@@ -17,12 +17,12 @@ Load and apply general rules from .cursor/rules/fullcycle-docs.mdc
 - Evaluate alternatives and record decisions as ADRs.
 
 # Inputs
-- Approved requirements doc `docs/requirements/<slug>.md`
+- Approved requirements doc `docs/requirements/000-<slug>.md`
 - Read relevant ADRs `docs/adr/**` and design docs `docs/design/**`
 
 # Outputs
-1. `docs/design/<slug>.md`
-2. ADRs under `docs/adr/YYYYMMDD-<title>.md`
+1. `docs/design/000-<slug>.md`
+2. ADRs under `docs/adr/000-<title>.md`
 
 ## Design Doc Outline
 ```md

@@ -19,7 +19,7 @@ Load and apply general rules from .cursor/rules/fullcycle-docs.mdc
 - Approved problem-exploration doc.
 
 # Outputs
-`docs/requirements/<slug>.md`:
+`docs/requirements/000-<slug>.md`:
 
 ```md
 # Requirements Specification - <title>

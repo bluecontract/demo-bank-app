@@ -20,7 +20,7 @@ Load and apply general rules from .cursor/rules/fullcycle-docs.mdc
 Use these rules when the user expresses a need or feature request and no requirements doc exists.
 
 # Outputs
-`docs/problem-exploration/<slug>.md`:
+`docs/problem-exploration/000-<slug>.md`:
 
 # Steps
 1. **Restate** your understanding of the problem in 2-3 sentences.
@@ -28,7 +28,7 @@ Use these rules when the user expresses a need or feature request and no require
    - Primary goals & business value
    - Stakeholders & user personas
    - Operational context & constraints
-3. Draft `docs/problem-exploration/<slug>.md` with:
+3. Draft `docs/problem-exploration/000-<slug>.md` with:
 
 ```md
 # Problem Exploration - <title>
@@ -42,14 +42,11 @@ Use these rules when the user expresses a need or feature request and no require
 ## Stakeholders & Personas
 - <persona> — <need>
 
-## Use-Case Scenarios
+## Scope / Use-Case Scenarios
 1. *When … they should be able to …*
 
 ## Constraints & Assumptions
 - …
-
-## Definition of Done
-- Exploration document accepted; may move to Requirements Analysis.
 ```
 
 4. Present the doc for human approval. Proceed only after sign-off.
