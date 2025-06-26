@@ -1,0 +1,45 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+---
+description: Core rules orchestrating full-cycle workflow & policies.
+alwaysApply: true
+---
+
+# Phase-Oriented Workflow
+Phases: 1-Problem Exploration · 2-Requirements · 3-Architecture & ADR · 4-Implementation Plan · 5-Implementation & TDD · 6-Testing · 7-Deployment/Verification · 8-Fixes/Improvements.
+
+## Phase Selection
+- Make sure to always know what the current phase is.
+- For purely technical or internal tasks (e.g. repo bootstrap, CI/CD config) that have **no product impact and no behavioural change**, you may activate the **Express Implementation path**:
+  1. Draft a minimal implementation plan specifying scope, deliverables, guardrails.
+  2. Skip the requirements doc linking in the plan and state why earlier phases are skipped.
+  3. Follow the rest of the steps.
+- Single problem per chat: prompt the user to start a new chat for new topic after all implementation and testing was completed to keep chat history clean
+- If the one of the preceding steps is being updated, follow the process step by step and cascade the changes as needed
+
+## Human-in-the-Loop Gates
+- If in doubt **ask clarifying questions; never guess**.
+- Before moving to next phase: present the artifact, request review, and wait for explicit approval.
+
+## Self-Review
+Before submitting any artifact or code:
+1. Verify alignment with preceding artifacts and requirements
+2. Analyse surrounding context from existing documentation (e.g. when planning architecture changes, analyse current architecture documentation)
+3. Ensure that documentation is updated.
+
+## Tools
+Leverage available tools and MCP servers as needed
+
+## Rules
+1. Load specific rules according to the development step and context.
+2. Always explicitly list all loaded rules in the chat at the very end of the response
+3. Propose cursor rules update upon addition or changes to technology, conventions, etc.
+
+Phase 1 - Problem Exploration: `fullcycle-problem-exploration.mdc`
+Phase 2 - Requirements: `fullcycle-requirements-analysis.mdc`
+Phase 3 - Architecture & ADR: `fullcycle-architecture-design.mdc`
+Documentation: `fullcycle-docs.mdc`

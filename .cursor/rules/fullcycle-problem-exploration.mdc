@@ -1,0 +1,55 @@
+---
+description: Phase 1 rules – understanding the problem in depth: use these rules when the user expresses a need or feature request and no requirements doc exists
+globs: 
+alwaysApply: false
+---
+
+---
+description: Phase 1 rules - understanding the problem in depth.
+globs: docs/problem-exploration/**
+---
+
+# General rules
+Load and apply general rules from .cursor/rules/fullcycle-docs.mdc
+
+# Goals
+- Produce concise summary of the problem / task / goal to achieve.
+- Discover with the user, define, document key aspects and drivers
+
+# Trigger
+Use these rules when the user expresses a need or feature request and no requirements doc exists.
+
+# Outputs
+`docs/problem-exploration/<slug>.md`:
+
+# Steps
+1. **Restate** your understanding of the problem in 2-3 sentences.
+2. **Interrogate** (ask targeted questions) to reveal:
+   - Primary goals & business value
+   - Stakeholders & user personas
+   - Operational context & constraints
+3. Draft `docs/problem-exploration/<slug>.md` with:
+
+```md
+# Problem Exploration - <title>
+
+## Date
+2025-31-01
+
+## Context
+<Why this problem matters>
+
+## Stakeholders & Personas
+- <persona> — <need>
+
+## Use-Case Scenarios
+1. *When … they should be able to …*
+
+## Constraints & Assumptions
+- …
+
+## Definition of Done
+- Exploration document accepted; may move to Requirements Analysis.
+```
+
+4. Present the doc for human approval. Proceed only after sign-off.

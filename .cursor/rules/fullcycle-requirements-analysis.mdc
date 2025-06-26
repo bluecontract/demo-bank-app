@@ -1,0 +1,50 @@
+---
+description: Phase 2 rules – capture functional & non-functional requirements.
+globs: 
+alwaysApply: false
+---
+
+---
+description: Phase 2 rules - capture functional & non-functional requirements.
+globs: docs/requirements/**
+---
+
+# General rules
+Load and apply general rules from .cursor/rules/fullcycle-docs.mdc
+
+# Goals
+- Discover with the user, define, document key functional and non-functional requirements
+
+# Inputs
+- Approved problem-exploration doc.
+
+# Outputs
+`docs/requirements/<slug>.md`:
+
+```md
+# Requirements Specification - <title>
+
+## Date
+2025-31-01
+
+## Functional Requirements
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-1 | … | Must |
+
+## Non-Functional Requirements
+| ID | Category | Requirement | Metric/Target |
+|----|----------|-------------|---------------|
+| NFR-1 | Performance | P95 latency ≤ 300 ms | - |
+
+## Acceptance Criteria
+- …
+```
+
+# Rules
+- Derive FRs from accepted use-cases.
+- Work with user to refine NFRs
+- Map NFRs to measurable metrics (latency, RPS, durability, cost, security, etc.) as apropriate.
+- Use MoSCoW priorities.
+- **Ask, don't assume** when requirements are ambiguous.
+- Require approval before advancing to Architecture Design.

@@ -1,0 +1,16 @@
+---
+description: General documentation rules - use always when creating or updating docs
+globs: 
+alwaysApply: false
+---
+
+---
+description: General rules for documentation.
+globs: docs/**, README.md
+---
+
+# Rules
+- Keep documentation concise, optimize for factuality and readability
+- Follow defined templates and existing conventions unless requested explicitly
+- Read existing relevant documentation to gather context
+
