@@ -37,6 +37,11 @@ Initial high-level requirements – to be refined per workflow.
 6.4 System listens to `/blue/webhooks` for new document versions & events.  
 6.5 On `BlockFunds`, `PushOutPayment`, `CancelPayment`, system updates ledger and responds via `POST /agents/{id}/{operation}`.
 
+## UX Design
+
+UX design should follow example demo app from presentation.
+Screenshots of the views are gathered under [(./001-ux-assets)](./001-ux-assets/)
+
 ## Non-Functional Requirements
 
 > **Note** – Non-functional requirements are **not critical** for the demo's success but are documented to illustrate the decision-making process and to provide a baseline for future hardening.
