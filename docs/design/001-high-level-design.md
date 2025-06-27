@@ -1,8 +1,9 @@
 # Technical Design – Initial High-Level Architecture
 
-*Status: Initial draft – subject to refinement during Architecture & Implementation phases*
+_Status: Initial draft – subject to refinement during Architecture & Implementation phases_
 
 ## 1. Overview Diagram (textual)
+
 ```
           ┌────────────┐        HTTPS         ┌──────────┐
 User ───► │  React UI  │ ────────────────────►│ API GW   │
@@ -22,8 +23,10 @@ User ───► │  React UI  │ ──────────────�
 
 Webhook & MyOS interaction (simplified):
 ```
+
 MyOS Mock ──HTTP──► API GW `/blue/webhooks` ──► Bank Lambda (monolith) ──► DynamoDB
 Bank Lambda (monolith) ──HTTPS──► MyOS Mock `/agents/...`
+
 ```
 The monolithic **Bank Lambda** handles authentication (name-only sign-in with JWT cookie), funding, transfers, transaction history, incoming webhooks, **and** outgoing requests to MyOS. This design consciously forgoes at-least-once delivery guarantees to keep the architecture minimal and simple. Further breakdown and advancements possible at later stage.
 
@@ -47,3 +50,4 @@ The monolithic **Bank Lambda** handles authentication (name-only sign-in with JW
 
 
 *Sort-Key (SK) considerations*: refine DynamoDB single-table design to include composite SKs (e.g., `TXN#<id>` for transactions, `EVENT#<id>` for idempotency) to support efficient queries.
+```
