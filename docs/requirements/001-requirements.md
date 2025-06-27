@@ -7,9 +7,10 @@ Initial high-level requirements – to be refined per workflow.
 
 ## Functional Requirements
 
-### FR-1 User Authentication
-1.1 A visitor can sign up (email + password or Cognito-hosted social login).  
-1.2 A registered user can sign in / sign out of the demo application.
+### FR-1 Simplified Authentication
+1.1 Visitor provides a unique **Name** to create (or reuse) a profile.  
+1.2 On sign-in, system issues a short-lived JWT containing `userId` and `name`.  
+1.3 Subsequent API requests must include a valid session token; missing or invalid tokens result in `401 Unauthorized`.
 
 ### FR-2 Bank Account Management
 2.1 A signed-in user can create one or more **bank accounts** (each receives a unique account number).  
@@ -55,6 +56,7 @@ Screenshots of the views are gathered under [(./001-ux-assets)](./001-ux-assets/
 | NFR-5 | Observability | Structured JSON logs, error tracking, basic metrics (p95 latency, error rate) |
 | NFR-6 | CI/CD | Automated lint, test, deploy on main branch push |
 | NFR-7 | Testing | ≥ 80 % statement coverage, integration tests, e2e tests for critical flows |
+| NFR-8 | Security | Session token delivered via `HttpOnly; Secure; SameSite=Strict` cookie and validated on every request |
 
 ## Out-of-Scope
 * Internationalisation & multi-currency support.  
