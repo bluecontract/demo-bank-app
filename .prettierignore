@@ -1,0 +1,14 @@
+# Add files here to ignore them from prettier formatting
+/dist
+/coverage
+/.nx/cache
+/.nx/workspace-data
+
+# Generated files
+**/dist/**
+**/out-tsc/**
+**/*.d.ts
+
+# Lock files
+package-lock.json
+yarn.lock
