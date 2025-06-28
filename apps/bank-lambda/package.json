@@ -1,0 +1,32 @@
+{
+  "name": "@demo-blue/bank-lambda",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "nx": {},
+  "main": "main.js",
+  "scripts": {
+    "test": "vitest run",
+    "build": "mkdir -p ../../dist/apps/bank-lambda && cp template.yaml ../../dist/apps/bank-lambda/template.yaml && esbuild src/main.ts --bundle --platform=node --format=cjs --target=node22 --outfile=../../dist/apps/bank-lambda/main.cjs --sourcemap"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@ts-rest/core": "^3.52.1",
+    "@ts-rest/open-api": "^3.52.1",
+    "@ts-rest/serverless": "^3.52.1",
+    "js-yaml": "^4.1.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.150",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^24.0.6",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
+  }
+}

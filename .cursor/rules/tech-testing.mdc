@@ -1,0 +1,47 @@
+---
+description: 
+globs: *.ts
+alwaysApply: false
+---
+# Testing - Node.js / React / Vitest / Playwright
+
+## Guiding Principles
+
+1. **Test-Driven Development (TDD)**
+   - Write failing tests first, then implement the minimum code to pass, and finally refactor.
+   - Each red-green-refactor loop should be < 10 min to keep feedback fast.
+
+2. **Test Pyramid**
+End-to-end (Playwright) - few, broad, slow
+Integration (Vitest + real adapters) - moderate
+Unit (Vitest + mocks) - many, fast, focused
+
+## Best Practices
+
+| Level | Focus | Guidelines |
+|-------|-------|------------|
+| **Unit** | Pure functions, domain logic, React components in isolation | • Keep test boundaries tight — mock external collaborators (DB, network, timers).<br>• Apply **DRY** setup helpers (see *Setup Patterns*). |
+| **Integration** | Multiple modules wired together (e.g. service + repo hitting an in-memory DB) | • Spin up real adapters where feasible.<br>• Avoid third-party mocks; prefer lightweight test doubles (SQLite, DynamoLocal, MSW). |
+| **End-to-End** | Critical user flows across the full stack | • Write Playwright tests for happy paths **and** edge cases.<br>• Keep E2E suite small & critical—smoke the most important journeys.<br>• Parallelise in CI and reuse browsers for speed. |
+
+### Edge-Case Coverage
+Test edge case scenarios, e.g.:
+
+- Invalid or missing inputs
+- Large payloads / pagination limits
+- Boundary dates & numbers (epoch, max int, leap year)
+- Concurrent updates / race conditions
+- Permission or feature-flag toggles
+
+### Patterns & Techniques
+
+- **Given-When-Then** structure in every test.
+- **Queries over Assertions** - assert on rendered output or public API, never on internals.
+- **Snapshot tests** sparingly; prefer explicit assertions.
+- **Deterministic timing** - fake timers for time-dependent logic.
+- **Seed data once** per test file via `beforeAll`; reset state in `beforeEach`.
+- **Parallel safe** - tests must not rely on execution order or global shared state.
+
+### Quality Gates
+
+- **Coverage targets**: 90%+ for domain logic, 80% overall.

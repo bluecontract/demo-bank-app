@@ -1,5 +1,15 @@
 {
   "name": "@demo-blue/bank-web-app",
   "version": "0.0.1",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-router-dom": "6.29.0"
+  },
+  "devDependencies": {
+    "@nx/react": "21.2.1",
+    "@vitejs/plugin-react": "^4.2.0",
+    "vite": "^6.0.0"
+  }
 }

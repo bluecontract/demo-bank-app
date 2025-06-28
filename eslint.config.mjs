@@ -1,4 +1,5 @@
 import nx from '@nx/eslint-plugin';
+import jsoncParser from 'jsonc-eslint-parser';
 
 export default [
   ...nx.configs['flat/base'],
@@ -26,6 +27,44 @@ export default [
               onlyDependOnLibsWithTags: ['*'],
             },
           ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['**/package.json'],
+    languageOptions: {
+      parser: jsoncParser,
+    },
+    rules: {
+      '@nx/dependency-checks': [
+        'error',
+        {
+          checkMissingDependencies: true,
+          checkObsoleteDependencies: true,
+          checkVersionMismatches: true,
+          ignoredDependencies: ['vite'],
+          ignoredFiles: ['*.config.{js,ts,mjs}', '**/*.config.{js,ts,mjs}'],
+          includeTransitiveDependencies: false,
+        },
+      ],
+    },
+  },
+  {
+    files: ['apps/bank-lambda/package.json'],
+    languageOptions: {
+      parser: jsoncParser,
+    },
+    rules: {
+      '@nx/dependency-checks': [
+        'error',
+        {
+          checkMissingDependencies: true,
+          checkObsoleteDependencies: true,
+          checkVersionMismatches: true,
+          ignoredDependencies: ['vite', 'vitest'],
+          ignoredFiles: ['*.config.{js,ts,mjs}', '**/*.config.{js,ts,mjs}'],
+          includeTransitiveDependencies: false,
         },
       ],
     },

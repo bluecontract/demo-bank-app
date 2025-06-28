@@ -1,0 +1,76 @@
+{
+  "name": "@demo-blue/bank-lambda",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/bank-lambda/src",
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "nx build bank-lambda --configuration=production",
+          "mv dist/apps/bank-lambda/main.cjs dist/apps/bank-lambda/main.js",
+          "cd apps/bank-lambda && sam local start-api --port 3000"
+        ],
+        "parallel": false
+      },
+      "dependsOn": [
+        "localstack:serve"
+      ]
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{workspaceRoot}/dist/apps/bank-lambda"
+      ],
+      "defaultConfiguration": "development",
+      "options": {
+        "commands": [
+          "cd apps/bank-lambda && npm run build"
+        ],
+        "parallel": false
+      },
+      "configurations": {
+        "development": {
+          "commands": [
+            "cd apps/bank-lambda && npm run build"
+          ]
+        },
+        "production": {
+          "commands": [
+            "cd apps/bank-lambda && npm run build -- --minify --tree-shaking=true"
+          ]
+        }
+      }
+    },
+    "generate-docs": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx tsx src/generate-openapi.ts",
+        "cwd": "apps/bank-lambda"
+      },
+      "dependsOn": [
+        "build"
+      ]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm test",
+        "cwd": "apps/bank-lambda"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": [
+        "{options.outputFile}"
+      ],
+      "options": {
+        "lintFilePatterns": [
+          "apps/bank-lambda/**/*.{ts,tsx,js,jsx}",
+          "apps/bank-lambda/package.json"
+        ]
+      }
+    }
+  }
+}

@@ -6,20 +6,59 @@ A modern banking application demonstrating Blue Language integration and state-o
 
 ### Prerequisites
 
-- Node.js 22+ (LTS)
-- npm
+- **Node.js 22+ (LTS)** - JavaScript runtime environment
+- **npm** - Package manager  
+- **Docker** - Required for LocalStack (AWS service emulation)
+- **AWS SAM CLI** - Required for local Lambda development and testing
+
+#### Install AWS SAM CLI
+
+Choose one of the following installation methods:
+
+**Option 1: Using pip (Recommended)**
+```bash
+pip3 install aws-sam-cli
+```
+
+**Option 2: Using other methods**
+See the [official AWS SAM CLI installation guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) for Windows, Linux, and other installation options.
+
+**Verify Installation**
+```bash
+sam --version
+```
+
+> **⚠️ Troubleshooting SAM CLI**: If you get a "bad interpreter" error, SAM CLI may have been installed with an older Python version. Solutions:
+> 
+> **Option 1: Reinstall with current Python**
+> ```bash
+> pip3 uninstall aws-sam-cli
+> pip3 install aws-sam-cli
+> ```
+> 
+> **Option 2: Add Python bin to PATH** (if you see PATH warnings)
+> ```bash
+> # Add to your shell profile (.zshrc, .bashrc, etc.)
+> export PATH="$(python3 -m site --user-base)/bin:$PATH"
+> ```
 
 ### Run the Application
 
 ```bash
-# Install dependencies
+# 1. Install dependencies
 npm install
 
-# Start the development server
-npm start
+# 2. Ensure Docker is running
+npm run docker:check
+
+# 3. Start all services (frontend, backend, localstack)
+npm run serve:all
 ```
 
-The app will be available at `http://localhost:4200`
+The app will be available at:
+- **Frontend**: http://localhost:4200
+- **Backend API**: http://localhost:3000  
+- **LocalStack**: http://localhost:4566
 
 ### Available Scripts
 
@@ -39,8 +78,34 @@ The app will be available at `http://localhost:4200`
 | `npm run format:check` | Check code formatting             |
 | `npm run clean`        | Reset Nx cache                    |
 | `npm run graph`        | View dependency graph             |
+| `npm run serve:all`    | Start all services with Nx        |
+| `npm run serve:stack`  | Start backend stack (LocalStack + Lambda) |
+| `npm run docker:check` | Verify Docker is running           |
 
 > **💡 Affected vs All**: By default, commands run only on "affected" projects (those changed since the last commit). Use `:all` variants to run on all projects.
+
+### 🎯 Multi-Service Development
+
+Start all services with Nx orchestration:
+
+```bash
+# Start all services with dependency management
+npm run serve:all
+
+# Start backend stack only (useful for API development)
+npm run serve:stack
+
+# Start individual services
+nx serve localstack              # LocalStack only
+nx serve @demo-blue/bank-lambda  # Backend API only  
+nx serve @demo-blue/bank-web-app # Frontend only
+
+# Check service status
+docker ps --filter 'name=localstack-demo-blue'
+
+# Stop services when done
+docker stop localstack-demo-blue
+```
 
 ## 🧪 Testing & Quality
 
@@ -101,6 +166,11 @@ demo-blue/
 │   │   ├── src/                   # Frontend source code
 │   │   ├── tailwind.config.js     # Styling configuration
 │   │   └── vite.config.ts         # Build configuration
+│   ├── bank-lambda/               # AWS Lambda backend
+│   │   ├── src/                   # Lambda source code
+│   │   └── project.json           # SAM local serve config
+│   ├── localstack/                # LocalStack service wrapper
+│   │   └── project.json           # LocalStack serve config
 │   └── bank-web-app-e2e/          # Playwright E2E tests
 │       ├── src/                   # E2E test suites
 │       └── playwright.config.ts   # Test configuration

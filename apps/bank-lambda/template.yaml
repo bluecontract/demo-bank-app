@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Blue Demo Bank Lambda API
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: nodejs22.x
+    CodeUri: ../../dist/apps/bank-lambda/
+    Environment:
+      Variables:
+        NODE_ENV: !Ref Environment
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+
+Resources:
+  BankApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "bank-api-${Environment}"
+      StageName: !Ref Environment
+      Cors:
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      EndpointConfiguration:
+        Type: REGIONAL
+
+  BankLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "bank-lambda-${Environment}"
+      Handler: main.handler
+      Description: Banking API Lambda function
+      Events:
+        ApiRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /{proxy+}
+            Method: ANY
+        ApiOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /{proxy+}
+            Method: OPTIONS
+
+Outputs:
+  BankApiUrl:
+    Description: "API Gateway endpoint URL for Bank API"
+    Value: !Sub "https://${BankApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiUrl"
+
+  BankApiId:
+    Description: "API Gateway ID"
+    Value: !Ref BankApi
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiId" 
