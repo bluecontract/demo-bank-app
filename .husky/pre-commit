@@ -1,6 +1,3 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
 echo "🎨 Phase 1: Formatting & linting staged files..."
 npx lint-staged
 
