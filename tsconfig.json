@@ -14,6 +14,9 @@
     },
     {
       "path": "./libs/api-contract"
+    },
+    {
+      "path": "./libs/api-client"
     }
   ]
 }

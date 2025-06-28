@@ -16,13 +16,9 @@
   "exclude": [
     "out-tsc",
     "dist",
-    "src/**/*.spec.ts",
     "src/**/*.test.ts",
-    "src/**/*.spec.tsx",
     "src/**/*.test.tsx",
-    "src/**/*.spec.js",
     "src/**/*.test.js",
-    "src/**/*.spec.jsx",
     "src/**/*.test.jsx",
     "vite.config.ts",
     "vite.config.mts",
@@ -32,5 +28,10 @@
     "eslint.config.cjs",
     "eslint.config.mjs"
   ],
-  "include": ["src/**/*.js", "src/**/*.jsx", "src/**/*.ts", "src/**/*.tsx"]
+  "include": ["src/**/*.js", "src/**/*.jsx", "src/**/*.ts", "src/**/*.tsx"],
+  "references": [
+    {
+      "path": "../../libs/api-client/tsconfig.lib.json"
+    }
+  ]
 }

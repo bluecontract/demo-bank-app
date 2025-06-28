@@ -25,7 +25,7 @@
           "watchDepsName": "watch-deps"
         }
       },
-      "exclude": ["libs/api-contract/*"]
+      "exclude": ["libs/api-contract/*", "libs/api-client/*"]
     },
     {
       "plugin": "@nx/react/router-plugin",
@@ -64,11 +64,8 @@
     },
     {
       "plugin": "@nx/js/typescript",
-      "include": ["libs/api-contract/*"],
+      "include": ["libs/api-contract/*", "libs/api-client/*"],
       "options": {
-        "typecheck": {
-          "targetName": "typecheck"
-        },
         "build": {
           "targetName": "build",
           "configName": "tsconfig.lib.json"

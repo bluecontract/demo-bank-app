@@ -31,8 +31,10 @@
   "private": true,
   "dependencies": {
     "@demo-blue/api-contract": "*",
+    "@demo-blue/api-client": "*",
     "@ts-rest/core": "^3.52.1",
     "@ts-rest/serverless": "^3.52.1",
+    "@tanstack/react-query": "^5.17.10",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-router-dom": "6.29.0",
@@ -97,7 +99,8 @@
   "workspaces": [
     "apps/*",
     "@demo-blue/*",
-    "libs/*"
+    "libs/*",
+    "libs"
   ],
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,css,scss,md,html,yml,yaml}": [

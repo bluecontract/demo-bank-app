@@ -17,6 +17,11 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "es2022",
-    "customConditions": ["development"]
+    "customConditions": ["development"],
+    "baseUrl": ".",
+    "paths": {
+      "@demo-blue/api-client": ["libs/api-client/src/index.ts"],
+      "@demo-blue/api-contract": ["libs/api-contract/src/index.ts"]
+    }
   }
 }

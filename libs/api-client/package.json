@@ -1,0 +1,44 @@
+{
+  "name": "@demo-blue/api-client",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!**/*.tsbuildinfo"
+  ],
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "@nx/esbuild:esbuild",
+        "outputs": [
+          "{options.outputPath}"
+        ],
+        "options": {
+          "outputPath": "libs/api-client/dist",
+          "main": "libs/api-client/src/index.ts",
+          "tsConfig": "libs/api-client/tsconfig.lib.json",
+          "format": [
+            "esm"
+          ],
+          "declarationRootDir": "libs/api-client/src"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@demo-blue/api-contract": "*",
+    "@ts-rest/core": "^3.52.1"
+  }
+}

@@ -9,7 +9,7 @@
     "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"],
+  "exclude": ["src/**/*.test.ts"],
   "references": [
     {
       "path": "../../libs/api-contract/tsconfig.lib.json"
