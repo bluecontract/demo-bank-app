@@ -15,3 +15,4 @@ export const handler: unknown = createLambdaHandler(bankApiContract, {
     };
   },
 });
+// Test comment for Husky
