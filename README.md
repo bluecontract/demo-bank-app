@@ -7,7 +7,7 @@ A modern banking application demonstrating Blue Language integration and state-o
 ### Prerequisites
 
 - **Node.js 22+ (LTS)** - JavaScript runtime environment
-- **npm** - Package manager  
+- **npm** - Package manager
 - **Docker** - Required for LocalStack (AWS service emulation)
 - **AWS SAM CLI** - Required for local Lambda development and testing
 
@@ -16,6 +16,7 @@ A modern banking application demonstrating Blue Language integration and state-o
 Choose one of the following installation methods:
 
 **Option 1: Using pip (Recommended)**
+
 ```bash
 pip3 install aws-sam-cli
 ```
@@ -24,19 +25,22 @@ pip3 install aws-sam-cli
 See the [official AWS SAM CLI installation guide](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) for Windows, Linux, and other installation options.
 
 **Verify Installation**
+
 ```bash
 sam --version
 ```
 
 > **⚠️ Troubleshooting SAM CLI**: If you get a "bad interpreter" error, SAM CLI may have been installed with an older Python version. Solutions:
-> 
+>
 > **Option 1: Reinstall with current Python**
+>
 > ```bash
 > pip3 uninstall aws-sam-cli
 > pip3 install aws-sam-cli
 > ```
-> 
+>
 > **Option 2: Add Python bin to PATH** (if you see PATH warnings)
+>
 > ```bash
 > # Add to your shell profile (.zshrc, .bashrc, etc.)
 > export PATH="$(python3 -m site --user-base)/bin:$PATH"
@@ -56,31 +60,36 @@ npm run serve:all
 ```
 
 The app will be available at:
+
 - **Frontend**: http://localhost:4200
-- **Backend API**: http://localhost:3000  
+- **Backend API**: http://localhost:3000
 - **LocalStack**: http://localhost:4566
 
 ### Available Scripts
 
-| Command                | Description                       |
-| ---------------------- | --------------------------------- |
-| `npm start`            | Start development server          |
-| `npm test`             | Run tests for affected projects   |
-| `npm run test:all`     | Run tests for all projects        |
-| `npm run test:watch`   | Run tests in watch mode           |
-| `npm run e2e`          | Run E2E tests                     |
-| `npm run build`        | Build affected projects           |
-| `npm run build:all`    | Build all projects                |
-| `npm run lint`         | Lint affected projects            |
-| `npm run lint:all`     | Lint all projects                 |
-| `npm run lint:fix`     | Lint and auto-fix affected issues |
-| `npm run format`       | Format code with Prettier         |
-| `npm run format:check` | Check code formatting             |
-| `npm run clean`        | Reset Nx cache                    |
-| `npm run graph`        | View dependency graph             |
-| `npm run serve:all`    | Start all services with Nx        |
-| `npm run serve:stack`  | Start backend stack (LocalStack + Lambda) |
-| `npm run docker:check` | Verify Docker is running           |
+| Command                   | Description                               |
+| ------------------------- | ----------------------------------------- |
+| `npm start`               | Start development server                  |
+| `npm test`                | Run tests for affected projects           |
+| `npm run test:all`        | Run tests for all projects                |
+| `npm run test:watch`      | Run tests in watch mode                   |
+| `npm run e2e`             | Run E2E tests                             |
+| `npm run build`           | Build affected projects                   |
+| `npm run build:all`       | Build all projects                        |
+| `npm run lint`            | Lint affected projects                    |
+| `npm run lint:all`        | Lint all projects                         |
+| `npm run lint:fix`        | Lint and auto-fix affected issues         |
+| `npm run format`          | Format code with Prettier                 |
+| `npm run format:check`    | Check code formatting                     |
+| `npm run format:staged`   | Format only staged files with Prettier    |
+| `npm run pre-commit`      | Run pre-commit checks manually            |
+| `npm run validate-commit` | Validate commit message format            |
+| `npm run generate-docs`   | Generate OpenAPI docs from TypeScript     |
+| `npm run clean`           | Reset Nx cache                            |
+| `npm run graph`           | View dependency graph                     |
+| `npm run serve:all`       | Start all services with Nx                |
+| `npm run serve:stack`     | Start backend stack (LocalStack + Lambda) |
+| `npm run docker:check`    | Verify Docker is running                  |
 
 > **💡 Affected vs All**: By default, commands run only on "affected" projects (those changed since the last commit). Use `:all` variants to run on all projects.
 
@@ -97,7 +106,7 @@ npm run serve:stack
 
 # Start individual services
 nx serve localstack              # LocalStack only
-nx serve @demo-blue/bank-lambda  # Backend API only  
+nx serve @demo-blue/bank-lambda  # Backend API only
 nx serve @demo-blue/bank-web-app # Frontend only
 
 # Check service status
@@ -107,7 +116,7 @@ docker ps --filter 'name=localstack-demo-blue'
 docker stop localstack-demo-blue
 ```
 
-## 🧪 Testing & Quality
+## 🧪 Testing
 
 ### Run Tests
 
@@ -120,22 +129,6 @@ npm run test:watch
 
 # E2E tests (Playwright)
 npm run e2e
-```
-
-### Code Quality
-
-```bash
-# Lint all projects
-npm run lint
-
-# Lint and auto-fix issues
-npm run lint:fix
-
-# Format with Prettier
-npm run format
-
-# Check formatting
-npm run format:check
 ```
 
 ### Build & Deploy
@@ -154,6 +147,33 @@ npx nx preview bank-web-app
 npm run clean  # Reset Nx cache
 npm run graph  # View dependency graph
 ```
+
+## 🎯 Code Quality & Git Hooks
+
+### Automatic Quality Enforcement
+
+This project uses **automated git hooks** to ensure code quality:
+
+```bash
+# Pre-commit (automatic on git commit)
+- Format staged files with Prettier
+- Run affected tests
+- Block commit if issues found
+
+# Commit message (automatic on git commit)
+- Validate conventional commit format
+- Ensure consistent commit history
+```
+
+### Git Hook Setup
+
+Git hooks are automatically installed via **Husky**:
+
+- ✅ **Pre-commit**: Formats code + runs tests
+- ✅ **Commit-msg**: Validates conventional commit format
+- ✅ **Staged-only formatting**: Fast iteration (formats only changed files)
+
+**Conventional Commit Format:** `type: description` (feat, fix, docs, chore, etc.)
 
 ## 🏗️ Repository Structure
 
@@ -174,7 +194,8 @@ demo-blue/
 │   └── bank-web-app-e2e/          # Playwright E2E tests
 │       ├── src/                   # E2E test suites
 │       └── playwright.config.ts   # Test configuration
-├── libs/                          # Shared libraries (future)
+├── libs/                          # Shared libraries
+│   ├── api-contract/              # Shared API contracts (ts-rest + Zod)
 │   ├── domain/                    # Domain logic (business rules)
 │   ├── application/               # Use cases & application services
 │   └── infrastructure/            # External adapters (DB, APIs)
@@ -221,6 +242,53 @@ Each app manages its own infrastructure-as-code:
 - **`bank-lambda/`**: AWS Lambda, API Gateway, DynamoDB
 - **Shared resources**: Defined in dedicated infrastructure packages
 
+## 📦 Dependency Management Strategy
+
+### Single Version Policy
+
+- **DevDependencies centralized at root** - All build tools, linters, and testing frameworks managed in workspace root
+- **Runtime dependencies per project** - Only production dependencies live in individual app/lib package.json files
+- **Nx workspace resolution** - Enables consistent tooling versions across all projects
+
+## ⚡ Lambda Production Optimization
+
+### Optimized Bundle Generation
+
+- **Tree-shaking enabled**: Only used code included via esbuild bundling
+- **Minification in production**: Code compression for faster cold starts
+- **Source maps**: Bundled source maps for clear stack traces
+
+```bash
+# Development build (fast iteration)
+nx serve bank-lambda        # No minification and tree shaking
+
+# Production build (optimized)
+nx build bank-lambda        # Minified tree-shaked bundle, all dependencies inlined
+```
+
+## 🔗 API Contract & Documentation
+
+### Shared Contract Library (`libs/api-contract`)
+
+- **Centralized contracts**: TypeScript API definitions using ts-rest + Zod
+- **Cross-app consistency**: Backend, frontend, and SDKs import the same contract
+- **Type safety**: Compile-time API validation between client and server
+- **Auto-completion**: Full IDE support for API endpoints and schemas
+
+### Documentation Generation
+
+```bash
+# Generate OpenAPI docs from TypeScript contract
+npm run generate-docs       # Creates docs/api/openapi.{json,yaml}
+```
+
+**Benefits:**
+
+- 📊 Contract-first development
+- 🔄 Documentation stays in sync with code
+- 📱 Enables SDK generation for multiple platforms
+- ✅ Single source of truth for API structure
+
 ## 🛠️ Technology Stack
 
 - **Frontend**: React, TypeScript, Tailwind CSS, Vite
@@ -228,7 +296,7 @@ Each app manages its own infrastructure-as-code:
 - **Testing**: Vitest, Playwright
 - **Build**: Nx, esbuild
 - **Deployment**: AWS SAM, GitHub Actions
-- **Local development** Docker Compose, Localstack
+- **Local development** Localstack / Docker
 
 ## 📚 Project Documentation
 

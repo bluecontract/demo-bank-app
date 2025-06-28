@@ -11,6 +11,7 @@ export default [
       '**/vite.config.*.timestamp*',
       '**/vitest.config.*.timestamp*',
       '**/test-output',
+      '.nx/cache/**',
     ],
   },
   {
@@ -32,7 +33,27 @@ export default [
     },
   },
   {
-    files: ['**/package.json'],
+    files: ['scripts/**/*.ts', 'scripts/**/*.js'], // Workspace scripts have more relaxed boundaries
+    rules: {
+      '@nx/enforce-module-boundaries': [
+        'error',
+        {
+          enforceBuildableLibDependency: true,
+          allow: [
+            '^\\.\\./apps/.*$', // Workspace scripts can import from apps for documentation/tooling
+          ],
+          depConstraints: [
+            {
+              sourceTag: '*',
+              onlyDependOnLibsWithTags: ['*'],
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['package.json'], // Root package.json - single source of truth for versions
     languageOptions: {
       parser: jsoncParser,
     },
@@ -43,7 +64,7 @@ export default [
           checkMissingDependencies: true,
           checkObsoleteDependencies: true,
           checkVersionMismatches: true,
-          ignoredDependencies: ['vite'],
+          ignoredDependencies: [],
           ignoredFiles: ['*.config.{js,ts,mjs}', '**/*.config.{js,ts,mjs}'],
           includeTransitiveDependencies: false,
         },
@@ -51,7 +72,7 @@ export default [
     },
   },
   {
-    files: ['apps/bank-lambda/package.json'],
+    files: ['apps/**/package.json', 'libs/**/package.json'], // All project package.json files
     languageOptions: {
       parser: jsoncParser,
     },
@@ -59,28 +80,14 @@ export default [
       '@nx/dependency-checks': [
         'error',
         {
-          checkMissingDependencies: true,
-          checkObsoleteDependencies: true,
-          checkVersionMismatches: true,
-          ignoredDependencies: ['vite', 'vitest'],
+          checkMissingDependencies: true, // Must declare dependencies they actually use
+          checkObsoleteDependencies: true, // Remove unused dependencies
+          checkVersionMismatches: true, // Versions must match root package.json
+          ignoredDependencies: ['vitest'], // Test framework comes from root devDependencies
           ignoredFiles: ['*.config.{js,ts,mjs}', '**/*.config.{js,ts,mjs}'],
           includeTransitiveDependencies: false,
         },
       ],
     },
-  },
-  {
-    files: [
-      '**/*.ts',
-      '**/*.tsx',
-      '**/*.cts',
-      '**/*.mts',
-      '**/*.js',
-      '**/*.jsx',
-      '**/*.cjs',
-      '**/*.mjs',
-    ],
-    // Override or add rules here
-    rules: {},
   },
 ];

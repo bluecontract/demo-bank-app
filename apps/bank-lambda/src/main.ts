@@ -1,5 +1,5 @@
 import { createLambdaHandler } from '@ts-rest/serverless/aws';
-import { bankApiContract } from './api/contract.js';
+import { bankApiContract } from '@demo-blue/api-contract';
 
 // Create the handler using ts-rest/serverless/aws
 export const handler: unknown = createLambdaHandler(bankApiContract, {

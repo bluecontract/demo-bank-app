@@ -11,6 +11,9 @@
     },
     {
       "path": "./apps/bank-lambda"
+    },
+    {
+      "path": "./libs/api-contract"
     }
   ]
 }

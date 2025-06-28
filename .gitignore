@@ -4,6 +4,11 @@
 dist
 tmp
 out-tsc
+static
+graph.html
+
+# TypeScript incremental compilation cache
+*.tsbuildinfo
 
 # dependencies
 node_modules

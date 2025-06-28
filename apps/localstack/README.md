@@ -9,11 +9,12 @@ LocalStack provides local AWS cloud service emulation for development and testin
 ## Usage
 
 ### Via Nx (Recommended)
+
 ```bash
 # Start LocalStack
 nx serve localstack
 
-# Stop LocalStack  
+# Stop LocalStack
 nx stop localstack
 
 # Check LocalStack health
@@ -23,11 +24,11 @@ nx status localstack
 ## Services Enabled
 
 - Lambda
-- API Gateway  
+- API Gateway
 - DynamoDB
 - SSM Parameter Store
 - S3
-  
+
 All services are available at: `http://localhost:4566`
 
 ## Environment
@@ -35,4 +36,4 @@ All services are available at: `http://localhost:4566`
 - Endpoint: http://localhost:4566
 - AWS Access Key: test
 - AWS Secret Key: test
-- Region: us-east-1 
+- Region: us-east-1

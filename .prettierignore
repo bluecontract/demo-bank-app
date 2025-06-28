@@ -10,5 +10,39 @@
 **/*.d.ts
 
 # Lock files
+# Build outputs
+dist/
+build/
+.next/
+coverage/
+
+# Dependencies
+node_modules/
+
+# Generated files
+*.d.ts
+graph.html
+
+# Static assets
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+
+# Config files that should maintain specific formatting
+*.min.js
+*.min.css
+
+# Lock files
 package-lock.json
 yarn.lock
+pnpm-lock.yaml
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db

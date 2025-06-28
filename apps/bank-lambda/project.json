@@ -8,63 +8,45 @@
       "executor": "nx:run-commands",
       "options": {
         "commands": [
-          "nx build bank-lambda --configuration=production",
+          "nx build bank-lambda --configuration=development",
           "mv dist/apps/bank-lambda/main.cjs dist/apps/bank-lambda/main.js",
           "cd apps/bank-lambda && sam local start-api --port 3000"
         ],
         "parallel": false
       },
-      "dependsOn": [
-        "localstack:serve"
-      ]
+      "dependsOn": ["localstack:serve"]
     },
     "build": {
       "executor": "nx:run-commands",
-      "outputs": [
-        "{workspaceRoot}/dist/apps/bank-lambda"
-      ],
+      "outputs": ["{workspaceRoot}/dist/apps/bank-lambda"],
       "defaultConfiguration": "development",
       "options": {
-        "commands": [
-          "cd apps/bank-lambda && npm run build"
-        ],
+        "commands": ["cd apps/bank-lambda && npm run build"],
         "parallel": false
       },
       "configurations": {
         "development": {
           "commands": [
-            "cd apps/bank-lambda && npm run build"
+            "cd apps/bank-lambda && npm run build -- --tree-shaking=false"
           ]
         },
         "production": {
           "commands": [
-            "cd apps/bank-lambda && npm run build -- --minify --tree-shaking=true"
+            "cd apps/bank-lambda && npm run build -- --tree-shaking=true --minify"
           ]
         }
       }
     },
-    "generate-docs": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "npx tsx src/generate-openapi.ts",
-        "cwd": "apps/bank-lambda"
-      },
-      "dependsOn": [
-        "build"
-      ]
-    },
     "test": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "npm test",
+        "command": "npx vitest run",
         "cwd": "apps/bank-lambda"
       }
     },
     "lint": {
       "executor": "@nx/eslint:lint",
-      "outputs": [
-        "{options.outputFile}"
-      ],
+      "outputs": ["{options.outputFile}"],
       "options": {
         "lintFilePatterns": [
           "apps/bank-lambda/**/*.{ts,tsx,js,jsx}",

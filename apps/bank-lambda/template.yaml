@@ -22,7 +22,7 @@ Resources:
   BankApi:
     Type: AWS::Serverless::Api
     Properties:
-      Name: !Sub "bank-api-${Environment}"
+      Name: !Sub 'bank-api-${Environment}'
       StageName: !Ref Environment
       Cors:
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
@@ -34,7 +34,7 @@ Resources:
   BankLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "bank-lambda-${Environment}"
+      FunctionName: !Sub 'bank-lambda-${Environment}'
       Handler: main.handler
       Description: Banking API Lambda function
       Events:
@@ -53,13 +53,13 @@ Resources:
 
 Outputs:
   BankApiUrl:
-    Description: "API Gateway endpoint URL for Bank API"
-    Value: !Sub "https://${BankApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+    Description: 'API Gateway endpoint URL for Bank API'
+    Value: !Sub 'https://${BankApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
     Export:
-      Name: !Sub "${AWS::StackName}-ApiUrl"
+      Name: !Sub '${AWS::StackName}-ApiUrl'
 
   BankApiId:
-    Description: "API Gateway ID"
+    Description: 'API Gateway ID'
     Value: !Ref BankApi
     Export:
-      Name: !Sub "${AWS::StackName}-ApiId" 
+      Name: !Sub '${AWS::StackName}-ApiId'

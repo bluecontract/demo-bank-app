@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bankApiContract } from './api/contract.js';
+import { bankApiContract } from '@demo-blue/api-contract';
 
 describe('Bank Lambda Business Logic', () => {
   describe('Bank Lambda Setup', () => {

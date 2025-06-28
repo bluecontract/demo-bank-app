@@ -1,7 +1,13 @@
 import { generateOpenApi } from '@ts-rest/open-api';
 import { writeFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { bankApiContract } from './api/contract.js';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+import { bankApiContract } from '@demo-blue/api-contract';
+
+// ES module equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Generate OpenAPI spec
 const openApiDocument = generateOpenApi(
@@ -45,8 +51,8 @@ const openApiDocument = generateOpenApi(
   }
 );
 
-// Ensure docs directory exists
-const docsDir = join(__dirname, '..', 'docs');
+// Ensure docs directory exists (at workspace root)
+const docsDir = join(__dirname, '..', 'docs', 'api');
 mkdirSync(docsDir, { recursive: true });
 
 // Write OpenAPI spec to file
