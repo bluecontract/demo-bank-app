@@ -40,9 +40,32 @@
     "test": {
       "executor": "nx:run-commands",
       "options": {
+        "command": "npx vitest run --config vitest.config.ts",
+        "cwd": "apps/bank-lambda",
+        "env": {
+          "VITEST_EXCLUDE_INTEGRATION": "true"
+        }
+      },
+      "dependsOn": ["^build"]
+    },
+    "test:integration": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "find src -name '*.integration.test.ts' -exec npx vitest run --config vitest.config.ts {} +"
+        ],
+        "cwd": "apps/bank-lambda",
+        "parallel": false
+      },
+      "dependsOn": ["^build", "localstack:serve"]
+    },
+    "test:all": {
+      "executor": "nx:run-commands",
+      "options": {
         "command": "npx vitest run",
         "cwd": "apps/bank-lambda"
-      }
+      },
+      "dependsOn": ["^build", "localstack:serve"]
     },
     "lint": {
       "executor": "@nx/eslint:lint",
@@ -54,5 +77,6 @@
         ]
       }
     }
-  }
+  },
+  "implicitDependencies": []
 }

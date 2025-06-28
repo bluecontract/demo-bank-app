@@ -3,8 +3,12 @@ import { nxE2EPreset } from '@nx/playwright/preset';
 import { workspaceRoot } from '@nx/devkit';
 import { fileURLToPath } from 'url';
 
-// For CI, you may want to set BASE_URL to the deployed application.
-const baseURL = process.env['BASE_URL'] || 'http://localhost:4300';
+// For CI, E2E_BASE_URL is set to the deployed application URL
+// For local development, defaults to localhost
+const baseURL =
+  process.env['E2E_BASE_URL'] ||
+  process.env['BASE_URL'] ||
+  'http://localhost:4300';
 
 /**
  * Read environment variables from file.
@@ -24,12 +28,26 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npx nx run @demo-blue/bank-web-app:preview',
-    url: 'http://localhost:4300',
-    reuseExistingServer: true,
-    cwd: workspaceRoot,
-  },
+  /*
+   * For local development, Nx dependency management auto-starts backend via dependsOn.
+   * Only auto-start frontend for local testing, disable for CI or remote environments.
+   *
+   * Scenarios:
+   * - Local development: webServer starts frontend, Nx starts backend automatically
+   * - CI environments: webServer disabled (manual server startup in CI workflows)
+   * - Remote environments: webServer disabled (tests against live env)
+   */
+  webServer:
+    process.env['CI'] ||
+    (process.env['E2E_BASE_URL'] &&
+      !process.env['E2E_BASE_URL'].includes('localhost'))
+      ? undefined
+      : {
+          command: 'npx nx run @demo-blue/bank-web-app:preview',
+          url: 'http://localhost:4300',
+          reuseExistingServer: true,
+          cwd: workspaceRoot,
+        },
   projects: [
     {
       name: 'chromium',

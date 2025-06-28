@@ -127,9 +127,30 @@ npm test
 # Unit tests in watch mode
 npm run test:watch
 
-# E2E tests (Playwright)
+# E2E tests (full-stack local testing)
+npm run e2e
+
+# E2E tests against remote environments
+npm run e2e:dev   # Test against dev environment
+npm run e2e:prod  # Test against production environment
+```
+
+**Note:** For local E2E testing, start the backend services first, then run E2E tests:
+
+```bash
+# Terminal 1: Start the full stack
+npm run serve
+
+# Terminal 2: Run E2E tests (includes automatic health check)
 npm run e2e
 ```
+
+The E2E command automatically waits for the backend to become healthy before running tests.
+
+**Environment Variables:**
+
+- `E2E_BASE_URL`: Frontend URL for E2E tests (default: http://localhost:4300)
+- `BACKEND_URL`: Backend URL for health checks (default: http://localhost:3000)
 
 ### Security Auditing
 
