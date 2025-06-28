@@ -1,0 +1,161 @@
+name: Local Stack E2E Tests
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        default: '20'
+        type: string
+    outputs:
+      success:
+        description: 'Whether local stack E2E tests passed'
+        value: ${{ jobs.local-stack-e2e.outputs.success }}
+
+env:
+  NODE_ENV: ci
+
+jobs:
+  local-stack-e2e:
+    name: Local Stack E2E Tests
+    runs-on: ubuntu-latest
+    outputs:
+      success: ${{ steps.test-result.outputs.success }}
+
+    services:
+      # LocalStack as a service container (reliable for CI)
+      localstack:
+        image: localstack/localstack:latest
+        ports:
+          - 4566:4566
+          - 4510-4559:4510-4559
+        env:
+          DEBUG: 1
+          DOCKER_HOST: unix:///var/run/docker.sock
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+        options: >-
+          --health-cmd="curl -f http://localhost:4566/_localstack/health || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+          --health-start-period=30s
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Nx SHAs
+        uses: nrwl/nx-set-shas@v4
+
+      - name: Wait for LocalStack to be ready
+        run: |
+          echo "⏳ Waiting for LocalStack to be ready..."
+          timeout 60 bash -c 'until curl -f http://localhost:4566/_localstack/health; do sleep 2; done'
+          echo "✅ LocalStack is ready"
+
+      - name: Install SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Build affected projects
+        run: npx nx affected -t build
+
+      - name: Start Lambda API with SAM local
+        run: |
+          echo "🚀 Starting Lambda API with SAM local..."
+          cd apps/bank-lambda
+
+          # Set LocalStack environment variables for SAM
+          export AWS_ACCESS_KEY_ID=test
+          export AWS_SECRET_ACCESS_KEY=test
+          export AWS_DEFAULT_REGION=us-east-1
+
+          # Start SAM local in background
+          sam local start-api --port 3000 \
+            --docker-network host \
+            --skip-pull-image &
+
+          # Wait for SAM local to be ready
+          echo "⏳ Waiting for SAM local to be ready..."
+          timeout 60 bash -c 'until curl -f http://localhost:3000/health; do sleep 3; done'
+          echo "✅ SAM local API is ready"
+
+      - name: Start Frontend Preview
+        run: |
+          echo "🌐 Starting frontend preview..."
+          # Build frontend first
+          npx nx build bank-web-app
+
+          # Start preview server in background
+          npx nx preview bank-web-app --port 4300 &
+
+          # Wait for frontend to be ready with health check
+          echo "⏳ Waiting for frontend to be ready..."
+          timeout 60 bash -c 'until curl -f http://localhost:4300 && curl -s http://localhost:4300 | grep -q "<!DOCTYPE html>"; do sleep 2; done'
+          echo "✅ Frontend preview is ready and serving content"
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests using npm script (reuses local config)
+        id: run-e2e-tests
+        run: |
+          echo "🧪 Running E2E tests using npm script (reuses local test configuration)..."
+
+          # Use npm script for test execution (reuses local config) but with CI environment
+          export CI=true
+          if npm run e2e; then
+            echo "✅ Local stack E2E tests passed"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Local stack E2E tests failed"
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Set final result
+        id: test-result
+        if: always()
+        run: |
+          if [ "${{ steps.run-e2e-tests.outputs.success }}" == "true" ]; then
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "success=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Playwright report (on failure)
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-local-stack
+          path: apps/bank-web-app-e2e/test-output/
+          retention-days: 7
+
+      - name: Show service logs (on failure)
+        if: failure()
+        run: |
+          echo "📋 Service logs for debugging:"
+          echo "=== LocalStack logs ==="
+          docker logs $(docker ps -q --filter ancestor=localstack/localstack:latest) || echo "No LocalStack container found"
+
+          echo "=== Background processes ==="
+          jobs -l || echo "No background jobs found"
+
+          echo "=== Service health checks ==="
+          curl -s http://localhost:4566/_localstack/health || echo "LocalStack not responding"
+          curl -s http://localhost:3000/health || echo "Lambda API not responding" 
+          curl -s http://localhost:4300 || echo "Frontend not responding"

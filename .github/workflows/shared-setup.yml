@@ -1,0 +1,98 @@
+name: Shared Setup and Quality Gates
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        default: '20'
+        type: string
+      run-security-scan:
+        description: 'Whether to run security scanning'
+        required: false
+        default: false
+        type: boolean
+    outputs:
+      affected-apps:
+        description: 'Comma-separated list of affected applications'
+        value: ${{ jobs.setup.outputs.affected-apps }}
+      has-affected-apps:
+        description: 'Whether there are affected applications'
+        value: ${{ jobs.setup.outputs.has-affected-apps }}
+      cache-hit:
+        description: 'Whether npm cache was hit'
+        value: ${{ jobs.setup.outputs.cache-hit }}
+
+env:
+  NODE_ENV: ci
+
+jobs:
+  setup:
+    name: Setup and Quality Gates
+    runs-on: ubuntu-latest
+    outputs:
+      affected-apps: ${{ steps.affected.outputs.apps }}
+      has-affected-apps: ${{ steps.affected.outputs.has-apps }}
+      cache-hit: ${{ steps.cache.outputs.cache-hit }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          cache: 'npm'
+
+      - name: Cache dependencies
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Nx SHAs
+        uses: nrwl/nx-set-shas@v4
+
+      # Configure Nx for CI environment
+      - name: Configure Nx
+        run: echo "NX_SKIP_NX_CACHE=false" >> $GITHUB_ENV
+
+      # Quality checks on affected projects
+      - name: Run format check
+        run: npx nx format:check
+
+      - name: Run lint
+        run: npx nx affected -t lint
+
+      - name: Run tests
+        run: npx nx affected -t test
+
+      - name: Run build
+        run: npx nx affected -t build
+
+      # Security scanning (if enabled)
+      - name: Run dependency audit
+        if: inputs.run-security-scan
+        run: npm audit --audit-level high
+
+      # Determine affected applications for deployment
+      - name: Get affected apps
+        id: affected
+        run: |
+          AFFECTED_APPS=$(npx nx show projects --affected --json | jq -r '.[] | select(. | contains("bank-")) | select(. | contains("-e2e") | not)' | tr '\n' ',' | sed 's/,$//')
+          echo "apps=${AFFECTED_APPS}" >> $GITHUB_OUTPUT
+          if [ -n "$AFFECTED_APPS" ]; then
+            echo "has-apps=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-apps=false" >> $GITHUB_OUTPUT
+          fi
+          echo "Affected apps: $AFFECTED_APPS"
