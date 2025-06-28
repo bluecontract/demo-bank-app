@@ -1,0 +1,39 @@
+---
+description: 
+globs: *.ts
+alwaysApply: false
+---
+# Node.js 22 + TypeScript - Cursor Rules
+
+## Best Practices (Code & Implementation)
+
+- **ES Modules First**  
+  Keep the entire codebase pure ESM.
+
+- **Idiomatic Typescript**
+  Write clear, concise, moderns idiomatic Typescript code. Leverage built-in type helpers.
+
+- **Strict Typing**  
+  Follow strict compiler flags. Use branded/opaque types for identifiers. Prefer `unknown` over `any` and narrow aggressively at boundaries.
+
+- **Async Design**  
+  Provide cancellable APIs that accept `AbortSignal`; stream large data using `AsyncIterable` and surface back-pressure explicitly.
+
+- **Dependency Injection**  
+  Pass collaborators via constructors or provider functions. Keep modules stateless; expose factory helpers for tests.
+
+- **Error Taxonomy**  
+  Derive all errors from a common `AppError` base containing `code`, `message`, and `cause`.  Never throw primitive values.
+
+- **Clean Code**  
+  Keep functions small, limit parameter count, favour pure functions, and use intention-revealing names.
+
+## Conventions
+
+| Aspect | Rule |
+|---------------|
+| **File Names** | `camelCase.ts` for utilities; `PascalCase.ts` for classes; |
+| **Exports** | Prefer named exports; default only when the module exposes a single primary concept. |
+| **Path Aliases** | `@domain/*`, `@application/*`, `@infra/*`, declared in `tsconfig.json`. |
+| **Package Surface** | Re-export public types and factories from each package's `index.ts`. |
+| **Configuration** | Centralised, typed config read once at startup and injected into downstream code. |

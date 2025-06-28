@@ -1,0 +1,102 @@
+---
+description: 
+globs: apps/bank-web-app/**
+alwaysApply: false
+---
+# React + Tailwind CSS - Cursor Rules
+
+## Best Practices (Implementation & Structure)
+
+- **Component Granularity**  
+  Build small functional components focused on a single concern; compose them declaratively.
+
+- **Separation of concerns**  
+  Keep data-fetching, auth checks, side-effects separated from presentation.
+
+- **State Strategy**  
+  Prefer local component state; lift state only when necessary; encapsulate cross-cutting state in context or lightweight stores.
+
+- **Styling with Tailwind**  
+  Use utility classes for most styling; extract repeated groups with a variant helper; keep design tokens in Tailwind config.
+
+- **Responsiveness & Theming**  
+  Apply responsive prefixes (`sm`, `md`, `lg`, `xl`, `2xl`) and dark-mode variants consistently; keep layout fluid by default.
+
+- **Accessibility First**  
+  Use semantic HTML, ARIA labels, and manage focus order; ensure keyboard and screen-reader usability.
+
+- **Performance**  
+  Split code with `React.lazy`; memoise pure components; leverage `useDeferredValue` or `useTransition` for expensive updates.
+
+- **Clean Code**  
+  Co-locate logic, styles, and tests; keep prop surfaces minimal; extract custom hooks for cross-cutting behaviour.
+
+## Design Patterns
+Apply patterns as appropriate, e.g.:
+
+- Compound Components  
+- Headless + Styled Separation  
+- Render Props / Function-as-Child  
+- Provider pattern for shared context  
+- Atomic Design hierarchy  
+- Slot pattern via `children`  
+
+## Conventions
+
+| Aspect | Rule |
+|---------------|
+| **State** | Use React Query + Context |
+| **File Naming** | `PascalCase.tsx` for components; `variant.ts` for class variants; each component folder re-exports its public API |
+| **Prop Conventions** | Boolean props use positive names (e.g. `isOpen`); provide defaults in destructuring. |
+| **Tailwind Order** | Group layout → flex/grid → spacing → sizing → typography → effects → state modifiers. |
+
+### Example project structure
+
+src/
+├─ app/                       # Global wiring
+│   ├─ App.tsx                # <Router> + top-level providers
+│   ├─ main.tsx               # ReactDOM.createRoot / Vite entry
+│   ├─ router.tsx             # React-Router route objects
+│   └─ providers/             # One-file-per provider wrapper
+│        ├─ Query.tsx         # QueryClientProvider
+│        ├─ SelectedAccount.tsx # Context provider & hook
+│        └─ Theme.tsx
+│
+├─ api/                       # All server I/O in one place
+│   ├─ http.ts                # fetch/axios wrapper + interceptors
+│   ├─ accounts.ts            # useAccounts(), useAccount(id)
+│   └─ transactions.ts        # useTransactions(accountId, page)
+│
+├─ features/                  # Business slices (1 folder per domain noun)
+│   ├─ accounts/
+│   │    ├─ components/
+│   │    │     └─ AccountsList.tsx
+│   │    └─ hooks/
+│   │          └─ useAccountsTable.ts   # table sorting/paging logic
+│   ├─ transactions/
+│   │    ├─ components/
+│   │    │     └─ TransactionsPanel.tsx
+│   │    └─ hooks/
+│   │          └─ useInfiniteTransactions.ts
+│   └─ transfer/
+│         └─ TransferForm.tsx
+│
+├─ pages/                     # Route targets (lazy-loaded)
+│   ├─ DashboardPage/
+│   │     └─ index.tsx
+│   └─ AccountDetailPage/
+│         └─ index.tsx
+│
+├─ ui/                        # Reusable design-system atoms & molecules
+│   ├─ Button/
+│   ├─ Modal/
+│   ├─ Card/
+│   └─ Spinner/
+│
+├─ hooks/                     # Totally generic hooks
+│   └─ usePrevious.ts
+│
+├─ lib/                       # Non-React helpers (dates, math, formatting)
+│   └─ formatCurrency.ts
+│
+└─ assets/                    # Static images, SVG icons, fonts

@@ -1,0 +1,33 @@
+---
+description: 
+globs: *.ts
+alwaysApply: false
+---
+# Generic Backend Development - Cursor Rules
+
+## Best Practices (Code & Architecture)
+
+- **Layered Hexagonal Architecture**  
+  - Domain rules in `/libs/domain`  
+  - Application orchestration in `/libs/application`  
+  - Technology-specific adapters in `/libs/infrastructure`  
+  - Deployment adapters (HTTP, Lambda, events) in `/apps/*`  
+  Outer layers depend only on abstractions of inner layers.
+
+- **API Surface**  
+  Expose contracts that speak the domain's ubiquitous language.  Map external DTOs to internal models only at the boundary.
+
+- **Validation & Error Flow**  
+  Validate all external input at the edge.  Propagate typed domain errors upward and translate them once into standard responses or domain events.
+
+- **Security by Design**  
+  Follow industry security best practices and actively defend against the **OWASP Top 10**.
+
+- **Observability**  
+  Emit structured logs enriched with relevant details. Add metrics as appropriate.
+
+- **Performance & Scalability**  
+  Stream large payloads, keep services stateless, and apply resilience mechanisms (retries, circuit-breakers, bulkheads) at the boundary.
+
+- **Clean Code Principles**  
+  Cohesive modules, intention-revealing names, small pure functions, and single responsibility per file. Prefer composition over inheritance. Keep Single Level of Abstraction for readability. Apply design patters as they fit.                                               |
