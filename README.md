@@ -131,6 +131,22 @@ npm run test:watch
 npm run e2e
 ```
 
+### Security Auditing
+
+```bash
+# Run security audit (production dependencies only, moderate+)
+npm run security:audit
+
+# Run security audit (all dependencies, high+ only)
+npm run security:audit:dev
+
+# Automatically fix security vulnerabilities
+npm run security:audit:fix
+
+# Check all vulnerability levels (including low)
+npm audit
+```
+
 ### Build & Deploy
 
 ```bash
@@ -152,13 +168,14 @@ npm run graph  # View dependency graph
 
 ### Automatic Quality Enforcement
 
-This project uses **automated git hooks** to ensure code quality:
+This project uses **automated git hooks** to ensure code quality and security:
 
 ```bash
 # Pre-commit (automatic on git commit)
-- Format staged files with Prettier
-- Run affected tests
-- Block commit if issues found
+- Phase 1: Format staged files with Prettier + ESLint
+- Phase 2: Security audit (production: moderate+, dev: high+ only)
+- Phase 3: Run affected tests
+- Block commit if any phase fails
 
 # Commit message (automatic on git commit)
 - Validate conventional commit format
@@ -169,8 +186,9 @@ This project uses **automated git hooks** to ensure code quality:
 
 Git hooks are automatically installed via **Husky**:
 
-- ✅ **Pre-commit**: Formats code + runs tests
+- ✅ **Pre-commit**: Formats code + security audit + runs tests
 - ✅ **Commit-msg**: Validates conventional commit format
+- ✅ **Security audit**: Blocks commits with vulnerabilities (moderate+ in prod, high+ in dev)
 - ✅ **Staged-only formatting**: Fast iteration (formats only changed files)
 
 **Conventional Commit Format:** `type: description` (feat, fix, docs, chore, etc.)
@@ -297,6 +315,63 @@ npm run generate-docs       # Creates docs/api/openapi.{json,yaml}
 - **Build**: Nx, esbuild
 - **Deployment**: AWS SAM, GitHub Actions
 - **Local development** Localstack / Docker
+
+## 🚀 CI/CD Pipeline
+
+### Pipeline Flow
+
+```mermaid
+graph TB
+    A[Push/PR] --> B["🧪 Quality Gates<br/>Unit Tests • Lint • Build • Security"]
+    B --> C["🐳 Integration Tests<br/>AWS Services via LocalStack"]
+    C --> D["⚡ Local Stack E2E<br/>SAM Local + React Dev + E2E"]
+    D --> E{Branch Type?}
+    E -->|PR to main| F["🚀 Deploy Dev<br/>+ Cloud E2E Tests"]
+    E -->|Push to main| G["🚀 Deploy Production<br/>+ Cloud E2E Tests"]
+
+    subgraph "Pre-Deployment Test Pyramid"
+        direction TB
+        T1["1️⃣ Unit Tests<br/>(Fast, Isolated)"]
+        T2["2️⃣ Integration Tests<br/>(AWS Services)"]
+        T3["3️⃣ Local E2E<br/>(Full Stack)"]
+        T1 --> T2 --> T3
+    end
+
+    subgraph "Post-Deployment"
+        T4["4️⃣ Cloud E2E<br/>(Live Environment)"]
+    end
+
+    %% Connect pyramid to main flow
+    B -.-> T1
+    C -.-> T2
+    D -.-> T3
+    F -.-> T4
+    G -.-> T4
+
+    style A fill:#e1f5fe
+    style E fill:#fff3e0
+    style F fill:#e8f5e8
+    style G fill:#fff8e1
+    style T1 fill:#f3e5f5
+    style T2 fill:#e8f5e8
+    style T3 fill:#fff3e0
+    style T4 fill:#fce4ec
+```
+
+### Test Strategy
+
+**4-Tier Test Pyramid:**
+
+1. **Unit Tests**: Fast, isolated tests without external dependencies
+2. **Integration Tests**: AWS service integration via LocalStack containers
+3. **Local Stack E2E**: Full-stack tests against local services (pre-deployment validation)
+4. **Cloud E2E**: End-to-end tests against live AWS environments (post-deployment verification)
+
+**Deployment Flow:**
+
+- **PR to main** → Deploy to dev environment + run cloud E2E tests
+- **Merge to main** → Deploy to production + run cloud E2E tests
+- **Zero manual approvals** - Fully automated with proper test gates
 
 ## 📚 Project Documentation
 
