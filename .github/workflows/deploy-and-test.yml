@@ -14,14 +14,14 @@ on:
       node-version:
         description: 'Node.js version to use'
         required: false
-        default: '20'
+        default: '22'
         type: string
       e2e-base-url:
         description: 'Base URL for E2E tests'
         required: true
         type: string
       backend-url:
-        description: 'Backend API URL for health checks'
+        description: 'Backend API URL'
         required: true
         type: string
     outputs:
@@ -42,8 +42,15 @@ jobs:
   deploy:
     name: Deploy to ${{ inputs.environment }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.environment }}
     outputs:
       success: ${{ steps.deploy-status.outputs.success }}
+
+    permissions:
+      id-token: write
+      contents: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,7 +63,17 @@ jobs:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-modules-
+
       - name: Install dependencies
+        if: steps.cache-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Setup Nx SHAs
@@ -72,6 +89,13 @@ jobs:
       - name: Deploy affected apps to ${{ inputs.environment }}
         id: deploy-apps
         run: |
+          # Check if there are any apps to deploy
+          if [ -z "${{ inputs.affected-apps }}" ] || [ "${{ inputs.affected-apps }}" = "" ]; then
+            echo "ℹ️ No affected apps to deploy, skipping deployment..."
+            echo "success=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           IFS=',' read -ra APPS <<< "${{ inputs.affected-apps }}"
           SUCCESS=true
 
@@ -88,6 +112,9 @@ jobs:
           done
 
           echo "success=$SUCCESS" >> $GITHUB_OUTPUT
+        env:
+          # Set API URL for frontend builds
+          BANK_API_URL: ${{ inputs.backend-url }}
 
       - name: Set deployment status
         id: deploy-status
@@ -107,6 +134,7 @@ jobs:
   e2e-tests:
     name: E2E Tests (${{ inputs.environment }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [deploy]
     if: always() && needs.deploy.outputs.success == 'true'
     outputs:
@@ -123,20 +151,47 @@ jobs:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
 
+      - name: Cache node_modules
+        id: cache-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-modules-
+
       - name: Install dependencies
+        if: steps.cache-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Setup Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
+      - name: Install Playwright browsers
+        run: |
+          echo "📦 Installing Playwright browsers..."
+          npx playwright install --with-deps
+          echo "✅ Playwright browsers installed successfully"
+
       - name: Wait for deployment to be ready
         run: |
           echo "⏳ Waiting for deployment to be ready..."
-          sleep 30  # Give the deployment time to be accessible
+          if [ -n "$BANK_API_URL" ]; then
+            npm run wait-for-backend
+          else
+            sleep 30  # Fallback for non-API deployments
+          fi
 
       - name: Run E2E tests
         id: run-e2e
         run: |
+          # Check if any deployments actually happened
+          if [ -z "${{ inputs.affected-apps }}" ] || [ "${{ inputs.affected-apps }}" = "" ]; then
+            echo "ℹ️ No affected apps deployed, skipping E2E tests..."
+            echo "success=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           echo "🧪 Running E2E tests against ${{ inputs.environment }}..."
           echo "Target URL: $E2E_BASE_URL"
           if npx nx affected -t e2e; then
@@ -150,7 +205,7 @@ jobs:
         env:
           CI: true
           E2E_BASE_URL: ${{ inputs.e2e-base-url }}
-          BACKEND_URL: ${{ inputs.backend-url }}
+          BANK_API_URL: ${{ inputs.backend-url }}
 
       - name: Set E2E status
         id: e2e-status

@@ -19,6 +19,12 @@ export default defineConfig(() => ({
     host: 'localhost',
   },
   plugins: [react()],
+  define: {
+    // Transform BANK_API_URL environment variable to a global constant
+    __BANK_API_URL__: JSON.stringify(
+      process.env.BANK_API_URL || 'http://localhost:3000'
+    ),
+  },
   // Uncomment this if you are using workers.
   // worker: {
   //  plugins: [ nxViteTsPaths() ],

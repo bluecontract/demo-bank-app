@@ -10,7 +10,7 @@ import { createApiClient } from '@demo-blue/api-client';
 const queryClient = new QueryClient();
 
 const apiClient = createApiClient({
-  baseUrl: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000',
+  baseUrl: __BANK_API_URL__,
 });
 
 function HealthStatus() {
@@ -46,8 +46,7 @@ function HealthStatus() {
         <h3 className="font-bold">System Health</h3>
         <p>⚠️ Backend service is not available</p>
         <p className="text-sm">
-          Make sure the API server is running on{' '}
-          {import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'}
+          Make sure the API server is running on {__BANK_API_URL__}
         </p>
       </div>
     );

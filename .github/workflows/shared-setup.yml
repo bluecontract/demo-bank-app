@@ -6,7 +6,7 @@ on:
       node-version:
         description: 'Node.js version to use'
         required: false
-        default: '20'
+        default: '22'
         type: string
       run-security-scan:
         description: 'Whether to run security scanning'
@@ -31,10 +31,11 @@ jobs:
   setup:
     name: Setup and Quality Gates
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       affected-apps: ${{ steps.affected.outputs.apps }}
       has-affected-apps: ${{ steps.affected.outputs.has-apps }}
-      cache-hit: ${{ steps.cache.outputs.cache-hit }}
+      cache-hit: ${{ steps.cache-modules.outputs.cache-hit }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,16 +48,17 @@ jobs:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
 
-      - name: Cache dependencies
-        id: cache
+      - name: Cache node_modules
+        id: cache-modules
         uses: actions/cache@v4
         with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          path: node_modules
+          key: ${{ runner.os }}-modules-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-node-
+            ${{ runner.os }}-modules-
 
       - name: Install dependencies
+        if: steps.cache-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Setup Nx SHAs
@@ -88,11 +90,21 @@ jobs:
       - name: Get affected apps
         id: affected
         run: |
-          AFFECTED_APPS=$(npx nx show projects --affected --json | jq -r '.[] | select(. | contains("bank-")) | select(. | contains("-e2e") | not)' | tr '\n' ',' | sed 's/,$//')
+          # Get all affected projects that are applications (not libraries or e2e tests)
+          AFFECTED_APPS=$(npx nx show projects --affected --json | jq -r '.[]' | while read project; do
+            # Check if project is an application and has a deploy target
+            if npx nx show project $project --json | jq -e '.projectType == "application" and .targets.deploy' > /dev/null 2>&1; then
+              # Skip e2e test projects
+              if [[ ! "$project" == *"-e2e" ]]; then
+                echo "$project"
+              fi
+            fi
+          done | tr '\n' ',' | sed 's/,$//')
+
           echo "apps=${AFFECTED_APPS}" >> $GITHUB_OUTPUT
           if [ -n "$AFFECTED_APPS" ]; then
             echo "has-apps=true" >> $GITHUB_OUTPUT
           else
             echo "has-apps=false" >> $GITHUB_OUTPUT
           fi
-          echo "Affected apps: $AFFECTED_APPS"
+          echo "Affected deployable apps: $AFFECTED_APPS"

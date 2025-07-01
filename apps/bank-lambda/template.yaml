@@ -24,10 +24,12 @@ Resources:
     Properties:
       Name: !Sub 'bank-api-${Environment}'
       StageName: !Ref Environment
+      # API Gateway handles OPTIONS preflight requests, Lambda handles CORS for actual requests
       Cors:
         AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
         AllowOrigin: "'*'"
+        MaxAge: "'600'"
       EndpointConfiguration:
         Type: REGIONAL
 
@@ -38,18 +40,12 @@ Resources:
       Handler: main.handler
       Description: Banking API Lambda function
       Events:
-        ApiRoot:
+        HealthApi:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /{proxy+}
-            Method: ANY
-        ApiOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /{proxy+}
-            Method: OPTIONS
+            Path: /health
+            Method: GET
 
 Outputs:
   BankApiUrl:

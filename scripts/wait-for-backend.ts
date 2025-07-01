@@ -5,8 +5,8 @@
  * before proceeding with E2E tests.
  */
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000';
-const HEALTH_ENDPOINT = `${BACKEND_URL}/health`;
+const BANK_API_URL = process.env.BANK_API_URL || 'http://localhost:3000';
+const HEALTH_ENDPOINT = `${BANK_API_URL}/health`;
 const MAX_ATTEMPTS = 5; // 5 attempts
 const INITIAL_DELAY = 1000; // Start with 1 second
 const MAX_DELAY = 5000; // Cap at 5 seconds

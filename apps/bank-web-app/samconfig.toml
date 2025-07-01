@@ -1,0 +1,39 @@
+version = 0.1
+
+# SAM Configuration for Frontend Infrastructure
+
+[default.global.parameters]
+stack_name = "demo-blue-frontend"
+region = "eu-central-1"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy.parameters]
+confirm_changeset = false
+fail_on_empty_changeset = false
+capabilities = "CAPABILITY_IAM"
+region = "eu-central-1"
+
+# Development Environment
+[dev.deploy.parameters]
+stack_name = "demo-blue-frontend-dev"
+s3_bucket = "demo-blue-deployments-dev"
+parameter_overrides = "Environment=dev"
+tags = "Environment=dev Project=demo-blue"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false
+region = "eu-central-1"
+
+# Production Environment  
+[prod.deploy.parameters]
+stack_name = "demo-blue-frontend-prod"
+s3_bucket = "demo-blue-deployments-prod"
+parameter_overrides = "Environment=prod"
+tags = "Environment=prod Project=demo-blue"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false
+region = "eu-central-1" 
