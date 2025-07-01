@@ -6,7 +6,7 @@ on:
       node-version:
         description: 'Node.js version to use'
         required: false
-        default: '20'
+        default: '22'
         type: string
     outputs:
       success:
@@ -20,27 +20,9 @@ jobs:
   local-stack-e2e:
     name: Local Stack E2E Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       success: ${{ steps.test-result.outputs.success }}
-
-    services:
-      # LocalStack as a service container (reliable for CI)
-      localstack:
-        image: localstack/localstack:latest
-        ports:
-          - 4566:4566
-          - 4510-4559:4510-4559
-        env:
-          DEBUG: 1
-          DOCKER_HOST: unix:///var/run/docker.sock
-        volumes:
-          - /var/run/docker.sock:/var/run/docker.sock
-        options: >-
-          --health-cmd="curl -f http://localhost:4566/_localstack/health || exit 1"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=3
-          --health-start-period=30s
 
     steps:
       - name: Checkout
@@ -60,69 +42,94 @@ jobs:
       - name: Setup Nx SHAs
         uses: nrwl/nx-set-shas@v4
 
-      - name: Wait for LocalStack to be ready
-        run: |
-          echo "⏳ Waiting for LocalStack to be ready..."
-          timeout 60 bash -c 'until curl -f http://localhost:4566/_localstack/health; do sleep 2; done'
-          echo "✅ LocalStack is ready"
-
-      - name: Install SAM CLI
-        uses: aws-actions/setup-sam@v2
-        with:
-          use-installer: true
-
       - name: Build affected projects
         run: npx nx affected -t build
 
-      - name: Start Lambda API with SAM local
+      - name: Start services using serve:stack
         run: |
-          echo "🚀 Starting Lambda API with SAM local..."
-          cd apps/bank-lambda
+          echo "🚀 Starting services using serve:stack..."
 
-          # Set LocalStack environment variables for SAM
-          export AWS_ACCESS_KEY_ID=test
-          export AWS_SECRET_ACCESS_KEY=test
-          export AWS_DEFAULT_REGION=us-east-1
+          # Set environment variables
+          export BANK_API_URL=http://localhost:3000
 
-          # Start SAM local in background
-          sam local start-api --port 3000 \
-            --docker-network host \
-            --skip-pull-image &
+          # Start all services in background
+          npm run serve:stack &
 
-          # Wait for SAM local to be ready
-          echo "⏳ Waiting for SAM local to be ready..."
-          timeout 60 bash -c 'until curl -f http://localhost:3000/health; do sleep 3; done'
-          echo "✅ SAM local API is ready"
+          # Wait for LocalStack with retries
+          echo "⏳ Waiting for LocalStack..."
+          for i in {1..30}; do
+            if curl -f http://localhost:4566/_localstack/health > /dev/null 2>&1; then
+              echo "✅ LocalStack is ready (attempt $i)"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "❌ LocalStack failed to start after 30 attempts"
+              exit 1
+            fi
+            sleep 3
+          done
 
-      - name: Start Frontend Preview
-        run: |
-          echo "🌐 Starting frontend preview..."
-          # Build frontend first
-          npx nx build bank-web-app
+          # Wait for backend API with retries
+          echo "⏳ Waiting for backend API..."
+          for i in {1..30}; do
+            if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+              echo "✅ Backend API is ready (attempt $i)"
+              # Additional stability check - wait a bit more and check again
+              sleep 5
+              if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+                echo "✅ Backend API stability confirmed"
+                break
+              else
+                echo "⚠️ Backend API became unstable, continuing to wait..."
+                continue
+              fi
+            fi
+            if [ $i -eq 30 ]; then
+              echo "❌ Backend API failed to start after 30 attempts"
+              exit 1
+            fi
+            sleep 3
+          done
 
-          # Start preview server in background
-          npx nx preview bank-web-app --port 4300 &
+          # Wait for frontend with retries
+          echo "⏳ Waiting for frontend..."
+          for i in {1..30}; do
+            if curl -f http://localhost:4200 > /dev/null 2>&1; then
+              echo "✅ Frontend is ready (attempt $i)"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "❌ Frontend failed to start after 30 attempts"
+              exit 1
+            fi
+            sleep 3
+          done
 
-          # Wait for frontend to be ready with health check
-          echo "⏳ Waiting for frontend to be ready..."
-          timeout 60 bash -c 'until curl -f http://localhost:4300 && curl -s http://localhost:4300 | grep -q "<!DOCTYPE html>"; do sleep 2; done'
-          echo "✅ Frontend preview is ready and serving content"
+          # Final health verification
+          echo "🔍 Final health verification..."
+          curl -s http://localhost:4566/_localstack/health | jq '.' || echo "LocalStack health check failed"
+          curl -s http://localhost:3000/health | jq '.' || echo "Backend health check failed"
+          echo "✅ All services are ready and verified"
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps
 
-      - name: Run E2E tests using npm script (reuses local config)
+      - name: Run E2E tests
         id: run-e2e-tests
         run: |
-          echo "🧪 Running E2E tests using npm script (reuses local test configuration)..."
+          echo "🧪 Running E2E tests..."
 
-          # Use npm script for test execution (reuses local config) but with CI environment
+          # Set environment variables for E2E tests
+          export E2E_BASE_URL=http://localhost:4200
+          export BANK_API_URL=http://localhost:3000
           export CI=true
+
+          # Run e2e tests
           if npm run e2e; then
-            echo "✅ Local stack E2E tests passed"
+            echo "✅ E2E tests passed"
             echo "success=true" >> $GITHUB_OUTPUT
           else
-            echo "❌ Local stack E2E tests failed"
+            echo "❌ E2E tests failed"
             echo "success=false" >> $GITHUB_OUTPUT
             exit 1
           fi
@@ -150,12 +157,9 @@ jobs:
         run: |
           echo "📋 Service logs for debugging:"
           echo "=== LocalStack logs ==="
-          docker logs $(docker ps -q --filter ancestor=localstack/localstack:latest) || echo "No LocalStack container found"
-
-          echo "=== Background processes ==="
-          jobs -l || echo "No background jobs found"
+          docker logs $(docker ps -q --filter name=localstack-demo-blue) || echo "No LocalStack container found"
 
           echo "=== Service health checks ==="
           curl -s http://localhost:4566/_localstack/health || echo "LocalStack not responding"
-          curl -s http://localhost:3000/health || echo "Lambda API not responding" 
-          curl -s http://localhost:4300 || echo "Frontend not responding"
+          curl -s http://localhost:3000/health || echo "Backend API not responding" 
+          curl -s http://localhost:4200 || echo "Frontend not responding"

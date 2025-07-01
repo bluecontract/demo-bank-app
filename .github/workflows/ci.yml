@@ -2,7 +2,7 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, 'feature/*', 'bugfix/*', 'hotfix/*']
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -17,66 +17,74 @@ permissions:
 
 jobs:
   # ============================================================================
-  # QUALITY GATES & SETUP (Reusable workflow)
+  # QUALITY GATES (always run)
   # ============================================================================
   quality-gates:
     name: Quality Gates & Setup
     uses: ./.github/workflows/shared-setup.yml
     with:
-      node-version: '20'
+      node-version: '22'
       run-security-scan: ${{ github.event_name == 'pull_request' }}
     secrets: inherit
 
   # ============================================================================
-  # INTEGRATION TESTS (LocalStack required)
+  # INTEGRATION TESTS (always run)
   # ============================================================================
   integration-tests:
     name: Integration Tests
     uses: ./.github/workflows/integration-tests.yml
     needs: [quality-gates]
     with:
-      node-version: '20'
+      node-version: '22'
     secrets: inherit
 
   # ============================================================================
-  # LOCAL STACK E2E TESTS (Pre-deployment validation)
+  # LOCAL STACK E2E TESTS (always run)
   # ============================================================================
   local-stack-e2e:
     name: Local Stack E2E Tests
     uses: ./.github/workflows/local-stack-e2e.yml
     needs: [quality-gates, integration-tests]
     with:
-      node-version: '20'
+      node-version: '22'
     secrets: inherit
 
   # ============================================================================
-  # DEPLOY TO DEV (On PR to main)
+  # DEPLOY TO DEV (On PR to main OR merge to main)
   # ============================================================================
   deploy-dev:
     name: Deploy & Test (Dev)
     uses: ./.github/workflows/deploy-and-test.yml
     needs: [quality-gates, integration-tests, local-stack-e2e]
-    if: github.event_name == 'pull_request' && github.base_ref == 'main' && needs.quality-gates.outputs.has-affected-apps == 'true'
+    if: |
+      needs.quality-gates.outputs.has-affected-apps == 'true' && (
+        (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      )
     with:
       environment: 'dev'
       affected-apps: ${{ needs.quality-gates.outputs.affected-apps }}
-      node-version: '20'
-      e2e-base-url: 'https://dev.your-domain.com'
-      backend-url: 'https://api-dev.your-domain.com'
+      node-version: '22'
+      e2e-base-url: '${{ vars.DEV_FRONTEND_URL }}'
+      backend-url: '${{ vars.DEV_BACKEND_URL }}'
     secrets: inherit
 
   # ============================================================================
-  # DEPLOY TO PRODUCTION (On merge to main)
+  # DEPLOY TO PRODUCTION (Only on merge to main, after dev success)
   # ============================================================================
   deploy-production:
     name: Deploy & Test (Production)
     uses: ./.github/workflows/deploy-and-test.yml
-    needs: [quality-gates, integration-tests, local-stack-e2e]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.quality-gates.outputs.has-affected-apps == 'true'
+    needs: [quality-gates, deploy-dev]
+    if: |
+      github.event_name == 'push' && 
+      github.ref == 'refs/heads/main' && 
+      needs.deploy-dev.outputs.deployment-success == 'true' &&
+      needs.deploy-dev.outputs.e2e-success == 'true'
     with:
       environment: 'prod'
       affected-apps: ${{ needs.quality-gates.outputs.affected-apps }}
-      node-version: '20'
-      e2e-base-url: 'https://your-domain.com'
-      backend-url: 'https://api.your-domain.com'
+      node-version: '22'
+      e2e-base-url: '${{ vars.PROD_FRONTEND_URL }}'
+      backend-url: '${{ vars.PROD_BACKEND_URL }}'
     secrets: inherit
