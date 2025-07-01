@@ -1,0 +1,40 @@
+version = 0.1
+
+# SAM Configuration for different environments
+
+[default.global.parameters]
+stack_name = "demo-blue-bank"
+region = "eu-central-1"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.package.parameters]
+resolve_s3 = true
+
+[default.deploy.parameters]
+confirm_changeset = false
+fail_on_empty_changeset = false
+capabilities = "CAPABILITY_IAM"
+region = "eu-central-1"
+
+# Development Environment
+[dev.deploy.parameters]
+stack_name = "demo-blue-bank-dev" 
+s3_bucket = "demo-blue-deployments-dev"
+parameter_overrides = "Environment=dev"
+tags = "Environment=dev Project=demo-blue"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false
+
+# Production Environment  
+[prod.deploy.parameters]
+stack_name = "demo-blue-bank-prod"
+s3_bucket = "demo-blue-deployments-prod"
+parameter_overrides = "Environment=prod"
+tags = "Environment=prod Project=demo-blue"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false 

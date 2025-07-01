@@ -59,6 +59,17 @@
       },
       "dependsOn": ["^build", "localstack:serve"]
     },
+    "test:integration:ci": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "find src -name '*.integration.test.ts' -exec npx vitest run --config vitest.config.ts {} +"
+        ],
+        "cwd": "apps/bank-lambda",
+        "parallel": false
+      },
+      "dependsOn": ["^build"]
+    },
     "test:all": {
       "executor": "nx:run-commands",
       "options": {
@@ -76,6 +87,17 @@
           "apps/bank-lambda/package.json"
         ]
       }
+    },
+    "deploy": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "sam deploy --config-env {args.environment} --no-confirm-changeset --no-fail-on-empty-changeset"
+        ],
+        "cwd": "apps/bank-lambda",
+        "parallel": false
+      },
+      "dependsOn": ["build"]
     }
   },
   "implicitDependencies": []
