@@ -38,12 +38,15 @@ export default defineConfig({
       use: { ...devices['Desktop Safari'] },
     },
   ],
-  webServer: process.env.CI
-    ? undefined
-    : {
-        command: 'npm run serve:stack',
-        url: 'http://localhost:4200',
-        reuseExistingServer: true,
-        timeout: 180 * 1000,
-      },
+  webServer:
+    process.env.CI ||
+    process.env.E2E_BASE_URL?.includes('cloudfront') ||
+    process.env.E2E_BASE_URL?.includes('https://')
+      ? undefined
+      : {
+          command: 'npm run serve:stack',
+          url: 'http://localhost:4200',
+          reuseExistingServer: true,
+          timeout: 180 * 1000,
+        },
 });
