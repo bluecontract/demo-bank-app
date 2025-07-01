@@ -1,6 +1,7 @@
 import { createLambdaHandler } from '@ts-rest/serverless/aws';
 import { bankApiContract } from '@demo-blue/api-contract';
 
+// Force deployment trigger - can be removed later
 // Create and export the ts-rest handler directly
 export const handler = createLambdaHandler(
   bankApiContract,

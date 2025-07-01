@@ -65,6 +65,7 @@ function HealthStatus() {
   );
 }
 
+// Force deployment trigger - can be removed later (timestamp: 2025-01-27)
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
