@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@demo-blue/api-client": "*",
+    "@demo-blue/bank-api-client": "*",
     "@tanstack/react-query": "^5.17.10",
     "react": "19.0.0",
     "react-dom": "19.0.0",

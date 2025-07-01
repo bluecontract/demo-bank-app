@@ -1,0 +1,19 @@
+{
+  "name": "@demo-blue/bank-api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "nx": {},
+  "main": "main.js",
+  "scripts": {
+    "build": "mkdir -p ../../dist/apps/bank-api && cp template.yaml ../../dist/apps/bank-api/template.yaml && esbuild src/main.ts --bundle --platform=node --format=cjs --target=node22 --outfile=../../dist/apps/bank-api/main.cjs --sourcemap"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@demo-blue/bank-api-contract": "*",
+    "@ts-rest/serverless": "^3.52.1"
+  }
+}

@@ -20,8 +20,8 @@
     "customConditions": ["development"],
     "baseUrl": ".",
     "paths": {
-      "@demo-blue/api-client": ["libs/api-client/src/index.ts"],
-      "@demo-blue/api-contract": ["libs/api-contract/src/index.ts"]
+      "@demo-blue/bank-api-client": ["libs/bank-api-client/src/index.ts"],
+      "@demo-blue/bank-api-contract": ["libs/bank-api-contract/src/index.ts"]
     }
   }
 }

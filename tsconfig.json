@@ -10,13 +10,13 @@
       "path": "./apps/bank-web-app"
     },
     {
-      "path": "./apps/bank-lambda"
+      "path": "./apps/bank-api"
     },
     {
-      "path": "./libs/api-contract"
+      "path": "./libs/bank-api-contract"
     },
     {
-      "path": "./libs/api-client"
+      "path": "./libs/bank-api-client"
     }
   ]
 }

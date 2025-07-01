@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/api-contract",
+  "name": "@demo-blue/bank-api-contract",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -26,13 +26,13 @@
           "{options.outputPath}"
         ],
         "options": {
-          "outputPath": "libs/api-contract/dist",
-          "main": "libs/api-contract/src/index.ts",
-          "tsConfig": "libs/api-contract/tsconfig.lib.json",
+          "outputPath": "libs/bank-api-contract/dist",
+          "main": "libs/bank-api-contract/src/index.ts",
+          "tsConfig": "libs/bank-api-contract/tsconfig.lib.json",
           "format": [
             "esm"
           ],
-          "declarationRootDir": "libs/api-contract/src"
+          "declarationRootDir": "libs/bank-api-contract/src"
         }
       }
     }

@@ -1,16 +1,16 @@
 {
-  "name": "@demo-blue/bank-lambda",
+  "name": "@demo-blue/bank-api",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "sourceRoot": "apps/bank-lambda/src",
+  "sourceRoot": "apps/bank-api/src",
   "targets": {
     "serve": {
       "executor": "nx:run-commands",
       "options": {
         "commands": [
-          "nx build bank-lambda --configuration=development",
-          "mv dist/apps/bank-lambda/main.cjs dist/apps/bank-lambda/main.js",
-          "cd apps/bank-lambda && sam local start-api --port 3000"
+          "nx build bank-api --configuration=development",
+          "mv dist/apps/bank-api/main.cjs dist/apps/bank-api/main.js",
+          "cd apps/bank-api && sam local start-api --port 3000"
         ],
         "parallel": false
       },
@@ -18,21 +18,21 @@
     },
     "build": {
       "executor": "nx:run-commands",
-      "outputs": ["{workspaceRoot}/dist/apps/bank-lambda"],
+      "outputs": ["{workspaceRoot}/dist/apps/bank-api"],
       "defaultConfiguration": "development",
       "options": {
-        "commands": ["cd apps/bank-lambda && npm run build"],
+        "commands": ["cd apps/bank-api && npm run build"],
         "parallel": false
       },
       "configurations": {
         "development": {
           "commands": [
-            "cd apps/bank-lambda && npm run build -- --tree-shaking=false"
+            "cd apps/bank-api && npm run build -- --tree-shaking=false"
           ]
         },
         "production": {
           "commands": [
-            "cd apps/bank-lambda && npm run build -- --tree-shaking=true --minify"
+            "cd apps/bank-api && npm run build -- --tree-shaking=true --minify"
           ]
         }
       }
@@ -41,7 +41,7 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "npx vitest run --config vitest.config.ts",
-        "cwd": "apps/bank-lambda",
+        "cwd": "apps/bank-api",
         "env": {
           "VITEST_EXCLUDE_INTEGRATION": "true"
         }
@@ -54,7 +54,7 @@
         "commands": [
           "find src -name '*.integration.test.ts' -exec npx vitest run --config vitest.config.ts {} +"
         ],
-        "cwd": "apps/bank-lambda",
+        "cwd": "apps/bank-api",
         "parallel": false
       },
       "dependsOn": ["^build", "localstack:serve"]
@@ -65,7 +65,7 @@
         "commands": [
           "find src -name '*.integration.test.ts' -exec npx vitest run --config vitest.config.ts {} +"
         ],
-        "cwd": "apps/bank-lambda",
+        "cwd": "apps/bank-api",
         "parallel": false
       },
       "dependsOn": ["^build"]
@@ -74,7 +74,7 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "npx vitest run",
-        "cwd": "apps/bank-lambda"
+        "cwd": "apps/bank-api"
       },
       "dependsOn": ["^build", "localstack:serve"]
     },
@@ -83,8 +83,8 @@
       "outputs": ["{options.outputFile}"],
       "options": {
         "lintFilePatterns": [
-          "apps/bank-lambda/**/*.{ts,tsx,js,jsx}",
-          "apps/bank-lambda/package.json"
+          "apps/bank-api/**/*.{ts,tsx,js,jsx}",
+          "apps/bank-api/package.json"
         ]
       }
     },
@@ -94,7 +94,7 @@
         "commands": [
           "sam deploy --config-env {args.environment} --no-confirm-changeset --no-fail-on-empty-changeset"
         ],
-        "cwd": "apps/bank-lambda",
+        "cwd": "apps/bank-api",
         "parallel": false
       },
       "dependsOn": ["build"]

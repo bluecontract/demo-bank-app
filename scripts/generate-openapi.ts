@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
-import { bankApiContract } from '@demo-blue/api-contract';
+import { bankApiContract } from '@demo-blue/bank-api-contract';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);

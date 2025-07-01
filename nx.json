@@ -24,7 +24,7 @@
           "watchDepsName": "watch-deps"
         }
       },
-      "exclude": ["libs/api-contract/*", "libs/api-client/*"]
+      "exclude": ["libs/bank-api-contract/*", "libs/bank-api-client/*"]
     },
     {
       "plugin": "@nx/react/router-plugin",
@@ -63,7 +63,7 @@
     },
     {
       "plugin": "@nx/js/typescript",
-      "include": ["libs/api-contract/*", "libs/api-client/*"],
+      "include": ["libs/bank-api-contract/*", "libs/bank-api-client/*"],
       "options": {
         "build": {
           "targetName": "build",
@@ -88,7 +88,7 @@
       "options": {
         "command": "npx tsx scripts/generate-openapi.ts"
       },
-      "inputs": ["libs/api-contract/src/**/*"],
+      "inputs": ["libs/bank-api-contract/src/**/*"],
       "outputs": ["{workspaceRoot}/docs/api"]
     }
   },

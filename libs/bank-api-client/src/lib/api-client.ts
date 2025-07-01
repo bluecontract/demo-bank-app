@@ -1,5 +1,5 @@
 import { initClient } from '@ts-rest/core';
-import { bankApiContract } from '@demo-blue/api-contract';
+import { bankApiContract } from '@demo-blue/bank-api-contract';
 
 export interface ApiClientConfig {
   baseUrl: string;

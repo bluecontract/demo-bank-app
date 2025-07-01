@@ -4,7 +4,7 @@
   "include": [],
   "references": [
     {
-      "path": "../api-contract"
+      "path": "../bank-api-contract"
     },
     {
       "path": "./tsconfig.lib.json"

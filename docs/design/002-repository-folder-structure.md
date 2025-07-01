@@ -131,7 +131,7 @@ apps/bank-api/
 shared/bank-api-contract/
 └─ src/
     └─ lib/
-        └─ bank-api.contract.ts   # ts-rest contract: routes, schemas
+        └─ bank-api-contract.ts   # ts-rest contract: routes, schemas
 ```
 
 **routing.ts**

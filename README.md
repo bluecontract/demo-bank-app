@@ -106,7 +106,7 @@ npm run serve:stack
 
 # Start individual services
 nx serve localstack              # LocalStack only
-nx serve @demo-blue/bank-lambda  # Backend API only
+nx serve @demo-blue/bank-api  # Backend API only
 nx serve @demo-blue/bank-web-app # Frontend only
 
 # Check service status
@@ -225,7 +225,7 @@ demo-blue/
 │   │   ├── src/                   # Frontend source code
 │   │   ├── tailwind.config.js     # Styling configuration
 │   │   └── vite.config.ts         # Build configuration
-│   ├── bank-lambda/               # AWS Lambda backend
+│   ├── bank-api/                  # AWS Lambda backend
 │   │   ├── src/                   # Lambda source code
 │   │   └── project.json           # SAM local serve config
 │   ├── localstack/                # LocalStack service wrapper
@@ -234,7 +234,7 @@ demo-blue/
 │       ├── src/                   # E2E test suites
 │       └── playwright.config.ts   # Test configuration
 ├── libs/                          # Shared libraries
-│   ├── api-contract/              # Shared API contracts (ts-rest + Zod)
+│   ├── bank-api-contract/         # Shared API contracts (ts-rest + Zod)
 │   ├── domain/                    # Domain logic (business rules)
 │   ├── application/               # Use cases & application services
 │   └── infrastructure/            # External adapters (DB, APIs)
@@ -258,7 +258,7 @@ demo-blue/
 ┌─────────────────────────────────────────────────────────────┐
 │                     /apps (Adapters)                       │
 ├─────────────────────────────────────────────────────────────┤
-│  bank-web-app/     │  bank-lambda/     │  bank-web-app-e2e/ │
+│  bank-web-app/     │  bank-api/        │  bank-web-app-e2e/ │
 │  (React SPA)       │  (AWS Lambda)     │  (E2E Tests)       │
 └─────────────────────────────────────────────────────────────┘
                                │
@@ -278,7 +278,7 @@ demo-blue/
 Each app manages its own infrastructure-as-code:
 
 - **`bank-web-app/`**: S3 bucket, CloudFront distribution
-- **`bank-lambda/`**: AWS Lambda, API Gateway, DynamoDB
+- **`bank-api/`**: AWS Lambda, API Gateway, DynamoDB
 - **Shared resources**: Defined in dedicated infrastructure packages
 
 ## 📦 Dependency Management Strategy
@@ -299,15 +299,15 @@ Each app manages its own infrastructure-as-code:
 
 ```bash
 # Development build (fast iteration)
-nx serve bank-lambda        # No minification and tree shaking
+nx serve bank-api        # No minification and tree shaking
 
 # Production build (optimized)
-nx build bank-lambda        # Minified tree-shaked bundle, all dependencies inlined
+nx build bank-api        # Minified tree-shaked bundle, all dependencies inlined
 ```
 
 ## 🔗 API Contract & Documentation
 
-### Shared Contract Library (`libs/api-contract`)
+### Shared Contract Library (`libs/bank-api-contract`)
 
 - **Centralized contracts**: TypeScript API definitions using ts-rest + Zod
 - **Cross-app consistency**: Backend, frontend, and SDKs import the same contract

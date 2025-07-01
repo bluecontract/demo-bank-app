@@ -156,7 +156,7 @@ echo "PROD_BACKEND_URL = https://{api-id}.execute-api.${AWS_REGION}.amazonaws.co
 echo ""
 echo "📦 Next steps:"
 echo "1. Deploy frontend infrastructure: cd apps/bank-web-app && sam deploy --config-env dev"
-echo "2. Deploy lambda infrastructure: cd apps/bank-lambda && sam deploy --config-env dev"
+echo "2. Deploy lambda infrastructure: cd apps/bank-api && sam deploy --config-env dev"
 echo "3. Get CloudFront URLs from frontend deployment outputs"
 echo "4. Get API Gateway URLs from lambda deployment outputs"
 echo "5. Update GitHub variables with actual URLs:"

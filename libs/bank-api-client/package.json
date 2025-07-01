@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/api-client",
+  "name": "@demo-blue/bank-api-client",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -26,19 +26,19 @@
           "{options.outputPath}"
         ],
         "options": {
-          "outputPath": "libs/api-client/dist",
-          "main": "libs/api-client/src/index.ts",
-          "tsConfig": "libs/api-client/tsconfig.lib.json",
+          "outputPath": "libs/bank-api-client/dist",
+          "main": "libs/bank-api-client/src/index.ts",
+          "tsConfig": "libs/bank-api-client/tsconfig.lib.json",
           "format": [
             "esm"
           ],
-          "declarationRootDir": "libs/api-client/src"
+          "declarationRootDir": "libs/bank-api-client/src"
         }
       }
     }
   },
   "dependencies": {
-    "@demo-blue/api-contract": "*",
+    "@demo-blue/bank-api-contract": "*",
     "@ts-rest/core": "^3.52.1"
   }
 }

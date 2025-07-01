@@ -12,7 +12,7 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
-      "path": "../../libs/api-contract/tsconfig.lib.json"
+      "path": "../../libs/bank-api-contract/tsconfig.lib.json"
     }
   ]
 }
