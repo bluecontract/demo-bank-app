@@ -8,10 +8,10 @@ alwaysApply: false
 ## Best Practices (Code & Architecture)
 
 - **Layered Hexagonal Architecture**  
-  - Domain rules in `/libs/domain`  
-  - Application orchestration in `/libs/application`  
-  - Technology-specific adapters in `/libs/infrastructure`  
-  - Deployment adapters (HTTP, Lambda, events) in `/apps/*`  
+  - Domain rules in `/libs/${scope}/domain`  
+  - Application orchestration in `/libs/${scope}/application`  
+  - Technology-specific adapters in `/libs/${scope}/infrastructure`  
+  - Deployment adapters (HTTP APIs, Lambda, containers) in `/apps/*`  
   Outer layers depend only on abstractions of inner layers.
 
 - **API Surface**  
