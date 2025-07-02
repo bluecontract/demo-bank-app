@@ -26,7 +26,9 @@
       },
       "exclude": [
         "libs/shared/bank-api-contract/*",
-        "libs/shared/bank-api-client/*"
+        "libs/shared/bank-api-client/*",
+        "libs/shared/auth/*",
+        "libs/auth/*"
       ]
     },
     {
@@ -68,7 +70,9 @@
       "plugin": "@nx/js/typescript",
       "include": [
         "libs/shared/bank-api-contract/*",
-        "libs/shared/bank-api-client/*"
+        "libs/shared/bank-api-client/*",
+        "libs/shared/auth/*",
+        "libs/auth/*"
       ],
       "options": {
         "build": {

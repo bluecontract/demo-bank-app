@@ -17,6 +17,9 @@
     },
     {
       "path": "./libs/shared/bank-api-client"
+    },
+    {
+      "path": "./libs/auth"
     }
   ]
 }
