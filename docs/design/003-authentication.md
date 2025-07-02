@@ -35,12 +35,12 @@ sequenceDiagram
 
 ## Component Responsibilities
 
-| Component          | Responsibility                                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| **SPA**            | Sign-Up, Sign-In pages, shows UX errors & session-expired toast. No direct JWT access.                       |
-| **API Gateway**    | Single REST stage; forwards all paths to Bank Lambda.                                                        |
-| **Bank Lambda**    | Validates inputs, checks DynamoDB for user, issues/validates JWT, sets/clears cookie, handles business APIs. |
-| **DynamoDB.Users** | `PK = USER#<userId>` with attributes `name`, `createdAt`.                                                    |
+| Component          | Responsibility                                                                                                                                                                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SPA**            | Sign-Up, Sign-In pages, shows UX errors & session-expired toast. No direct JWT access.                                                                                                                                                   |
+| **API Gateway**    | Single REST stage; forwards all paths to Bank Lambda.                                                                                                                                                                                    |
+| **Bank Lambda**    | Validates inputs, checks DynamoDB for user, issues/validates JWT, sets/clears cookie, handles business APIs.                                                                                                                             |
+| **DynamoDB.Users** | **Two item types**: (1) Username reservations: `PK = USERNAME#{name}`, `SK = USERNAME` for uniqueness; (2) User profiles: `PK = USER#{userId}`, `SK = PROFILE` with attributes `name`, `createdAt`. Transaction ensures atomic creation. |
 
 ## Technology & Frameworks
 
