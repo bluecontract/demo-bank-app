@@ -5,12 +5,14 @@
   "sourceRoot": "libs/shared/bank-api-client/src",
   "targets": {
     "build": {
-      "executor": "@nx/js:tsc",
+      "executor": "@nx/esbuild:esbuild",
       "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "dist/libs/shared/bank-api-client",
+        "outputPath": "libs/shared/bank-api-client/dist",
         "main": "libs/shared/bank-api-client/src/index.ts",
-        "tsConfig": "libs/shared/bank-api-client/tsconfig.lib.json"
+        "tsConfig": "libs/shared/bank-api-client/tsconfig.lib.json",
+        "format": ["esm"],
+        "declarationRootDir": "libs/shared/bank-api-client/src"
       }
     },
     "lint": {
