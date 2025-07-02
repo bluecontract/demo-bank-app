@@ -5,6 +5,7 @@ export * from './entities/User';
 export * from './services/UserRepository';
 export * from './services/JwtService';
 export * from './services/Logger';
+export * from './services/Metrics';
 export * from './services/Configuration';
 
 // Errors
