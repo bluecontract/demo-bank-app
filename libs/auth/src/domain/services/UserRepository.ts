@@ -21,11 +21,4 @@ export interface UserRepository {
    * @returns Promise resolving to the saved user
    */
   save(user: User): Promise<User>;
-
-  /**
-   * Check if a user exists with the given name
-   * @param name The user name to check
-   * @returns Promise resolving to true if user exists, false otherwise
-   */
-  existsByName(name: UserName): Promise<boolean>;
 }
