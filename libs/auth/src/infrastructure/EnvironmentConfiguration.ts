@@ -1,7 +1,5 @@
-import {
-  Configuration,
-  AuthConfiguration,
-} from '../domain/services/Configuration';
+import type { Configuration } from '../application/ports';
+import type { AuthConfiguration } from '../domain/types';
 
 export class ConfigurationValidationError extends Error {
   constructor(message: string, public readonly missingVariables: string[]) {

@@ -1,2 +1,5 @@
-// Application layer exports - to be implemented
-export {};
+// Ports (service interfaces)
+export * from './ports';
+
+// Commands
+export * from './commands/signUp';

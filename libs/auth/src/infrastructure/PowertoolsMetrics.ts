@@ -1,5 +1,6 @@
 import { Metrics as PowertoolsMetricsClass } from '@aws-lambda-powertools/metrics';
-import { Metrics, MetricsConfig, MetricUnit } from '../domain/services/Metrics';
+import type { Metrics } from '../application/ports';
+import type { MetricsConfig, MetricUnit } from '../domain/types';
 
 export class PowertoolsMetrics implements Metrics {
   private metrics: PowertoolsMetricsClass;

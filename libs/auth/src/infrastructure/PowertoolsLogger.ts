@@ -1,5 +1,6 @@
 import { Logger as PowertoolsLoggerClass } from '@aws-lambda-powertools/logger';
-import { Logger, LoggerConfig } from '../domain/services/Logger';
+import type { Logger } from '../application/ports';
+import type { LoggerConfig } from '../domain/types';
 
 export class PowertoolsLogger implements Logger {
   private logger: PowertoolsLoggerClass;

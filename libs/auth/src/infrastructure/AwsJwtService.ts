@@ -1,6 +1,6 @@
 import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import jwt from 'jsonwebtoken';
-import { JwtService, JwtPayload } from '../domain/services/JwtService';
+import type { JwtService, JwtPayload } from '../application/ports';
 import { UserId } from '../domain/entities/User';
 import { InvalidTokenError, TokenExpiredError } from '../domain/errors';
 

@@ -5,7 +5,7 @@ import {
   QueryCommand,
   TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { UserRepository } from '../domain/services/UserRepository';
+import type { UserRepository } from '../application/ports';
 import {
   User,
   UserId,
