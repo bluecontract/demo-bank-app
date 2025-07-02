@@ -3,11 +3,23 @@ import playwright from 'eslint-plugin-playwright';
 
 export default [
   ...baseConfig,
-  playwright.configs['flat/recommended'],
+  {
+    ignores: [
+      'out-tsc/**/*',
+      'coverage/**/*',
+      'dist/**/*',
+      '**/*.d.ts',
+      'test-output/**/*',
+    ],
+  },
   {
     files: ['**/*.ts', '**/*.js'],
-    ignores: ['out-tsc/**/*'],
-    // Override or add rules here
-    rules: {},
+    ...playwright.configs['flat/recommended'],
+    rules: {
+      ...playwright.configs['flat/recommended'].rules,
+      // Allow reasonable conditional logic in e2e tests for retry patterns
+      'playwright/no-conditional-in-test': 'off',
+      'playwright/no-conditional-expect': 'off',
+    },
   },
 ];
