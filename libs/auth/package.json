@@ -41,6 +41,7 @@
     "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/lib-dynamodb": "^3.0.0",
     "@aws-sdk/client-ssm": "^3.0.0",
+    "@aws-lambda-powertools/logger": "^2.0.0",
     "jsonwebtoken": "^9.0.0"
   }
 }
