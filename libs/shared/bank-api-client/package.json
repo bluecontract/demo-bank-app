@@ -26,19 +26,20 @@
           "{options.outputPath}"
         ],
         "options": {
-          "outputPath": "libs/bank-api-client/dist",
-          "main": "libs/bank-api-client/src/index.ts",
-          "tsConfig": "libs/bank-api-client/tsconfig.lib.json",
+          "outputPath": "libs/shared/bank-api-client/dist",
+          "main": "libs/shared/bank-api-client/src/index.ts",
+          "tsConfig": "libs/shared/bank-api-client/tsconfig.lib.json",
           "format": [
             "esm"
           ],
-          "declarationRootDir": "libs/bank-api-client/src"
+          "declarationRootDir": "libs/shared/bank-api-client/src"
         }
       }
     }
   },
   "dependencies": {
     "@demo-blue/shared-bank-api-contract": "*",
-    "@ts-rest/core": "^3.52.1"
+    "@ts-rest/core": "^3.52.1",
+    "tslib": "^2.3.0"
   }
 }
