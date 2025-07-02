@@ -10,8 +10,7 @@
       "@nx/react/typings/cssmodule.d.ts",
       "@nx/react/typings/image.d.ts",
       "vite/client"
-    ],
-    "rootDir": "src"
+    ]
   },
   "exclude": [
     "out-tsc",
@@ -31,7 +30,7 @@
   "include": ["src/**/*.js", "src/**/*.jsx", "src/**/*.ts", "src/**/*.tsx"],
   "references": [
     {
-      "path": "../../libs/bank-api-client/tsconfig.lib.json"
+      "path": "../../libs/shared/bank-api-client/tsconfig.lib.json"
     }
   ]
 }

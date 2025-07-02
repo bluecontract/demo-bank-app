@@ -13,7 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@demo-blue/bank-api-contract": "*",
+    "@demo-blue/shared-bank-api-contract": "*",
     "@ts-rest/serverless": "^3.52.1"
   }
 }

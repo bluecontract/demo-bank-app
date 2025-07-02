@@ -1,0 +1,28 @@
+{
+  "name": "@demo-blue/shared-bank-api-client",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/shared/bank-api-client/src",
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/libs/shared/bank-api-client",
+        "main": "libs/shared/bank-api-client/src/index.ts",
+        "tsConfig": "libs/shared/bank-api-client/tsconfig.lib.json"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": [
+          "libs/shared/bank-api-client/**/*.{ts,tsx,js,jsx}",
+          "libs/shared/bank-api-client/package.json"
+        ]
+      }
+    }
+  },
+  "implicitDependencies": []
+}

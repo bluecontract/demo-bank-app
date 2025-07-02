@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/bank-api-contract",
+  "name": "@demo-blue/shared-bank-api-contract",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",

@@ -4,7 +4,6 @@
     "outDir": "dist",
     "module": "esnext",
     "types": ["node"],
-    "rootDir": "src",
     "moduleResolution": "bundler",
     "tsBuildInfoFile": "dist/tsconfig.app.tsbuildinfo"
   },
@@ -12,7 +11,7 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
-      "path": "../../libs/bank-api-contract/tsconfig.lib.json"
+      "path": "../../libs/shared/bank-api-contract/tsconfig.lib.json"
     }
   ]
 }

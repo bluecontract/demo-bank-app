@@ -17,11 +17,6 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "es2022",
-    "customConditions": ["development"],
-    "baseUrl": ".",
-    "paths": {
-      "@demo-blue/bank-api-client": ["libs/bank-api-client/src/index.ts"],
-      "@demo-blue/bank-api-contract": ["libs/bank-api-contract/src/index.ts"]
-    }
+    "customConditions": ["development"]
   }
 }

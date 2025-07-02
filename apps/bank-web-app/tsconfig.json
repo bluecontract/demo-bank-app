@@ -3,7 +3,7 @@
   "include": [],
   "references": [
     {
-      "path": "../../libs/bank-api-client"
+      "path": "../../libs/shared/bank-api-client"
     },
     {
       "path": "./tsconfig.app.json"

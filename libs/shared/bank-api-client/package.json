@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/bank-api-client",
+  "name": "@demo-blue/shared-bank-api-client",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -38,7 +38,7 @@
     }
   },
   "dependencies": {
-    "@demo-blue/bank-api-contract": "*",
+    "@demo-blue/shared-bank-api-contract": "*",
     "@ts-rest/core": "^3.52.1"
   }
 }

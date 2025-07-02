@@ -5,7 +5,7 @@ import {
   QueryClientProvider,
   useQuery,
 } from '@tanstack/react-query';
-import { createApiClient } from '@demo-blue/bank-api-client';
+import { createApiClient } from '@demo-blue/shared-bank-api-client';
 
 const queryClient = new QueryClient();
 

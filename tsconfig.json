@@ -13,10 +13,10 @@
       "path": "./apps/bank-api"
     },
     {
-      "path": "./libs/bank-api-contract"
+      "path": "./libs/shared/bank-api-contract"
     },
     {
-      "path": "./libs/bank-api-client"
+      "path": "./libs/shared/bank-api-client"
     }
   ]
 }
