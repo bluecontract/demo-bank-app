@@ -17,6 +17,7 @@ import { UserAlreadyExistsError } from '../domain/errors';
 export interface DynamoUserRepositoryConfig {
   tableName: string;
   region: string;
+  testUserTtlSeconds: number;
   endpoint?: string; // For LocalStack testing
 }
 
@@ -57,6 +58,7 @@ interface UnknownDbItem {
 export class DynamoUserRepository implements UserRepository {
   private readonly client: DynamoDBDocumentClient;
   private readonly tableName: string;
+  private readonly testUserTtlSeconds: number;
 
   constructor(config: DynamoUserRepositoryConfig) {
     const dynamoClient = new DynamoDBClient({
@@ -66,6 +68,7 @@ export class DynamoUserRepository implements UserRepository {
 
     this.client = DynamoDBDocumentClient.from(dynamoClient);
     this.tableName = config.tableName;
+    this.testUserTtlSeconds = config.testUserTtlSeconds;
   }
 
   async save(user: User): Promise<User> {
@@ -170,9 +173,9 @@ export class DynamoUserRepository implements UserRepository {
       createdAt: persistence.createdAt,
     };
 
-    // Add TTL for test users (1 hour from now)
+    // Add TTL for test users
     if (persistence.isTest) {
-      item.ttl = Math.floor(Date.now() / 1000) + 3600;
+      item.ttl = Math.floor(Date.now() / 1000) + this.testUserTtlSeconds;
     }
 
     return item;
@@ -192,9 +195,9 @@ export class DynamoUserRepository implements UserRepository {
       isTest: persistence.isTest,
     };
 
-    // Add TTL for test users (1 hour from now)
+    // Add TTL for test users
     if (persistence.isTest) {
-      item.ttl = Math.floor(Date.now() / 1000) + 3600;
+      item.ttl = Math.floor(Date.now() / 1000) + this.testUserTtlSeconds;
     }
 
     return item;

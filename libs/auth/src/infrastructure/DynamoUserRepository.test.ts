@@ -39,6 +39,7 @@ describe('DynamoUserRepository', () => {
     repository = new DynamoUserRepository({
       tableName: 'test-table',
       region: 'us-east-1',
+      testUserTtlSeconds: 600, // 10 minutes
     });
   });
 
