@@ -19,6 +19,61 @@ Globals:
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
 
 Resources:
+  # DynamoDB Table for Single Table Design
+  BankTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'demo-blue-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: demo-blue
+        - Key: Component
+          Value: database
+
+  # SSM Parameter for JWT Secret
+  JwtSecretParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/demo-blue/${Environment}/jwt-secret'
+      Type: SecureString
+      Value: 'REPLACE_ME_IN_CONSOLE'
+      Description: !Sub 'JWT signing secret for demo-blue ${Environment} - Update this value in AWS console'
+      Tags:
+        Environment: !Ref Environment
+        Application: demo-blue
+        Component: auth
+
   BankApi:
     Type: AWS::Serverless::Api
     Properties:
@@ -39,6 +94,20 @@ Resources:
       FunctionName: !Sub 'bank-api-${Environment}'
       Handler: main.handler
       Description: Banking API Lambda function
+      Environment:
+        Variables:
+          DYNAMO_TABLE_NAME: !Ref BankTable
+          JWT_SECRET_PARAMETER_NAME: !Ref JwtSecretParameter
+          JWT_TTL_SECONDS: 3600
+          TEST_USER_TTL_SECONDS: 600 # 10 minutes
+          SERVICE_NAME: !Sub 'bank-api-${Environment}'
+          LOG_LEVEL: INFO
+          METRICS_NAMESPACE: !Sub 'DemoBlue/${Environment}'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BankTable
+        - SSMParameterReadPolicy:
+            ParameterName: !Ref JwtSecretParameter
       Events:
         HealthApi:
           Type: Api
@@ -59,3 +128,15 @@ Outputs:
     Value: !Ref BankApi
     Export:
       Name: !Sub '${AWS::StackName}-ApiId'
+
+  BankTableName:
+    Description: 'DynamoDB table name for banking data (single table design)'
+    Value: !Ref BankTable
+    Export:
+      Name: !Sub '${AWS::StackName}-BankTableName'
+
+  JwtSecretParameterName:
+    Description: 'SSM Parameter name for JWT secret'
+    Value: !Ref JwtSecretParameter
+    Export:
+      Name: !Sub '${AWS::StackName}-JwtSecretParameterName'

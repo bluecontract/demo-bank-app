@@ -23,11 +23,11 @@ sequenceDiagram
     participant U as Browser SPA (CloudFront)
     participant G as API Gateway
     participant L as Bank Lambda
-    participant D as DynamoDB.Users
+    participant D as DynamoDB.BankTable
 
     U->>G: POST /auth/signup { name }
     G->>L: Lambda proxy
-    L->>D: PutItem (if name unique)
+    L->>D: TransactWrite (username + user profile)
     L-->>U: 201 Created + Set-Cookie JWT
     U->>G: GET /accounts (cookie auto-sent)
     G->>L: verify JWT (HS256)
@@ -35,12 +35,12 @@ sequenceDiagram
 
 ## Component Responsibilities
 
-| Component          | Responsibility                                                                                                                                                                                                                           |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **SPA**            | Sign-Up, Sign-In pages, shows UX errors & session-expired toast. No direct JWT access.                                                                                                                                                   |
-| **API Gateway**    | Single REST stage; forwards all paths to Bank Lambda.                                                                                                                                                                                    |
-| **Bank Lambda**    | Validates inputs, checks DynamoDB for user, issues/validates JWT, sets/clears cookie, handles business APIs.                                                                                                                             |
-| **DynamoDB.Users** | **Two item types**: (1) Username reservations: `PK = USERNAME#{name}`, `SK = USERNAME` for uniqueness; (2) User profiles: `PK = USER#{userId}`, `SK = PROFILE` with attributes `name`, `createdAt`. Transaction ensures atomic creation. |
+| Component              | Responsibility                                                                                                                                                                                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **SPA**                | Sign-Up, Sign-In pages, shows UX errors & session-expired toast. No direct JWT access.                                                                                                                                                                                                                                                     |
+| **API Gateway**        | Single REST stage; forwards all paths to Bank Lambda.                                                                                                                                                                                                                                                                                      |
+| **Bank Lambda**        | Validates inputs, checks DynamoDB for user, issues/validates JWT, sets/clears cookie, handles business APIs.                                                                                                                                                                                                                               |
+| **DynamoDB.BankTable** | **Single table design with two item types**: (1) Username reservations: `PK = USERNAME#{name}`, `SK = USERNAME` for uniqueness; (2) User profiles: `PK = USER#{userId}`, `SK = PROFILE` with attributes `name`, `createdAt`. Transaction ensures atomic creation. Designed to accommodate future entities (accounts, transactions, cards). |
 
 ## Technology & Frameworks
 
