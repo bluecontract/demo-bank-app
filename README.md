@@ -10,6 +10,7 @@ A modern banking application demonstrating Blue Language integration and state-o
 - **npm** - Package manager
 - **Docker** - Required for LocalStack (AWS service emulation)
 - **AWS SAM CLI** - Required for local Lambda development and testing
+- **Localstack samlocal** - Required for local Lambda development and testing
 
 #### Install AWS SAM CLI
 
@@ -45,6 +46,18 @@ sam --version
 > # Add to your shell profile (.zshrc, .bashrc, etc.)
 > export PATH="$(python3 -m site --user-base)/bin:$PATH"
 > ```
+
+#### Install samlocal
+
+```bash
+pip3 install aws-sam-cli-local
+```
+
+**Verify Installation**
+
+```bash
+samlocal --version
+```
 
 ### Run the Application
 

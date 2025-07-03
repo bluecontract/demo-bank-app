@@ -229,7 +229,9 @@ export class DynamoUserRepository implements UserRepository {
 
   private isConditionalCheckFailedException(error: unknown): boolean {
     return (
-      error instanceof Error && error.name === 'ConditionalCheckFailedException'
+      error instanceof Error &&
+      (error.name === 'ConditionalCheckFailedException' ||
+        error.name === 'TransactionCanceledException')
     );
   }
 }

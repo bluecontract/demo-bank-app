@@ -30,9 +30,6 @@ export async function signUp(
 ): Promise<SignUpResult> {
   const { userRepository, jwtService, logger, metrics } = dependencies;
 
-  // Validate input
-  validateInput(command);
-
   const { name, isTest = false } = command;
 
   logger.info('User sign-up started', {
@@ -47,7 +44,10 @@ export async function signUp(
 
     savedUser = await userRepository.save(user);
 
-    const token = await jwtService.generateToken(savedUser.id);
+    const token = await jwtService.generateToken(
+      savedUser.id,
+      savedUser.isTest
+    );
 
     const metricName = isTest ? 'TestUserSignUp' : 'UserSignUp';
     metrics.addMetric(metricName, 'Count', 1);
@@ -92,27 +92,5 @@ export async function signUp(
     });
 
     throw error;
-  }
-}
-
-function validateInput(command: SignUpCommand): void {
-  const { name } = command;
-
-  // Check for empty name
-  if (!name || name.trim() === '') {
-    throw new Error('User name cannot be empty');
-  }
-
-  const trimmedName = name.trim();
-
-  // Check length
-  if (trimmedName.length < 1 || trimmedName.length > 50) {
-    throw new Error('User name must be between 1 and 50 characters');
-  }
-
-  // Check for valid characters (letters, numbers, hyphens)
-  const validNamePattern = /^[a-zA-Z0-9-]+$/;
-  if (!validNamePattern.test(trimmedName)) {
-    throw new Error('User name can only contain letters, numbers, and hyphens');
   }
 }

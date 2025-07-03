@@ -1,9 +1,14 @@
 import { createLambdaHandler } from '@ts-rest/serverless/aws';
 import type { Handler } from 'aws-lambda';
 import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { UserAlreadyExistsError, InvalidUserNameError } from '@demo-blue/auth';
+import { signUpHandler } from './auth';
+import {
+  toUserAlreadyExistsError,
+  toValidationError,
+  toInternalServerError,
+} from './errors';
 
-// Force deployment trigger - can be removed later
-// Create and export the ts-rest handler directly
 export const handler: Handler = createLambdaHandler(
   bankApiContract,
   {
@@ -20,11 +25,12 @@ export const handler: Handler = createLambdaHandler(
         body: healthData,
       };
     },
+
+    signUp: signUpHandler,
   },
   {
-    // CORS configuration - let ts-rest handle CORS
     cors: {
-      origin: '*',
+      origin: true,
       allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowHeaders: [
         'Content-Type',
@@ -34,6 +40,20 @@ export const handler: Handler = createLambdaHandler(
         'X-Amz-Security-Token',
       ],
       maxAge: 600,
+    },
+    errorHandler: error => {
+      if (error instanceof UserAlreadyExistsError) {
+        return toUserAlreadyExistsError(error);
+      }
+
+      if (
+        error instanceof InvalidUserNameError ||
+        (error as { name: string })?.name === 'RequestValidationError'
+      ) {
+        return toValidationError(error);
+      }
+
+      return toInternalServerError();
     },
   }
 );

@@ -64,7 +64,10 @@ describe('signUp', () => {
           isTest: false,
         })
       );
-      expect(mockJwtService.generateToken).toHaveBeenCalledWith(mockUser.id);
+      expect(mockJwtService.generateToken).toHaveBeenCalledWith(
+        mockUser.id,
+        mockUser.isTest
+      );
       expect(mockMetrics.addMetric).toHaveBeenCalledWith(
         'UserSignUp',
         'Count',
@@ -138,36 +141,6 @@ describe('signUp', () => {
       );
     });
 
-    it('should validate input and throw error for empty name', async () => {
-      const command: SignUpCommand = {
-        name: '',
-      };
-
-      await expect(signUp(command, dependencies)).rejects.toThrow(
-        'User name cannot be empty'
-      );
-    });
-
-    it('should validate input and throw error for name with invalid characters', async () => {
-      const command: SignUpCommand = {
-        name: 'user@invalid',
-      };
-
-      await expect(signUp(command, dependencies)).rejects.toThrow(
-        'User name can only contain letters, numbers, and hyphens'
-      );
-    });
-
-    it('should validate input and throw error for name too long', async () => {
-      const command: SignUpCommand = {
-        name: 'a'.repeat(51),
-      };
-
-      await expect(signUp(command, dependencies)).rejects.toThrow(
-        'User name must be between 1 and 50 characters'
-      );
-    });
-
     it('should handle repository errors gracefully', async () => {
       const command: SignUpCommand = {
         name: 'johndoe',
@@ -210,6 +183,25 @@ describe('signUp', () => {
           userName: 'johndoe',
           userId: mockUser.id,
           error: 'JWT generation failed',
+        })
+      );
+    });
+
+    it('should handle unknown errors gracefully', async () => {
+      const command: SignUpCommand = {
+        name: 'johndoe',
+      };
+
+      const unknownError = new Error('Something went wrong');
+      vi.mocked(mockUserRepository.save).mockRejectedValue(unknownError);
+
+      await expect(signUp(command, dependencies)).rejects.toThrow(unknownError);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'User sign-up failed',
+        expect.objectContaining({
+          userName: 'johndoe',
+          error: 'Something went wrong',
         })
       );
     });

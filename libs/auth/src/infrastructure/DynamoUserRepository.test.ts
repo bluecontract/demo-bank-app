@@ -97,7 +97,7 @@ describe('DynamoUserRepository', () => {
       expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw UserAlreadyExistsError when user already exists', async () => {
+    it('should throw UserAlreadyExistsError when user already exists (ConditionalCheckFailedException)', async () => {
       // Given
       const user = User.create('john-doe' as UserName);
 
@@ -109,6 +109,42 @@ describe('DynamoUserRepository', () => {
       await expect(repository.save(user)).rejects.toThrow(
         UserAlreadyExistsError
       );
+
+      // Verify TransactWriteCommand was attempted
+      expect(mockTransactWriteCommand).toHaveBeenCalledTimes(1);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('should throw UserAlreadyExistsError when transaction is cancelled (TransactionCanceledException)', async () => {
+      // Given
+      const user = User.create('john-doe' as UserName);
+
+      const transactionError = new Error('Transaction cancelled');
+      transactionError.name = 'TransactionCanceledException';
+      mockSend.mockRejectedValueOnce(transactionError);
+
+      // When & Then
+      await expect(repository.save(user)).rejects.toThrow(
+        UserAlreadyExistsError
+      );
+
+      // Verify TransactWriteCommand was attempted
+      expect(mockTransactWriteCommand).toHaveBeenCalledTimes(1);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('should rethrow other DynamoDB errors without converting them', async () => {
+      // Given
+      const user = User.create('john-doe' as UserName);
+
+      const dynamoError = new Error('Service unavailable');
+      dynamoError.name = 'ServiceUnavailableException';
+      mockSend.mockRejectedValueOnce(dynamoError);
+
+      // When & Then
+      const savePromise = repository.save(user);
+      await expect(savePromise).rejects.toThrow('Service unavailable');
+      await expect(savePromise).rejects.not.toThrow(UserAlreadyExistsError);
 
       // Verify TransactWriteCommand was attempted
       expect(mockTransactWriteCommand).toHaveBeenCalledTimes(1);

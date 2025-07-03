@@ -6,7 +6,7 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-    AllowedValues: [dev, staging, prod]
+    AllowedValues: [dev, prod]
 
 Globals:
   Function:
@@ -79,12 +79,6 @@ Resources:
     Properties:
       Name: !Sub 'bank-api-${Environment}'
       StageName: !Ref Environment
-      # API Gateway handles OPTIONS preflight requests, Lambda handles CORS for actual requests
-      Cors:
-        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
-        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-        AllowOrigin: "'*'"
-        MaxAge: "'600'"
       EndpointConfiguration:
         Type: REGIONAL
 
@@ -103,6 +97,7 @@ Resources:
           SERVICE_NAME: !Sub 'bank-api-${Environment}'
           LOG_LEVEL: INFO
           METRICS_NAMESPACE: !Sub 'DemoBlue/${Environment}'
+          AWS_ENDPOINT_URL: '' # only for local development
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BankTable
@@ -115,6 +110,12 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /health
             Method: GET
+        SignUpApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /auth/signup
+            Method: POST
 
 Outputs:
   BankApiUrl:
