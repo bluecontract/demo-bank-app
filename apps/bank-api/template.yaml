@@ -107,7 +107,12 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BankTable
-        - SecretsManagerReadWrite
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref JwtSecret
       Events:
         HealthApi:
           Type: Api

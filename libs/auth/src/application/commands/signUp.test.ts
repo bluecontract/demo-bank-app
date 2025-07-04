@@ -5,31 +5,31 @@ import { User, UserName } from '../../domain/entities/User';
 import { UserAlreadyExistsError } from '../../domain/errors';
 
 // Mock dependencies
-const mockUserRepository = {
+const mockUserRepository: UserRepository = {
   save: vi.fn(),
   findById: vi.fn(),
   findByName: vi.fn(),
-} as unknown as UserRepository;
+};
 
-const mockJwtService = {
+const mockJwtService: JwtService = {
   generateToken: vi.fn(),
   verifyToken: vi.fn(),
-} as unknown as JwtService;
+};
 
-const mockLogger = {
+const mockLogger: Logger = {
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
   setCorrelationId: vi.fn(),
-} as unknown as Logger;
+};
 
-const mockMetrics = {
+const mockMetrics: Metrics = {
   addMetric: vi.fn(),
   addMetadata: vi.fn(),
   publishStoredMetrics: vi.fn(),
   setDefaultDimensions: vi.fn(),
-} as unknown as Metrics;
+};
 
 const dependencies: SignUpDependencies = {
   userRepository: mockUserRepository,

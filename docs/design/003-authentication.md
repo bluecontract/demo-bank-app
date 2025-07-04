@@ -47,7 +47,7 @@ sequenceDiagram
 | Layer          | Choice                                               | Rationale                      |
 | -------------- | ---------------------------------------------------- | ------------------------------ |
 | JWT            | `jsonwebtoken` HS256                                 | Simple, no external key store. |
-| Cookie signing | Same secret as JWT; emitted via `Set-Cookie` header. |
+| Cookie signing | Same secret as JWT; emitted via `Set-Cookie` header. | Simplifies secret management.  |
 | Persistence    | DynamoDB single table                                | Already selected in ADR 001.   |
 
 ## Security Review

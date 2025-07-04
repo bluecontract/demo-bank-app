@@ -165,9 +165,7 @@ describe('Bank API Integration Tests', () => {
       });
 
       // And - should set HttpOnly auth cookie
-      const cookieHeader = result.headers?.['set-cookie'] as
-        | string
-        | undefined as string;
+      const cookieHeader = result.headers?.['set-cookie'] as string | undefined;
       expect(cookieHeader).toBeDefined();
       expect(cookieHeader).toContain('demoAuth=');
       expect(cookieHeader).toContain('HttpOnly');
@@ -177,6 +175,9 @@ describe('Bank API Integration Tests', () => {
       expect(cookieHeader).toContain(`Max-Age=${TEST_CONFIG.jwtTtlSeconds}`);
 
       // And - JWT token should be valid and contain correct data
+      if (!cookieHeader) {
+        throw new Error('Cookie header is undefined');
+      }
       const token = extractTokenFromCookie(cookieHeader);
       const decoded = jwt.verify(token, TEST_CONFIG.jwtSecret) as any;
       expect(decoded.sub).toBe(body.userId); // JWT uses 'sub' for subject/userId
@@ -234,9 +235,7 @@ describe('Bank API Integration Tests', () => {
       const body = JSON.parse(result.body);
       expect(body.name).toBe(testUserName);
       // And - should set cookie with test user TTL
-      const cookieHeader = result.headers?.['set-cookie'] as
-        | string
-        | undefined as string;
+      const cookieHeader = result.headers?.['set-cookie'] as string | undefined;
       expect(cookieHeader).toBeDefined();
       expect(cookieHeader).toBeTypeOf('string');
       expect(cookieHeader).toContain(
@@ -244,6 +243,9 @@ describe('Bank API Integration Tests', () => {
       );
 
       // And - JWT should indicate test user
+      if (!cookieHeader) {
+        throw new Error('Cookie header is undefined');
+      }
       const token = extractTokenFromCookie(cookieHeader);
       const decoded = jwt.verify(token, TEST_CONFIG.jwtSecret) as any;
       expect(decoded.sub).toBe(body.userId); // JWT uses 'sub' for subject/userId
@@ -353,9 +355,10 @@ describe('Bank API Integration Tests', () => {
       // Then - it should return success
       expect(result.statusCode).toBe(201);
       // And - JWT token should be included in the cookie header
-      const cookieHeader = result.headers?.['set-cookie'] as
-        | string
-        | undefined as string;
+      const cookieHeader = result.headers?.['set-cookie'] as string | undefined;
+      if (!cookieHeader) {
+        throw new Error('Cookie header is undefined');
+      }
       const token = extractTokenFromCookie(cookieHeader);
 
       // And - should not throw when verifying JWT Token with correct secret
@@ -385,7 +388,7 @@ describe('Bank API Integration Tests', () => {
 
 function generateUniqueTestUserName(prefix = 'test-user'): string {
   const timestamp = Date.now();
-  const randomSuffix = Math.random().toString(36).substr(2, 9);
+  const randomSuffix = Math.random().toString(36).substring(2, 9);
   return `${prefix}-${timestamp}-${randomSuffix}`;
 }
 

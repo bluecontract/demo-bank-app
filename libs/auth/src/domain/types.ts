@@ -5,7 +5,7 @@ export interface AuthConfiguration {
   testUserTtlSeconds: number;
   environment: string;
   serviceName: string;
-  logLevel: string;
+  logLevel: LogLevel;
   metricsNamespace: string;
 }
 

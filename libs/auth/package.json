@@ -38,9 +38,9 @@
     }
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.0.0",
-    "@aws-sdk/lib-dynamodb": "^3.0.0",
-    "@aws-sdk/client-secrets-manager": "^3.0.0",
+    "@aws-sdk/client-dynamodb": "^3.840.0",
+    "@aws-sdk/lib-dynamodb": "^3.840.0",
+    "@aws-sdk/client-secrets-manager": "^3.840.0",
     "@aws-lambda-powertools/logger": "^2.0.0",
     "@aws-lambda-powertools/metrics": "^2.0.0",
     "jsonwebtoken": "^9.0.0"

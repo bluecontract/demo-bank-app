@@ -1,10 +1,16 @@
 import type { Configuration } from '../application/ports';
-import type { AuthConfiguration } from '../domain/types';
+import type { AuthConfiguration, LogLevel } from '../domain/types';
+import { AppError } from '../domain/errors/AppError';
 
-export class ConfigurationValidationError extends Error {
-  constructor(message: string, public readonly missingVariables: string[]) {
-    super(message);
-    this.name = 'ConfigurationValidationError';
+export class ConfigurationValidationError extends AppError {
+  readonly code = 'CONFIGURATION_VALIDATION_ERROR';
+
+  constructor(
+    message: string,
+    public readonly missingVariables: string[],
+    cause?: Error
+  ) {
+    super(message, cause);
   }
 }
 
@@ -128,9 +134,11 @@ export class EnvironmentConfiguration implements Configuration {
     return parsed;
   }
 
-  private getLogLevel(): string {
+  private getLogLevel(): LogLevel {
     const level = this.getStringEnv('LOG_LEVEL', 'INFO').toUpperCase();
-    const validLevels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
-    return validLevels.includes(level) ? level : 'INFO';
+    const validLevels: LogLevel[] = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
+    return validLevels.includes(level as LogLevel)
+      ? (level as LogLevel)
+      : 'INFO';
   }
 }
