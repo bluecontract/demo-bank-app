@@ -13,14 +13,21 @@ describe('App', () => {
     expect(baseElement).toBeTruthy();
   });
 
-  it('should have a greeting as the title', () => {
-    const { getAllByText } = render(
+  it('should show the Demo Blue Bank title', () => {
+    const { getByText } = render(
       <BrowserRouter>
         <App />
       </BrowserRouter>
     );
-    expect(
-      getAllByText(new RegExp('Welcome @demo-blue/demo-blue', 'gi')).length > 0
-    ).toBeTruthy();
+    expect(getByText('Demo Blue Bank')).toBeTruthy();
+  });
+
+  it('should show the system health section', () => {
+    const { getByText } = render(
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    );
+    expect(getByText('System Health')).toBeTruthy();
   });
 });
