@@ -2,7 +2,8 @@
 
 ## Status
 
-- 2025-06-26 Accepted Relates-to ADR 001
+- 2025-06-26 Accepted – Relates to ADR 001
+- 2025-07-01 **Superseded in cookie attribute by ADR 005**
 
 ## Context
 
@@ -40,3 +41,7 @@ _Alternatives considered_
 ## Supersedes
 
 Partially supersedes ADR 001 item _Authentication_ by replacing email/password or Cognito flow with name-only JWT login.
+
+## Superseded By
+
+Cookie attribute decision (`SameSite=Strict`) is superseded by ADR 005 – Cross-Site Authentication Cookie.

@@ -6,7 +6,7 @@ Parameters:
   Environment:
     Type: String
     Default: dev
-    AllowedValues: [dev, staging, prod]
+    AllowedValues: [dev, prod]
 
 Globals:
   Function:
@@ -19,17 +19,72 @@ Globals:
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
 
 Resources:
+  # DynamoDB Table for Single Table Design
+  BankTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'demo-blue-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: demo-blue
+        - Key: Component
+          Value: database
+
+  # Secrets Manager Secret for JWT Secret
+  JwtSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '/demo-blue/${Environment}/jwt-secret'
+      Description: !Sub 'JWT signing secret for demo-blue ${Environment}'
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: 'secret'
+        PasswordLength: 64
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: demo-blue
+        - Key: Component
+          Value: auth
+
   BankApi:
     Type: AWS::Serverless::Api
     Properties:
       Name: !Sub 'bank-api-${Environment}'
       StageName: !Ref Environment
-      # API Gateway handles OPTIONS preflight requests, Lambda handles CORS for actual requests
-      Cors:
-        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
-        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-        AllowOrigin: "'*'"
-        MaxAge: "'600'"
       EndpointConfiguration:
         Type: REGIONAL
 
@@ -39,6 +94,25 @@ Resources:
       FunctionName: !Sub 'bank-api-${Environment}'
       Handler: main.handler
       Description: Banking API Lambda function
+      Environment:
+        Variables:
+          DYNAMO_TABLE_NAME: !Ref BankTable
+          JWT_SECRET_ARN: !Ref JwtSecret
+          JWT_TTL_SECONDS: 3600
+          TEST_USER_TTL_SECONDS: 600 # 10 minutes
+          SERVICE_NAME: !Sub 'bank-api-${Environment}'
+          LOG_LEVEL: INFO
+          METRICS_NAMESPACE: !Sub 'DemoBlue/${Environment}'
+          AWS_ENDPOINT_URL: '' # only for local development
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BankTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref JwtSecret
       Events:
         HealthApi:
           Type: Api
@@ -46,6 +120,12 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /health
             Method: GET
+        SignUpApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /auth/signup
+            Method: POST
 
 Outputs:
   BankApiUrl:
@@ -59,3 +139,15 @@ Outputs:
     Value: !Ref BankApi
     Export:
       Name: !Sub '${AWS::StackName}-ApiId'
+
+  BankTableName:
+    Description: 'DynamoDB table name for banking data (single table design)'
+    Value: !Ref BankTable
+    Export:
+      Name: !Sub '${AWS::StackName}-BankTableName'
+
+  JwtSecretArn:
+    Description: 'Secrets Manager secret ARN for JWT secret'
+    Value: !Ref JwtSecret
+    Export:
+      Name: !Sub '${AWS::StackName}-JwtSecretArn'

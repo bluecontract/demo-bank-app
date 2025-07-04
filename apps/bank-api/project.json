@@ -10,6 +10,7 @@
         "commands": [
           "nx build bank-api --configuration=development",
           "mv dist/apps/bank-api/main.cjs dist/apps/bank-api/main.js",
+          "cd apps/bank-api && samlocal deploy --no-confirm-changeset --resolve-s3",
           "cd apps/bank-api && sam local start-api --port 3000"
         ],
         "parallel": false

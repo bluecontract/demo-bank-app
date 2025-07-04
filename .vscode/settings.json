@@ -1,0 +1,29 @@
+{
+  "typescript.preferences.includePackageJsonAutoImports": "off",
+  "typescript.suggest.autoImports": false,
+  "typescript.disableAutomaticTypeAcquisition": false,
+  "typescript.preferences.includeInlayParameterNameHints": "all",
+  "typescript.preferences.includeInlayParameterNameHintsWhenArgumentMatchesName": false,
+  "typescript.preferences.includeInlayFunctionParameterTypeHints": true,
+  "typescript.preferences.includeInlayVariableTypeHints": true,
+  "typescript.preferences.includeInlayPropertyDeclarationTypeHints": true,
+  "typescript.preferences.includeInlayFunctionLikeReturnTypeHints": true,
+  "typescript.preferences.includeInlayEnumMemberValueHints": true,
+  "vitest.commandLine": "npx vitest",
+  "vitest.nodeEnv": {
+    "NODE_OPTIONS": "--loader=tsx"
+  },
+  "eslint.experimental.useFlatConfig": true,
+  "eslint.workingDirectories": ["."],
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.nx": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.nx": true,
+    "**/coverage": true
+  }
+}

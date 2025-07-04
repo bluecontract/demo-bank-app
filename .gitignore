@@ -38,6 +38,7 @@ npm-debug.log
 yarn-error.log
 testem.log
 /typings
+*.log
 
 # System Files
 .DS_Store
@@ -53,3 +54,6 @@ vitest.config.*.timestamp*
 test-output
 
 *graph.html
+
+# Working docs
+IMPLEMENTATION_PLAN.md

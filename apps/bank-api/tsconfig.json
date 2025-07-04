@@ -4,6 +4,9 @@
   "include": [],
   "references": [
     {
+      "path": "../../libs/auth"
+    },
+    {
       "path": "../../libs/shared/bank-api-contract"
     },
     {

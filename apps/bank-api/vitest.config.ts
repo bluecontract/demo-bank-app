@@ -11,5 +11,7 @@ export default defineConfig({
       process.env.VITEST_EXCLUDE_INTEGRATION === 'true'
         ? ['**/node_modules/**', '**/dist/**', '**/*.integration.test.ts']
         : ['**/node_modules/**', '**/dist/**'],
+    isolate: true,
+    passWithNoTests: true,
   },
 });

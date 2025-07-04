@@ -1,6 +1,6 @@
 # Technical Design – Repository Folder Structure & Coding Rules
 
-## 0 TL;DR
+## 0 TL;DR
 
 | Rule                        | Summary                                                              |
 | --------------------------- | -------------------------------------------------------------------- | ------------------------ |
@@ -13,14 +13,15 @@
 
 ---
 
-## 1 Workspace & Folder Layout
+## 1 Workspace & Folder Layout
 
 ```
 apps/
 └─ bank-api/                    # Lambda + API Gateway mapping
    ├─ src/
-   │  ├─ handler.ts             # ts-rest-serverless adapter
-   │  └─ routing.ts             # maps contract routes -> command/query fns
+   │  ├─ main.ts                # ts-rest-serverless adapter & routing
+   │  ├─ auth.ts                # Authentication handlers (signUp, signIn, etc.)
+   │  └─ banking.ts             # Banking handlers (transfer, accounts, etc.)
 
 libs/
 ├─ banking/
@@ -42,7 +43,7 @@ libs/
 
 ---
 
-## 2 Ports & Dependencies
+## 2 Ports & Dependencies
 
 - Define **only abstractions** (`AccountRepository`, `MyOSClient`) in `application/ports.ts`.
 - Handlers receive deps explicitly:
@@ -56,7 +57,7 @@ export async function transferMoney(
 
 ---
 
-## 3 Command & Query File Convention
+## 3 Command & Query File Convention
 
 ```ts
 // libs/banking/application/commands/transfer-money.ts
@@ -69,7 +70,7 @@ export async function transferMoney(cmd: TransferMoneyCommand, deps: Deps): Prom
 
 ---
 
-## 4 Nx & ESLint Rules
+## 4 Nx & ESLint Rules
 
 ### 4.1 Layer Guards
 
@@ -121,39 +122,72 @@ _Apps in one domain *can* import **domain** libs from another domain for shared 
 
 ---
 
-## 5 API Gateway → Lambda Mapping with **ts-rest-serverless**
+## 5 API Gateway → Lambda Mapping with **ts-rest-serverless**
 
 ```
 apps/bank-api/
 └─ src/
-    ├─ routing.ts              # (req) -> call handler -> (res)
-    └─ handler.ts              # exports { handler } for AWS, configures ts-rest
+    ├─ main.ts                 # Clean routing: assigns handlers
+    ├─ auth.ts                 # Auth domain handlers (signUp, signIn, etc.)
+    └─ banking.ts              # Banking domain handlers (transfer, etc.)
 shared/bank-api-contract/
 └─ src/
     └─ lib/
         └─ bank-api-contract.ts   # ts-rest contract: routes, schemas
 ```
 
-**routing.ts**
+**auth.ts**
 
 ```ts
-import { transferMoney }  from '@demo-blue/banking/application/commands/transfer-money";
-import { getTransactionHistory } from '@demo-blue/banking/application/queries/get-transaction-history";
+import { signUp } from '@demo-blue/auth';
 
-export const handlers = {
-  transferMoney: async ({ body }) => transferMoney(body, deps),
-  getTransactionHistory: async ({ params, query }) =>
-    getTransactionHistory({ ...params, ...query }, deps),
+export const signUpHandler = async ({ body }: { body: { name: string } }) => {
+  const deps = await initializeDependencies();
+  const result = await signUp(body, deps);
+
+  return {
+    status: 201 as const,
+    body: { userId: result.user.id, name: result.user.name },
+    headers: { 'Set-Cookie': `auth=${result.token}; HttpOnly; ...` },
+  };
 };
 ```
 
-**lambda.ts**
+**banking.ts**
+
+```ts
+import { transferMoney } from '@demo-blue/banking/application/commands/transfer-money';
+import { getTransactionHistory } from '@demo-blue/banking/application/queries/get-transaction-history';
+
+export const transferMoneyHandler = async ({ body }) =>
+  transferMoney(body, deps);
+
+export const getTransactionHistoryHandler = async ({ params, query }) =>
+  getTransactionHistory({ ...params, ...query }, deps);
+```
+
+**main.ts** _(Clean routing only)_
 
 ```ts
 import { createLambdaHandler } from '@ts-rest/serverless/aws';
 import { bankApiContract } from '@demo-blue/shared/bank-api-contract';
-import { handlers } from './routing';
-export const handler = createLambdaHandler(bankApiContract, handlers);
+import { signUpHandler } from './auth';
+import { transferMoneyHandler, getTransactionHistoryHandler } from './banking';
+
+export const handler = createLambdaHandler(bankApiContract, {
+  // Health check (minimal, no business logic)
+  health: async () => ({
+    status: 200,
+    body: { status: 'healthy', timestamp: new Date().toISOString() },
+  }),
+
+  // Auth handlers
+  signUp: signUpHandler,
+
+  // Banking handlers
+  transferMoney: transferMoneyHandler,
+  getTransactionHistory: getTransactionHistoryHandler,
+});
 ```
 
 _The same `contract` file feeds:_
@@ -164,7 +198,7 @@ _The same `contract` file feeds:_
 
 ---
 
-## 6 Testing Conventions
+## 6 Testing Conventions
 
 Domain - pure unit tests  
 Application - with in-memory fakes  

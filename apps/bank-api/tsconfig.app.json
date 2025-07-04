@@ -11,6 +11,9 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
+      "path": "../../libs/auth/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/shared/bank-api-contract/tsconfig.lib.json"
     }
   ]

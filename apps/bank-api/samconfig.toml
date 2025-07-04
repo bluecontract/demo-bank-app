@@ -13,16 +13,23 @@ parallel = true
 [default.package.parameters]
 resolve_s3 = true
 
+[default.local_start_api.parameters]
+env_vars = "env.local.json"
+port = 3000
+warm_containers = "lazy"
+
 [default.deploy.parameters]
 confirm_changeset = false
 fail_on_empty_changeset = false
 capabilities = "CAPABILITY_IAM"
 region = "eu-central-1"
+resolve_s3 = true
 
 # Development Environment
 [dev.deploy.parameters]
 stack_name = "demo-blue-bank-dev" 
 s3_bucket = "demo-blue-deployments-dev"
+region = "eu-central-1"
 parameter_overrides = "Environment=dev"
 tags = "Environment=dev Project=demo-blue"
 capabilities = "CAPABILITY_IAM"
@@ -33,6 +40,7 @@ fail_on_empty_changeset = false
 [prod.deploy.parameters]
 stack_name = "demo-blue-bank-prod"
 s3_bucket = "demo-blue-deployments-prod"
+region = "eu-central-1"
 parameter_overrides = "Environment=prod"
 tags = "Environment=prod Project=demo-blue"
 capabilities = "CAPABILITY_IAM"

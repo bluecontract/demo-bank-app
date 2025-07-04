@@ -15,6 +15,13 @@ export default [
     ],
   },
   {
+    files: ['**/*.test.ts', '**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+    },
+  },
+  {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
     rules: {
       '@nx/enforce-module-boundaries': [
@@ -53,7 +60,7 @@ export default [
     },
   },
   {
-    files: ['package.json'], // Root package.json - single source of truth for versions
+    files: ['package.json', 'apps/**/package.json', 'libs/**/package.json'], // All package.json files
     languageOptions: {
       parser: jsoncParser,
     },
@@ -64,25 +71,6 @@ export default [
           checkMissingDependencies: true,
           checkObsoleteDependencies: true,
           checkVersionMismatches: true,
-          ignoredDependencies: [],
-          ignoredFiles: ['*.config.{js,ts,mjs}', '**/*.config.{js,ts,mjs}'],
-          includeTransitiveDependencies: false,
-        },
-      ],
-    },
-  },
-  {
-    files: ['apps/**/package.json', 'libs/**/package.json'], // All project package.json files
-    languageOptions: {
-      parser: jsoncParser,
-    },
-    rules: {
-      '@nx/dependency-checks': [
-        'error',
-        {
-          checkMissingDependencies: true, // Must declare dependencies they actually use
-          checkObsoleteDependencies: true, // Remove unused dependencies
-          checkVersionMismatches: true, // Versions must match root package.json
           ignoredDependencies: ['vitest'], // Test framework comes from root devDependencies
           ignoredFiles: ['*.config.{js,ts,mjs}', '**/*.config.{js,ts,mjs}'],
           includeTransitiveDependencies: false,
