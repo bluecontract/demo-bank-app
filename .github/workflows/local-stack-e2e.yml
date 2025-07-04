@@ -36,6 +36,23 @@ jobs:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
 
+      - name: Install AWS SAM CLI
+        run: |
+          echo "📦 Installing AWS SAM CLI..."
+          wget -q https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip
+          unzip -q aws-sam-cli-linux-x86_64.zip -d sam-installation
+          sudo ./sam-installation/install --update
+          rm -rf sam-installation aws-sam-cli-linux-x86_64.zip
+          sam --version
+
+      - name: Install LocalStack CLI
+        run: |
+          echo "📦 Installing LocalStack CLI..."
+          pip install localstack
+          localstack --version
+          pip install aws-sam-cli-local
+          samlocal --version
+
       - name: Install dependencies
         run: npm ci
 
