@@ -10,10 +10,10 @@ import type {
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import {
-  SSMClient,
-  PutParameterCommand,
-  DeleteParameterCommand,
-} from '@aws-sdk/client-ssm';
+  SecretsManagerClient,
+  CreateSecretCommand,
+  DeleteSecretCommand,
+} from '@aws-sdk/client-secrets-manager';
 import {
   CreateTableCommand,
   DeleteTableCommand,
@@ -29,7 +29,7 @@ import jwt from 'jsonwebtoken';
 // Test configuration
 const TEST_CONFIG = {
   tableName: 'demo-blue-integration-test',
-  jwtSecretParameterName: '/demo-blue/integration-test/jwt-secret',
+  jwtSecretArn: '/demo-blue/integration-test/jwt-secret',
   jwtSecret: 'integration-test-jwt-secret-key-12345',
   localstackEndpoint: 'http://localhost:4566',
   region: 'us-east-1',
@@ -40,7 +40,7 @@ const TEST_CONFIG = {
 // AWS clients configured for LocalStack
 let dynamoClient: DynamoDBClient;
 let dynamoDocClient: DynamoDBDocumentClient;
-let ssmClient: SSMClient;
+let secretsManagerClient: SecretsManagerClient;
 
 describe('Bank API Integration Tests', () => {
   beforeAll(async () => {
@@ -56,7 +56,7 @@ describe('Bank API Integration Tests', () => {
 
     dynamoDocClient = DynamoDBDocumentClient.from(dynamoClient);
 
-    ssmClient = new SSMClient({
+    secretsManagerClient = new SecretsManagerClient({
       endpoint: TEST_CONFIG.localstackEndpoint,
       region: TEST_CONFIG.region,
       credentials: {
@@ -67,7 +67,7 @@ describe('Bank API Integration Tests', () => {
 
     // Set up environment variables for integration testing
     process.env.DYNAMO_TABLE_NAME = TEST_CONFIG.tableName;
-    process.env.JWT_SECRET_PARAMETER_NAME = TEST_CONFIG.jwtSecretParameterName;
+    process.env.JWT_SECRET_ARN = TEST_CONFIG.jwtSecretArn;
     process.env.JWT_TTL_SECONDS = TEST_CONFIG.jwtTtlSeconds.toString();
     process.env.TEST_USER_TTL_SECONDS =
       TEST_CONFIG.testUserTtlSeconds.toString();
@@ -88,7 +88,7 @@ describe('Bank API Integration Tests', () => {
     await cleanupLocalStackResources();
 
     delete process.env.DYNAMO_TABLE_NAME;
-    delete process.env.JWT_SECRET_PARAMETER_NAME;
+    delete process.env.JWT_SECRET_ARN;
     delete process.env.JWT_TTL_SECONDS;
     delete process.env.TEST_USER_TTL_SECONDS;
     delete process.env.SERVICE_NAME;
@@ -471,7 +471,7 @@ async function setupLocalStackResources(): Promise<void> {
           tableReady = true;
           break;
         }
-      } catch (error) {
+      } catch {
         // Table might not exist yet
       }
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -481,14 +481,12 @@ async function setupLocalStackResources(): Promise<void> {
       throw new Error('DynamoDB table failed to become active');
     }
 
-    // Create SSM parameter
-    await ssmClient.send(
-      new PutParameterCommand({
-        Name: TEST_CONFIG.jwtSecretParameterName,
-        Value: TEST_CONFIG.jwtSecret,
-        Type: 'SecureString',
+    // Create Secrets Manager secret
+    await secretsManagerClient.send(
+      new CreateSecretCommand({
+        Name: TEST_CONFIG.jwtSecretArn,
+        SecretString: JSON.stringify({ secret: TEST_CONFIG.jwtSecret }),
         Description: 'JWT secret for integration tests',
-        Overwrite: true,
       })
     );
   } catch (error) {
@@ -511,13 +509,16 @@ async function cleanupLocalStackResources(): Promise<void> {
   );
 
   cleanupPromises.push(
-    ssmClient
+    secretsManagerClient
       .send(
-        new DeleteParameterCommand({ Name: TEST_CONFIG.jwtSecretParameterName })
+        new DeleteSecretCommand({
+          SecretId: TEST_CONFIG.jwtSecretArn,
+          ForceDeleteWithoutRecovery: true,
+        })
       )
       .then(() => void 0)
       .catch(error => {
-        console.warn('Failed to cleanup SSM parameter:', error);
+        console.warn('Failed to cleanup Secrets Manager secret:', error);
       })
   );
 
@@ -536,8 +537,8 @@ async function getUserFromDynamoDB(userId: string) {
       })
     );
     return result.Item;
-  } catch (error) {
-    console.error('Failed to get user from DynamoDB:', error);
+  } catch {
+    console.error('Failed to get user from DynamoDB');
     return null;
   }
 }

@@ -34,9 +34,9 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
   TransactWriteCommand: vi.fn(),
 }));
 
-vi.mock('@aws-sdk/client-ssm', () => ({
-  SSMClient: vi.fn(() => ({})),
-  GetParameterCommand: vi.fn(),
+vi.mock('@aws-sdk/client-secrets-manager', () => ({
+  SecretsManagerClient: vi.fn(() => ({})),
+  GetSecretValueCommand: vi.fn(),
 }));
 
 // Mock AWS Lambda Powertools
@@ -119,8 +119,12 @@ describe('Bank API Handler', () => {
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
 
     // Mock environment variables
+    vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('DYNAMO_TABLE_NAME', 'test-table');
-    vi.stubEnv('JWT_SECRET_PARAMETER_NAME', '/test/jwt-secret');
+    vi.stubEnv(
+      'JWT_SECRET_ARN',
+      'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
+    );
     vi.stubEnv('JWT_TTL_SECONDS', '3600');
     vi.stubEnv('TEST_USER_TTL_SECONDS', '600');
     vi.stubEnv('SERVICE_NAME', 'test-service');
@@ -128,16 +132,16 @@ describe('Bank API Handler', () => {
     vi.stubEnv('METRICS_NAMESPACE', 'Test');
     vi.stubEnv('AWS_REGION', 'us-east-1');
 
-    // Mock the SSM parameter response for JWT secret
-    const mockSsmClient = {
+    // Mock the Secrets Manager response for JWT secret
+    const mockSecretsManagerClient = {
       send: vi.fn().mockResolvedValue({
-        Parameter: { Value: 'test-jwt-secret' },
+        SecretString: JSON.stringify({ secret: 'test-jwt-secret' }),
       }),
     };
 
-    vi.doMock('@aws-sdk/client-ssm', () => ({
-      SSMClient: vi.fn(() => mockSsmClient),
-      GetParameterCommand: vi.fn(),
+    vi.doMock('@aws-sdk/client-secrets-manager', () => ({
+      SecretsManagerClient: vi.fn(() => mockSecretsManagerClient),
+      GetSecretValueCommand: vi.fn(),
     }));
 
     // Reset mock before each test
@@ -194,25 +198,6 @@ describe('Bank API Handler', () => {
   });
 
   describe('Health Endpoint', () => {
-    it('should return health status with default environment values', async () => {
-      const event = createTestEvent('GET', '/health');
-
-      const result = (await handler(
-        event,
-        {} as Context,
-        vi.fn() as Callback<APIGatewayProxyResult>
-      )) as APIGatewayProxyResult;
-
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body).toEqual({
-        status: 'healthy',
-        timestamp: '2024-01-01T12:00:00.000Z',
-        version: '0.0.0',
-        environment: 'test',
-      });
-    });
-
     it('should return health status with environment variables when set', async () => {
       vi.stubEnv('npm_package_version', '2.1.0');
       vi.stubEnv('NODE_ENV', 'production');

@@ -21,7 +21,8 @@ describe('EnvironmentConfiguration', () => {
   describe('getAuthConfig', () => {
     it('should return valid configuration when all required variables are set', async () => {
       process.env.DYNAMO_TABLE_NAME = 'test-table';
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
       process.env.JWT_TTL_SECONDS = '1800';
       process.env.TEST_USER_TTL_SECONDS = '3600';
       process.env.SERVICE_NAME = 'test-service';
@@ -33,7 +34,8 @@ describe('EnvironmentConfiguration', () => {
 
       expect(config).toEqual({
         dynamoTableName: 'test-table',
-        jwtSecretParameterName: '/test/jwt-secret',
+        jwtSecretArn:
+          'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123',
         jwtTtlSeconds: 1800,
         testUserTtlSeconds: 3600,
         environment: 'development',
@@ -45,7 +47,8 @@ describe('EnvironmentConfiguration', () => {
 
     it('should use defaults for optional variables when required variables are set', async () => {
       process.env.DYNAMO_TABLE_NAME = 'test-table';
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
 
       const config = await envConfig.getAuthConfig();
 
@@ -57,7 +60,8 @@ describe('EnvironmentConfiguration', () => {
     });
 
     it('should throw ConfigurationValidationError when DYNAMO_TABLE_NAME is missing', async () => {
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
 
       await expect(envConfig.getAuthConfig()).rejects.toThrow(
         ConfigurationValidationError
@@ -67,15 +71,13 @@ describe('EnvironmentConfiguration', () => {
       );
     });
 
-    it('should throw ConfigurationValidationError when JWT_SECRET_PARAMETER_NAME is missing', async () => {
+    it('should throw ConfigurationValidationError when JWT_SECRET_ARN is missing', async () => {
       process.env.DYNAMO_TABLE_NAME = 'test-table';
 
       await expect(envConfig.getAuthConfig()).rejects.toThrow(
         ConfigurationValidationError
       );
-      await expect(envConfig.getAuthConfig()).rejects.toThrow(
-        'JWT_SECRET_PARAMETER_NAME'
-      );
+      await expect(envConfig.getAuthConfig()).rejects.toThrow('JWT_SECRET_ARN');
     });
 
     it('should throw ConfigurationValidationError when multiple required variables are missing', async () => {
@@ -83,16 +85,17 @@ describe('EnvironmentConfiguration', () => {
 
       expect(error).toBeInstanceOf(ConfigurationValidationError);
       expect(error.message).toContain('DYNAMO_TABLE_NAME');
-      expect(error.message).toContain('JWT_SECRET_PARAMETER_NAME');
+      expect(error.message).toContain('JWT_SECRET_ARN');
       expect(error.missingVariables).toEqual([
         'DYNAMO_TABLE_NAME',
-        'JWT_SECRET_PARAMETER_NAME',
+        'JWT_SECRET_ARN',
       ]);
     });
 
     it('should throw ConfigurationValidationError when required variable is empty string', async () => {
       process.env.DYNAMO_TABLE_NAME = '';
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
 
       await expect(envConfig.getAuthConfig()).rejects.toThrow(
         ConfigurationValidationError
@@ -104,7 +107,8 @@ describe('EnvironmentConfiguration', () => {
 
     it('should throw ConfigurationValidationError when required variable is only whitespace', async () => {
       process.env.DYNAMO_TABLE_NAME = '   ';
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
 
       await expect(envConfig.getAuthConfig()).rejects.toThrow(
         ConfigurationValidationError
@@ -116,7 +120,8 @@ describe('EnvironmentConfiguration', () => {
 
     it('should throw ConfigurationValidationError when JWT_TTL_SECONDS is invalid', async () => {
       process.env.DYNAMO_TABLE_NAME = 'test-table';
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
       process.env.JWT_TTL_SECONDS = '0';
 
       await expect(envConfig.getAuthConfig()).rejects.toThrow(
@@ -129,7 +134,8 @@ describe('EnvironmentConfiguration', () => {
 
     it('should throw ConfigurationValidationError when JWT_TTL_SECONDS exceeds maximum', async () => {
       process.env.DYNAMO_TABLE_NAME = 'test-table';
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
       process.env.JWT_TTL_SECONDS = '86401';
 
       await expect(envConfig.getAuthConfig()).rejects.toThrow(
@@ -142,7 +148,8 @@ describe('EnvironmentConfiguration', () => {
 
     it('should throw ConfigurationValidationError when TEST_USER_TTL_SECONDS is invalid', async () => {
       process.env.DYNAMO_TABLE_NAME = 'test-table';
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
       process.env.TEST_USER_TTL_SECONDS = '604801';
 
       await expect(envConfig.getAuthConfig()).rejects.toThrow(
@@ -155,7 +162,8 @@ describe('EnvironmentConfiguration', () => {
 
     it('should throw ConfigurationValidationError when LOG_LEVEL is invalid', async () => {
       process.env.DYNAMO_TABLE_NAME = 'test-table';
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
       process.env.LOG_LEVEL = 'INVALID';
 
       await expect(envConfig.getAuthConfig()).rejects.toThrow(
@@ -168,19 +176,23 @@ describe('EnvironmentConfiguration', () => {
 
     it('should trim whitespace from string values', async () => {
       process.env.DYNAMO_TABLE_NAME = '  test-table  ';
-      process.env.JWT_SECRET_PARAMETER_NAME = '  /test/jwt-secret  ';
+      process.env.JWT_SECRET_ARN =
+        '  arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123  ';
       process.env.SERVICE_NAME = '  test-service  ';
 
       const config = await envConfig.getAuthConfig();
 
       expect(config.dynamoTableName).toBe('test-table');
-      expect(config.jwtSecretParameterName).toBe('/test/jwt-secret');
+      expect(config.jwtSecretArn).toBe(
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
+      );
       expect(config.serviceName).toBe('test-service');
     });
 
     it('should handle case-insensitive log levels', async () => {
       process.env.DYNAMO_TABLE_NAME = 'test-table';
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
       process.env.LOG_LEVEL = 'debug';
 
       const config = await envConfig.getAuthConfig();
@@ -192,7 +204,8 @@ describe('EnvironmentConfiguration', () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(vi.fn());
 
       process.env.DYNAMO_TABLE_NAME = 'test-table';
-      process.env.JWT_SECRET_PARAMETER_NAME = '/test/jwt-secret';
+      process.env.JWT_SECRET_ARN =
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123';
       process.env.JWT_TTL_SECONDS = 'invalid-number';
 
       const config = await envConfig.getAuthConfig();

@@ -9,19 +9,14 @@ export class ConfigurationValidationError extends Error {
 }
 
 export class EnvironmentConfiguration implements Configuration {
-  private readonly requiredVariables = [
-    'DYNAMO_TABLE_NAME',
-    'JWT_SECRET_PARAMETER_NAME',
-  ];
+  private readonly requiredVariables = ['DYNAMO_TABLE_NAME', 'JWT_SECRET_ARN'];
 
   async getAuthConfig(): Promise<AuthConfiguration> {
     this.validateConfiguration();
 
     return {
       dynamoTableName: this.getRequiredStringEnv('DYNAMO_TABLE_NAME'),
-      jwtSecretParameterName: this.getRequiredStringEnv(
-        'JWT_SECRET_PARAMETER_NAME'
-      ),
+      jwtSecretArn: this.getRequiredStringEnv('JWT_SECRET_ARN'),
       jwtTtlSeconds: this.getNumberEnv('JWT_TTL_SECONDS', 3600),
       testUserTtlSeconds: this.getNumberEnv('TEST_USER_TTL_SECONDS', 86400),
       environment: this.getEnvironment(),

@@ -29,6 +29,7 @@ resolve_s3 = true
 [dev.deploy.parameters]
 stack_name = "demo-blue-bank-dev" 
 s3_bucket = "demo-blue-deployments-dev"
+region = "eu-central-1"
 parameter_overrides = "Environment=dev"
 tags = "Environment=dev Project=demo-blue"
 capabilities = "CAPABILITY_IAM"
@@ -39,6 +40,7 @@ fail_on_empty_changeset = false
 [prod.deploy.parameters]
 stack_name = "demo-blue-bank-prod"
 s3_bucket = "demo-blue-deployments-prod"
+region = "eu-central-1"
 parameter_overrides = "Environment=prod"
 tags = "Environment=prod Project=demo-blue"
 capabilities = "CAPABILITY_IAM"

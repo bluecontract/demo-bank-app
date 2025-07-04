@@ -1,6 +1,6 @@
 export interface AuthConfiguration {
   dynamoTableName: string;
-  jwtSecretParameterName: string;
+  jwtSecretArn: string;
   jwtTtlSeconds: number;
   testUserTtlSeconds: number;
   environment: string;

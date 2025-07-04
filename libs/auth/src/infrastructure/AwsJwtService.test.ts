@@ -6,18 +6,20 @@ import { InvalidTokenError, TokenExpiredError } from '../domain/errors';
 
 // Mock AWS SDK
 const mockSend = vi.fn();
-const mockSSMClient = {
+const mockSecretsManagerClient = {
   send: mockSend,
 };
 
-vi.mock('@aws-sdk/client-ssm', () => ({
-  SSMClient: vi.fn(() => mockSSMClient),
-  GetParameterCommand: vi.fn(),
+vi.mock('@aws-sdk/client-secrets-manager', () => ({
+  SecretsManagerClient: vi.fn(() => mockSecretsManagerClient),
+  GetSecretValueCommand: vi.fn(),
 }));
 
 // Get typed access to mocked constructor
-const { GetParameterCommand } = await import('@aws-sdk/client-ssm');
-const mockGetParameterCommand = vi.mocked(GetParameterCommand);
+const { GetSecretValueCommand } = await import(
+  '@aws-sdk/client-secrets-manager'
+);
+const mockGetSecretValueCommand = vi.mocked(GetSecretValueCommand);
 
 // Mock jsonwebtoken
 vi.mock('jsonwebtoken', () => ({
@@ -30,6 +32,7 @@ vi.mock('jsonwebtoken', () => ({
 describe('AwsJwtService', () => {
   let service: AwsJwtService;
   const mockSecret = 'test-secret-key';
+  const mockSecretJson = JSON.stringify({ secret: mockSecret });
   const userId = 'test-user-123' as UserId;
 
   // Fixed timestamp for deterministic testing: 2024-01-01T12:00:00Z
@@ -44,7 +47,8 @@ describe('AwsJwtService', () => {
 
     service = new AwsJwtService({
       region: 'us-east-1',
-      jwtSecretParameterName: '/app/jwt-secret',
+      jwtSecretArn:
+        'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123',
     });
   });
 
@@ -60,7 +64,7 @@ describe('AwsJwtService', () => {
       const expectedToken = 'regular-user-token';
 
       mockSend.mockResolvedValueOnce({
-        Parameter: { Value: mockSecret },
+        SecretString: mockSecretJson,
       });
       (jwt.sign as any).mockReturnValue(expectedToken);
 
@@ -88,7 +92,7 @@ describe('AwsJwtService', () => {
       const expectedToken = 'test-user-token';
 
       mockSend.mockResolvedValueOnce({
-        Parameter: { Value: mockSecret },
+        SecretString: mockSecretJson,
       });
       (jwt.sign as any).mockReturnValue(expectedToken);
 
@@ -108,12 +112,12 @@ describe('AwsJwtService', () => {
       expect(payload.exp).toBe(fixedTimestamp + 600);
     });
 
-    it('should call SSM to get JWT secret parameter', async () => {
+    it('should call Secrets Manager to get JWT secret', async () => {
       // Given
       const userId = 'user-123' as UserId;
 
       mockSend.mockResolvedValueOnce({
-        Parameter: { Value: mockSecret },
+        SecretString: mockSecretJson,
       });
       (jwt.sign as any).mockReturnValue('token');
 
@@ -121,13 +125,13 @@ describe('AwsJwtService', () => {
       await service.generateToken(userId);
 
       // Then
-      // Verify GetParameterCommand was created with correct parameters
-      expect(mockGetParameterCommand).toHaveBeenCalledWith({
-        Name: '/app/jwt-secret',
-        WithDecryption: true,
+      // Verify GetSecretValueCommand was created with correct parameters
+      expect(mockGetSecretValueCommand).toHaveBeenCalledWith({
+        SecretId:
+          'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123',
       });
 
-      // Verify send was called with the GetParameterCommand instance
+      // Verify send was called with the GetSecretValueCommand instance
       expect(mockSend).toHaveBeenCalledTimes(1);
 
       // Verify token has exact timestamps
@@ -136,29 +140,29 @@ describe('AwsJwtService', () => {
     });
   });
 
-  it('should cache JWT secret after first SSM call', async () => {
+  it('should cache JWT secret after first Secrets Manager call', async () => {
     // Given
     const userId = 'user-123' as UserId;
     mockSend.mockResolvedValueOnce({
-      Parameter: { Value: mockSecret },
+      SecretString: mockSecretJson,
     });
     (jwt.sign as any).mockReturnValue('token1');
 
     // When
     await service.generateToken(userId);
 
-    // Verify first call used GetParameterCommand
-    expect(mockGetParameterCommand).toHaveBeenCalledTimes(1);
+    // Verify first call used GetSecretValueCommand
+    expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
 
     // Reset tracking for second call
-    const firstCallCount = mockGetParameterCommand.mock.calls.length;
+    const firstCallCount = mockGetSecretValueCommand.mock.calls.length;
     (jwt.sign as any).mockReturnValue('token2');
 
     await service.generateToken(userId);
 
     // Then
-    // Verify no additional GetParameterCommand was created (cached secret)
-    expect(mockGetParameterCommand.mock.calls.length).toBe(firstCallCount); // No new commands
+    // Verify no additional GetSecretValueCommand was created (cached secret)
+    expect(mockGetSecretValueCommand.mock.calls.length).toBe(firstCallCount); // No new commands
     expect(mockSend).toHaveBeenCalledTimes(1); // Still only called once
 
     // Verify both tokens have the same exact timestamps (cached secret)
@@ -174,7 +178,7 @@ describe('AwsJwtService', () => {
       const mockPayload = { sub: userId, iat: 123456, exp: 123460 };
 
       mockSend.mockResolvedValueOnce({
-        Parameter: { Value: mockSecret },
+        SecretString: mockSecretJson,
       });
       (jwt.verify as any).mockReturnValue(mockPayload);
 
@@ -187,11 +191,11 @@ describe('AwsJwtService', () => {
         algorithms: ['HS256'],
       });
 
-      // Verify GetParameterCommand was created to fetch secret
-      expect(mockGetParameterCommand).toHaveBeenCalledTimes(1);
-      expect(mockGetParameterCommand).toHaveBeenCalledWith({
-        Name: '/app/jwt-secret',
-        WithDecryption: true,
+      // Verify GetSecretValueCommand was created to fetch secret
+      expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
+      expect(mockGetSecretValueCommand).toHaveBeenCalledWith({
+        SecretId:
+          'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123',
       });
     });
 
@@ -200,7 +204,7 @@ describe('AwsJwtService', () => {
       const invalidToken = 'invalid-token';
 
       mockSend.mockResolvedValueOnce({
-        Parameter: { Value: mockSecret },
+        SecretString: mockSecretJson,
       });
       (jwt.verify as any).mockImplementation(() => {
         throw new Error('jwt malformed');
@@ -211,8 +215,8 @@ describe('AwsJwtService', () => {
         InvalidTokenError
       );
 
-      // Verify GetParameterCommand was called to fetch secret
-      expect(mockGetParameterCommand).toHaveBeenCalledTimes(1);
+      // Verify GetSecretValueCommand was called to fetch secret
+      expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
     });
 
     it('should throw TokenExpiredError for expired token', async () => {
@@ -220,7 +224,7 @@ describe('AwsJwtService', () => {
       const expiredToken = 'expired-token';
 
       mockSend.mockResolvedValueOnce({
-        Parameter: { Value: mockSecret },
+        SecretString: mockSecretJson,
       });
       (jwt.verify as any).mockImplementation(() => {
         const error = new Error('jwt expired');
@@ -233,8 +237,8 @@ describe('AwsJwtService', () => {
         TokenExpiredError
       );
 
-      // Verify GetParameterCommand was called to fetch secret
-      expect(mockGetParameterCommand).toHaveBeenCalledTimes(1);
+      // Verify GetSecretValueCommand was called to fetch secret
+      expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
     });
 
     it('should throw InvalidTokenError for invalid signature', async () => {
@@ -242,7 +246,7 @@ describe('AwsJwtService', () => {
       const invalidSignatureToken = 'invalid-signature-token';
 
       mockSend.mockResolvedValueOnce({
-        Parameter: { Value: mockSecret },
+        SecretString: mockSecretJson,
       });
       (jwt.verify as any).mockImplementation(() => {
         const error = new Error('invalid signature');
@@ -255,53 +259,53 @@ describe('AwsJwtService', () => {
         InvalidTokenError
       );
 
-      // Verify GetParameterCommand was called to fetch secret
-      expect(mockGetParameterCommand).toHaveBeenCalledTimes(1);
+      // Verify GetSecretValueCommand was called to fetch secret
+      expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('error handling', () => {
-    it('should handle SSM parameter retrieval errors', async () => {
+    it('should handle Secrets Manager retrieval errors', async () => {
       // Given
-      mockSend.mockRejectedValueOnce(new Error('SSM Error'));
+      mockSend.mockRejectedValueOnce(new Error('Secrets Manager Error'));
 
       // When & Then
       await expect(service.generateToken(userId)).rejects.toThrow(
-        'Failed to retrieve JWT secret: Error: SSM Error'
+        'Failed to retrieve JWT secret: Error: Secrets Manager Error'
       );
 
-      // Verify GetParameterCommand was attempted
-      expect(mockGetParameterCommand).toHaveBeenCalledTimes(1);
+      // Verify GetSecretValueCommand was attempted
+      expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle missing SSM parameter', async () => {
+    it('should handle missing secret', async () => {
       // Given
       mockSend.mockResolvedValueOnce({
-        Parameter: undefined,
+        SecretString: undefined,
       });
 
       // When & Then
       await expect(service.generateToken(userId)).rejects.toThrow(
-        'JWT secret parameter not found: /app/jwt-secret'
+        'JWT secret not found: arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
       );
 
-      // Verify GetParameterCommand was attempted
-      expect(mockGetParameterCommand).toHaveBeenCalledTimes(1);
+      // Verify GetSecretValueCommand was attempted
+      expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle missing SSM parameter value', async () => {
+    it('should handle missing secret key in JSON', async () => {
       // Given
       mockSend.mockResolvedValueOnce({
-        Parameter: { Value: undefined },
+        SecretString: JSON.stringify({ wrongKey: 'value' }),
       });
 
       // When & Then
       await expect(service.generateToken(userId)).rejects.toThrow(
-        'JWT secret parameter not found: /app/jwt-secret'
+        'JWT secret key not found in secret: arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
       );
 
-      // Verify GetParameterCommand was attempted
-      expect(mockGetParameterCommand).toHaveBeenCalledTimes(1);
+      // Verify GetSecretValueCommand was attempted
+      expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
     });
   });
 });

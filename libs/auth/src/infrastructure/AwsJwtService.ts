@@ -1,4 +1,7 @@
-import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+import {
+  SecretsManagerClient,
+  GetSecretValueCommand,
+} from '@aws-sdk/client-secrets-manager';
 import jwt from 'jsonwebtoken';
 import type { JwtService, JwtPayload } from '../application/ports';
 import { UserId } from '../domain/entities/User';
@@ -6,21 +9,21 @@ import { InvalidTokenError, TokenExpiredError } from '../domain/errors';
 
 export interface AwsJwtServiceConfig {
   region: string;
-  jwtSecretParameterName: string;
+  jwtSecretArn: string;
   endpoint?: string; // For LocalStack testing
 }
 
 export class AwsJwtService implements JwtService {
-  private readonly ssmClient: SSMClient;
-  private readonly jwtSecretParameterName: string;
+  private readonly secretsClient: SecretsManagerClient;
+  private readonly jwtSecretArn: string;
   private jwtSecret: string | null = null; // Cache the secret
 
   constructor(config: AwsJwtServiceConfig) {
-    this.ssmClient = new SSMClient({
+    this.secretsClient = new SecretsManagerClient({
       region: config.region,
       ...(config.endpoint && { endpoint: config.endpoint }),
     });
-    this.jwtSecretParameterName = config.jwtSecretParameterName;
+    this.jwtSecretArn = config.jwtSecretArn;
   }
 
   async generateToken(userId: UserId, isTest?: boolean): Promise<string> {
@@ -73,20 +76,24 @@ export class AwsJwtService implements JwtService {
     }
 
     try {
-      const command = new GetParameterCommand({
-        Name: this.jwtSecretParameterName,
-        WithDecryption: true,
+      const command = new GetSecretValueCommand({
+        SecretId: this.jwtSecretArn,
       });
 
-      const response = await this.ssmClient.send(command);
+      const response = await this.secretsClient.send(command);
 
-      if (!response.Parameter?.Value) {
+      if (!response.SecretString) {
+        throw new Error(`JWT secret not found: ${this.jwtSecretArn}`);
+      }
+
+      const secretData = JSON.parse(response.SecretString);
+      if (!secretData.secret || typeof secretData.secret !== 'string') {
         throw new Error(
-          `JWT secret parameter not found: ${this.jwtSecretParameterName}`
+          `JWT secret key not found in secret: ${this.jwtSecretArn}`
         );
       }
 
-      this.jwtSecret = response.Parameter.Value;
+      this.jwtSecret = secretData.secret as string;
       return this.jwtSecret;
     } catch (error) {
       throw new Error(`Failed to retrieve JWT secret: ${error}`);

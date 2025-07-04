@@ -61,18 +61,24 @@ Resources:
         - Key: Component
           Value: database
 
-  # SSM Parameter for JWT Secret
-  JwtSecretParameter:
-    Type: AWS::SSM::Parameter
+  # Secrets Manager Secret for JWT Secret
+  JwtSecret:
+    Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub '/demo-blue/${Environment}/jwt-secret'
-      Type: SecureString
-      Value: 'REPLACE_ME_IN_CONSOLE'
-      Description: !Sub 'JWT signing secret for demo-blue ${Environment} - Update this value in AWS console'
+      Description: !Sub 'JWT signing secret for demo-blue ${Environment}'
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: 'secret'
+        PasswordLength: 64
+        ExcludeCharacters: '"@/\'
       Tags:
-        Environment: !Ref Environment
-        Application: demo-blue
-        Component: auth
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: demo-blue
+        - Key: Component
+          Value: auth
 
   BankApi:
     Type: AWS::Serverless::Api
@@ -91,7 +97,7 @@ Resources:
       Environment:
         Variables:
           DYNAMO_TABLE_NAME: !Ref BankTable
-          JWT_SECRET_PARAMETER_NAME: !Ref JwtSecretParameter
+          JWT_SECRET_ARN: !Ref JwtSecret
           JWT_TTL_SECONDS: 3600
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
           SERVICE_NAME: !Sub 'bank-api-${Environment}'
@@ -101,8 +107,7 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BankTable
-        - SSMParameterReadPolicy:
-            ParameterName: !Ref JwtSecretParameter
+        - SecretsManagerReadWrite
       Events:
         HealthApi:
           Type: Api
@@ -136,8 +141,8 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-BankTableName'
 
-  JwtSecretParameterName:
-    Description: 'SSM Parameter name for JWT secret'
-    Value: !Ref JwtSecretParameter
+  JwtSecretArn:
+    Description: 'Secrets Manager secret ARN for JWT secret'
+    Value: !Ref JwtSecret
     Export:
-      Name: !Sub '${AWS::StackName}-JwtSecretParameterName'
+      Name: !Sub '${AWS::StackName}-JwtSecretArn'
