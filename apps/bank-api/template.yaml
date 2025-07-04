@@ -120,12 +120,24 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /health
             Method: GET
+        HealthOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /health
+            Method: OPTIONS
         SignUpApi:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
             Path: /auth/signup
             Method: POST
+        SignUpOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /auth/signup
+            Method: OPTIONS
 
 Outputs:
   BankApiUrl:
