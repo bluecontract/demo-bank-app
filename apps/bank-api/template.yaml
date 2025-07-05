@@ -138,6 +138,18 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /auth/signup
             Method: OPTIONS
+        SignInApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /auth/signin
+            Method: POST
+        SignInOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /auth/signin
+            Method: OPTIONS
 
 Outputs:
   BankApiUrl:

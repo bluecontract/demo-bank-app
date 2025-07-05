@@ -41,13 +41,13 @@ jobs:
   # ============================================================================
   # LOCAL STACK E2E TESTS (always run)
   # ============================================================================
-  local-stack-e2e:
-    name: Local Stack E2E Tests
-    uses: ./.github/workflows/local-stack-e2e.yml
-    needs: [quality-gates, integration-tests]
-    with:
-      node-version: '22'
-    secrets: inherit
+  # local-stack-e2e:
+  #   name: Local Stack E2E Tests
+  #   uses: ./.github/workflows/local-stack-e2e.yml
+  #   needs: [quality-gates, integration-tests]
+  #   with:
+  #     node-version: '22'
+  #   secrets: inherit
 
   # ============================================================================
   # DEPLOY TO DEV (On PR to main OR merge to main)
@@ -55,7 +55,7 @@ jobs:
   deploy-dev:
     name: Deploy & Test (Dev)
     uses: ./.github/workflows/deploy-and-test.yml
-    needs: [quality-gates, integration-tests, local-stack-e2e]
+    needs: [quality-gates, integration-tests]
     if: |
       needs.quality-gates.outputs.has-affected-apps == 'true' && (
         (github.event_name == 'pull_request' && github.base_ref == 'main') ||

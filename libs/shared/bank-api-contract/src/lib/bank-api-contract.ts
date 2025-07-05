@@ -18,6 +18,8 @@ export const SignUpRequestSchema = z.object({
   name: z.string().min(1).max(50),
 });
 
+export const SignInRequestSchema = SignUpRequestSchema;
+
 export const AuthSuccessResponseSchema = z.object({
   userId: z.string(),
   name: z.string(),
@@ -58,6 +60,18 @@ export const bankApiContract = c.router(
         // 400: AuthErrorResponseSchema,
       },
       summary: 'Sign up with a unique name',
+    },
+
+    signIn: {
+      method: 'POST',
+      path: '/auth/signin',
+      body: SignInRequestSchema,
+      responses: {
+        200: AuthSuccessResponseSchema,
+        404: AuthErrorResponseSchema,
+        // 400: AuthErrorResponseSchema,
+      },
+      summary: 'Sign in with existing name',
     },
   },
   {

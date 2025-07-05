@@ -16,7 +16,7 @@ resolve_s3 = true
 [default.local_start_api.parameters]
 env_vars = "env.local.json"
 port = 3000
-warm_containers = "lazy"
+warm_containers = "eager"
 
 [default.deploy.parameters]
 confirm_changeset = false

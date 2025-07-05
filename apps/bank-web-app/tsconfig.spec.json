@@ -11,6 +11,7 @@
       "@nx/react/typings/cssmodule.d.ts",
       "@nx/react/typings/image.d.ts"
     ],
+    "lib": ["dom", "es2020"],
     "jsx": "react-jsx"
   },
   "include": [

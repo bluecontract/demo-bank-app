@@ -34,7 +34,12 @@ export function HealthStatus() {
     return (
       <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
         <h3 className="font-bold">System Health</h3>
-        <p>⚠️ Backend service is not available</p>
+        <p>
+          <span role="img" aria-label="Warning">
+            ⚠️
+          </span>{' '}
+          Backend service is not available
+        </p>
         <p className="text-sm">
           Make sure the API server is running on{' '}
           {import.meta.env.VITE_API_URL || 'http://localhost:3000'}
@@ -48,7 +53,12 @@ export function HealthStatus() {
   return (
     <div className="p-4 bg-green-100 border border-green-400 text-green-700 rounded">
       <h3 className="font-bold">System Health</h3>
-      <p>✅ Status: {health.status}</p>
+      <p>
+        <span role="img" aria-label="Success">
+          ✅
+        </span>{' '}
+        Status: {health.status}
+      </p>
       <p>Version: {health.version}</p>
       <p>Environment: {health.environment}</p>
       <p>Last checked: {new Date(health.timestamp).toLocaleString()}</p>

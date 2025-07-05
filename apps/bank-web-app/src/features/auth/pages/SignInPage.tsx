@@ -1,11 +1,11 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SignUpForm } from '../components/SignUpForm';
+import { SignInForm } from '../components/SignInForm';
 
-export const SignUpPage: React.FC = () => {
+export const SignInPage: React.FC = () => {
   const navigate = useNavigate();
 
-  const handleSignUpSuccess = () => {
+  const handleSignInSuccess = () => {
     navigate('/dashboard');
   };
 
@@ -14,23 +14,23 @@ export const SignUpPage: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h1 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Join Blue Bank
+            Welcome Back
           </h1>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Create your account to get started
+            Sign in to your Blue Bank account
           </p>
         </div>
 
-        <SignUpForm onSuccess={handleSignUpSuccess} />
+        <SignInForm onSuccess={handleSignInSuccess} />
 
         <div className="text-center">
           <p className="text-sm text-gray-600">
-            Already have an account?{' '}
+            Don't have an account?{' '}
             <button
-              onClick={() => navigate('/signin')}
+              onClick={() => navigate('/signup')}
               className="font-medium text-blue-600 hover:text-blue-500"
             >
-              Sign in here
+              Sign up here
             </button>
           </p>
         </div>

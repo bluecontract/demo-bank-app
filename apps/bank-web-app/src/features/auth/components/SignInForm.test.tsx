@@ -3,19 +3,19 @@ import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { vi } from 'vitest';
-import { SignUpForm } from './SignUpForm';
+import { SignInForm } from './SignInForm';
 import { ApiProvider } from '../../../app/providers/ApiProvider';
 import { AuthProvider } from '../../../app/providers/AuthProvider';
 
 // Use vi.hoisted to create mocks that can be used in vi.mock
-const { mockSignUp, mockHealth } = vi.hoisted(() => ({
-  mockSignUp: vi.fn(),
+const { mockSignIn, mockHealth } = vi.hoisted(() => ({
+  mockSignIn: vi.fn(),
   mockHealth: vi.fn(),
 }));
 
 vi.mock('../../../api/client', () => ({
   apiClient: {
-    signUp: mockSignUp,
+    signIn: mockSignIn,
     health: mockHealth,
   },
 }));
@@ -23,7 +23,7 @@ vi.mock('../../../api/client', () => ({
 // Mock the API client library
 vi.mock('@demo-blue/shared-bank-api-client', () => ({
   createApiClient: () => ({
-    signUp: mockSignUp,
+    signIn: mockSignIn,
     health: mockHealth,
   }),
 }));
@@ -47,7 +47,7 @@ const createTestWrapper = () => {
   );
 };
 
-describe('SignUpForm', () => {
+describe('SignInForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -57,17 +57,15 @@ describe('SignUpForm', () => {
 
     render(
       <TestWrapper>
-        <SignUpForm />
+        <SignInForm />
       </TestWrapper>
     );
 
     expect(
-      screen.getByRole('heading', { name: 'Create Account' })
+      screen.getByRole('heading', { name: 'Sign In' })
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Full Name')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Create Account' })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument();
   });
 
   it('shows validation error for empty name', async () => {
@@ -75,11 +73,11 @@ describe('SignUpForm', () => {
 
     render(
       <TestWrapper>
-        <SignUpForm />
+        <SignInForm />
       </TestWrapper>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
       expect(screen.getByText('Name is required')).toBeInTheDocument();
@@ -91,13 +89,13 @@ describe('SignUpForm', () => {
 
     render(
       <TestWrapper>
-        <SignUpForm />
+        <SignInForm />
       </TestWrapper>
     );
 
     const nameInput = screen.getByLabelText('Full Name');
     fireEvent.change(nameInput, { target: { value: 'a'.repeat(51) } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
       expect(
@@ -113,50 +111,50 @@ describe('SignUpForm', () => {
       status: number;
       body: { userId: string; name: string };
     }) => void = vi.fn();
-    const signUpPromise = new Promise(resolve => {
+    const signInPromise = new Promise(resolve => {
       resolvePromise = resolve;
     });
 
-    mockSignUp.mockReturnValue(signUpPromise);
+    mockSignIn.mockReturnValue(signInPromise);
 
     render(
       <TestWrapper>
-        <SignUpForm />
+        <SignInForm />
       </TestWrapper>
     );
 
     const nameInput = screen.getByLabelText('Full Name');
     fireEvent.change(nameInput, { target: { value: 'John Doe' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
-    expect(screen.getByText('Creating Account...')).toBeInTheDocument();
+    expect(screen.getByText('Signing In...')).toBeInTheDocument();
 
-    resolvePromise({ status: 201, body: { userId: '123', name: 'John Doe' } });
+    resolvePromise({ status: 200, body: { userId: '123', name: 'John Doe' } });
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'Create Account' })
+        screen.getByRole('button', { name: 'Sign In' })
       ).toBeInTheDocument();
     });
   });
 
-  it('calls onSuccess when signup succeeds', async () => {
+  it('calls onSuccess when signin succeeds', async () => {
     const TestWrapper = createTestWrapper();
     const onSuccess = vi.fn();
 
-    mockSignUp.mockResolvedValue({
-      status: 201,
+    mockSignIn.mockResolvedValue({
+      status: 200,
       body: { userId: '123', name: 'John Doe' },
     });
 
     render(
       <TestWrapper>
-        <SignUpForm onSuccess={onSuccess} />
+        <SignInForm onSuccess={onSuccess} />
       </TestWrapper>
     );
 
     const nameInput = screen.getByLabelText('Full Name');
     fireEvent.change(nameInput, { target: { value: 'John Doe' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
       expect(onSuccess).toHaveBeenCalledWith({
@@ -166,30 +164,55 @@ describe('SignUpForm', () => {
     });
   });
 
-  it('shows error message when user already exists', async () => {
+  it('shows error message when user not found', async () => {
     const TestWrapper = createTestWrapper();
 
-    // Mock the API to return a 409 status, which should cause the component to throw an error
-    mockSignUp.mockResolvedValue({
-      status: 409,
-      body: { error: 'CONFLICT', message: 'User already exists' },
+    mockSignIn.mockResolvedValue({
+      status: 404,
+      body: {
+        error: 'USER_NOT_FOUND',
+        message: 'User not found. Please check the name and try again.',
+      },
     });
 
     render(
       <TestWrapper>
-        <SignUpForm />
+        <SignInForm />
+      </TestWrapper>
+    );
+
+    const nameInput = screen.getByLabelText('Full Name');
+    fireEvent.change(nameInput, { target: { value: 'NonExistent User' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('User not found. Please check the name and try again.')
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('shows generic error message for other failures', async () => {
+    const TestWrapper = createTestWrapper();
+
+    mockSignIn.mockResolvedValue({
+      status: 500,
+      body: { error: 'INTERNAL_ERROR', message: 'Something went wrong' },
+    });
+
+    render(
+      <TestWrapper>
+        <SignInForm />
       </TestWrapper>
     );
 
     const nameInput = screen.getByLabelText('Full Name');
     fireEvent.change(nameInput, { target: { value: 'John Doe' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
       expect(
-        screen.getByText(
-          'A user with this name already exists. Please choose a different name.'
-        )
+        screen.getByText('Sign in failed. Please try again.')
       ).toBeInTheDocument();
     });
   });
@@ -199,23 +222,59 @@ describe('SignUpForm', () => {
 
     render(
       <TestWrapper>
-        <SignUpForm />
+        <SignInForm />
       </TestWrapper>
     );
 
     // First trigger an error
-    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
       expect(screen.getByText('Name is required')).toBeInTheDocument();
     });
 
-    // Then type in the field to clear the error
+    // Then type to clear the error
     const nameInput = screen.getByLabelText('Full Name');
-    fireEvent.change(nameInput, { target: { value: 'John' } });
+    fireEvent.change(nameInput, { target: { value: 'J' } });
 
     await waitFor(() => {
       expect(screen.queryByText('Name is required')).not.toBeInTheDocument();
+    });
+  });
+
+  it('disables form when mutation is pending', async () => {
+    const TestWrapper = createTestWrapper();
+
+    let resolvePromise: (value: {
+      status: number;
+      body: { userId: string; name: string };
+    }) => void = vi.fn();
+    const signInPromise = new Promise(resolve => {
+      resolvePromise = resolve;
+    });
+
+    mockSignIn.mockReturnValue(signInPromise);
+
+    render(
+      <TestWrapper>
+        <SignInForm />
+      </TestWrapper>
+    );
+
+    const nameInput = screen.getByLabelText('Full Name');
+    const submitButton = screen.getByRole('button', { name: 'Sign In' });
+
+    fireEvent.change(nameInput, { target: { value: 'John Doe' } });
+    fireEvent.click(submitButton);
+
+    expect(nameInput).toBeDisabled();
+    expect(submitButton).toBeDisabled();
+
+    resolvePromise({ status: 200, body: { userId: '123', name: 'John Doe' } });
+
+    await waitFor(() => {
+      expect(nameInput).not.toBeDisabled();
+      expect(submitButton).not.toBeDisabled();
     });
   });
 });
