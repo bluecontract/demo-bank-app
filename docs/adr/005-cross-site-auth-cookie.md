@@ -2,7 +2,7 @@
 
 ## Status
 
-- 2025-07-01 **Proposed** – Supersedes ADR 003 section on `SameSite` attribute
+- 2025-07-01 Accepted – Supersedes ADR 003 section on `SameSite` attribute
 
 ## Context
 
