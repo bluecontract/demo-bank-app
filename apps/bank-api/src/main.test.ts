@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
 import { handler } from './main';
 import { UserAlreadyExistsError, InvalidUserNameError } from '@demo-blue/auth';
-import { signUpHandler } from './auth';
+import { signUpHandler, signInHandler } from './auth';
 import type {
   APIGatewayProxyEvent,
   APIGatewayProxyResult,
@@ -11,12 +11,14 @@ import type {
   Callback,
 } from 'aws-lambda';
 
-// Mock the signUpHandler to control its behavior in tests
+// Mock the auth handlers to control their behavior in tests
 vi.mock('./auth', () => ({
   signUpHandler: vi.fn(),
+  signInHandler: vi.fn(),
 }));
 
 const mockSignUpHandler = vi.mocked(signUpHandler);
+const mockSignInHandler = vi.mocked(signInHandler);
 
 // Mock AWS SDK
 vi.mock('@aws-sdk/client-dynamodb', () => ({
@@ -99,6 +101,7 @@ describe('Bank Lambda Business Logic', () => {
       expect(bankApiContract).toBeDefined();
       expect(bankApiContract.health).toBeDefined();
       expect(bankApiContract.signUp).toBeDefined();
+      expect(bankApiContract.signIn).toBeDefined();
     });
 
     it('should have health endpoint defined', () => {
@@ -109,6 +112,11 @@ describe('Bank Lambda Business Logic', () => {
     it('should have sign-up endpoint defined', () => {
       expect(bankApiContract.signUp.method).toBe('POST');
       expect(bankApiContract.signUp.path).toBe('/auth/signup');
+    });
+
+    it('should have sign-in endpoint defined', () => {
+      expect(bankApiContract.signIn.method).toBe('POST');
+      expect(bankApiContract.signIn.path).toBe('/auth/signin');
     });
   });
 });
@@ -146,6 +154,7 @@ describe('Bank API Handler', () => {
 
     // Reset mock before each test
     mockSignUpHandler.mockReset();
+    mockSignInHandler.mockReset();
   });
 
   afterEach(() => {

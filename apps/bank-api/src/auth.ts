@@ -1,4 +1,9 @@
-import { signUp, type SignUpResult } from '@demo-blue/auth';
+import {
+  signUp,
+  signIn,
+  type SignUpResult,
+  type SignInResult,
+} from '@demo-blue/auth';
 import {
   DynamoUserRepository,
   AwsJwtService,
@@ -20,15 +25,18 @@ const createAuthCookie = (token: string, ttlSeconds: number): string => {
 };
 
 const getTtlSeconds = (
-  user: SignUpResult['user'],
+  user: SignUpResult['user'] | SignInResult['user'],
   config: { jwtTtlSeconds: number; testUserTtlSeconds: number }
 ): number => {
-  return user.isTest ? config.testUserTtlSeconds : config.jwtTtlSeconds;
+  return user?.isTest ? config.testUserTtlSeconds : config.jwtTtlSeconds;
 };
 
 const formatResponse = (
-  user: SignUpResult['user'],
-  token: string,
+  status: number,
+  {
+    user,
+    token,
+  }: { user: SignUpResult['user'] | SignInResult['user']; token: string },
   config: { jwtTtlSeconds: number; testUserTtlSeconds: number },
   responseHeaders: Headers
 ) => {
@@ -36,7 +44,7 @@ const formatResponse = (
   responseHeaders.set('Set-Cookie', createAuthCookie(token, ttlSeconds));
   responseHeaders.set('Access-Control-Allow-Credentials', 'true');
   return {
-    status: 201 as const,
+    status,
     body: {
       userId: user.id,
       name: user.name,
@@ -102,9 +110,29 @@ export const signUpHandler: AppRouteImplementation<
       },
       deps
     );
-    return formatResponse(result.user, result.token, config, responseHeaders);
+    return formatResponse(201, result, config, responseHeaders);
   } catch (error: unknown) {
     logger.error('Sign-up failed', { error: String(error) });
+    throw error;
+  }
+};
+
+export const signInHandler: AppRouteImplementation<
+  typeof bankApiContract
+>['signIn'] = async ({ body }, { responseHeaders }) => {
+  const deps = await initializeDependencies();
+  const { logger, config } = deps;
+
+  try {
+    const result = await signIn(
+      {
+        name: body.name,
+      },
+      deps
+    );
+    return formatResponse(200, result, config, responseHeaders);
+  } catch (error: unknown) {
+    logger.error('Sign-in failed', { error: String(error) });
     throw error;
   }
 };

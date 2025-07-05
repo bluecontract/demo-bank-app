@@ -10,6 +10,7 @@ export interface SignInResult {
     id: string;
     name: string;
     createdAt: string;
+    isTest: boolean;
   };
   token: string;
 }
@@ -66,6 +67,7 @@ export async function signIn(
         id: foundUser.id,
         name: foundUser.name,
         createdAt: foundUser.createdAt.toISOString(),
+        isTest: foundUser.isTest,
       },
       token,
     };

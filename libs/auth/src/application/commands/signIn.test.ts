@@ -84,6 +84,7 @@ describe('signIn', () => {
           id: mockUser.id,
           name: 'johndoe',
           createdAt: mockUser.createdAt.toISOString(),
+          isTest: false,
         },
         token: mockToken,
       });
@@ -113,6 +114,7 @@ describe('signIn', () => {
       expect(result.user.id).toBe(mockUser.id);
       expect(result.user.name).toBe('test-user');
       expect(result.user.createdAt).toBe(mockUser.createdAt.toISOString());
+      expect(result.user.isTest).toBe(true);
       expect(result.token).toBe(mockToken);
     });
 

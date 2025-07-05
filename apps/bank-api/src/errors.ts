@@ -1,8 +1,9 @@
 import { TsRestResponse } from '@ts-rest/serverless/aws';
-import { UserAlreadyExistsError } from '@demo-blue/auth';
+import { UserAlreadyExistsError, UserNotFoundError } from '@demo-blue/auth';
 
 export const ERROR_CODES = {
   USER_ALREADY_EXISTS: 'USER_ALREADY_EXISTS',
+  USER_NOT_FOUND: 'USER_NOT_FOUND',
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
@@ -15,6 +16,16 @@ export const toUserAlreadyExistsError = (error: UserAlreadyExistsError) => {
         'A user with this name already exists. Please choose a different name.',
     },
     { status: 409 as const }
+  );
+};
+
+export const toUserNotFoundError = (error: UserNotFoundError) => {
+  return TsRestResponse.fromJson(
+    {
+      error: error.code,
+      message: 'User not found. Please check the name and try again.',
+    },
+    { status: 404 as const }
   );
 };
 

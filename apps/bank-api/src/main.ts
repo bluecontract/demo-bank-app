@@ -1,10 +1,15 @@
 import { createLambdaHandler } from '@ts-rest/serverless/aws';
 import type { Handler } from 'aws-lambda';
 import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
-import { UserAlreadyExistsError, InvalidUserNameError } from '@demo-blue/auth';
-import { signUpHandler } from './auth';
+import {
+  UserAlreadyExistsError,
+  UserNotFoundError,
+  InvalidUserNameError,
+} from '@demo-blue/auth';
+import { signUpHandler, signInHandler } from './auth';
 import {
   toUserAlreadyExistsError,
+  toUserNotFoundError,
   toValidationError,
   toInternalServerError,
 } from './errors';
@@ -27,6 +32,7 @@ export const handler: Handler = createLambdaHandler(
     },
 
     signUp: signUpHandler,
+    signIn: signInHandler,
   },
   {
     cors: {
@@ -44,6 +50,10 @@ export const handler: Handler = createLambdaHandler(
     errorHandler: error => {
       if (error instanceof UserAlreadyExistsError) {
         return toUserAlreadyExistsError(error);
+      }
+
+      if (error instanceof UserNotFoundError) {
+        return toUserNotFoundError(error);
       }
 
       if (
