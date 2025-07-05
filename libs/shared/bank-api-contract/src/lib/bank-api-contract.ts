@@ -47,6 +47,11 @@ export const bankApiContract = c.router(
       method: 'POST',
       path: '/auth/signup',
       body: SignUpRequestSchema,
+      query: z
+        .object({
+          dev: z.string().optional(),
+        })
+        .optional(),
       responses: {
         201: AuthSuccessResponseSchema,
         409: AuthErrorResponseSchema,
