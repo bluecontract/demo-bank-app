@@ -13,6 +13,7 @@ import {
   UserPersistenceData,
 } from '../domain/entities/User';
 import { UserAlreadyExistsError } from '../domain/errors';
+import { AwsResilienceConfigBuilder } from '@demo-blue/shared-observability';
 
 export interface DynamoUserRepositoryConfig {
   tableName: string;
@@ -61,9 +62,11 @@ export class DynamoUserRepository implements UserRepository {
   private readonly testUserTtlSeconds: number;
 
   constructor(config: DynamoUserRepositoryConfig) {
+    const resilienceConfig = AwsResilienceConfigBuilder.forDynamoDB();
     const dynamoClient = new DynamoDBClient({
       region: config.region,
       ...(config.endpoint && { endpoint: config.endpoint }),
+      ...AwsResilienceConfigBuilder.toAwsConfig(resilienceConfig),
     });
 
     this.client = DynamoDBDocumentClient.from(dynamoClient);

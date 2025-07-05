@@ -4,16 +4,11 @@ import {
   type SignUpResult,
   type SignInResult,
 } from '@demo-blue/auth';
-import {
-  DynamoUserRepository,
-  AwsJwtService,
-  PowertoolsLogger,
-  PowertoolsMetrics,
-  EnvironmentConfiguration,
-  type LogLevel,
-} from '@demo-blue/auth';
+
 import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
 import { AppRouteImplementation } from '@ts-rest/serverless/aws';
+
+import { getDependencies } from './dependencies';
 
 const COOKIE_CONFIG = {
   NAME: 'demoAuth',
@@ -52,54 +47,10 @@ const formatResponse = (
   };
 };
 
-const initializeDependencies = async () => {
-  const envConfig = new EnvironmentConfiguration();
-  const authConfig = await envConfig.getAuthConfig();
-
-  const logger = new PowertoolsLogger({
-    level: authConfig.logLevel as LogLevel,
-    serviceName: authConfig.serviceName,
-    environment: authConfig.environment,
-  });
-
-  const metrics = new PowertoolsMetrics({
-    namespace: authConfig.metricsNamespace,
-    serviceName: authConfig.serviceName,
-    environment: authConfig.environment,
-  });
-
-  const awsRegion = process.env.AWS_REGION || 'eu-central-1';
-  const awsEndpoint = process.env.AWS_ENDPOINT_URL; // For LocalStack testing
-
-  const userRepository = new DynamoUserRepository({
-    tableName: authConfig.dynamoTableName,
-    region: awsRegion,
-    testUserTtlSeconds: authConfig.testUserTtlSeconds,
-    ...(awsEndpoint && { endpoint: awsEndpoint }),
-  });
-
-  const jwtService = new AwsJwtService({
-    region: awsRegion,
-    jwtSecretArn: authConfig.jwtSecretArn,
-    ...(awsEndpoint && { endpoint: awsEndpoint }),
-  });
-
-  return {
-    userRepository,
-    jwtService,
-    logger,
-    metrics,
-    config: {
-      jwtTtlSeconds: authConfig.jwtTtlSeconds,
-      testUserTtlSeconds: authConfig.testUserTtlSeconds,
-    },
-  };
-};
-
 export const signUpHandler: AppRouteImplementation<
   typeof bankApiContract
 >['signUp'] = async ({ body, query }, { responseHeaders }) => {
-  const deps = await initializeDependencies();
+  const deps = await getDependencies();
   const { logger, config } = deps;
 
   try {
@@ -120,7 +71,7 @@ export const signUpHandler: AppRouteImplementation<
 export const signInHandler: AppRouteImplementation<
   typeof bankApiContract
 >['signIn'] = async ({ body }, { responseHeaders }) => {
-  const deps = await initializeDependencies();
+  const deps = await getDependencies();
   const { logger, config } = deps;
 
   try {

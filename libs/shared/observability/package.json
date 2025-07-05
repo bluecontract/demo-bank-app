@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/auth",
+  "name": "@demo-blue/shared-observability",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -26,22 +26,19 @@
           "{options.outputPath}"
         ],
         "options": {
-          "outputPath": "libs/auth/dist",
-          "main": "libs/auth/src/index.ts",
-          "tsConfig": "libs/auth/tsconfig.lib.json",
+          "outputPath": "libs/shared/observability/dist",
+          "main": "libs/shared/observability/src/index.ts",
+          "tsConfig": "libs/shared/observability/tsconfig.lib.json",
           "format": [
             "esm"
           ],
-          "declarationRootDir": "libs/auth/src"
+          "declarationRootDir": "libs/shared/observability/src"
         }
       }
     }
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.840.0",
-    "@aws-sdk/lib-dynamodb": "^3.840.0",
-    "@aws-sdk/client-secrets-manager": "^3.840.0",
-    "@demo-blue/shared-observability": "*",
-    "jsonwebtoken": "^9.0.0"
+    "@aws-lambda-powertools/logger": "^2.0.0",
+    "@aws-lambda-powertools/metrics": "^2.0.0"
   }
 }
