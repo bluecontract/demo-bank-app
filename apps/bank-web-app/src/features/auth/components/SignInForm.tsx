@@ -4,43 +4,36 @@ import { useNavigate } from 'react-router-dom';
 import { useApiClient } from '../../../app/providers/ApiProvider';
 import { useAuth } from '../../../app/providers/AuthProvider';
 
-interface SignUpFormProps {
+interface SignInFormProps {
   onSuccess?: (user: { userId: string; name: string }) => void;
 }
 
-export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
+export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
   const [name, setName] = useState('');
   const [errors, setErrors] = useState<{ name?: string }>({});
   const apiClient = useApiClient();
   const navigate = useNavigate();
   const { signIn } = useAuth();
 
-  const signUpMutation = useMutation({
+  const signInMutation = useMutation({
     mutationFn: async (userData: { name: string }) => {
-      const isE2ETest =
-        typeof window !== 'undefined' &&
-        (window.location.search.includes('e2e=true') ||
-          // @ts-expect-error - Playwright injects this global
-          window.playwright !== undefined);
-
-      const response = await apiClient.signUp({
+      const response = await apiClient.signIn({
         body: userData,
-        query: isE2ETest ? { dev: 'true' } : undefined,
       });
 
-      if (response.status === 201) {
+      if (response.status === 200) {
         return response.body;
       } else {
-        if (response.status === 409) {
+        if (response.status === 404) {
           throw new Error(
-            'A user with this name already exists. Please choose a different name.'
+            'User not found. Please check the name and try again.'
           );
         }
 
         const errorBody = response.body as
           | { error?: string; message?: string }
           | undefined;
-        throw new Error(errorBody?.message || 'Sign up failed');
+        throw new Error(errorBody?.message || 'Sign in failed');
       }
     },
     onSuccess: data => {
@@ -48,16 +41,16 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
       // Update auth state via AuthProvider
       signIn(data);
       onSuccess?.(data);
-      // Navigate to dashboard after successful sign up
+      // Navigate to dashboard after successful sign in
       navigate('/dashboard');
     },
     onError: (error: unknown) => {
-      if (error instanceof Error && error.message?.includes('different name')) {
+      if (error instanceof Error && error.message?.includes('User not found')) {
         setErrors({
-          name: 'A user with this name already exists. Please choose a different name.',
+          name: 'User not found. Please check the name and try again.',
         });
       } else {
-        setErrors({ name: 'Sign up failed. Please try again.' });
+        setErrors({ name: 'Sign in failed. Please try again.' });
       }
     },
   });
@@ -82,7 +75,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
     }
 
     setErrors({});
-    signUpMutation.mutate({ name: name.trim() });
+    signInMutation.mutate({ name: name.trim() });
   };
 
   const clearErrors = () => {
@@ -92,7 +85,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
   return (
     <div className="bg-white p-8 rounded-lg shadow-md max-w-md mx-auto">
       <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-        Create Account
+        Sign In
       </h2>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -116,7 +109,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
               errors.name ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="Enter your full name"
-            disabled={signUpMutation.isPending}
+            disabled={signInMutation.isPending}
           />
           {errors.name && (
             <p className="mt-1 text-sm text-red-600" role="alert">
@@ -127,10 +120,10 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
 
         <button
           type="submit"
-          disabled={signUpMutation.isPending}
+          disabled={signInMutation.isPending}
           className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {signUpMutation.isPending ? 'Creating Account...' : 'Create Account'}
+          {signInMutation.isPending ? 'Signing In...' : 'Sign In'}
         </button>
       </form>
     </div>

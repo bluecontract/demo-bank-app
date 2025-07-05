@@ -143,7 +143,7 @@ test.describe('Sign Up Flow', () => {
     await page.fill('input[name="name"]', 'a');
 
     // Error should disappear
-    await expect(page.getByText('Name is required')).not.toBeVisible();
+    await expect(page.getByText('Name is required')).toBeHidden();
   });
 
   test('should have proper accessibility attributes', async ({ page }) => {

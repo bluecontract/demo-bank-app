@@ -11,6 +11,10 @@ export function HomePage() {
     navigate(signupUrl);
   };
 
+  const handleSignInClick = () => {
+    navigate('/signin');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
@@ -44,18 +48,32 @@ export function HomePage() {
                 Sign Up
               </button>
               <button
-                disabled
-                className="bg-gray-100 text-gray-400 px-6 py-3 rounded-lg font-medium cursor-not-allowed"
+                onClick={handleSignInClick}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-medium transition-colors"
               >
                 Sign In
-                <span className="block text-xs mt-1">Coming Soon</span>
               </button>
             </div>
 
             <div className="text-sm text-gray-500">
-              <p>🔐 Secure authentication system</p>
-              <p>💳 Account management features</p>
-              <p>💰 Transaction history</p>
+              <p>
+                <span role="img" aria-label="Security">
+                  🔐
+                </span>{' '}
+                Secure authentication system
+              </p>
+              <p>
+                <span role="img" aria-label="Credit card">
+                  💳
+                </span>{' '}
+                Account management features
+              </p>
+              <p>
+                <span role="img" aria-label="Money">
+                  💰
+                </span>{' '}
+                Transaction history
+              </p>
             </div>
           </div>
         </div>
