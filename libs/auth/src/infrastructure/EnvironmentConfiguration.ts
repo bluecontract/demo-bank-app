@@ -1,6 +1,7 @@
 import type { Configuration } from '../application/ports';
-import type { AuthConfiguration, LogLevel } from '../domain/types';
+import type { AuthConfiguration } from '../domain/types';
 import { AppError } from '../domain/errors/AppError';
+import type { LogLevel } from '@demo-blue/shared-observability';
 
 export class ConfigurationValidationError extends AppError {
   readonly code = 'CONFIGURATION_VALIDATION_ERROR';

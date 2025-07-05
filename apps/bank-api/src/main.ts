@@ -13,6 +13,7 @@ import {
   toValidationError,
   toInternalServerError,
 } from './errors';
+import { getDependencies } from './dependencies';
 
 export const handler: Handler = createLambdaHandler(
   bankApiContract,
@@ -65,5 +66,18 @@ export const handler: Handler = createLambdaHandler(
 
       return toInternalServerError();
     },
+    responseHandlers: [
+      async response => {
+        try {
+          const { metrics, logger } = await getDependencies();
+          await metrics.publishStoredMetrics();
+          logger.debug('Metrics published successfully');
+        } catch (error) {
+          // Log error but don't fail the response
+          console.error('Failed to publish metrics:', error);
+        }
+        return response;
+      },
+    ],
   }
 );

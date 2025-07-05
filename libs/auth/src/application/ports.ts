@@ -1,5 +1,11 @@
 import { User, UserId } from '../domain/entities/User';
-import { AuthConfiguration, MetricUnit } from '../domain/types';
+import { AuthConfiguration } from '../domain/types';
+
+export type {
+  Logger,
+  Metrics,
+  MetricUnit,
+} from '@demo-blue/shared-observability';
 
 export interface JwtPayload {
   sub: UserId;
@@ -33,21 +39,6 @@ export interface JwtService {
    * @throws TokenExpiredError if token has expired
    */
   verifyToken(token: string): Promise<JwtPayload>;
-}
-
-export interface Logger {
-  info(message: string, extra?: Record<string, unknown>): void;
-  warn(message: string, extra?: Record<string, unknown>): void;
-  error(message: string, extra?: Record<string, unknown>): void;
-  debug(message: string, extra?: Record<string, unknown>): void;
-  setCorrelationId(correlationId: string): void;
-}
-
-export interface Metrics {
-  addMetric(name: string, unit: MetricUnit, value: number): void;
-  addMetadata(key: string, value: string): void;
-  publishStoredMetrics(): Promise<void>;
-  setDefaultDimensions(dimensions: Record<string, string>): void;
 }
 
 export interface Configuration {

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Metrics as PowertoolsMetricsClass } from '@aws-lambda-powertools/metrics';
 import { PowertoolsMetrics } from './PowertoolsMetrics';
-import { MetricUnit } from '../domain/services/Metrics';
+import { MetricUnit } from '../interfaces/Metrics';
 
 vi.mock('@aws-lambda-powertools/metrics');
 

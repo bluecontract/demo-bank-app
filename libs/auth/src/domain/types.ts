@@ -10,26 +10,3 @@ export interface AuthConfiguration {
 }
 
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
-
-export interface LoggerConfig {
-  level: LogLevel;
-  serviceName: string;
-  environment?: string;
-}
-
-export type MetricUnit =
-  | 'Seconds'
-  | 'Microseconds'
-  | 'Milliseconds'
-  | 'Count'
-  | 'Bytes'
-  | 'Kilobytes'
-  | 'Megabytes'
-  | 'Gigabytes'
-  | 'Percent';
-
-export interface MetricsConfig {
-  namespace: string;
-  serviceName: string;
-  environment?: string;
-}

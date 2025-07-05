@@ -113,6 +113,10 @@ Resources:
               Action:
                 - secretsmanager:GetSecretValue
               Resource: !Ref JwtSecret
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
+              Resource: '*'
       Events:
         HealthApi:
           Type: Api

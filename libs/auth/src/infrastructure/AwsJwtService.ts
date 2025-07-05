@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import type { JwtService, JwtPayload } from '../application/ports';
 import { UserId } from '../domain/entities/User';
 import { InvalidTokenError, TokenExpiredError } from '../domain/errors';
+import { AwsResilienceConfigBuilder } from '@demo-blue/shared-observability';
 
 export interface AwsJwtServiceConfig {
   region: string;
@@ -19,9 +20,11 @@ export class AwsJwtService implements JwtService {
   private jwtSecret: string | null = null; // Cache the secret
 
   constructor(config: AwsJwtServiceConfig) {
+    const resilienceConfig = AwsResilienceConfigBuilder.forSecretsManager();
     this.secretsClient = new SecretsManagerClient({
       region: config.region,
       ...(config.endpoint && { endpoint: config.endpoint }),
+      ...AwsResilienceConfigBuilder.toAwsConfig(resilienceConfig),
     });
     this.jwtSecretArn = config.jwtSecretArn;
   }
