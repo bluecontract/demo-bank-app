@@ -23,6 +23,9 @@
     },
     {
       "path": "./libs/shared/observability"
+    },
+    {
+      "path": "./libs/banking"
     }
   ]
 }

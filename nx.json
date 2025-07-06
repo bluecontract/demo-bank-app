@@ -27,7 +27,8 @@
       "exclude": [
         "libs/shared/bank-api-contract/*",
         "libs/shared/bank-api-client/*",
-        "libs/auth/*"
+        "libs/auth/*",
+        "libs/banking/*"
       ]
     },
     {
@@ -70,8 +71,8 @@
       "include": [
         "libs/shared/bank-api-contract/*",
         "libs/shared/bank-api-client/*",
-        "libs/shared/auth/*",
-        "libs/auth/*"
+        "libs/auth/*",
+        "libs/banking/*"
       ],
       "options": {
         "build": {
