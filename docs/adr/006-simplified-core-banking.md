@@ -17,13 +17,14 @@ A **single DynamoDB table** with synchronous balance snapshots satisfies those d
 
 ## Decisions
 
-| #   | Decision                                                                                                                 | Rationale                                                                   |
-| --- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| 1   | **Single‑Table DynamoDB** (`BankTable`) stores `Account`, `BalanceSnapshot`, `TxnHeader`, `Posting`, `IdempotencyGuard`. | One service to learn, identical behaviour on LocalStack, cost pennies.      |
-| 2   | **Append‑Only Postings**; `TxnHeader.status` may mutate (`PENDING`, `POSTED`, `VOID`, `RETURNED`).                       | Money trail stays immutable; UI can show lifecycle.                         |
-| 3   | **Snapshot Updated Synchronously** inside the same `TransactWriteItems`.                                                 | Client gets final balance in the 201 response; simpler than async for demo. |
-| 4   | **`FUNDING` Transaction Type**                                                                                           | Lets demo users mint balance.                                               |
-| 5   | **Ephemeral Test Data via TTL** – JWT may carry `isTest=true`; repository sets `ttl` ≤ 24 h on all items.                | Aligned with current approach to e2e test data                              |
+| #   | Decision                                                                                                                                                                            | Rationale                                                                   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 1   | **Single‑Table DynamoDB** (`BankTable`) stores `Account`, `BalanceSnapshot`, `TxnHeader`, `Posting`, `IdempotencyGuard`.                                                            | One service to learn, identical behaviour on LocalStack, cost pennies.      |
+| 2   | **Append‑Only Postings**; `TxnHeader.status` may mutate (`PENDING`, `POSTED`, `VOID`, `RETURNED`).                                                                                  | Money trail stays immutable; UI can show lifecycle.                         |
+| 3   | **Snapshot Updated Synchronously** inside the same `TransactWriteItems`.                                                                                                            | Client gets final balance in the 201 response; simpler than async for demo. |
+| 4   | **`FUNDING` Transaction Type**                                                                                                                                                      | Lets demo users mint balance.                                               |
+| 5   | **Ephemeral Test Data via TTL** – JWT may carry `isTest=true`; repository sets `ttl` ≤ 24 h on all items.                                                                           | Aligned with current approach to e2e test data                              |
+| 6   | **GSI Attribute Names** – Use explicit attribute names: `BANKING_GSI1PK`, `BANKING_GSI1SK`, `BANKING_GSI2PK`, `BANKING_GSI2SK`, `BANKING_GSI3PK`, `BANKING_GSI3SK` for all indexes. | Ensures schema and code are always in sync.                                 |
 
 Detailed design outlined in [004-core-banking-design.md](../design/004-core-banking-design.md)
 

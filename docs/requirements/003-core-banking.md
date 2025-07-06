@@ -1,4 +1,4 @@
-# Requirements Specification – Core Banking (Accounts & Internal Transfers)
+# Requirements Specification – Core Banking (Accounts & Internal Transfers)
 
 ## Date
 
@@ -8,10 +8,10 @@
 
 | ID       | Requirement                                                                                                                                                                                                  | Priority |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| FR-ACC-1 | **Create Account** – A signed‑in user can create exactly one bank account; system generates `account_id` (ULID) and a **10‑digit account number** unique across demo.                                        | Must     |
-| FR-ACC-2 | **Fund Account** – In the _Funding_ UI a user enters an _amount_ (positive integer ≤ 1 000 000) which results in a **credit** transaction of type `FUNDING`.                                                 | Must     |
-| FR-ACC-3 | **Internal Transfer** – User can send money to another valid **account number** in the demo. Amount must be ≤ _available balance_.                                                                           | Must     |
-| FR-ACC-4 | **Validation** – Transfer fails with clear error when: destination account unknown, amount ≤ 0, or insufficient available balance.                                                                           | Must     |
+| FR-ACC-1 | **Create Account** – A signed‑in user can create multiple bank accounts; system generates `account_id` (UUID) and a **10‑digit account number** unique across demo.                                          | Must     |
+| FR-ACC-2 | **Fund Account** – In the _Funding_ UI a user enters an _amount_ (positive integer ≤ 1,000,000) which results in a **credit** transaction of type `FUNDING`.                                                 | Must     |
+| FR-ACC-3 | **Internal Transfer** – User can send money to another valid **account number** in the demo. Amount must be ≤ _available balance_.                                                                           | Must     |
+| FR-ACC-4 | **Validation** – Transfer fails with clear error when: destination account unknown, amount ≤ 0, or insufficient available balance.                                                                           | Must     |
 | FR-ACC-5 | **Transaction List** – User can list their last N transactions with: date, type, counter‑party, amount (signed), status, resulting balance.                                                                  | Must     |
 | FR-ACC-6 | **Balance Endpoint** – API returns both `ledger_balance` and `available_balance` calculated **synchronously** within the transaction request for deterministic UX.                                           | Must     |
 | FR-ACC-7 | **Idempotency** – `CreateTransaction` accepts `Idempotency-Key` header; duplicate keys return the original 201 response.                                                                                     | Must     |
@@ -35,5 +35,6 @@
 - User opens an account and sees balance = `0.00 USD`.
 - Funding 250.00 increases ledger _and_ available balance by 250.00 and appears in feed as **FUNDING** credit.
 - Sending 100.00 to another existing account succeeds; balances update atomically on both accounts; feed shows **TRANSFER** debit / credit.
-- Attempting to send 999 999.00 with only 150.00 available returns `400 Insufficient Funds`.
-- Attempting to send to non‑existing account returns `404 Destination Not Found`.
+- Attempting to send 999,999.00 with only 150.00 available returns `400 Insufficient Funds`.
+- Attempting to send to non‑existing account returns `404 Destination Not Found`.
+- **Test data is always ephemeral if `isTest=true` in JWT; repository enforces TTL on all items.**
