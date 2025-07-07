@@ -1,6 +1,6 @@
 import type { Configuration } from '../application/ports';
 import type { AuthConfiguration } from '../domain/types';
-import { AppError } from '../domain/errors/AppError';
+import { AppError } from '../domain/errors';
 import type { LogLevel } from '@demo-blue/shared-observability';
 
 export class ConfigurationValidationError extends AppError {

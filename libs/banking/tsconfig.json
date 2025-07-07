@@ -7,7 +7,7 @@
       "path": "../shared/observability"
     },
     {
-      "path": "../auth"
+      "path": "../shared/core"
     },
     {
       "path": "./tsconfig.lib.json"

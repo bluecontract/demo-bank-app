@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/auth",
+  "name": "@demo-blue/shared-core",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -26,23 +26,16 @@
           "{options.outputPath}"
         ],
         "options": {
-          "outputPath": "libs/auth/dist",
-          "main": "libs/auth/src/index.ts",
-          "tsConfig": "libs/auth/tsconfig.lib.json",
+          "outputPath": "libs/shared/core/dist",
+          "main": "libs/shared/core/src/index.ts",
+          "tsConfig": "libs/shared/core/tsconfig.lib.json",
           "format": [
             "esm"
           ],
-          "declarationRootDir": "libs/auth/src"
+          "declarationRootDir": "libs/shared/core/src"
         }
       }
     }
   },
-  "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.840.0",
-    "@aws-sdk/lib-dynamodb": "^3.840.0",
-    "@aws-sdk/client-secrets-manager": "^3.840.0",
-    "@demo-blue/shared-core": "*",
-    "@demo-blue/shared-observability": "*",
-    "jsonwebtoken": "^9.0.0"
-  }
+  "dependencies": {}
 }

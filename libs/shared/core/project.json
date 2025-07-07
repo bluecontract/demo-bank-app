@@ -1,0 +1,30 @@
+{
+  "name": "@demo-blue/shared-core",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/shared/core/src",
+  "targets": {
+    "build": {
+      "executor": "@nx/esbuild:esbuild",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "libs/shared/core/dist",
+        "main": "libs/shared/core/src/index.ts",
+        "tsConfig": "libs/shared/core/tsconfig.lib.json",
+        "format": ["esm"],
+        "declarationRootDir": "libs/shared/core/src"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": [
+          "libs/shared/core/**/*.{ts,tsx,js,jsx}",
+          "libs/shared/core/package.json"
+        ]
+      }
+    }
+  },
+  "implicitDependencies": []
+}

@@ -14,24 +14,6 @@
   },
   "plugins": [
     {
-      "plugin": "@nx/js/typescript",
-      "options": {
-        "typecheck": false,
-        "build": {
-          "targetName": "build",
-          "configName": "tsconfig.lib.json",
-          "buildDepsName": "build-deps",
-          "watchDepsName": "watch-deps"
-        }
-      },
-      "exclude": [
-        "libs/shared/bank-api-contract/*",
-        "libs/shared/bank-api-client/*",
-        "libs/auth/*",
-        "libs/banking/*"
-      ]
-    },
-    {
       "plugin": "@nx/react/router-plugin",
       "options": {
         "buildTargetName": "build",
@@ -71,6 +53,8 @@
       "include": [
         "libs/shared/bank-api-contract/*",
         "libs/shared/bank-api-client/*",
+        "libs/shared/observability/*",
+        "libs/shared/core/*",
         "libs/auth/*",
         "libs/banking/*"
       ],

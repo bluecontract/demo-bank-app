@@ -44,6 +44,8 @@
     "@aws-sdk/lib-dynamodb": "^3.840.0",
     "@demo-blue/shared-bank-api-client": "*",
     "@demo-blue/shared-bank-api-contract": "*",
+    "@demo-blue/shared-core": "*",
+    "@demo-blue/shared-observability": "*",
     "@tanstack/react-query": "^5.17.10",
     "@ts-rest/core": "^3.52.1",
     "@ts-rest/serverless": "^3.52.1",
@@ -113,7 +115,9 @@
   "workspaces": [
     "apps/*",
     "libs/*",
-    "libs/shared/*"
+    "libs/shared/*",
+    "shared",
+    "shared/*"
   ],
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,css,scss,md,html,yml,yaml}": [

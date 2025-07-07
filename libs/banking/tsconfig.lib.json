@@ -17,7 +17,7 @@
       "path": "../shared/observability/tsconfig.lib.json"
     },
     {
-      "path": "../auth/tsconfig.lib.json"
+      "path": "../shared/core/tsconfig.lib.json"
     }
   ],
   "exclude": [

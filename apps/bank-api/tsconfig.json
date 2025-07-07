@@ -4,10 +4,10 @@
   "include": [],
   "references": [
     {
-      "path": "../../libs/auth"
+      "path": "../../libs/shared/bank-api-contract"
     },
     {
-      "path": "../../libs/shared/bank-api-contract"
+      "path": "../../libs/auth"
     },
     {
       "path": "./tsconfig.app.json"

@@ -1,4 +1,4 @@
-import { AppError } from './AppError';
+import { AppError } from '@demo-blue/shared-core';
 
 export class InvalidUserNameError extends AppError {
   readonly code = 'INVALID_USER_NAME';

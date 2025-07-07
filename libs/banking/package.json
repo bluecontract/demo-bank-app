@@ -35,6 +35,19 @@
           "declarationRootDir": "libs/banking/src"
         }
       },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx vitest run --config vitest.config.ts --exclude **/*.integration.test.ts",
+          "cwd": "libs/banking",
+          "env": {
+            "VITEST_EXCLUDE_INTEGRATION": "true"
+          }
+        },
+        "dependsOn": [
+          "^build"
+        ]
+      },
       "test:integration": {
         "executor": "nx:run-commands",
         "options": {
@@ -67,7 +80,7 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
-    "@demo-blue/auth": "*",
+    "@demo-blue/shared-core": "*",
     "@demo-blue/shared-observability": "*"
   }
 }

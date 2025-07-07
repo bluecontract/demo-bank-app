@@ -7,6 +7,9 @@
       "path": "../shared/observability"
     },
     {
+      "path": "../shared/core"
+    },
+    {
       "path": "./tsconfig.lib.json"
     },
     {
