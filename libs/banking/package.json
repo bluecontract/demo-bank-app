@@ -78,6 +78,7 @@
     }
   },
   "dependencies": {
-    "@demo-blue/shared-core": "*"
+    "@demo-blue/shared-core": "*",
+    "@demo-blue/shared-observability": "*"
   }
 }
