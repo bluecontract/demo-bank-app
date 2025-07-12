@@ -17,3 +17,21 @@ export interface AccountResult {
   availableBalanceMinor: Money;
   balanceVersion: number;
 }
+
+export interface PostingResult {
+  accountId: string;
+  amount: Money;
+  side: 'DEBIT' | 'CREDIT';
+  accountNumber: string;
+  counterpartyAccountNumber: string;
+}
+
+export interface TransactionResult {
+  id: string;
+  type: 'FUNDING' | 'TRANSFER';
+  status: 'POSTED';
+  postings: PostingResult[];
+  description: string;
+  transactionIdempotencyKey?: string;
+  createdAt: Date;
+}

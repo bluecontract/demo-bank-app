@@ -15,3 +15,11 @@ export class ForbiddenError extends AppError {
     super(message);
   }
 }
+
+export class TransactionNotFoundError extends AppError {
+  readonly code = 'TRANSACTION_NOT_FOUND';
+
+  constructor(transactionId: string) {
+    super(`Transaction ${transactionId} not found`);
+  }
+}
