@@ -11,6 +11,25 @@ import { Transaction } from '../domain/entities/Transaction';
 import { Money } from '../domain/valueObjects/Money';
 import { Posting } from '../domain/valueObjects/Posting';
 
+// Helper function to create test accounts with required properties
+const createTestAccount = (
+  overrides: Partial<ConstructorParameters<typeof Account>[0]> = {}
+) => {
+  return new Account({
+    id: 'acc-test',
+    accountNumber: '1234567890',
+    name: 'Test Account',
+    ownerUserId: 'user-test',
+    status: 'ACTIVE',
+    currency: 'USD',
+    createdAt: new Date(),
+    ledgerBalanceMinor: new Money(0),
+    availableBalanceMinor: new Money(0),
+    balanceVersion: 0,
+    ...overrides,
+  });
+};
+
 const TEST_CONFIG = {
   tableName: `demo-blue-banking-dynamo-repository-integration-test-${Date.now()}`,
   localstackEndpoint: 'http://localhost:4566',
@@ -104,14 +123,11 @@ describe('DynamoBankingRepository Integration', () => {
   });
 
   it('should save and retrieve an account', async () => {
-    const account = new Account({
+    const account = createTestAccount({
       id: 'acc-1',
       accountNumber: '1234567890',
       name: 'Test Account 1',
       ownerUserId: 'user-1',
-      status: 'ACTIVE',
-      currency: 'USD',
-      createdAt: new Date(),
     });
     await repository.saveAccount(account);
     const loaded = await repository.getAccountById('acc-1');
@@ -121,7 +137,7 @@ describe('DynamoBankingRepository Integration', () => {
   });
 
   it('should retrieve account with correct balance information', async () => {
-    const account = new Account({
+    const account = createTestAccount({
       id: 'acc-balance-test',
       accountNumber: '5555555555',
       name: 'Balance Test Account',
@@ -153,14 +169,11 @@ describe('DynamoBankingRepository Integration', () => {
   });
 
   it('should save and retrieve by account number', async () => {
-    const account = new Account({
+    const account = createTestAccount({
       id: 'acc-2',
       accountNumber: '2222222222',
       name: 'Test Account 2',
       ownerUserId: 'user-2',
-      status: 'ACTIVE',
-      currency: 'USD',
-      createdAt: new Date(),
     });
     await repository.saveAccount(account);
     const id = await repository.getAccountIdByNumber('2222222222');
@@ -168,23 +181,17 @@ describe('DynamoBankingRepository Integration', () => {
   });
 
   it('should save and retrieve multiple accounts for a user', async () => {
-    const account1 = new Account({
+    const account1 = createTestAccount({
       id: 'acc-3',
       accountNumber: '3333333333',
       name: 'Test Account 3',
       ownerUserId: 'user-3',
-      status: 'ACTIVE',
-      currency: 'USD',
-      createdAt: new Date(),
     });
-    const account2 = new Account({
+    const account2 = createTestAccount({
       id: 'acc-4',
       accountNumber: '4444444444',
       name: 'Test Account 4',
       ownerUserId: 'user-3',
-      status: 'ACTIVE',
-      currency: 'USD',
-      createdAt: new Date(),
     });
     await repository.saveAccount(account1);
     await repository.saveAccount(account2);
@@ -197,27 +204,23 @@ describe('DynamoBankingRepository Integration', () => {
 
   it('should save a transaction and update balances', async () => {
     const timestamp = Date.now().toString();
-    const src = new Account({
+    const src = createTestAccount({
       id: `acc-5-${timestamp}`,
       accountNumber: `5555${timestamp.slice(-6)}`,
       name: 'Source Account',
       ownerUserId: 'user-5',
-      status: 'ACTIVE',
-      currency: 'USD',
-      createdAt: new Date(),
       ledgerBalanceMinor: new Money(10000),
       availableBalanceMinor: new Money(10000),
+      balanceVersion: 1,
     });
-    const dst = new Account({
+    const dst = createTestAccount({
       id: `acc-6-${timestamp}`,
       accountNumber: `6666${timestamp.slice(-6)}`,
       name: 'Destination Account',
       ownerUserId: 'user-6',
-      status: 'ACTIVE',
-      currency: 'USD',
-      createdAt: new Date(),
       ledgerBalanceMinor: new Money(0),
       availableBalanceMinor: new Money(0),
+      balanceVersion: 1,
     });
     await repository.saveAccount(src);
     await repository.saveAccount(dst);
@@ -259,7 +262,7 @@ describe('DynamoBankingRepository Integration', () => {
     it('should handle multi-posting transaction (3+ accounts)', async () => {
       // Create three accounts for a split transaction with unique account numbers
       const timestamp = Date.now().toString();
-      const source = new Account({
+      const source = createTestAccount({
         id: `acc-multi-1-${timestamp}`,
         accountNumber: `1111${timestamp.slice(-6)}`,
         name: 'Multi Source Account',
@@ -271,7 +274,7 @@ describe('DynamoBankingRepository Integration', () => {
         availableBalanceMinor: new Money(10000),
       });
 
-      const dest1 = new Account({
+      const dest1 = createTestAccount({
         id: `acc-multi-2-${timestamp}`,
         accountNumber: `2222${timestamp.slice(-6)}`,
         name: 'Multi Dest 1',
@@ -283,7 +286,7 @@ describe('DynamoBankingRepository Integration', () => {
         availableBalanceMinor: new Money(0),
       });
 
-      const dest2 = new Account({
+      const dest2 = createTestAccount({
         id: `acc-multi-3-${timestamp}`,
         accountNumber: `3333${timestamp.slice(-6)}`,
         name: 'Multi Dest 2',
@@ -363,26 +366,20 @@ describe('DynamoBankingRepository Integration', () => {
     });
 
     it('should handle large amount transactions near boundaries', async () => {
-      const largeAccount1 = new Account({
+      const largeAccount1 = createTestAccount({
         id: 'acc-large-1',
         accountNumber: '7777777777',
         name: 'Large Account 1',
         ownerUserId: 'user-large-1',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date(),
         ledgerBalanceMinor: new Money(999999999), // Near max safe integer
         availableBalanceMinor: new Money(999999999),
       });
 
-      const largeAccount2 = new Account({
+      const largeAccount2 = createTestAccount({
         id: 'acc-large-2',
         accountNumber: '8888888888',
         name: 'Large Account 2',
         ownerUserId: 'user-large-2',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date(),
         ledgerBalanceMinor: new Money(0),
         availableBalanceMinor: new Money(0),
       });
@@ -434,26 +431,20 @@ describe('DynamoBankingRepository Integration', () => {
     });
 
     it('should handle sequential transactions on same accounts', async () => {
-      const account1 = new Account({
+      const account1 = createTestAccount({
         id: 'acc-seq-1',
         accountNumber: '1010101010',
         name: 'Sequential Test Account 1',
         ownerUserId: 'user-seq-1',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date(),
         ledgerBalanceMinor: new Money(10000),
         availableBalanceMinor: new Money(10000),
       });
 
-      const account2 = new Account({
+      const account2 = createTestAccount({
         id: 'acc-seq-2',
         accountNumber: '2020202020',
         name: 'Sequential Test Account 2',
         ownerUserId: 'user-seq-2',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date(),
         ledgerBalanceMinor: new Money(5000),
         availableBalanceMinor: new Money(5000),
       });
@@ -523,38 +514,29 @@ describe('DynamoBankingRepository Integration', () => {
   describe('Concurrency Testing', () => {
     it('should handle simultaneous transactions on same account with optimistic locking', async () => {
       // Create source account with sufficient balance
-      const sourceAccount = new Account({
+      const sourceAccount = createTestAccount({
         id: 'acc-concurrent-1.1',
         accountNumber: '1111222233',
         name: 'Concurrent Source Account',
         ownerUserId: 'user-concurrent-1',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date(),
         ledgerBalanceMinor: new Money(100000), // $1000
         availableBalanceMinor: new Money(100000),
       });
 
-      const destAccount1 = new Account({
+      const destAccount1 = createTestAccount({
         id: 'acc-concurrent-2.1',
         accountNumber: '2222333344',
         name: 'Concurrent Dest 1',
         ownerUserId: 'user-concurrent-2',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date(),
         ledgerBalanceMinor: new Money(0),
         availableBalanceMinor: new Money(0),
       });
 
-      const destAccount2 = new Account({
+      const destAccount2 = createTestAccount({
         id: 'acc-concurrent-3',
         accountNumber: '3333444455',
         name: 'Concurrent Dest 2',
         ownerUserId: 'user-concurrent-3',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date(),
         ledgerBalanceMinor: new Money(0),
         availableBalanceMinor: new Money(0),
       });
@@ -650,26 +632,20 @@ describe('DynamoBankingRepository Integration', () => {
     });
 
     it('should handle concurrent idempotency conflicts correctly', async () => {
-      const account1 = new Account({
+      const account1 = createTestAccount({
         id: 'acc-idem-1',
         accountNumber: '5555666677',
         name: 'Idempotency Account 1',
         ownerUserId: 'user-idem-1',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date(),
         ledgerBalanceMinor: new Money(50000),
         availableBalanceMinor: new Money(50000),
       });
 
-      const account2 = new Account({
+      const account2 = createTestAccount({
         id: 'acc-idem-2',
         accountNumber: '6666777788',
         name: 'Idempotency Account 2',
         ownerUserId: 'user-idem-2',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date(),
         ledgerBalanceMinor: new Money(10000),
         availableBalanceMinor: new Money(10000),
       });
@@ -742,7 +718,7 @@ describe('DynamoBankingRepository Integration', () => {
       const originalBalance1 = new Money(200000);
       const originalBalance2 = new Money(0);
 
-      const concurrentAccount1 = new Account({
+      const concurrentAccount1 = createTestAccount({
         id: 'acc-concurrent-1.2',
         accountNumber: '7777888899',
         name: 'Concurrent Account 1',
@@ -754,7 +730,7 @@ describe('DynamoBankingRepository Integration', () => {
         availableBalanceMinor: originalBalance1,
       });
 
-      const concurrentAccount2 = new Account({
+      const concurrentAccount2 = createTestAccount({
         id: 'acc-concurrent-2.2',
         accountNumber: '8888999900',
         name: 'Concurrent Account 2',
@@ -779,7 +755,7 @@ describe('DynamoBankingRepository Integration', () => {
         amount: number
       ) => {
         // Clone accounts so each transaction has its own copy but with same version
-        const account1Clone = new Account({
+        const account1Clone = createTestAccount({
           id: account1Fresh!.id,
           accountNumber: account1Fresh!.accountNumber,
           name: account1Fresh!.name,
@@ -792,7 +768,7 @@ describe('DynamoBankingRepository Integration', () => {
           balanceVersion: account1Fresh!.balanceVersion, // Same version - this is key for optimistic locking test
         });
 
-        const account2Clone = new Account({
+        const account2Clone = createTestAccount({
           id: account2Fresh!.id,
           accountNumber: account2Fresh!.accountNumber,
           name: account2Fresh!.name,
@@ -902,7 +878,7 @@ describe('DynamoBankingRepository Integration', () => {
 
       // Create multiple accounts concurrently for same user
       const createAccountConcurrently = async (index: number) => {
-        const account = new Account({
+        const account = createTestAccount({
           id: `acc-create-${index}`,
           accountNumber: `9999${index.toString().padStart(6, '0')}`,
           name: `Concurrent Account ${index}`,
@@ -944,7 +920,7 @@ describe('DynamoBankingRepository Integration', () => {
       const duplicateAccountNumber = `5555${timestamp.slice(-6)}`;
 
       // Create first account
-      const account1 = new Account({
+      const account1 = createTestAccount({
         id: `acc-duplicate-1-${timestamp}`,
         accountNumber: duplicateAccountNumber,
         name: 'First Account',
@@ -959,7 +935,7 @@ describe('DynamoBankingRepository Integration', () => {
       await repository.saveAccount(account1);
 
       // Try to create second account with same account number
-      const account2 = new Account({
+      const account2 = createTestAccount({
         id: `acc-duplicate-2-${timestamp}`,
         accountNumber: duplicateAccountNumber, // Same account number!
         name: 'Second Account',
@@ -1024,7 +1000,7 @@ describe('DynamoBankingRepository Integration', () => {
     });
 
     it('should handle optimistic locking conflicts during balance updates', async () => {
-      const lockingAccount = new Account({
+      const lockingAccount = createTestAccount({
         id: 'acc-locking-1',
         accountNumber: '4444000001',
         name: 'Locking Test Account',
@@ -1036,7 +1012,7 @@ describe('DynamoBankingRepository Integration', () => {
         availableBalanceMinor: new Money(50000),
       });
 
-      const targetAccount = new Account({
+      const targetAccount = createTestAccount({
         id: 'acc-locking-2',
         accountNumber: '5555000001',
         name: 'Target Account',
@@ -1119,7 +1095,7 @@ describe('DynamoBankingRepository Integration', () => {
       expect(emptyUserAccounts).toHaveLength(0);
 
       // Create account but don't add any transactions
-      const emptyTxnAccount = new Account({
+      const emptyTxnAccount = createTestAccount({
         id: emptyAccountId,
         accountNumber: '8888000001',
         name: 'Empty Transaction Account',
@@ -1145,7 +1121,7 @@ describe('DynamoBankingRepository Integration', () => {
 
   describe('Data Consistency Validation', () => {
     it('should maintain ACID properties during transaction processing', async () => {
-      const account1 = new Account({
+      const account1 = createTestAccount({
         id: 'acc-acid-1',
         accountNumber: '1111000010',
         name: 'ACID Test Account 1',
@@ -1157,7 +1133,7 @@ describe('DynamoBankingRepository Integration', () => {
         availableBalanceMinor: new Money(50000),
       });
 
-      const account2 = new Account({
+      const account2 = createTestAccount({
         id: 'acc-acid-2',
         accountNumber: '2222000010',
         name: 'ACID Test Account 2',
@@ -1247,7 +1223,7 @@ describe('DynamoBankingRepository Integration', () => {
 
       // Create 5 test accounts for complex transaction validation
       for (let i = 1; i <= 5; i++) {
-        const account = new Account({
+        const account = createTestAccount({
           id: `acc-debit-${i}`,
           accountNumber: `${i}000000010`,
           name: `Double Entry Account ${i}`,
@@ -1385,7 +1361,7 @@ describe('DynamoBankingRepository Integration', () => {
     });
 
     it('should maintain referential integrity between transactions and accounts', async () => {
-      const refAccount1 = new Account({
+      const refAccount1 = createTestAccount({
         id: 'acc-ref-1',
         accountNumber: '5555000010',
         name: 'Referential Account 1',
@@ -1397,7 +1373,7 @@ describe('DynamoBankingRepository Integration', () => {
         availableBalanceMinor: new Money(30000),
       });
 
-      const refAccount2 = new Account({
+      const refAccount2 = createTestAccount({
         id: 'acc-ref-2',
         accountNumber: '6666000010',
         name: 'Referential Account 2',
@@ -1490,7 +1466,7 @@ describe('DynamoBankingRepository Integration', () => {
     });
 
     it('should maintain data consistency under concurrent modifications', async () => {
-      const concAccount1 = new Account({
+      const concAccount1 = createTestAccount({
         id: 'acc-conc-consistency-1',
         accountNumber: '7777000010',
         name: 'Concurrent Consistency Account 1',
@@ -1502,7 +1478,7 @@ describe('DynamoBankingRepository Integration', () => {
         availableBalanceMinor: new Money(100000),
       });
 
-      const concAccount2 = new Account({
+      const concAccount2 = createTestAccount({
         id: 'acc-conc-consistency-2',
         accountNumber: '8888000010',
         name: 'Concurrent Consistency Account 2',

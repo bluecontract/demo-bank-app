@@ -18,9 +18,9 @@ export interface AccountProps {
   currency: Currency;
   createdAt: Date;
   isTest?: boolean;
-  ledgerBalanceMinor?: Money;
-  availableBalanceMinor?: Money;
-  balanceVersion?: number;
+  ledgerBalanceMinor: Money;
+  availableBalanceMinor: Money;
+  balanceVersion: number;
 }
 
 export class Account {
@@ -65,6 +65,19 @@ export class Account {
       throw new Error('Account number must be exactly 10 digits');
     }
 
+    // Validate required balance and version fields
+    if (!props.ledgerBalanceMinor) {
+      throw new Error('Ledger balance must be provided');
+    }
+
+    if (!props.availableBalanceMinor) {
+      throw new Error('Available balance must be provided');
+    }
+
+    if (typeof props.balanceVersion !== 'number' || props.balanceVersion < 0) {
+      throw new Error('Balance version must be a non-negative number');
+    }
+
     this.id = props.id;
     this.accountNumber = props.accountNumber;
     this.name = props.name;
@@ -73,9 +86,9 @@ export class Account {
     this.currency = props.currency;
     this.createdAt = props.createdAt;
     this.isTest = props.isTest ?? false;
-    this.ledgerBalanceMinor = props.ledgerBalanceMinor ?? new Money(0);
-    this.availableBalanceMinor = props.availableBalanceMinor ?? new Money(0);
-    this.balanceVersion = props.balanceVersion ?? 0;
+    this.ledgerBalanceMinor = props.ledgerBalanceMinor;
+    this.availableBalanceMinor = props.availableBalanceMinor;
+    this.balanceVersion = props.balanceVersion;
   }
 
   isActive(): boolean {

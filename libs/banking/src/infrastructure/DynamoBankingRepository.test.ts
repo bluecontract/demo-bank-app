@@ -60,6 +60,23 @@ const mockQueryCommand = vi.mocked(QueryCommand);
 const mockTransactWriteCommand = vi.mocked(TransactWriteCommand);
 const mockBatchGetCommand = vi.mocked(BatchGetCommand);
 
+// Helper function to create test accounts with default balance and version
+const createTestAccount = (overrides = {}) => {
+  return new Account({
+    id: 'acc-123',
+    accountNumber: '1234567890',
+    name: 'Test Account',
+    ownerUserId: 'user-456',
+    status: 'ACTIVE',
+    currency: 'USD',
+    createdAt: new Date('2024-01-01'),
+    ledgerBalanceMinor: new Money(0),
+    availableBalanceMinor: new Money(0),
+    balanceVersion: 0,
+    ...overrides,
+  });
+};
+
 describe('DynamoBankingRepository', () => {
   let repository: DynamoBankingRepository;
 
@@ -73,14 +90,8 @@ describe('DynamoBankingRepository', () => {
 
   describe('saveAccount', () => {
     it('should save a new account successfully', async () => {
-      const account = new Account({
-        id: 'acc-123',
-        accountNumber: '1234567890',
+      const account = createTestAccount({
         name: 'My Savings Account',
-        ownerUserId: 'user-456',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date('2024-01-01'),
       });
 
       mockSend.mockResolvedValueOnce({});
@@ -93,14 +104,8 @@ describe('DynamoBankingRepository', () => {
     });
 
     it('should include account name in saved data', async () => {
-      const account = new Account({
-        id: 'acc-123',
-        accountNumber: '1234567890',
+      const account = createTestAccount({
         name: 'Business Checking',
-        ownerUserId: 'user-456',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date('2024-01-01'),
       });
 
       mockSend.mockResolvedValueOnce({});
@@ -123,15 +128,7 @@ describe('DynamoBankingRepository', () => {
     });
 
     it('should save account with correct GSI keys', async () => {
-      const account = new Account({
-        id: 'acc-123',
-        accountNumber: '1234567890',
-        name: 'Test Account',
-        ownerUserId: 'user-456',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date('2024-01-01'),
-      });
+      const account = createTestAccount();
 
       mockSend.mockResolvedValueOnce({});
 
@@ -191,15 +188,7 @@ describe('DynamoBankingRepository', () => {
     });
 
     it('should rethrow AWS SDK errors', async () => {
-      const account = new Account({
-        id: 'acc-123',
-        accountNumber: '1234567890',
-        name: 'Test Account',
-        ownerUserId: 'user-456',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date('2024-01-01'),
-      });
+      const account = createTestAccount();
 
       const awsError = new Error('DynamoDB service error');
       mockSend.mockRejectedValueOnce(awsError);
@@ -211,14 +200,7 @@ describe('DynamoBankingRepository', () => {
     });
 
     it('should handle account with test flag', async () => {
-      const account = new Account({
-        id: 'acc-123',
-        accountNumber: '1234567890',
-        name: 'Test Account',
-        ownerUserId: 'user-456',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date('2024-01-01'),
+      const account = createTestAccount({
         isTest: true,
       });
 
@@ -242,15 +224,7 @@ describe('DynamoBankingRepository', () => {
     });
 
     it('should use conditional expression to prevent overwrites', async () => {
-      const account = new Account({
-        id: 'acc-123',
-        accountNumber: '1234567890',
-        name: 'Test Account',
-        ownerUserId: 'user-456',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date('2024-01-01'),
-      });
+      const account = createTestAccount();
 
       mockSend.mockResolvedValueOnce({});
 
@@ -270,15 +244,7 @@ describe('DynamoBankingRepository', () => {
     });
 
     it('should create account number reservation item', async () => {
-      const account = new Account({
-        id: 'acc-123',
-        accountNumber: '1234567890',
-        name: 'Test Account',
-        ownerUserId: 'user-456',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date('2024-01-01'),
-      });
+      const account = createTestAccount();
 
       mockSend.mockResolvedValueOnce({});
 
@@ -303,15 +269,7 @@ describe('DynamoBankingRepository', () => {
     });
 
     it('should create exactly three items in transaction', async () => {
-      const account = new Account({
-        id: 'acc-123',
-        accountNumber: '1234567890',
-        name: 'Test Account',
-        ownerUserId: 'user-456',
-        status: 'ACTIVE',
-        currency: 'USD',
-        createdAt: new Date('2024-01-01'),
-      });
+      const account = createTestAccount();
 
       mockSend.mockResolvedValueOnce({});
 
