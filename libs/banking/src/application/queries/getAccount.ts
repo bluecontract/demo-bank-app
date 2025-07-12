@@ -1,6 +1,6 @@
-import { Account } from '../../domain/entities/Account';
 import { BankingRepository } from '../ports';
 import { AccountNotFoundError } from '../errors';
+import { AccountResult } from '../dtos';
 
 export interface GetAccountQuery {
   userId: string;
@@ -14,7 +14,7 @@ export interface GetAccountDependencies {
 export async function getAccount(
   query: GetAccountQuery,
   dependencies: GetAccountDependencies
-): Promise<Account> {
+): Promise<AccountResult> {
   const { repository } = dependencies;
 
   const account = await repository.getAccountById(query.accountId);
@@ -22,5 +22,16 @@ export async function getAccount(
     throw new AccountNotFoundError(query.accountId);
   }
 
-  return account;
+  return {
+    id: account.id,
+    accountNumber: account.accountNumber,
+    name: account.name,
+    ownerUserId: account.ownerUserId,
+    status: account.status,
+    currency: account.currency,
+    createdAt: account.createdAt,
+    ledgerBalanceMinor: account.ledgerBalanceMinor,
+    availableBalanceMinor: account.availableBalanceMinor,
+    balanceVersion: account.balanceVersion,
+  };
 }

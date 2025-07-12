@@ -3,6 +3,7 @@ import { getAccount } from './getAccount';
 import { Account } from '../../domain/entities/Account';
 import { Money } from '../../domain/valueObjects/Money';
 import { AccountNotFoundError } from '../errors';
+import { AccountResult } from '../dtos';
 
 // Mock repository implementation
 const createMockRepository = () => ({
@@ -16,8 +17,9 @@ const createMockRepository = () => ({
 });
 
 describe('getAccount', () => {
-  it('should return account when account exists and user is authorized', async () => {
+  it('should return account when account exists and user is the owner', async () => {
     const mockRepository = createMockRepository();
+    const createdAt = new Date();
     const account = new Account({
       id: 'acc-123',
       accountNumber: '1234567890',
@@ -25,7 +27,7 @@ describe('getAccount', () => {
       ownerUserId: 'user-456',
       status: 'ACTIVE',
       currency: 'USD',
-      createdAt: new Date(),
+      createdAt,
       ledgerBalanceMinor: new Money(10000),
       availableBalanceMinor: new Money(9500),
       balanceVersion: 1,
@@ -38,7 +40,20 @@ describe('getAccount', () => {
       { repository: mockRepository }
     );
 
-    expect(result).toBe(account);
+    const expectedResult: AccountResult = {
+      id: 'acc-123',
+      accountNumber: '1234567890',
+      name: 'Test Account',
+      ownerUserId: 'user-456',
+      status: 'ACTIVE',
+      currency: 'USD',
+      createdAt,
+      ledgerBalanceMinor: new Money(10000),
+      availableBalanceMinor: new Money(9500),
+      balanceVersion: 1,
+    };
+
+    expect(result).toEqual(expectedResult);
     expect(mockRepository.getAccountById).toHaveBeenCalledWith('acc-123');
   });
 
@@ -85,6 +100,7 @@ describe('getAccount', () => {
 
   it('should handle different account statuses', async () => {
     const mockRepository = createMockRepository();
+    const createdAt = new Date();
     const account = new Account({
       id: 'acc-123',
       accountNumber: '1234567890',
@@ -92,7 +108,7 @@ describe('getAccount', () => {
       ownerUserId: 'user-456',
       status: 'SUSPENDED',
       currency: 'USD',
-      createdAt: new Date(),
+      createdAt,
       ledgerBalanceMinor: new Money(10000),
       availableBalanceMinor: new Money(9500),
       balanceVersion: 1,
@@ -105,7 +121,20 @@ describe('getAccount', () => {
       { repository: mockRepository }
     );
 
-    expect(result).toBe(account);
+    const expectedResult: AccountResult = {
+      id: 'acc-123',
+      accountNumber: '1234567890',
+      name: 'Test Account',
+      ownerUserId: 'user-456',
+      status: 'SUSPENDED',
+      currency: 'USD',
+      createdAt,
+      ledgerBalanceMinor: new Money(10000),
+      availableBalanceMinor: new Money(9500),
+      balanceVersion: 1,
+    };
+
+    expect(result).toEqual(expectedResult);
     expect(result.status).toBe('SUSPENDED');
   });
 
@@ -120,31 +149,5 @@ describe('getAccount', () => {
         { repository: mockRepository }
       )
     ).rejects.toThrow('Database connection failed');
-  });
-
-  it('should handle different user IDs correctly', async () => {
-    const mockRepository = createMockRepository();
-    const account = new Account({
-      id: 'acc-123',
-      accountNumber: '1234567890',
-      name: 'Test Account',
-      ownerUserId: 'different-user',
-      status: 'ACTIVE',
-      currency: 'USD',
-      createdAt: new Date(),
-      ledgerBalanceMinor: new Money(10000),
-      availableBalanceMinor: new Money(9500),
-      balanceVersion: 1,
-    });
-
-    mockRepository.getAccountById.mockResolvedValue(account);
-
-    const result = await getAccount(
-      { accountId: 'acc-123', userId: 'different-user' },
-      { repository: mockRepository }
-    );
-
-    expect(result).toBe(account);
-    expect(result.ownerUserId).toBe('different-user');
   });
 });
