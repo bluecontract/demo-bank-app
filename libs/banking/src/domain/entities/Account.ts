@@ -1,4 +1,8 @@
-import { AccountInactiveError, InsufficientFundsError } from '../errors';
+import {
+  AccountInactiveError,
+  InsufficientFundsError,
+  InvalidAccountError,
+} from '../errors';
 import { Posting } from '../valueObjects/Posting';
 import { Money } from '../valueObjects/Money';
 
@@ -41,41 +45,62 @@ export class Account {
 
   constructor(props: AccountProps) {
     if (!props.id || props.id.trim() === '') {
-      throw new Error('Account ID cannot be empty');
+      throw new InvalidAccountError('id', 'Account ID cannot be empty');
     }
 
     if (!props.accountNumber || props.accountNumber.trim() === '') {
-      throw new Error('Account number cannot be empty');
+      throw new InvalidAccountError(
+        'accountNumber',
+        'Account number cannot be empty'
+      );
     }
 
     if (!props.name || props.name.trim() === '') {
-      throw new Error('Account name cannot be empty');
+      throw new InvalidAccountError('name', 'Account name cannot be empty');
     }
 
     if (props.name.length > 100) {
-      throw new Error('Account name must be 100 characters or less');
+      throw new InvalidAccountError(
+        'name',
+        'Account name must be 100 characters or less'
+      );
     }
 
     if (!props.ownerUserId || props.ownerUserId.trim() === '') {
-      throw new Error('Owner user ID cannot be empty');
+      throw new InvalidAccountError(
+        'ownerUserId',
+        'Owner user ID cannot be empty'
+      );
     }
 
     // Validate account number is exactly 10 digits
     if (!/^\d{10}$/.test(props.accountNumber)) {
-      throw new Error('Account number must be exactly 10 digits');
+      throw new InvalidAccountError(
+        'accountNumber',
+        'Account number must be exactly 10 digits'
+      );
     }
 
     // Validate required balance and version fields
     if (!props.ledgerBalanceMinor) {
-      throw new Error('Ledger balance must be provided');
+      throw new InvalidAccountError(
+        'ledgerBalanceMinor',
+        'Ledger balance must be provided'
+      );
     }
 
     if (!props.availableBalanceMinor) {
-      throw new Error('Available balance must be provided');
+      throw new InvalidAccountError(
+        'availableBalanceMinor',
+        'Available balance must be provided'
+      );
     }
 
     if (typeof props.balanceVersion !== 'number' || props.balanceVersion < 0) {
-      throw new Error('Balance version must be a non-negative number');
+      throw new InvalidAccountError(
+        'balanceVersion',
+        'Balance version must be a non-negative number'
+      );
     }
 
     this.id = props.id;

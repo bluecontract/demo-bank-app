@@ -1,6 +1,6 @@
 import { Posting, PostingSide } from '../valueObjects/Posting';
 import { Money } from '../valueObjects/Money';
-import { InvalidTransactionError, UnbalancedTransactionError } from '../errors';
+import { UnbalancedTransactionError, InvalidTransactionError } from '../errors';
 import { randomUUID } from 'crypto';
 import { FUNDING_SOURCE } from './Account';
 
@@ -37,11 +37,14 @@ export class Transaction {
 
   constructor(props: TransactionProps) {
     if (!props.id || props.id.trim() === '') {
-      throw new Error('Transaction ID cannot be empty');
+      throw new InvalidTransactionError('id', 'Transaction ID cannot be empty');
     }
 
     if (!props.postings || props.postings.length === 0) {
-      throw new Error('Transaction must have at least one posting');
+      throw new InvalidTransactionError(
+        'postings',
+        'Transaction must have at least one posting'
+      );
     }
 
     this.id = props.id;
@@ -95,12 +98,14 @@ export class Transaction {
 
     if (debits !== credits) {
       throw new InvalidTransactionError(
+        'postings',
         `Transaction debits (${debits}) must equal credits (${credits})`
       );
     }
 
     if (debits === 0 || credits === 0) {
       throw new InvalidTransactionError(
+        'postings',
         'Transaction must have both debit and credit postings'
       );
     }

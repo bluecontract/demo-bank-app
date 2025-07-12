@@ -1,4 +1,5 @@
 import { Money } from './Money';
+import { InvalidBalanceSnapshotError } from '../errors';
 
 export interface BalanceSnapshotProps {
   accountId: string;
@@ -15,39 +16,30 @@ export class BalanceSnapshot {
 
   constructor(props: BalanceSnapshotProps) {
     if (!props.accountId || props.accountId.trim() === '') {
-      throw new Error('Account ID cannot be empty');
+      throw new InvalidBalanceSnapshotError(
+        'accountId',
+        'Account ID cannot be empty'
+      );
     }
 
     if (props.version < 0) {
-      throw new Error('Version must be non-negative');
+      throw new InvalidBalanceSnapshotError(
+        'version',
+        'Version must be non-negative'
+      );
     }
 
     if (props.availableBalance.isGreaterThan(props.ledgerBalance)) {
-      throw new Error('Available balance cannot exceed ledger balance');
+      throw new InvalidBalanceSnapshotError(
+        'availableBalance',
+        'Available balance cannot exceed ledger balance'
+      );
     }
 
     this.accountId = props.accountId;
     this.ledgerBalance = props.ledgerBalance;
     this.availableBalance = props.availableBalance;
     this.version = props.version;
-  }
-
-  addToBalance(amount: Money): BalanceSnapshot {
-    return new BalanceSnapshot({
-      accountId: this.accountId,
-      ledgerBalance: this.ledgerBalance.add(amount),
-      availableBalance: this.availableBalance.add(amount),
-      version: this.version + 1,
-    });
-  }
-
-  subtractFromBalance(amount: Money): BalanceSnapshot {
-    return new BalanceSnapshot({
-      accountId: this.accountId,
-      ledgerBalance: this.ledgerBalance.subtract(amount),
-      availableBalance: this.availableBalance.subtract(amount),
-      version: this.version + 1,
-    });
   }
 
   equals(other: BalanceSnapshot): boolean {

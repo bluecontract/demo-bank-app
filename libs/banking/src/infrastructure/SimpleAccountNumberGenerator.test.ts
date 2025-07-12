@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { AccountNumberGenerator } from './AccountNumberGenerator';
+import { SimpleAccountNumberGenerator } from './SimpleAccountNumberGenerator';
 
 describe('AccountNumberGenerator', () => {
   describe('generate', () => {
     it('should generate a 10-digit account number', () => {
-      const generator = new AccountNumberGenerator();
+      const generator = new SimpleAccountNumberGenerator();
       const accountNumber = generator.generate();
 
       expect(accountNumber).toMatch(/^\d{10}$/);
     });
 
     it('should generate unique account numbers', () => {
-      const generator = new AccountNumberGenerator();
+      const generator = new SimpleAccountNumberGenerator();
       const accountNumbers = new Set();
 
       // Generate 100 account numbers and check for uniqueness
@@ -23,7 +23,7 @@ describe('AccountNumberGenerator', () => {
     });
 
     it('should generate account numbers with only digits', () => {
-      const generator = new AccountNumberGenerator();
+      const generator = new SimpleAccountNumberGenerator();
 
       for (let i = 0; i < 10; i++) {
         const accountNumber = generator.generate();
@@ -33,7 +33,7 @@ describe('AccountNumberGenerator', () => {
     });
 
     it('should generate different numbers on subsequent calls', () => {
-      const generator = new AccountNumberGenerator();
+      const generator = new SimpleAccountNumberGenerator();
       const first = generator.generate();
       const second = generator.generate();
 
@@ -41,7 +41,7 @@ describe('AccountNumberGenerator', () => {
     });
 
     it('should handle timestamp encoding correctly', () => {
-      const generator = new AccountNumberGenerator();
+      const generator = new SimpleAccountNumberGenerator();
       const accountNumber = generator.generate();
 
       // Verify it's a valid 10-digit number

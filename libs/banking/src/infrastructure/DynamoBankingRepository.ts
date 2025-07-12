@@ -21,8 +21,8 @@ import { PaginationOptions, PaginatedResult } from '../domain/types';
 import {
   OptimisticLockError,
   TransactionIdempotencyRecordNotFoundError,
-  AccountDataCorruptedError,
-} from '../domain/errors';
+  RepositoryError,
+} from './repositoryErrors';
 import { PostingSide, Posting } from '../domain/valueObjects/Posting';
 import { AwsResilienceConfigBuilder } from '@demo-blue/shared-observability';
 
@@ -294,7 +294,10 @@ export class DynamoBankingRepository implements BankingRepository {
       throw new OptimisticLockError(`transaction_save_${transaction.id}`);
     }
 
-    throw error;
+    throw new RepositoryError(
+      `transaction_save_(${transaction.id})`,
+      error as Error
+    );
   }
 
   private isValidAccountBalanceItem(item: unknown): item is AccountBalanceItem {
@@ -469,8 +472,12 @@ export class DynamoBankingRepository implements BankingRepository {
       ],
     });
 
-    await this.client.send(command);
-    return account;
+    try {
+      await this.client.send(command);
+      return account;
+    } catch (error: unknown) {
+      throw new RepositoryError(`account_save_(${account.id})`, error as Error);
+    }
   }
 
   async getAccountById(id: string): Promise<Account | null> {
@@ -488,22 +495,32 @@ export class DynamoBankingRepository implements BankingRepository {
       },
     });
 
-    const result = await this.client.send(command);
-    const items = result.Responses?.[this.tableName] || [];
+    try {
+      const result = await this.client.send(command);
+      const items = result.Responses?.[this.tableName] || [];
 
-    const metaItem = items.find(item => item.SK === SORT_KEYS.META);
-    const balanceItem = items.find(item => item.SK === SORT_KEYS.BALANCE);
+      const metaItem = items.find(item => item.SK === SORT_KEYS.META);
+      const balanceItem = items.find(item => item.SK === SORT_KEYS.BALANCE);
 
-    if (!metaItem || !this.isValidAccountMetaItem(metaItem)) {
-      return null;
+      if (!metaItem) {
+        return null;
+      }
+      if (!this.isValidAccountMetaItem(metaItem)) {
+        throw new Error('Invalid account meta item: corrupted data');
+      }
+      if (!balanceItem) {
+        throw new Error('Invalid account balance item: missing balance');
+      }
+      if (!this.isValidAccountBalanceItem(balanceItem)) {
+        throw new Error('Invalid account balance item: corrupted data');
+      }
+
+      const account = this.mapToAccount(metaItem, balanceItem);
+
+      return account;
+    } catch (error: unknown) {
+      throw new RepositoryError(`get_account_by_id(${id})`, error as Error);
     }
-    if (!balanceItem || !this.isValidAccountBalanceItem(balanceItem)) {
-      throw new AccountDataCorruptedError();
-    }
-
-    const account = this.mapToAccount(metaItem, balanceItem);
-
-    return account;
   }
 
   async getAccountIdByNumber(accountNumber: string): Promise<string | null> {
@@ -515,12 +532,22 @@ export class DynamoBankingRepository implements BankingRepository {
       },
     });
 
-    const result = await this.client.send(command);
-    if (!result.Item) {
-      return null;
-    }
+    try {
+      const result = await this.client.send(command);
+      if (!result.Item) {
+        return null;
+      }
+      if (!result.Item.accountId) {
+        throw new Error('Invalid account reservationitem: missing accountId');
+      }
 
-    return result.Item.accountId;
+      return result.Item.accountId;
+    } catch (error: unknown) {
+      throw new RepositoryError(
+        `get_account_id_by_number(${accountNumber})`,
+        error as Error
+      );
+    }
   }
 
   async getAccountsByUserId(userId: string): Promise<Account[]> {
@@ -533,38 +560,45 @@ export class DynamoBankingRepository implements BankingRepository {
       },
     });
 
-    const result = await this.client.send(userAccountsCommand);
-    if (!result.Items || result.Items.length === 0) {
-      return [];
+    try {
+      const result = await this.client.send(userAccountsCommand);
+      if (!result.Items || result.Items.length === 0) {
+        return [];
+      }
+
+      if (result.Items.length % 2 !== 0) {
+        throw new Error('Invalid account item: missing meta or balance');
+      }
+
+      const accounts = result.Items.reduce((acc, item) => {
+        if (!acc[item.PK]) {
+          acc[item.PK] = {};
+        }
+        if (item.SK === SORT_KEYS.META) {
+          acc[item.PK].meta = item;
+        }
+        if (item.SK === SORT_KEYS.BALANCE) {
+          acc[item.PK].balance = item;
+        }
+        return acc;
+      }, {});
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      return Object.entries(accounts).map(([_, account]) => {
+        if (
+          !this.isValidAccountMetaItem(account.meta) ||
+          !this.isValidAccountBalanceItem(account.balance)
+        ) {
+          throw new Error('Invalid account item: corrupted data');
+        }
+        return this.mapToAccount(account.meta, account.balance);
+      });
+    } catch (error: unknown) {
+      throw new RepositoryError(
+        `get_accounts_by_user(${userId})`,
+        error as Error
+      );
     }
-
-    if (result.Items.length % 2 !== 0) {
-      throw new AccountDataCorruptedError();
-    }
-
-    const accounts = result.Items.reduce((acc, item) => {
-      if (!acc[item.PK]) {
-        acc[item.PK] = {};
-      }
-      if (item.SK === SORT_KEYS.META) {
-        acc[item.PK].meta = item;
-      }
-      if (item.SK === SORT_KEYS.BALANCE) {
-        acc[item.PK].balance = item;
-      }
-      return acc;
-    }, {});
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    return Object.entries(accounts).map(([_, account]) => {
-      if (
-        !this.isValidAccountMetaItem(account.meta) ||
-        !this.isValidAccountBalanceItem(account.balance)
-      ) {
-        throw new AccountDataCorruptedError();
-      }
-      return this.mapToAccount(account.meta, account.balance);
-    });
   }
 
   async getTransactionsByAccount(
@@ -586,26 +620,38 @@ export class DynamoBankingRepository implements BankingRepository {
         : undefined,
     });
 
-    const result = await this.client.send(command);
-    const items = ((result.Items || []) as PostingItem[]).map(item => ({
-      transactionId: item.transactionId,
-      type: item.type as Transaction['type'],
-      status: item.status as Transaction['status'],
-      amount: new Money(item.amount),
-      side: item.side as PostingSide,
-      description: item.description,
-      accountNumber: item.accountNumber,
-      counterpartyAccountNumber: item.counterpartyAccountNumber,
-      createdAt: new Date(item.createdAt),
-    }));
+    try {
+      const result = await this.client.send(command);
+      for (const item of result.Items || []) {
+        if (!this.isValidPostingItem(item)) {
+          throw new Error('Invalid posting item: corrupted data');
+        }
+      }
+      const items = ((result.Items || []) as PostingItem[]).map(item => ({
+        transactionId: item.transactionId,
+        type: item.type as Transaction['type'],
+        status: item.status as Transaction['status'],
+        amount: new Money(item.amount),
+        side: item.side as PostingSide,
+        description: item.description,
+        accountNumber: item.accountNumber,
+        counterpartyAccountNumber: item.counterpartyAccountNumber,
+        createdAt: new Date(item.createdAt),
+      }));
 
-    return {
-      items,
-      nextToken: result.LastEvaluatedKey
-        ? JSON.stringify(result.LastEvaluatedKey)
-        : undefined,
-      hasMore: !!result.LastEvaluatedKey,
-    };
+      return {
+        items,
+        nextToken: result.LastEvaluatedKey
+          ? JSON.stringify(result.LastEvaluatedKey)
+          : undefined,
+        hasMore: !!result.LastEvaluatedKey,
+      };
+    } catch (error: unknown) {
+      throw new RepositoryError(
+        `get_transactions_by_account(${accountId})`,
+        error as Error
+      );
+    }
   }
 
   async getTransactionById(transactionId: string): Promise<Transaction | null> {
@@ -617,47 +663,54 @@ export class DynamoBankingRepository implements BankingRepository {
       },
     });
 
-    const result = await this.client.send(command);
-    if (!result.Items || result.Items.length === 0) {
-      return null;
-    }
-
-    const headerItem = result.Items.find(item => item.SK === SORT_KEYS.META);
-    if (!headerItem || !this.isValidTransactionHeaderItem(headerItem)) {
-      return null;
-    }
-
-    const postingItems = result.Items.filter(item =>
-      item.SK.startsWith(TABLE_PREFIXES.POSTING)
-    );
-
-    // Validate all posting items
-    for (const item of postingItems) {
-      if (!this.isValidPostingItem(item)) {
-        throw new AccountDataCorruptedError();
+    try {
+      const result = await this.client.send(command);
+      if (!result.Items || result.Items.length === 0) {
+        return null;
       }
+
+      const headerItem = result.Items.find(item => item.SK === SORT_KEYS.META);
+      if (!headerItem || !this.isValidTransactionHeaderItem(headerItem)) {
+        return null;
+      }
+
+      const postingItems = result.Items.filter(item =>
+        item.SK.startsWith(TABLE_PREFIXES.POSTING)
+      );
+
+      // Validate all posting items
+      for (const item of postingItems) {
+        if (!this.isValidPostingItem(item)) {
+          throw new Error('Invalid posting item: corrupted data');
+        }
+      }
+
+      const postings = postingItems.map(
+        item =>
+          new Posting({
+            accountId: item.accountId,
+            amount: new Money(item.amount),
+            side: item.side as PostingSide,
+            accountNumber: item.accountNumber,
+            counterpartyAccountNumber: item.counterpartyAccountNumber,
+          })
+      );
+
+      return new Transaction({
+        id: headerItem.transactionId,
+        type: headerItem.type as Transaction['type'],
+        status: headerItem.status as Transaction['status'],
+        postings,
+        description: headerItem.description,
+        transactionIdempotencyKey: headerItem.transactionIdempotencyKey,
+        createdAt: new Date(headerItem.createdAt),
+      });
+    } catch (error: unknown) {
+      throw new RepositoryError(
+        `get_transaction_by_id(${transactionId})`,
+        error as Error
+      );
     }
-
-    const postings = postingItems.map(
-      item =>
-        new Posting({
-          accountId: item.accountId,
-          amount: new Money(item.amount),
-          side: item.side as PostingSide,
-          accountNumber: item.accountNumber,
-          counterpartyAccountNumber: item.counterpartyAccountNumber,
-        })
-    );
-
-    return new Transaction({
-      id: headerItem.transactionId,
-      type: headerItem.type as Transaction['type'],
-      status: headerItem.status as Transaction['status'],
-      postings,
-      description: headerItem.description,
-      transactionIdempotencyKey: headerItem.transactionIdempotencyKey,
-      createdAt: new Date(headerItem.createdAt),
-    });
   }
 
   private mapToAccount(

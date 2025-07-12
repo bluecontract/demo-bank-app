@@ -78,7 +78,7 @@ describe('Transaction', () => {
       expect(transaction.transactionIdempotencyKey).toBe('key-123');
     });
 
-    it('should throw error for empty id', () => {
+    it('should throw InvalidTransactionError error for empty id', () => {
       const postings = [
         new Posting({
           accountId: 'acc-123',
@@ -106,10 +106,12 @@ describe('Transaction', () => {
             postings,
             createdAt: new Date(),
           })
-      ).toThrow('Transaction ID cannot be empty');
+      ).toThrow(
+        new InvalidTransactionError('id', 'Transaction ID cannot be empty')
+      );
     });
 
-    it('should throw error for empty postings', () => {
+    it('should throwInvalidTransactionError error for empty postings', () => {
       expect(
         () =>
           new Transaction({
@@ -120,10 +122,15 @@ describe('Transaction', () => {
             postings: [],
             createdAt: new Date(),
           })
-      ).toThrow('Transaction must have at least one posting');
+      ).toThrow(
+        new InvalidTransactionError(
+          'postings',
+          'Transaction must have at least one posting'
+        )
+      );
     });
 
-    it('should throw error for unbalanced postings', () => {
+    it('should throwInvalidTransactionError error for unbalanced postings', () => {
       const postings = [
         new Posting({
           accountId: 'acc-123',
@@ -151,10 +158,15 @@ describe('Transaction', () => {
             postings,
             createdAt: new Date(),
           })
-      ).toThrow(InvalidTransactionError);
+      ).toThrow(
+        new InvalidTransactionError(
+          'postings',
+          'Transaction debits (100) must equal credits (200)'
+        )
+      );
     });
 
-    it('should throw error for all debit postings', () => {
+    it('should throw InvalidTransactionError error for all debit postings', () => {
       const postings = [
         new Posting({
           accountId: 'acc-123',
@@ -182,10 +194,15 @@ describe('Transaction', () => {
             postings,
             createdAt: new Date(),
           })
-      ).toThrow(InvalidTransactionError);
+      ).toThrow(
+        new InvalidTransactionError(
+          'postings',
+          'Transaction debits (200) must equal credits (0)'
+        )
+      );
     });
 
-    it('should throw error for all credit postings', () => {
+    it('should throw InvalidTransactionError error for all credit postings', () => {
       const postings = [
         new Posting({
           accountId: 'acc-123',
@@ -213,7 +230,12 @@ describe('Transaction', () => {
             postings,
             createdAt: new Date(),
           })
-      ).toThrow(InvalidTransactionError);
+      ).toThrow(
+        new InvalidTransactionError(
+          'postings',
+          'Transaction debits (0) must equal credits (200)'
+        )
+      );
     });
   });
 

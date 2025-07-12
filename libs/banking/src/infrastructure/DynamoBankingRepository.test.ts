@@ -7,11 +7,12 @@ import { Account } from '../domain/entities/Account';
 import { Money } from '../domain/valueObjects/Money';
 import { Transaction } from '../domain/entities/Transaction';
 import { Posting } from '../domain/valueObjects/Posting';
+import { InvalidTransactionError } from '../domain/errors';
 import {
-  AccountDataCorruptedError,
+  RepositoryError,
   OptimisticLockError,
   TransactionIdempotencyRecordNotFoundError,
-} from '../domain/errors/BankingErrors';
+} from './repositoryErrors';
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import {
   AccountBalanceItem,
@@ -186,14 +187,14 @@ describe('DynamoBankingRepository', () => {
       );
     });
 
-    it('should rethrow AWS SDK errors', async () => {
+    it('should map AWS SDK errors to RepositoryError', async () => {
       const account = createTestAccount();
 
       const awsError = new Error('DynamoDB service error');
       mockSend.mockRejectedValueOnce(awsError);
 
       await expect(repository.saveAccount(account)).rejects.toThrow(
-        'DynamoDB service error'
+        RepositoryError
       );
       expect(mockTransactWriteCommand).toHaveBeenCalledTimes(1);
     });
@@ -602,7 +603,7 @@ describe('DynamoBankingRepository', () => {
       ).rejects.toThrow(OptimisticLockError);
     });
 
-    it('should rethrow generic AWS SDK errors', async () => {
+    it('should throw RepositoryError when generic AWS SDK errors occur', async () => {
       const transaction = createTestTransaction();
       const accounts = createTestAccounts();
 
@@ -614,7 +615,9 @@ describe('DynamoBankingRepository', () => {
           userId: 'user-123',
           idempotencyKey: 'test-key-123',
         })
-      ).rejects.toThrow('DynamoDB service error');
+      ).rejects.toThrow(
+        new RepositoryError(`transaction_save_(${transaction.id})`, awsError)
+      );
     });
 
     it('should flush pending deltas on successful save', async () => {
@@ -827,7 +830,7 @@ describe('DynamoBankingRepository', () => {
       expect(account).toBeNull();
     });
 
-    it('should throw AccountDataCorruptedError when balance item is missing', async () => {
+    it('should throw RepositoryError when balance item is missing', async () => {
       const accountData: AccountMetaItem = {
         PK: 'ACCOUNT#acc-123',
         SK: 'META',
@@ -846,11 +849,14 @@ describe('DynamoBankingRepository', () => {
       });
 
       await expect(repository.getAccountById('acc-123')).rejects.toThrow(
-        AccountDataCorruptedError
+        new RepositoryError(
+          'get_account_by_id(acc-123)',
+          new Error('Invalid account balance item: missing balance')
+        )
       );
     });
 
-    it('should throw AccountDataCorruptedError when balance item is invalid', async () => {
+    it('should throw RepositoryError when balance item is invalid', async () => {
       const accountData: AccountMetaItem = {
         PK: 'ACCOUNT#acc-123',
         SK: 'META',
@@ -875,7 +881,10 @@ describe('DynamoBankingRepository', () => {
       });
 
       await expect(repository.getAccountById('acc-123')).rejects.toThrow(
-        AccountDataCorruptedError
+        new RepositoryError(
+          'get_account_by_id(acc-123)',
+          new Error('Invalid account balance item: corrupted data')
+        )
       );
     });
   });
@@ -1033,12 +1042,12 @@ describe('DynamoBankingRepository', () => {
       expect(mockQueryCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('should rethrow AWS SDK errors', async () => {
+    it('should throw RepositoryError when AWS SDK errors occur', async () => {
       const awsError = new Error('DynamoDB service error');
       mockSend.mockRejectedValueOnce(awsError);
 
       await expect(repository.getAccountsByUserId('user-456')).rejects.toThrow(
-        'DynamoDB service error'
+        new RepositoryError('get_accounts_by_user(user-456)', awsError)
       );
       expect(mockQueryCommand).toHaveBeenCalledTimes(1);
     });
@@ -1063,7 +1072,10 @@ describe('DynamoBankingRepository', () => {
       });
 
       await expect(repository.getAccountsByUserId('user-456')).rejects.toThrow(
-        new AccountDataCorruptedError()
+        new RepositoryError(
+          'get_accounts_by_user(user-456)',
+          new Error('Invalid account item: missing meta or balance')
+        )
       );
 
       expect(mockQueryCommand).toHaveBeenCalledTimes(1);
@@ -1258,13 +1270,15 @@ describe('DynamoBankingRepository', () => {
       );
     });
 
-    it('should rethrow AWS SDK errors', async () => {
+    it('should throw RepositoryError when AWS SDK errors occur', async () => {
       const awsError = new Error('DynamoDB service error');
       mockSend.mockRejectedValueOnce(awsError);
 
       await expect(
         repository.getTransactionsByAccount('acc-123')
-      ).rejects.toThrow('DynamoDB service error');
+      ).rejects.toThrow(
+        new RepositoryError('get_transactions_by_account(acc-123)', awsError)
+      );
       expect(mockQueryCommand).toHaveBeenCalledTimes(1);
     });
 
@@ -1392,11 +1406,12 @@ describe('DynamoBankingRepository', () => {
 
       const account = await repository.getAccountById('acc-123');
 
-      expect(account.id).toBe('acc-123');
-      expect(account.name).toBe('Test Account');
-      expect(account.ledgerBalanceMinor.toCents()).toBe(1000);
-      expect(account.availableBalanceMinor.toCents()).toBe(800);
-      expect(account.balanceVersion).toBe(5);
+      expect(account).not.toBeNull();
+      expect(account!.id).toBe('acc-123');
+      expect(account!.name).toBe('Test Account');
+      expect(account!.ledgerBalanceMinor.toCents()).toBe(1000);
+      expect(account!.availableBalanceMinor.toCents()).toBe(800);
+      expect(account!.balanceVersion).toBe(5);
       expect(mockBatchGetCommand).toHaveBeenCalledTimes(1);
     });
 
@@ -1422,7 +1437,10 @@ describe('DynamoBankingRepository', () => {
       });
 
       await expect(repository.getAccountById('acc-123')).rejects.toThrow(
-        new AccountDataCorruptedError()
+        new RepositoryError(
+          'get_account_by_id(acc-123)',
+          new Error('Invalid account balance item: missing balance')
+        )
       );
 
       expect(mockBatchGetCommand).toHaveBeenCalledTimes(1);
@@ -1460,12 +1478,12 @@ describe('DynamoBankingRepository', () => {
       expect(mockBatchGetCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('should rethrow AWS SDK errors', async () => {
+    it('should throw RepositoryError when AWS SDK errors occur', async () => {
       const awsError = new Error('DynamoDB service error');
       mockSend.mockRejectedValueOnce(awsError);
 
       await expect(repository.getAccountById('acc-123')).rejects.toThrow(
-        'DynamoDB service error'
+        new RepositoryError('get_account_by_id(acc-123)', awsError)
       );
       expect(mockBatchGetCommand).toHaveBeenCalledTimes(1);
     });
@@ -1628,7 +1646,7 @@ describe('DynamoBankingRepository', () => {
       expect(mockQueryCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('should rethrow transaction constructor errors', async () => {
+    it('should throw RepositoryError when transaction constructor errors', async () => {
       const headerData: TransactionHeaderItem = {
         PK: 'TXN#txn-123',
         SK: 'META',
@@ -1645,17 +1663,23 @@ describe('DynamoBankingRepository', () => {
       });
 
       await expect(repository.getTransactionById('txn-123')).rejects.toThrow(
-        'Transaction must have at least one posting'
+        new RepositoryError(
+          'get_transaction_by_id(txn-123)',
+          new InvalidTransactionError(
+            'postings',
+            'Transaction must have at least one posting'
+          )
+        )
       );
       expect(mockQueryCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('should rethrow AWS SDK errors', async () => {
+    it('should throw RepositoryError when AWS SDK errors occur', async () => {
       const awsError = new Error('DynamoDB service error');
       mockSend.mockRejectedValueOnce(awsError);
 
       await expect(repository.getTransactionById('txn-123')).rejects.toThrow(
-        'DynamoDB service error'
+        new RepositoryError('get_transaction_by_id(txn-123)', awsError)
       );
       expect(mockQueryCommand).toHaveBeenCalledTimes(1);
     });

@@ -1,4 +1,6 @@
-export class AccountNumberGenerator {
+import { AccountNumberGenerator } from '../application/ports';
+
+export class SimpleAccountNumberGenerator implements AccountNumberGenerator {
   private counter = 0;
 
   generate(): string {

@@ -11,7 +11,7 @@ export class ConfigurationValidationError extends AppError {
     public readonly missingVariables: string[],
     cause?: Error
   ) {
-    super(message, cause);
+    super(message, { cause });
   }
 }
 

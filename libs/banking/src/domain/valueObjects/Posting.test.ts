@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Posting } from './Posting';
 import { Money } from './Money';
+import { InvalidMoneyAmountError, InvalidPostingError } from '../errors';
 
 const TEST_ACCOUNT_NUMBER_1 = '1234567890';
 const TEST_ACCOUNT_NUMBER_2 = '0987654321';
@@ -61,7 +62,9 @@ describe('Posting', () => {
             accountNumber: TEST_ACCOUNT_NUMBER_1,
             counterpartyAccountNumber: TEST_ACCOUNT_NUMBER_2,
           })
-      ).toThrow('Account ID cannot be empty');
+      ).toThrow(
+        new InvalidPostingError('accountId', 'Account ID cannot be empty')
+      );
     });
 
     it('should throw error for empty account number', () => {
@@ -74,7 +77,12 @@ describe('Posting', () => {
             accountNumber: '',
             counterpartyAccountNumber: TEST_ACCOUNT_NUMBER_2,
           })
-      ).toThrow('Account number cannot be empty');
+      ).toThrow(
+        new InvalidPostingError(
+          'accountNumber',
+          'Account number cannot be empty'
+        )
+      );
     });
 
     it('should throw error for empty counterparty account number', () => {
@@ -87,7 +95,12 @@ describe('Posting', () => {
             accountNumber: TEST_ACCOUNT_NUMBER_1,
             counterpartyAccountNumber: '',
           })
-      ).toThrow('Counterparty account number cannot be empty');
+      ).toThrow(
+        new InvalidPostingError(
+          'counterpartyAccountNumber',
+          'Counterparty account number cannot be empty'
+        )
+      );
     });
 
     it('should throw error for zero amount', () => {
@@ -100,13 +113,15 @@ describe('Posting', () => {
             accountNumber: TEST_ACCOUNT_NUMBER_1,
             counterpartyAccountNumber: TEST_ACCOUNT_NUMBER_2,
           })
-      ).toThrow('Amount must be positive');
+      ).toThrow(new InvalidPostingError('amount', 'Amount must be positive'));
     });
 
     it('should throw error for negative amount', () => {
       // Since Money doesn't allow negative amounts in constructor,
       // we test that subtract operation itself throws when result would be negative
-      expect(() => new Money(100).subtract(new Money(200))).toThrow();
+      expect(() => new Money(100).subtract(new Money(200))).toThrow(
+        new InvalidMoneyAmountError(-100)
+      );
     });
   });
 

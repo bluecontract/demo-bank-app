@@ -1,4 +1,5 @@
 import { Money } from './Money';
+import { InvalidPostingError } from '../errors';
 
 export type PostingSide = 'DEBIT' | 'CREDIT';
 export type Side = PostingSide;
@@ -19,22 +20,28 @@ export class Posting {
 
   constructor(props: PostingProps) {
     if (!props.accountId || props.accountId.trim() === '') {
-      throw new Error('Account ID cannot be empty');
+      throw new InvalidPostingError('accountId', 'Account ID cannot be empty');
     }
 
     if (!props.accountNumber || props.accountNumber.trim() === '') {
-      throw new Error('Account number cannot be empty');
+      throw new InvalidPostingError(
+        'accountNumber',
+        'Account number cannot be empty'
+      );
     }
 
     if (
       !props.counterpartyAccountNumber ||
       props.counterpartyAccountNumber.trim() === ''
     ) {
-      throw new Error('Counterparty account number cannot be empty');
+      throw new InvalidPostingError(
+        'counterpartyAccountNumber',
+        'Counterparty account number cannot be empty'
+      );
     }
 
     if (!props.amount.isPositive()) {
-      throw new Error('Amount must be positive');
+      throw new InvalidPostingError('amount', 'Amount must be positive');
     }
 
     this.accountId = props.accountId;

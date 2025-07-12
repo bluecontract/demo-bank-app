@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Account } from './Account';
-import { AccountInactiveError } from '../errors';
+import { AccountInactiveError, InvalidAccountError } from '../errors';
 import { Money } from '../valueObjects/Money';
 
 // Helper function to create test accounts with default balance and version
@@ -36,20 +36,23 @@ describe('Account', () => {
 
     it('should throw error for empty name', () => {
       expect(() => createTestAccount({ name: '' })).toThrow(
-        'Account name cannot be empty'
+        new InvalidAccountError('name', 'Account name cannot be empty')
       );
     });
 
     it('should throw error for whitespace-only name', () => {
       expect(() => createTestAccount({ name: '   ' })).toThrow(
-        'Account name cannot be empty'
+        new InvalidAccountError('name', 'Account name cannot be empty')
       );
     });
 
     it('should throw error for name longer than 100 characters', () => {
       const longName = 'a'.repeat(101);
       expect(() => createTestAccount({ name: longName })).toThrow(
-        'Account name must be 100 characters or less'
+        new InvalidAccountError(
+          'name',
+          'Account name must be 100 characters or less'
+        )
       );
     });
 
@@ -62,31 +65,42 @@ describe('Account', () => {
 
     it('should throw error for empty id', () => {
       expect(() => createTestAccount({ id: '' })).toThrow(
-        'Account ID cannot be empty'
+        new InvalidAccountError('id', 'Account ID cannot be empty')
       );
     });
 
     it('should throw error for empty account number', () => {
       expect(() => createTestAccount({ accountNumber: '' })).toThrow(
-        'Account number cannot be empty'
+        new InvalidAccountError(
+          'accountNumber',
+          'Account number cannot be empty'
+        )
       );
     });
 
     it('should throw error for empty owner user ID', () => {
       expect(() => createTestAccount({ ownerUserId: '' })).toThrow(
-        'Owner user ID cannot be empty'
+        new InvalidAccountError('ownerUserId', 'Owner user ID cannot be empty')
       );
     });
 
     it('should throw error for invalid account number length', () => {
       expect(
         () => createTestAccount({ accountNumber: '123456789' }) // 9 digits
-      ).toThrow('Account number must be exactly 10 digits');
+      ).toThrow(
+        new InvalidAccountError(
+          'accountNumber',
+          'Account number must be exactly 10 digits'
+        )
+      );
     });
 
     it('should throw error for non-numeric account number', () => {
       expect(() => createTestAccount({ accountNumber: '123456789a' })).toThrow(
-        'Account number must be exactly 10 digits'
+        new InvalidAccountError(
+          'accountNumber',
+          'Account number must be exactly 10 digits'
+        )
       );
     });
 
@@ -115,7 +129,12 @@ describe('Account', () => {
           availableBalanceMinor: new Money(0),
           balanceVersion: 0,
         } as any);
-      }).toThrow('Ledger balance must be provided');
+      }).toThrow(
+        new InvalidAccountError(
+          'ledgerBalanceMinor',
+          'Ledger balance must be provided'
+        )
+      );
     });
 
     it('should throw error when available balance is not provided', () => {
@@ -131,7 +150,12 @@ describe('Account', () => {
           ledgerBalanceMinor: new Money(0),
           balanceVersion: 0,
         } as any);
-      }).toThrow('Available balance must be provided');
+      }).toThrow(
+        new InvalidAccountError(
+          'availableBalanceMinor',
+          'Available balance must be provided'
+        )
+      );
     });
 
     it('should throw error when balance version is not provided', () => {
@@ -147,13 +171,23 @@ describe('Account', () => {
           ledgerBalanceMinor: new Money(0),
           availableBalanceMinor: new Money(0),
         } as any);
-      }).toThrow('Balance version must be a non-negative number');
+      }).toThrow(
+        new InvalidAccountError(
+          'balanceVersion',
+          'Balance version must be a non-negative number'
+        )
+      );
     });
 
     it('should throw error when balance version is negative', () => {
       expect(() => {
         createTestAccount({ balanceVersion: -1 });
-      }).toThrow('Balance version must be a non-negative number');
+      }).toThrow(
+        new InvalidAccountError(
+          'balanceVersion',
+          'Balance version must be a non-negative number'
+        )
+      );
     });
   });
 
