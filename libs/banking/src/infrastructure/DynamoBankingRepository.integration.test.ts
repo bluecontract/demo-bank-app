@@ -250,12 +250,12 @@ describe('DynamoBankingRepository Integration', () => {
       idempotencyKey: `txn-key-1-${timestamp}`,
     });
     // Check balances
-    const srcBalance = await repository.getBalanceSnapshot(src.id);
-    const dstBalance = await repository.getBalanceSnapshot(dst.id);
-    expect(srcBalance!.ledgerBalance.toCents()).toBe(9000);
-    expect(dstBalance!.ledgerBalance.toCents()).toBe(1000);
-    expect(srcBalance!.availableBalance.toCents()).toBe(9000);
-    expect(dstBalance!.availableBalance.toCents()).toBe(1000);
+    const srcBalance = await repository.getAccountById(src.id);
+    const dstBalance = await repository.getAccountById(dst.id);
+    expect(srcBalance!.ledgerBalanceMinor.toCents()).toBe(9000);
+    expect(dstBalance!.ledgerBalanceMinor.toCents()).toBe(1000);
+    expect(srcBalance!.availableBalanceMinor.toCents()).toBe(9000);
+    expect(dstBalance!.availableBalanceMinor.toCents()).toBe(1000);
   });
 
   describe('Complex Transaction Scenarios', () => {
@@ -349,13 +349,13 @@ describe('DynamoBankingRepository Integration', () => {
       );
 
       // Verify balances
-      const sourceBalance = await repository.getBalanceSnapshot(source.id);
-      const dest1Balance = await repository.getBalanceSnapshot(dest1.id);
-      const dest2Balance = await repository.getBalanceSnapshot(dest2.id);
+      const sourceBalance = await repository.getAccountById(source.id);
+      const dest1Balance = await repository.getAccountById(dest1.id);
+      const dest2Balance = await repository.getAccountById(dest2.id);
 
-      expect(sourceBalance!.ledgerBalance.toCents()).toBe(9000); // 10000 - 1000
-      expect(dest1Balance!.ledgerBalance.toCents()).toBe(600);
-      expect(dest2Balance!.ledgerBalance.toCents()).toBe(400);
+      expect(sourceBalance!.ledgerBalanceMinor.toCents()).toBe(9000); // 10000 - 1000
+      expect(dest1Balance!.ledgerBalanceMinor.toCents()).toBe(600);
+      expect(dest2Balance!.ledgerBalanceMinor.toCents()).toBe(400);
 
       // Verify transaction can be retrieved
       const savedTransaction = await repository.getTransactionById(
@@ -423,11 +423,11 @@ describe('DynamoBankingRepository Integration', () => {
       );
 
       // Verify balances handled large amounts correctly
-      const balance1 = await repository.getBalanceSnapshot(largeAccount1.id);
-      const balance2 = await repository.getBalanceSnapshot(largeAccount2.id);
+      const balance1 = await repository.getAccountById(largeAccount1.id);
+      const balance2 = await repository.getAccountById(largeAccount2.id);
 
-      expect(balance1!.ledgerBalance.toCents()).toBe(899999999); // 999999999 - 100000000
-      expect(balance2!.ledgerBalance.toCents()).toBe(100000000);
+      expect(balance1!.ledgerBalanceMinor.toCents()).toBe(899999999); // 999999999 - 100000000
+      expect(balance2!.ledgerBalanceMinor.toCents()).toBe(100000000);
     });
 
     it('should handle sequential transactions on same accounts', async () => {
@@ -455,8 +455,8 @@ describe('DynamoBankingRepository Integration', () => {
       // Execute three sequential transactions
       for (let i = 1; i <= 3; i++) {
         // Load fresh account state for each transaction
-        const freshAccount1 = await repository.loadAccount(account1.id);
-        const freshAccount2 = await repository.loadAccount(account2.id);
+        const freshAccount1 = await repository.getAccountById(account1.id);
+        const freshAccount2 = await repository.getAccountById(account2.id);
 
         const amount = new Money(1000 * i); // Increasing amounts: 1000, 2000, 3000
 
@@ -495,12 +495,12 @@ describe('DynamoBankingRepository Integration', () => {
       }
 
       // Verify final balances after all transactions
-      const finalBalance1 = await repository.getBalanceSnapshot(account1.id);
-      const finalBalance2 = await repository.getBalanceSnapshot(account2.id);
+      const finalBalance1 = await repository.getAccountById(account1.id);
+      const finalBalance2 = await repository.getAccountById(account2.id);
 
       // Total debited from account1: 1000 + 2000 + 3000 = 6000
-      expect(finalBalance1!.ledgerBalance.toCents()).toBe(4000); // 10000 - 6000
-      expect(finalBalance2!.ledgerBalance.toCents()).toBe(11000); // 5000 + 6000
+      expect(finalBalance1!.ledgerBalanceMinor.toCents()).toBe(4000); // 10000 - 6000
+      expect(finalBalance2!.ledgerBalanceMinor.toCents()).toBe(11000); // 5000 + 6000
 
       // Verify all transactions can be retrieved
       const account1Transactions = await repository.getTransactionsByAccount(
@@ -553,8 +553,8 @@ describe('DynamoBankingRepository Integration', () => {
         idempotencyKey: string
       ) => {
         // Load fresh account state
-        const freshSource = await repository.loadAccount(sourceAccount.id);
-        const freshDest = await repository.loadAccount(destId);
+        const freshSource = await repository.getAccountById(sourceAccount.id);
+        const freshDest = await repository.getAccountById(destId);
 
         const debitPosting = new Posting({
           accountId: freshSource!.id,
@@ -612,21 +612,21 @@ describe('DynamoBankingRepository Integration', () => {
       expect(successCount).toBeGreaterThanOrEqual(1);
 
       // Check final balance integrity - should be consistent
-      const finalSourceBalance = await repository.getBalanceSnapshot(
+      const finalSourceBalance = await repository.getAccountById(
         sourceAccount.id
       );
-      const finalDest1Balance = await repository.getBalanceSnapshot(
+      const finalDest1Balance = await repository.getAccountById(
         destAccount1.id
       );
-      const finalDest2Balance = await repository.getBalanceSnapshot(
+      const finalDest2Balance = await repository.getAccountById(
         destAccount2.id
       );
 
       // Total balance should be preserved
       const totalBalance =
-        finalSourceBalance!.ledgerBalance.toCents() +
-        finalDest1Balance!.ledgerBalance.toCents() +
-        finalDest2Balance!.ledgerBalance.toCents();
+        finalSourceBalance!.ledgerBalanceMinor.toCents() +
+        finalDest1Balance!.ledgerBalanceMinor.toCents() +
+        finalDest2Balance!.ledgerBalanceMinor.toCents();
 
       expect(totalBalance).toBe(100000); // Original amount preserved
     });
@@ -657,8 +657,8 @@ describe('DynamoBankingRepository Integration', () => {
 
       // Create identical transaction with same idempotency key
       const createDuplicateTransaction = async () => {
-        const freshAccount1 = await repository.loadAccount(account1.id);
-        const freshAccount2 = await repository.loadAccount(account2.id);
+        const freshAccount1 = await repository.getAccountById(account1.id);
+        const freshAccount2 = await repository.getAccountById(account2.id);
 
         const debitPosting = new Posting({
           accountId: freshAccount1!.id,
@@ -706,12 +706,12 @@ describe('DynamoBankingRepository Integration', () => {
       expect(successCount).toBe(3);
 
       // Verify only one transaction was actually applied
-      const finalBalance1 = await repository.getBalanceSnapshot(account1.id);
-      const finalBalance2 = await repository.getBalanceSnapshot(account2.id);
+      const finalBalance1 = await repository.getAccountById(account1.id);
+      const finalBalance2 = await repository.getAccountById(account2.id);
 
       // Balance should reflect only one transaction
-      expect(finalBalance1!.ledgerBalance.toCents()).toBe(45000); // 50000 - 5000
-      expect(finalBalance2!.ledgerBalance.toCents()).toBe(15000); // 10000 + 5000
+      expect(finalBalance1!.ledgerBalanceMinor.toCents()).toBe(45000); // 50000 - 5000
+      expect(finalBalance2!.ledgerBalanceMinor.toCents()).toBe(15000); // 10000 + 5000
     });
 
     it('should handle concurrent transactions with same account state (version competition)', async () => {
@@ -746,8 +746,12 @@ describe('DynamoBankingRepository Integration', () => {
       await repository.saveAccount(concurrentAccount2);
 
       // Load accounts once - both transactions will compete with the same account state/version
-      const account1Fresh = await repository.loadAccount(concurrentAccount1.id);
-      const account2Fresh = await repository.loadAccount(concurrentAccount2.id);
+      const account1Fresh = await repository.getAccountById(
+        concurrentAccount1.id
+      );
+      const account2Fresh = await repository.getAccountById(
+        concurrentAccount2.id
+      );
 
       // Create two transactions that compete with the same account state
       const createCompetingTransaction = async (
@@ -835,22 +839,22 @@ describe('DynamoBankingRepository Integration', () => {
       const failureCount = actualResults.filter(r => !r.success).length;
 
       // Verify balance consistency regardless of outcome
-      const finalBalance1 = await repository.getBalanceSnapshot(
+      const finalBalance1 = await repository.getAccountById(
         concurrentAccount1.id
       );
-      const finalBalance2 = await repository.getBalanceSnapshot(
+      const finalBalance2 = await repository.getAccountById(
         concurrentAccount2.id
       );
 
       // Total balance should always be preserved
       const totalBalance =
-        finalBalance1!.ledgerBalance.toCents() +
-        finalBalance2!.ledgerBalance.toCents();
+        finalBalance1!.ledgerBalanceMinor.toCents() +
+        finalBalance2!.ledgerBalanceMinor.toCents();
       expect(totalBalance).toBe(200000);
 
       // Get current balances for assertions
-      const account1Balance = finalBalance1!.ledgerBalance.toCents();
-      const account2Balance = finalBalance2!.ledgerBalance.toCents();
+      const account1Balance = finalBalance1!.ledgerBalanceMinor.toCents();
+      const account2Balance = finalBalance2!.ledgerBalanceMinor.toCents();
 
       // With optimistic locking and same starting versions, exactly one transaction should succeed
       expect(successCount).toBe(1);
@@ -910,8 +914,8 @@ describe('DynamoBankingRepository Integration', () => {
       // Verify each account has correct balance
       for (let i = 0; i < 5; i++) {
         const accountId = `acc-create-${i}`;
-        const balance = await repository.getBalanceSnapshot(accountId);
-        expect(balance!.ledgerBalance.toCents()).toBe(1000 * i);
+        const balance = await repository.getAccountById(accountId);
+        expect(balance!.ledgerBalanceMinor.toCents()).toBe(1000 * i);
       }
     });
 
@@ -968,7 +972,7 @@ describe('DynamoBankingRepository Integration', () => {
   });
 
   describe('Error and Recovery Testing', () => {
-    it('should handle account not found errors gracefully', async () => {
+    it('should handle not found account gracefully', async () => {
       // Test getAccountById with non-existent account
       const nonExistentAccount = await repository.getAccountById(
         'non-existent-acc'
@@ -981,13 +985,13 @@ describe('DynamoBankingRepository Integration', () => {
       );
       expect(nonExistentAccountId).toBeNull();
 
-      // Test loadAccount with non-existent account - should throw
+      // Test getAccountById with non-existent account - should throw
       await expect(
-        repository.loadAccount('non-existent-acc')
-      ).rejects.toThrow();
+        repository.getAccountById('non-existent-acc')
+      ).resolves.toBeNull();
 
-      // Test getBalanceSnapshot with non-existent account
-      const nonExistentBalance = await repository.getBalanceSnapshot(
+      // Test getAccountById with non-existent account
+      const nonExistentBalance = await repository.getAccountById(
         'non-existent-acc'
       );
       expect(nonExistentBalance).toBeNull();
@@ -1029,8 +1033,8 @@ describe('DynamoBankingRepository Integration', () => {
 
       // Simulate optimistic locking by modifying the account version manually
       // Load account and create valid transaction
-      const account1 = await repository.loadAccount(lockingAccount.id);
-      const account2 = await repository.loadAccount(targetAccount.id);
+      const account1 = await repository.getAccountById(lockingAccount.id);
+      const account2 = await repository.getAccountById(targetAccount.id);
 
       const debitPosting = new Posting({
         accountId: account1!.id,
@@ -1073,15 +1077,15 @@ describe('DynamoBankingRepository Integration', () => {
       ).rejects.toThrow();
 
       // Verify original balances are unchanged
-      const originalBalance1 = await repository.getBalanceSnapshot(
+      const originalBalance1 = await repository.getAccountById(
         lockingAccount.id
       );
-      const originalBalance2 = await repository.getBalanceSnapshot(
+      const originalBalance2 = await repository.getAccountById(
         targetAccount.id
       );
 
-      expect(originalBalance1!.ledgerBalance.toCents()).toBe(50000);
-      expect(originalBalance2!.ledgerBalance.toCents()).toBe(0);
+      expect(originalBalance1!.ledgerBalanceMinor.toCents()).toBe(50000);
+      expect(originalBalance2!.ledgerBalanceMinor.toCents()).toBe(0);
     });
 
     it('should handle empty query results gracefully', async () => {
@@ -1151,8 +1155,8 @@ describe('DynamoBankingRepository Integration', () => {
       const initialTotalBalance = 50000 + 25000; // 75000
 
       // Execute transaction and verify atomicity
-      const freshAccount1 = await repository.loadAccount(account1.id);
-      const freshAccount2 = await repository.loadAccount(account2.id);
+      const freshAccount1 = await repository.getAccountById(account1.id);
+      const freshAccount2 = await repository.getAccountById(account2.id);
 
       const transferAmount = new Money(10000);
 
@@ -1190,11 +1194,11 @@ describe('DynamoBankingRepository Integration', () => {
       );
 
       // Verify Consistency: Total balance preserved (Conservation of money)
-      const finalBalance1 = await repository.getBalanceSnapshot(account1.id);
-      const finalBalance2 = await repository.getBalanceSnapshot(account2.id);
+      const finalBalance1 = await repository.getAccountById(account1.id);
+      const finalBalance2 = await repository.getAccountById(account2.id);
       const finalTotalBalance =
-        finalBalance1!.ledgerBalance.toCents() +
-        finalBalance2!.ledgerBalance.toCents();
+        finalBalance1!.ledgerBalanceMinor.toCents() +
+        finalBalance2!.ledgerBalanceMinor.toCents();
 
       expect(finalTotalBalance).toBe(initialTotalBalance);
 
@@ -1206,15 +1210,15 @@ describe('DynamoBankingRepository Integration', () => {
       expect(savedTransaction!.postings).toHaveLength(2);
 
       // Verify balances changed consistently
-      expect(finalBalance1!.ledgerBalance.toCents()).toBe(40000); // 50000 - 10000
-      expect(finalBalance2!.ledgerBalance.toCents()).toBe(35000); // 25000 + 10000
+      expect(finalBalance1!.ledgerBalanceMinor.toCents()).toBe(40000); // 50000 - 10000
+      expect(finalBalance2!.ledgerBalanceMinor.toCents()).toBe(35000); // 25000 + 10000
 
       // Verify Isolation: No partial states visible
-      expect(finalBalance1!.ledgerBalance.toCents()).toBe(
-        finalBalance1!.availableBalance.toCents()
+      expect(finalBalance1!.ledgerBalanceMinor.toCents()).toBe(
+        finalBalance1!.availableBalanceMinor.toCents()
       );
-      expect(finalBalance2!.ledgerBalance.toCents()).toBe(
-        finalBalance2!.availableBalance.toCents()
+      expect(finalBalance2!.ledgerBalanceMinor.toCents()).toBe(
+        finalBalance2!.availableBalanceMinor.toCents()
       );
     });
 
@@ -1241,10 +1245,10 @@ describe('DynamoBankingRepository Integration', () => {
 
       // Calculate initial total balance across all accounts
       const initialBalances = await Promise.all(
-        accounts.map(acc => repository.getBalanceSnapshot(acc.id))
+        accounts.map(acc => repository.getAccountById(acc.id))
       );
       const initialTotal = initialBalances.reduce(
-        (sum, balance) => sum + balance!.ledgerBalance.toCents(),
+        (sum, balance) => sum + balance!.ledgerBalanceMinor.toCents(),
         0
       );
 
@@ -1252,8 +1256,8 @@ describe('DynamoBankingRepository Integration', () => {
       const transactions = [];
 
       // Transaction 1: Transfer from account 1 to account 2
-      const freshAcc1 = await repository.loadAccount(accounts[0].id);
-      const freshAcc2 = await repository.loadAccount(accounts[1].id);
+      const freshAcc1 = await repository.getAccountById(accounts[0].id);
+      const freshAcc2 = await repository.getAccountById(accounts[1].id);
 
       const debit1 = new Posting({
         accountId: freshAcc1!.id,
@@ -1291,8 +1295,8 @@ describe('DynamoBankingRepository Integration', () => {
       transactions.push(txn1);
 
       // Transaction 2: Transfer from account 3 to account 4
-      const freshAcc3 = await repository.loadAccount(accounts[2].id);
-      const freshAcc4 = await repository.loadAccount(accounts[3].id);
+      const freshAcc3 = await repository.getAccountById(accounts[2].id);
+      const freshAcc4 = await repository.getAccountById(accounts[3].id);
 
       const debit2 = new Posting({
         accountId: freshAcc3!.id,
@@ -1331,10 +1335,10 @@ describe('DynamoBankingRepository Integration', () => {
 
       // Verify double-entry bookkeeping: Total balance unchanged
       const finalBalances = await Promise.all(
-        accounts.map(acc => repository.getBalanceSnapshot(acc.id))
+        accounts.map(acc => repository.getAccountById(acc.id))
       );
       const finalTotal = finalBalances.reduce(
-        (sum, balance) => sum + balance!.ledgerBalance.toCents(),
+        (sum, balance) => sum + balance!.ledgerBalanceMinor.toCents(),
         0
       );
 
@@ -1389,8 +1393,8 @@ describe('DynamoBankingRepository Integration', () => {
       await repository.saveAccount(refAccount2);
 
       // Create transaction between accounts
-      const freshRefAccount1 = await repository.loadAccount(refAccount1.id);
-      const freshRefAccount2 = await repository.loadAccount(refAccount2.id);
+      const freshRefAccount1 = await repository.getAccountById(refAccount1.id);
+      const freshRefAccount2 = await repository.getAccountById(refAccount2.id);
 
       const debitPosting = new Posting({
         accountId: freshRefAccount1!.id,
@@ -1458,11 +1462,11 @@ describe('DynamoBankingRepository Integration', () => {
       );
 
       // Verify account balances reflect transaction impact
-      const finalBalance1 = await repository.getBalanceSnapshot(refAccount1.id);
-      const finalBalance2 = await repository.getBalanceSnapshot(refAccount2.id);
+      const finalBalance1 = await repository.getAccountById(refAccount1.id);
+      const finalBalance2 = await repository.getAccountById(refAccount2.id);
 
-      expect(finalBalance1!.ledgerBalance.toCents()).toBe(22000); // 30000 - 8000
-      expect(finalBalance2!.ledgerBalance.toCents()).toBe(23000); // 15000 + 8000
+      expect(finalBalance1!.ledgerBalanceMinor.toCents()).toBe(22000); // 30000 - 8000
+      expect(finalBalance2!.ledgerBalanceMinor.toCents()).toBe(23000); // 15000 + 8000
     });
 
     it('should maintain data consistency under concurrent modifications', async () => {
@@ -1500,8 +1504,8 @@ describe('DynamoBankingRepository Integration', () => {
 
       for (let i = 1; i <= 3; i++) {
         const operation = async () => {
-          const freshAcc1 = await repository.loadAccount(concAccount1.id);
-          const freshAcc2 = await repository.loadAccount(concAccount2.id);
+          const freshAcc1 = await repository.getAccountById(concAccount1.id);
+          const freshAcc2 = await repository.getAccountById(concAccount2.id);
 
           const amount = new Money(1000 * i); // Different amounts
 
@@ -1552,15 +1556,11 @@ describe('DynamoBankingRepository Integration', () => {
       expect(successCount).toBeGreaterThanOrEqual(1);
 
       // Verify data consistency regardless of concurrent execution results
-      const finalBalance1 = await repository.getBalanceSnapshot(
-        concAccount1.id
-      );
-      const finalBalance2 = await repository.getBalanceSnapshot(
-        concAccount2.id
-      );
+      const finalBalance1 = await repository.getAccountById(concAccount1.id);
+      const finalBalance2 = await repository.getAccountById(concAccount2.id);
       const finalTotal =
-        finalBalance1!.ledgerBalance.toCents() +
-        finalBalance2!.ledgerBalance.toCents();
+        finalBalance1!.ledgerBalanceMinor.toCents() +
+        finalBalance2!.ledgerBalanceMinor.toCents();
 
       // Total balance must be preserved (money conservation)
       expect(finalTotal).toBe(initialTotal);

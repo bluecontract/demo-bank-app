@@ -1,6 +1,5 @@
 import { Account } from '../domain/entities/Account';
 import { Transaction } from '../domain/entities/Transaction';
-import { BalanceSnapshot } from '../domain/valueObjects/BalanceSnapshot';
 import { PaginationOptions, PaginatedResult } from '../domain/types';
 import { Money } from 'src/domain/valueObjects/Money';
 import { Posting } from 'src/domain/valueObjects/Posting';
@@ -18,7 +17,6 @@ export interface BankingRepository {
   getAccountById(id: string): Promise<Account | null>;
   getAccountIdByNumber(accountNumber: string): Promise<Account['id'] | null>;
   getAccountsByUserId(userId: string): Promise<Account[]>;
-  loadAccount(accountId: string): Promise<Account>;
 
   // Transaction operations
   saveTransactionWithAccounts(
@@ -31,9 +29,6 @@ export interface BankingRepository {
     options?: PaginationOptions
   ): Promise<PaginatedResult<TransactionSummary>>;
   getTransactionById(transactionId: string): Promise<Transaction | null>;
-
-  // Balance operations
-  getBalanceSnapshot(accountId: string): Promise<BalanceSnapshot | null>;
 }
 
 // Account number generation interface

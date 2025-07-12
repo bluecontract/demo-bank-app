@@ -11,7 +11,6 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { Account } from '../domain/entities/Account';
 import { Transaction } from '../domain/entities/Transaction';
-import { BalanceSnapshot } from '../domain/valueObjects/BalanceSnapshot';
 import { Money } from '../domain/valueObjects/Money';
 import {
   BankingRepository,
@@ -21,7 +20,6 @@ import {
 import { PaginationOptions, PaginatedResult } from '../domain/types';
 import {
   OptimisticLockError,
-  AccountNotFoundError,
   TransactionIdempotencyRecordNotFoundError,
   AccountDataCorruptedError,
 } from '../domain/errors';
@@ -163,39 +161,6 @@ export class DynamoBankingRepository implements BankingRepository {
     });
     this.client = DynamoDBDocumentClient.from(dynamoClient);
     this.tableName = config.tableName;
-  }
-
-  async loadAccount(accountId: string): Promise<Account> {
-    const command = new BatchGetCommand({
-      RequestItems: {
-        [this.tableName]: {
-          Keys: [
-            { PK: `${TABLE_PREFIXES.ACCOUNT}${accountId}`, SK: SORT_KEYS.META },
-            {
-              PK: `${TABLE_PREFIXES.ACCOUNT}${accountId}`,
-              SK: SORT_KEYS.BALANCE,
-            },
-          ],
-        },
-      },
-    });
-
-    const result = await this.client.send(command);
-    const items = result.Responses?.[this.tableName] || [];
-
-    const metaItem = items.find(item => item.SK === SORT_KEYS.META);
-    const balanceItem = items.find(item => item.SK === SORT_KEYS.BALANCE);
-
-    if (!metaItem || !this.isValidAccountMetaItem(metaItem)) {
-      throw new AccountNotFoundError(accountId);
-    }
-    if (!balanceItem || !this.isValidAccountBalanceItem(balanceItem)) {
-      throw new AccountDataCorruptedError();
-    }
-
-    const account = this.mapToAccount(metaItem, balanceItem);
-
-    return account;
   }
 
   private buildIdempotencyItem(
@@ -445,32 +410,6 @@ export class DynamoBankingRepository implements BankingRepository {
     } catch (error: unknown) {
       return this.handleTransactionSaveError(error, transaction, context);
     }
-  }
-
-  async getBalanceSnapshot(accountId: string): Promise<BalanceSnapshot | null> {
-    const command = new GetCommand({
-      TableName: this.tableName,
-      Key: {
-        PK: `${TABLE_PREFIXES.ACCOUNT}${accountId}`,
-        SK: SORT_KEYS.BALANCE,
-      },
-    });
-
-    const result = await this.client.send(command);
-    if (!result.Item) {
-      return null;
-    }
-
-    if (!this.isValidAccountBalanceItem(result.Item)) {
-      throw new AccountDataCorruptedError();
-    }
-
-    return new BalanceSnapshot({
-      accountId,
-      ledgerBalance: new Money(result.Item.ledgerBalanceMinor),
-      availableBalance: new Money(result.Item.availableBalanceMinor),
-      version: result.Item.version,
-    });
   }
 
   async saveAccount(account: Account): Promise<Account> {

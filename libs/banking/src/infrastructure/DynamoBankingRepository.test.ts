@@ -8,7 +8,6 @@ import { Money } from '../domain/valueObjects/Money';
 import { Transaction } from '../domain/entities/Transaction';
 import { Posting } from '../domain/valueObjects/Posting';
 import {
-  AccountNotFoundError,
   AccountDataCorruptedError,
   OptimisticLockError,
   TransactionIdempotencyRecordNotFoundError,
@@ -1361,7 +1360,7 @@ describe('DynamoBankingRepository', () => {
     });
   });
 
-  describe('loadAccount', () => {
+  describe('getAccountById', () => {
     it('should load account with balance successfully', async () => {
       const metaData: AccountMetaItem = {
         PK: 'ACCOUNT#acc-123',
@@ -1391,7 +1390,7 @@ describe('DynamoBankingRepository', () => {
         },
       });
 
-      const account = await repository.loadAccount('acc-123');
+      const account = await repository.getAccountById('acc-123');
 
       expect(account.id).toBe('acc-123');
       expect(account.name).toBe('Test Account');
@@ -1422,27 +1421,27 @@ describe('DynamoBankingRepository', () => {
         },
       });
 
-      await expect(repository.loadAccount('acc-123')).rejects.toThrow(
+      await expect(repository.getAccountById('acc-123')).rejects.toThrow(
         new AccountDataCorruptedError()
       );
 
       expect(mockBatchGetCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw AccountNotFoundError when account does not exist', async () => {
+    it('should resolve null when account does not exist', async () => {
       mockSend.mockResolvedValueOnce({
         Responses: {
           'test-banking-table': [],
         },
       });
 
-      await expect(repository.loadAccount('nonexistent')).rejects.toThrow(
-        AccountNotFoundError
+      await expect(repository.getAccountById('nonexistent')).resolves.toBe(
+        null
       );
       expect(mockBatchGetCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw AccountNotFoundError when no meta item found', async () => {
+    it('should resolve null when no meta item found', async () => {
       const balanceData: AccountBalanceItem = {
         PK: 'ACCOUNT#acc-123',
         SK: 'BALANCE',
@@ -1457,9 +1456,7 @@ describe('DynamoBankingRepository', () => {
         },
       });
 
-      await expect(repository.loadAccount('acc-123')).rejects.toThrow(
-        AccountNotFoundError
-      );
+      await expect(repository.getAccountById('acc-123')).resolves.toBe(null);
       expect(mockBatchGetCommand).toHaveBeenCalledTimes(1);
     });
 
@@ -1467,7 +1464,7 @@ describe('DynamoBankingRepository', () => {
       const awsError = new Error('DynamoDB service error');
       mockSend.mockRejectedValueOnce(awsError);
 
-      await expect(repository.loadAccount('acc-123')).rejects.toThrow(
+      await expect(repository.getAccountById('acc-123')).rejects.toThrow(
         'DynamoDB service error'
       );
       expect(mockBatchGetCommand).toHaveBeenCalledTimes(1);
@@ -1501,7 +1498,7 @@ describe('DynamoBankingRepository', () => {
         },
       });
 
-      await repository.loadAccount('acc-456');
+      await repository.getAccountById('acc-456');
 
       expect(mockBatchGetCommand).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1517,128 +1514,24 @@ describe('DynamoBankingRepository', () => {
       );
     });
 
-    it('should throw AccountNotFoundError when Responses is undefined', async () => {
+    it('should return null when Responses is undefined', async () => {
       mockSend.mockResolvedValueOnce({
         Responses: undefined,
       });
 
-      await expect(repository.loadAccount('acc-123')).rejects.toThrow(
-        AccountNotFoundError
-      );
+      await expect(repository.getAccountById('acc-123')).resolves.toBe(null);
       expect(mockBatchGetCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw AccountNotFoundError when table is missing in Responses', async () => {
+    it('should resolve null when table is missing in Responses', async () => {
       mockSend.mockResolvedValueOnce({
         Responses: {
           'other-table': [],
         },
       });
 
-      await expect(repository.loadAccount('acc-123')).rejects.toThrow(
-        AccountNotFoundError
-      );
+      await expect(repository.getAccountById('acc-123')).resolves.toBe(null);
       expect(mockBatchGetCommand).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('getBalanceSnapshot', () => {
-    it('should return balance snapshot when found', async () => {
-      const balanceData: AccountBalanceItem = {
-        PK: 'ACCOUNT#acc-123',
-        SK: 'BALANCE',
-        ledgerBalanceMinor: 1500,
-        availableBalanceMinor: 1200,
-        version: 3,
-      };
-
-      mockSend.mockResolvedValueOnce({
-        Item: balanceData,
-      });
-
-      const snapshot = await repository.getBalanceSnapshot('acc-123');
-
-      expect(snapshot).toBeDefined();
-      expect(snapshot!.accountId).toBe('acc-123');
-      expect(snapshot!.ledgerBalance.toCents()).toBe(1500);
-      expect(snapshot!.availableBalance.toCents()).toBe(1200);
-      expect(snapshot!.version).toBe(3);
-      expect(mockGetCommand).toHaveBeenCalledTimes(1);
-    });
-
-    it('should return null when balance not found', async () => {
-      mockSend.mockResolvedValueOnce({
-        Item: undefined,
-      });
-
-      const snapshot = await repository.getBalanceSnapshot('nonexistent');
-
-      expect(snapshot).toBeNull();
-      expect(mockGetCommand).toHaveBeenCalledTimes(1);
-    });
-
-    it('should throw AccountNotFoundError when balance data corrupted', async () => {
-      const balanceData = {
-        PK: 'ACCOUNT#acc-123',
-        SK: 'BALANCE',
-        version: 1,
-      } as Omit<
-        AccountBalanceItem,
-        'ledgerBalanceMinor' | 'availableBalanceMinor'
-      >;
-
-      mockSend.mockResolvedValueOnce({
-        Item: balanceData,
-      });
-
-      await expect(repository.getBalanceSnapshot('acc-123')).rejects.toThrow(
-        AccountDataCorruptedError
-      );
-    });
-
-    it('should throw AccountDataCorruptedError when version is missing', async () => {
-      const balanceData = {
-        PK: 'ACCOUNT#acc-123',
-        SK: 'BALANCE',
-        ledgerBalanceMinor: 1000,
-        availableBalanceMinor: 800,
-      } as Omit<AccountBalanceItem, 'version'>;
-
-      mockSend.mockResolvedValueOnce({
-        Item: balanceData,
-      });
-
-      await expect(repository.getBalanceSnapshot('acc-123')).rejects.toThrow(
-        AccountDataCorruptedError
-      );
-    });
-
-    it('should rethrow AWS SDK errors', async () => {
-      const awsError = new Error('DynamoDB service error');
-      mockSend.mockRejectedValueOnce(awsError);
-
-      await expect(repository.getBalanceSnapshot('acc-123')).rejects.toThrow(
-        'DynamoDB service error'
-      );
-      expect(mockGetCommand).toHaveBeenCalledTimes(1);
-    });
-
-    it('should use correct GetCommand parameters', async () => {
-      mockSend.mockResolvedValueOnce({
-        Item: undefined,
-      });
-
-      await repository.getBalanceSnapshot('acc-789');
-
-      expect(mockGetCommand).toHaveBeenCalledWith(
-        expect.objectContaining({
-          TableName: 'test-banking-table',
-          Key: {
-            PK: 'ACCOUNT#acc-789',
-            SK: 'BALANCE',
-          },
-        })
-      );
     });
   });
 
