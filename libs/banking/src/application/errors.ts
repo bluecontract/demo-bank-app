@@ -7,3 +7,11 @@ export class AccountNotFoundError extends AppError {
     super(`Account ${accountId} not found`, { cause });
   }
 }
+
+export class ForbiddenError extends AppError {
+  readonly code = 'FORBIDDEN';
+
+  constructor(message: string) {
+    super(message);
+  }
+}

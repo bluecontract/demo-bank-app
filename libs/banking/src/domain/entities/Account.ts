@@ -130,14 +130,14 @@ export class Account {
     return this.ownerUserId === userId || this.isFundingSource();
   }
 
-  ensureSufficientFunds(amountMinor: number): void {
+  ensureSufficientFunds(amountMinor: Money): void {
     if (this.isFundingSource()) {
       return;
     }
 
-    if (this.availableBalanceMinor.isLessThan(new Money(amountMinor))) {
+    if (this.availableBalanceMinor.isLessThan(amountMinor)) {
       throw new InsufficientFundsError(
-        amountMinor,
+        amountMinor.toCents(),
         this.availableBalanceMinor.toCents()
       );
     }
