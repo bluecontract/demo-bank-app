@@ -20,7 +20,7 @@ export interface AccountProps {
   isTest?: boolean;
   ledgerBalanceMinor?: Money;
   availableBalanceMinor?: Money;
-  balance_version?: number;
+  balanceVersion?: number;
 }
 
 export class Account {
@@ -34,7 +34,7 @@ export class Account {
   readonly isTest: boolean;
   public ledgerBalanceMinor: Money;
   public availableBalanceMinor: Money;
-  public balance_version: number;
+  public balanceVersion: number;
 
   private _deltaLedgerMinor = 0;
   private _deltaAvailableMinor = 0;
@@ -75,7 +75,7 @@ export class Account {
     this.isTest = props.isTest ?? false;
     this.ledgerBalanceMinor = props.ledgerBalanceMinor ?? new Money(0);
     this.availableBalanceMinor = props.availableBalanceMinor ?? new Money(0);
-    this.balance_version = props.balance_version ?? 0;
+    this.balanceVersion = props.balanceVersion ?? 0;
   }
 
   isActive(): boolean {

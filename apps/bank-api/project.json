@@ -9,8 +9,9 @@
       "options": {
         "commands": [
           "nx build bank-api --configuration=development",
-          "mv dist/apps/bank-api/main.cjs dist/apps/bank-api/main.js",
+          "mv dist/apps/bank-api/lambda/main.cjs dist/apps/bank-api/lambda/main.js",
           "cd apps/bank-api && samlocal deploy --no-confirm-changeset --resolve-s3",
+          "cd apps/bank-api && npm run seed-funding-source",
           "cd apps/bank-api && sam local start-api --port 3000 --no-memory-limit"
         ],
         "parallel": false
@@ -61,6 +62,17 @@
       },
       "dependsOn": ["^build", "localstack:serve"]
     },
+    "test:integration:debug": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "find src -name '*.integration.test.ts' -exec node --inspect ../../node_modules/vitest/vitest.mjs watch --config vitest.config.ts {} +"
+        ],
+        "cwd": "apps/bank-api",
+        "parallel": false
+      },
+      "dependsOn": ["^build", "localstack:serve"]
+    },
     "test:integration:ci": {
       "executor": "nx:run-commands",
       "options": {
@@ -79,6 +91,17 @@
         "cwd": "apps/bank-api"
       },
       "dependsOn": ["^build", "localstack:serve"]
+    },
+    "test:debug": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --inspect ../../node_modules/vitest/vitest.mjs watch --config vitest.config.ts",
+        "cwd": "apps/bank-api",
+        "env": {
+          "VITEST_EXCLUDE_INTEGRATION": "true"
+        }
+      },
+      "dependsOn": ["^build"]
     },
     "lint": {
       "executor": "@nx/eslint:lint",

@@ -8,6 +8,14 @@ export class AccountNotFoundError extends AppError {
   }
 }
 
+export class AccountDataCorruptedError extends AppError {
+  readonly code = 'ACCOUNT_DATA_CORRUPTED';
+
+  constructor() {
+    super('Account data is corrupted');
+  }
+}
+
 export class InsufficientFundsError extends AppError {
   readonly code = 'INSUFFICIENT_FUNDS';
 

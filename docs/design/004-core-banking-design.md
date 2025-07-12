@@ -21,9 +21,9 @@ API Lambda  -->  Application Layer (Commands / Queries) -->  Domain  -->  Dynamo
 
 | Object              | Kind           | Responsibilities                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Account**         | Aggregate Root | Identity (`account_id`, `accountNumber`), balances, status; invariants such as `ensureSufficientFunds` or `ensureActive`.                                                                                                                                                                                                                                         |
+| **Account**         | Aggregate Root | Identity (`accountId`, `accountNumber`), balances, status; invariants such as `ensureSufficientFunds` or `ensureActive`.                                                                                                                                                                                                                                          |
 | **Transaction**     | Entity         | Represents a single, atomic movement of value across accounts. Contains an immutable, ordered set of Postings (debits and credits) that must be balanced (Σ debits = Σ credits) at creation. Enforces double-entry invariants, records type (FUNDING, TRANSFER), status, description, and idempotency key. Transaction identity is globally unique and immutable. |
-| **Posting**         | Value Object   | Atomic debit/credit line (`account_id`, `amount_minor`, `side`, `description`). The DB-only `posting_id` guarantees unique SK.                                                                                                                                                                                                                                    |
+| **Posting**         | Value Object   | Atomic debit/credit line (`accountId`, `amountMinor`, `side`, `description`). The DB-only `postingId` guarantees unique SK.                                                                                                                                                                                                                                       |
 | **BalanceSnapshot** | Projection     | Read‑model for fast balance fetch; updated synchronously or rebuilt from Postings.                                                                                                                                                                                                                                                                                |
 
 ---
@@ -73,17 +73,18 @@ A dormant Stream + Projector Lambda can replace the in‑transaction update when
 
 ## 5 DynamoDB Single‑Table Schema
 
-| PK                   | SK            | Item Type       | Core Attributes                                                                                                 |
-| -------------------- | ------------- | --------------- | --------------------------------------------------------------------------------------------------------------- |
-| `ACCOUNT#<id>`       | `META`        | Account         | accountNumber, ownerUserId, createdAt, currency, BANKING_GSI1PK, BANKING_GSI1SK, BANKING_GSI2PK, BANKING_GSI2SK |
-| `ACCOUNT#<id>`       | `BALANCE`     | BalanceSnapshot | ledger_balance_minor, available_balance_minor, version, ttl?                                                    |
-| `TXN#<txnId>`        | `META`        | TxnHeader       | type, status, createdAt, description, idempotencyKey,                                                           |
-| `TXN#<txnId>`        | `POST#<n>`    | Posting         | account_id, amount_minor, side, createdAt, BANKING_GSI3PK, BANKING_GSI3SK                                       |
-| `IDEMPOTENCY#<hash>` | `<timestamp>` | Guard           | ttl?                                                                                                            |
+| PK                        | SK            | Item Type         | Core Attributes                                                                 |
+| ------------------------- | ------------- | ----------------- | ------------------------------------------------------------------------------- |
+| `ACCOUNT#<id>`            | `META`        | Account           | accountNumber, ownerUserId, createdAt, currency, BANKING_GSI1PK, BANKING_GSI1SK |
+| `ACCOUNT#<id>`            | `BALANCE`     | BalanceSnapshot   | ledgerBalanceMinor, availableBalanceMinor, version, ttl?                        |
+| `ACCOUNT_NUMBER#<number>` | `RESERVE`     | NumberReservation | accountId                                                                       |
+| `TXN#<txnId>`             | `META`        | TxnHeader         | type, status, createdAt, description, idempotencyKey,                           |
+| `TXN#<txnId>`             | `POST#<n>`    | Posting           | accountId, amountMinor, side, createdAt, BANKING_GSI2PK, BANKING_GSI2SK         |
+| `IDEMPOTENCY#<hash>`      | `<timestamp>` | Guard             | ttl?                                                                            |
 
 **BANKING_GSI1** – `(BANKING_GSI1PK = USER#id, BANKING_GSI1SK = createdAt)` list accounts per user.
-**BANKING_GSI2** – `(BANKING_GSI2PK = ACCOUNT_NUMBER#number, BANKING_GSI2SK = ACCOUNT#id)` get account by number.
-**BANKING_GSI3** – `(BANKING_GSI3PK = ACCOUNT#id, BANKING_GSI3SK = POST#<createdAt>)` for transaction feed, sort by time
+**Account Number Lookup** – Uses direct item access with reservation pattern: `PK = ACCOUNT_NUMBER#number, SK = RESERVE` for account number to ID lookups.
+**BANKING_GSI2** – `(BANKING_GSI2PK = ACCOUNT#id, BANKING_GSI2SK = POST#<createdAt>)` for transaction feed, sort by time
 
 ---
 
@@ -96,5 +97,5 @@ A dormant Stream + Projector Lambda can replace the in‑transaction update when
 
 ## 7 Observability
 
-- Structured logs incl. `txn_id`, duration, result.
+- Structured logs incl. `txnId`, duration, result.
 - Metrics: `txn_create_p95_ms`, `transaction_failed`, `transaction_commited`, `account_created`.

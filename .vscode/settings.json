@@ -25,5 +25,6 @@
     "**/dist": true,
     "**/.nx": true,
     "**/coverage": true
-  }
+  },
+  "vitest.disableWorkspaceWarning": true
 }

@@ -24,7 +24,7 @@ External payments, card holds, FX, overdrafts, fees and reconciliation are _ackn
 ## Scope / Use‑Case Scenarios
 
 1. **Account Opening**  
-   Visitor presses _“Create Account”_ → system issues unique **account number**, **account_id** and currency = USD.
+   Visitor presses _“Create Account”_ → system issues unique **account number**, **accountId** and currency = USD.
 
 2. **Funding**  
    User enters an _amount_ in the _Funding_ UI. A **credit** transaction adds demo money to their account.
@@ -41,7 +41,7 @@ External payments, card holds, FX, overdrafts, fees and reconciliation are _ackn
 | ------------- | -------------------------------------------------------------------------------------------- |
 | Currency      | Single currency **USD** for milestone‑1.                                                     |
 | Users         | One user == one account for now; multi‑account per user is deferred but model must allow it. |
-| Numbering     | Internal opaque `account_id` plus a 10‑digit public **account number** validated as numeric. |
+| Numbering     | Internal opaque `accountId` plus a 10‑digit public **account number** validated as numeric.  |
 | Funding       | No external payment rail; money is minted via a privileged “FUNDING” transaction type.       |
 | Consistency   | Synchronous **available balance** check                                                      |
 | Observability | CloudWatch logs & metrics only                                                               |
