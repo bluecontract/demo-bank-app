@@ -53,6 +53,7 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-router-dom": "6.29.0",
+    "xss": "^1.0.15",
     "zod": "^3.25.67"
   },
   "devDependencies": {

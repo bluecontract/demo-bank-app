@@ -214,6 +214,27 @@ describe('Bank API Integration Tests', () => {
       );
       assertAllSecurityHeaders(signUp);
     });
+
+    it('should handle complex XSS payloads in account creation', async () => {
+      // Given - complex XSS payload in account name
+      const name = await generateUniqueTestUserName('xss-test-user');
+      const maliciousAccountName = `<img src="x" onerror="alert('XSS')"><script>document.cookie='stolen'</script>${name}`;
+
+      const signUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: { name: maliciousAccountName },
+      });
+
+      if (signUp.statusCode === 201) {
+        // Verify XSS payloads are removed but safe content remains
+        expect(signUp.body.name).toBe(name);
+        expect(signUp.body.name).not.toContain('<img');
+        expect(signUp.body.name).not.toContain('<script>');
+        expect(signUp.body.name).not.toContain('onerror');
+        expect(signUp.body.name).not.toContain('alert');
+      }
+    });
   });
 
   describe('Sign-in Endpoint', () => {
