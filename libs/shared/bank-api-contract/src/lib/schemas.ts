@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createSanitizedStringSchema } from './sanitization';
 
 export const ProblemDto = z.object({
-  code: z.string(),
+  error: z.string(),
   message: z.string(),
   detail: z.string().optional(),
 });

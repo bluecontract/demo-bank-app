@@ -12,6 +12,7 @@ import { getLogger } from './shared/logger';
 import { getSecurityHeaders } from './shared/security';
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { createAccountHandler } from './banking/createAccount';
+import { listAccountsHandler } from './banking/listAccounts';
 
 const metrics = getMetrics();
 const logger = getLogger();
@@ -40,6 +41,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
 
     banking: {
       createAccount: createAccountHandler,
+      listAccounts: listAccountsHandler,
     },
   }),
   {

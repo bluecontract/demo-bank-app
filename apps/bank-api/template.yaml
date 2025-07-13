@@ -185,6 +185,25 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /auth/signin
             Method: OPTIONS
+        CreateAccountApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts
+            Method: POST
+        ListAccountsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts
+            Method: GET
+        V1AccountsOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts
+            Method: OPTIONS
+
   # ------------------------------------------------------------------
   # Seed the FUNDING_SOURCE account and its BALANCE row (idempotent)
   # ------------------------------------------------------------------

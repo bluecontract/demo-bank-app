@@ -8,12 +8,22 @@ export const ERROR_CODES = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
 
+interface ProblemResponseOptions {
+  status: 401 | 404 | 409 | 500;
+  code: ProblemDto['error'];
+  message: ProblemDto['message'];
+  detail?: ProblemDto['detail'];
+}
+
 export const problemResponse = ({
   status,
   code,
   message,
   detail,
-}: ProblemDto & { status: 401 | 404 | 409 | 500 }) => {
+}: ProblemResponseOptions): {
+  body: ProblemDto;
+  status: 401 | 404 | 409 | 500;
+} => {
   return {
     status,
     body: { error: code, message, detail },

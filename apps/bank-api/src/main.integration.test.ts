@@ -374,6 +374,71 @@ describe('Bank API Integration Tests', () => {
       expect(result.body.name).not.toContain('alert');
     });
   });
+
+  describe('List Accounts Endpoint', () => {
+    let userId: string;
+    let jwtCookie: string;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('list-accounts-user');
+      userId = creds.userId;
+      jwtCookie = creds.jwtCookie;
+    });
+
+    it('should return an empty array if user has no accounts', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+        userId,
+        jwtCookie,
+      });
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toEqual({ accounts: [] });
+    });
+
+    it('should return a list of accounts for authenticated user', async () => {
+      for (let i = 0; i < 2; i++) {
+        const create = await invokeApi({
+          method: 'POST',
+          path: '/v1/accounts',
+          userId,
+          jwtCookie,
+          body: { name: 'Test Account' },
+        });
+        expect(create.statusCode).toBe(201);
+      }
+      const result = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+        userId,
+        jwtCookie,
+      });
+      expect(result.statusCode).toBe(200);
+      expect(Array.isArray(result.body.accounts)).toBe(true);
+      expect(result.body.accounts.length).toBeGreaterThanOrEqual(2);
+      for (const acc of result.body.accounts) {
+        expect(acc).toMatchObject({
+          accountId: expect.any(String),
+          accountNumber: expect.any(String),
+          currency: 'USD',
+          createdAt: expect.any(String),
+          status: 'ACTIVE',
+        });
+      }
+    });
+
+    it('should return 401 if user is not authenticated', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+      });
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+  });
 });
 
 // Helper functions

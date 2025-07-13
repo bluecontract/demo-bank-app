@@ -1,7 +1,7 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { createSanitizedStringSchema } from './sanitization';
-import { AccountDto, CreateAccountRequestDto } from './schemas';
+import { AccountDto, CreateAccountRequestDto, ProblemDto } from './schemas';
 
 const c = initContract();
 
@@ -58,8 +58,8 @@ export const bankApiContract = c.router(
         .optional(),
       responses: {
         201: AuthSuccessResponseSchema,
-        409: AuthErrorResponseSchema,
-        // 400: AuthErrorResponseSchema,
+        401: ProblemDto,
+        409: ProblemDto,
       },
       summary: 'Sign up with a unique name',
     },
@@ -70,8 +70,8 @@ export const bankApiContract = c.router(
       body: SignInRequestSchema,
       responses: {
         200: AuthSuccessResponseSchema,
-        404: AuthErrorResponseSchema,
-        // 400: AuthErrorResponseSchema,
+        401: ProblemDto,
+        404: ProblemDto,
       },
       summary: 'Sign in with existing name',
     },
@@ -84,12 +84,26 @@ export const bankApiContract = c.router(
         responses: { 201: AccountDto },
         summary: 'Create a bank account',
       },
+
+      listAccounts: {
+        method: 'GET',
+        path: '/v1/accounts',
+        responses: {
+          200: z.object({ accounts: z.array(AccountDto) }),
+        },
+        query: z.object({
+          limit: z.coerce.number().int().positive().optional(),
+          cursor: z.string().optional(),
+        }),
+        summary: 'List user bank accounts',
+      },
     },
   },
   {
     commonResponses: {
-      400: AuthErrorResponseSchema,
-      500: AuthErrorResponseSchema,
+      401: ProblemDto,
+      400: ProblemDto,
+      500: ProblemDto,
     },
   }
 );
