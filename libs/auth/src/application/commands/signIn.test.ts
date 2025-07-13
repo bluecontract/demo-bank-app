@@ -1,8 +1,14 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { signIn, SignInCommand, SignInDependencies } from './signIn';
+import { User } from '../../domain/entities/User';
+import {
+  UserNotFoundError,
+  TokenGenerationError,
+} from '../../infrastructure/errors';
+import { AuthError } from '../errors';
 import type { UserRepository, JwtService, Logger, Metrics } from '../ports';
-import { User, UserName } from '../../domain/entities/User';
-import { UserNotFoundError } from '../../domain/errors';
+import { AuthResult } from '../dtos';
+import { randomUUID } from 'crypto';
 
 // Mock dependencies
 const mockUserRepository: UserRepository = {
@@ -22,6 +28,7 @@ const mockLogger: Logger = {
   error: vi.fn(),
   debug: vi.fn(),
   setCorrelationId: vi.fn(),
+  addContext: vi.fn(),
 };
 
 const mockMetrics: Metrics = {
@@ -50,7 +57,12 @@ describe('signIn', () => {
         name: 'johndoe',
       };
 
-      const mockUser = User.create('johndoe' as UserName, false);
+      const mockUser = new User({
+        id: randomUUID(),
+        name: 'johndoe',
+        isTest: false,
+        createdAt: new Date(),
+      });
       const mockToken = 'jwt-token-123';
 
       vi.mocked(mockUserRepository.findByName).mockResolvedValue(mockUser);
@@ -79,7 +91,7 @@ describe('signIn', () => {
         })
       );
 
-      expect(result).toEqual({
+      const expectedResult: AuthResult = {
         user: {
           id: mockUser.id,
           name: 'johndoe',
@@ -87,7 +99,9 @@ describe('signIn', () => {
           isTest: false,
         },
         token: mockToken,
-      });
+      };
+
+      expect(result).toEqual(expectedResult);
     });
 
     it('should successfully sign in a test user', async () => {
@@ -96,7 +110,12 @@ describe('signIn', () => {
         name: 'test-user',
       };
 
-      const mockUser = User.create('test-user' as UserName, true);
+      const mockUser = new User({
+        id: randomUUID(),
+        name: 'test-user',
+        isTest: true,
+        createdAt: new Date(),
+      });
       const mockToken = 'jwt-token-test';
 
       vi.mocked(mockUserRepository.findByName).mockResolvedValue(mockUser);
@@ -154,16 +173,18 @@ describe('signIn', () => {
         name: 'johndoe',
       };
 
-      const error = new Error('Database connection failed');
-      vi.mocked(mockUserRepository.findByName).mockRejectedValue(error);
+      const repositoryError = new Error('Database connection failed');
+      vi.mocked(mockUserRepository.findByName).mockRejectedValue(
+        repositoryError
+      );
 
       // When & Then
       await expect(signIn(command, dependencies)).rejects.toThrow(
-        'Database connection failed'
+        new AuthError('Unexpected error during user sign-in', repositoryError)
       );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'User sign-in failed',
+        'Unexpected error during user sign-in',
         expect.objectContaining({
           userName: 'johndoe',
           error: 'Database connection failed',
@@ -177,15 +198,20 @@ describe('signIn', () => {
         name: 'johndoe',
       };
 
-      const mockUser = User.create('johndoe' as UserName, false);
-      const jwtError = new Error('JWT generation failed');
+      const mockUser = new User({
+        id: randomUUID(),
+        name: 'johndoe',
+        isTest: false,
+        createdAt: new Date(),
+      });
+      const jwtError = new TokenGenerationError(mockUser.id);
 
       vi.mocked(mockUserRepository.findByName).mockResolvedValue(mockUser);
       vi.mocked(mockJwtService.generateToken).mockRejectedValue(jwtError);
 
       // When & Then
       await expect(signIn(command, dependencies)).rejects.toThrow(
-        'JWT generation failed'
+        new TokenGenerationError(mockUser.id)
       );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
@@ -193,7 +219,7 @@ describe('signIn', () => {
         expect.objectContaining({
           userName: 'johndoe',
           userId: mockUser.id,
-          error: 'JWT generation failed',
+          error: `Failed to generate token for user '${mockUser.id}'`,
         })
       );
     });
@@ -208,10 +234,12 @@ describe('signIn', () => {
       vi.mocked(mockUserRepository.findByName).mockRejectedValue(unknownError);
 
       // When & Then
-      await expect(signIn(command, dependencies)).rejects.toThrow(unknownError);
+      await expect(signIn(command, dependencies)).rejects.toThrow(
+        new AuthError('Unexpected error during user sign-in', unknownError)
+      );
 
       expect(mockLogger.error).toHaveBeenCalledWith(
-        'User sign-in failed',
+        'Unexpected error during user sign-in',
         expect.objectContaining({
           userName: 'johndoe',
           error: 'Something went wrong',
@@ -225,7 +253,12 @@ describe('signIn', () => {
         name: 'johndoe',
       };
 
-      const mockUser = User.create('johndoe' as UserName, false);
+      const mockUser = new User({
+        id: randomUUID(),
+        name: 'johndoe',
+        isTest: false,
+        createdAt: new Date(),
+      });
       const mockToken = 'jwt-token-123';
 
       vi.mocked(mockUserRepository.findByName).mockResolvedValue(mockUser);

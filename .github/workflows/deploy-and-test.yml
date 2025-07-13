@@ -103,6 +103,7 @@ jobs:
           for app in "${APPS[@]}"; do
             if [ -n "$app" ]; then
               echo "🚀 Deploying $app to ${{ inputs.environment }}..."
+              echo "🚀 BANK_API_URL=$BANK_API_URL"
               if npx nx deploy $app --environment=${{ inputs.environment }}; then
                 echo "✅ Successfully deployed $app"
               else

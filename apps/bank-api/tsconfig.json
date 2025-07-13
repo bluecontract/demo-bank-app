@@ -4,7 +4,13 @@
   "include": [],
   "references": [
     {
+      "path": "../../libs/shared/observability"
+    },
+    {
       "path": "../../libs/shared/bank-api-contract"
+    },
+    {
+      "path": "../../libs/banking"
     },
     {
       "path": "../../libs/auth"

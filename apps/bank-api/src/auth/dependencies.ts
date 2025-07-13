@@ -1,32 +1,26 @@
 import {
   DynamoUserRepository,
   AwsJwtService,
+  EnvironmentConfiguration,
+} from '@demo-blue/auth';
+import type {
   PowertoolsLogger,
   PowertoolsMetrics,
-  EnvironmentConfiguration,
-  type LogLevel,
-} from '@demo-blue/auth';
+} from '@demo-blue/shared-observability';
+import { getLogger } from '../shared/logger';
+import { getMetrics } from '../shared/metrics';
 
 // Global dependencies - initialized once per Lambda container
 let globalDependencies: Awaited<
   ReturnType<typeof initializeDependencies>
 > | null = null;
 
-const initializeDependencies = async () => {
+const initializeDependencies = async (
+  logger: PowertoolsLogger,
+  metrics: PowertoolsMetrics
+) => {
   const envConfig = new EnvironmentConfiguration();
   const authConfig = await envConfig.getAuthConfig();
-
-  const logger = new PowertoolsLogger({
-    level: authConfig.logLevel as LogLevel,
-    serviceName: authConfig.serviceName,
-    environment: authConfig.environment,
-  });
-
-  const metrics = new PowertoolsMetrics({
-    namespace: authConfig.metricsNamespace,
-    serviceName: authConfig.serviceName,
-    environment: authConfig.environment,
-  });
 
   const awsRegion = process.env.AWS_REGION || 'eu-central-1';
   const awsEndpoint = process.env.AWS_ENDPOINT_URL;
@@ -44,12 +38,6 @@ const initializeDependencies = async () => {
     ...(awsEndpoint && { endpoint: awsEndpoint }),
   });
 
-  logger.info('Dependencies initialized', {
-    environment: authConfig.environment,
-    serviceName: authConfig.serviceName,
-    metricsNamespace: authConfig.metricsNamespace,
-  });
-
   return {
     userRepository,
     jwtService,
@@ -65,7 +53,10 @@ const initializeDependencies = async () => {
 // Get or initialize global dependencies
 export const getDependencies = async () => {
   if (!globalDependencies) {
-    globalDependencies = await initializeDependencies();
+    globalDependencies = await initializeDependencies(
+      getLogger(),
+      getMetrics()
+    );
   }
   return globalDependencies;
 };

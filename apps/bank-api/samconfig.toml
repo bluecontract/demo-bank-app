@@ -3,7 +3,7 @@ version = 0.1
 # SAM Configuration for different environments
 
 [default.global.parameters]
-stack_name = "demo-blue-bank"
+stack_name = "demo-bank-blue"
 region = "eu-central-1"
 
 [default.build.parameters]
@@ -27,7 +27,7 @@ resolve_s3 = true
 
 # Development Environment
 [dev.deploy.parameters]
-stack_name = "demo-blue-bank-dev" 
+stack_name = "demo-blue-backend-dev" 
 s3_bucket = "demo-blue-deployments-dev"
 region = "eu-central-1"
 parameter_overrides = "Environment=dev"
@@ -38,7 +38,7 @@ fail_on_empty_changeset = false
 
 # Production Environment  
 [prod.deploy.parameters]
-stack_name = "demo-blue-bank-prod"
+stack_name = "demo-blue-backend-prod"
 s3_bucket = "demo-blue-deployments-prod"
 region = "eu-central-1"
 parameter_overrides = "Environment=prod"

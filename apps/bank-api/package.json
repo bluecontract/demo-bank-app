@@ -19,12 +19,14 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/client-secrets-manager": "^3.840.0",
-    "@aws-sdk/lib-dynamodb": "^3.840.0",
     "@demo-blue/auth": "*",
     "@demo-blue/banking": "*",
     "@demo-blue/shared-bank-api-contract": "*",
+    "@demo-blue/shared-observability": "*",
+    "@ts-rest/core": "^3.52.1",
     "@ts-rest/serverless": "^3.52.1",
     "@types/aws-lambda": "^8.10.150",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "helmet": "^8.1.0"
   }
 }

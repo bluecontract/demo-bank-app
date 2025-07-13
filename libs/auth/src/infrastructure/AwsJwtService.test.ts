@@ -1,8 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
 import { AwsJwtService } from './AwsJwtService';
-import { UserId } from '../domain/entities/User';
-import { InvalidTokenError, TokenExpiredError } from '../domain/errors';
+import {
+  TokenVerificationError,
+  TokenExpiredError,
+  TokenGenerationError,
+  TokenServiceError,
+} from './errors';
 
 // Mock AWS SDK
 const mockSend = vi.fn();
@@ -33,7 +37,7 @@ describe('AwsJwtService', () => {
   let service: AwsJwtService;
   const mockSecret = 'test-secret-key';
   const mockSecretJson = JSON.stringify({ secret: mockSecret });
-  const userId = 'test-user-123' as UserId;
+  const userId = 'test-user-123';
 
   // Fixed timestamp for deterministic testing: 2024-01-01T12:00:00Z
   const fixedTimestamp = 1704110400; // Unix timestamp in seconds
@@ -60,7 +64,7 @@ describe('AwsJwtService', () => {
   describe('generateToken', () => {
     it('should generate token for regular user with 1 hour TTL', async () => {
       // Given
-      const userId = 'user-123' as UserId;
+      const userId = 'user-123';
       const expectedToken = 'regular-user-token';
 
       mockSend.mockResolvedValueOnce({
@@ -88,7 +92,7 @@ describe('AwsJwtService', () => {
 
     it('should generate token for test user with 10 minute TTL', async () => {
       // Given
-      const userId = 'test-user-123' as UserId;
+      const userId = 'test-user-123';
       const expectedToken = 'test-user-token';
 
       mockSend.mockResolvedValueOnce({
@@ -114,7 +118,7 @@ describe('AwsJwtService', () => {
 
     it('should call Secrets Manager to get JWT secret', async () => {
       // Given
-      const userId = 'user-123' as UserId;
+      const userId = 'user-123';
 
       mockSend.mockResolvedValueOnce({
         SecretString: mockSecretJson,
@@ -142,7 +146,7 @@ describe('AwsJwtService', () => {
 
   it('should cache JWT secret after first Secrets Manager call', async () => {
     // Given
-    const userId = 'user-123' as UserId;
+    const userId = 'user-123';
     mockSend.mockResolvedValueOnce({
       SecretString: mockSecretJson,
     });
@@ -169,6 +173,27 @@ describe('AwsJwtService', () => {
     const firstCallSecret = (jwt.sign as any).mock.calls[0][1];
     const secondCallSecret = (jwt.sign as any).mock.calls[1][1];
     expect(firstCallSecret).toBe(secondCallSecret);
+  });
+
+  it('should throw TokenGenerationError when jwt.sign fails', async () => {
+    // Given
+    const userId = 'user-123';
+    const jwtError = new Error('JWT signing failed');
+
+    mockSend.mockResolvedValueOnce({
+      SecretString: mockSecretJson,
+    });
+    (jwt.sign as any).mockImplementation(() => {
+      throw jwtError;
+    });
+
+    // When & Then
+    await expect(service.generateToken(userId)).rejects.toThrow(
+      new TokenGenerationError(userId, jwtError)
+    );
+
+    // Verify GetSecretValueCommand was called to fetch secret
+    expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
   });
 
   describe('verifyToken', () => {
@@ -199,20 +224,21 @@ describe('AwsJwtService', () => {
       });
     });
 
-    it('should throw InvalidTokenError for malformed token', async () => {
+    it('should throw TokenVerificationError for malformed token', async () => {
       // Given
       const invalidToken = 'invalid-token';
+      const jwtError = new Error('jwt malformed');
 
       mockSend.mockResolvedValueOnce({
         SecretString: mockSecretJson,
       });
       (jwt.verify as any).mockImplementation(() => {
-        throw new Error('jwt malformed');
+        throw jwtError;
       });
 
       // When & Then
       await expect(service.verifyToken(invalidToken)).rejects.toThrow(
-        InvalidTokenError
+        new TokenVerificationError('jwt malformed', jwtError)
       );
 
       // Verify GetSecretValueCommand was called to fetch secret
@@ -222,41 +248,41 @@ describe('AwsJwtService', () => {
     it('should throw TokenExpiredError for expired token', async () => {
       // Given
       const expiredToken = 'expired-token';
+      const jwtError = new Error('jwt expired');
+      jwtError.name = 'TokenExpiredError';
 
       mockSend.mockResolvedValueOnce({
         SecretString: mockSecretJson,
       });
       (jwt.verify as any).mockImplementation(() => {
-        const error = new Error('jwt expired');
-        error.name = 'TokenExpiredError';
-        throw error;
+        throw jwtError;
       });
 
       // When & Then
       await expect(service.verifyToken(expiredToken)).rejects.toThrow(
-        TokenExpiredError
+        new TokenExpiredError(jwtError)
       );
 
       // Verify GetSecretValueCommand was called to fetch secret
       expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw InvalidTokenError for invalid signature', async () => {
+    it('should throw TokenVerificationError for invalid signature', async () => {
       // Given
       const invalidSignatureToken = 'invalid-signature-token';
+      const jwtError = new Error('invalid signature');
+      jwtError.name = 'JsonWebTokenError';
 
       mockSend.mockResolvedValueOnce({
         SecretString: mockSecretJson,
       });
       (jwt.verify as any).mockImplementation(() => {
-        const error = new Error('invalid signature');
-        error.name = 'JsonWebTokenError';
-        throw error;
+        throw jwtError;
       });
 
       // When & Then
       await expect(service.verifyToken(invalidSignatureToken)).rejects.toThrow(
-        InvalidTokenError
+        new TokenVerificationError('invalid signature', jwtError)
       );
 
       // Verify GetSecretValueCommand was called to fetch secret
@@ -267,11 +293,15 @@ describe('AwsJwtService', () => {
   describe('error handling', () => {
     it('should handle Secrets Manager retrieval errors', async () => {
       // Given
-      mockSend.mockRejectedValueOnce(new Error('Secrets Manager Error'));
+      const secretsError = new Error('Secrets Manager Error');
+      mockSend.mockRejectedValueOnce(secretsError);
 
       // When & Then
       await expect(service.generateToken(userId)).rejects.toThrow(
-        'Failed to retrieve JWT secret: Error: Secrets Manager Error'
+        new TokenServiceError(
+          'Failed to retrieve JWT secret from arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123',
+          secretsError
+        )
       );
 
       // Verify GetSecretValueCommand was attempted
@@ -286,7 +316,9 @@ describe('AwsJwtService', () => {
 
       // When & Then
       await expect(service.generateToken(userId)).rejects.toThrow(
-        'JWT secret not found: arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
+        new TokenServiceError(
+          'JWT secret not found: arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
+        )
       );
 
       // Verify GetSecretValueCommand was attempted
@@ -301,7 +333,9 @@ describe('AwsJwtService', () => {
 
       // When & Then
       await expect(service.generateToken(userId)).rejects.toThrow(
-        'JWT secret key not found in secret: arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
+        new TokenServiceError(
+          'JWT secret key not found in secret: arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
+        )
       );
 
       // Verify GetSecretValueCommand was attempted

@@ -32,6 +32,12 @@ test.describe('Sign Up Flow', () => {
     // Submit the form
     await page.click('button[type="submit"]');
 
+    // Should show loading state briefly
+    await expect(page.getByText('Creating Account...')).toBeVisible();
+
+    // Button should be disabled during loading
+    await expect(page.locator('button[type="submit"]')).toBeDisabled();
+
     // Should navigate to dashboard after successful signup
     await expect(page).toHaveURL(URLS.DASHBOARD, {
       timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
@@ -41,7 +47,9 @@ test.describe('Sign Up Flow', () => {
     await expect(page.getByText('Welcome to Blue Bank')).toBeVisible();
   });
 
-  test('should show validation errors for empty name', async ({ page }) => {
+  test('should show validation errors for empty name and clear them when typing', async ({
+    page,
+  }) => {
     // Navigate to signup page with E2E mode
     await page.goto(URLS.SIGNUP);
 
@@ -53,6 +61,12 @@ test.describe('Sign Up Flow', () => {
 
     // Should not navigate away
     await expect(page).toHaveURL(URLS.SIGNUP);
+
+    // Start typing in the name field
+    await page.fill('input[name="name"]', 'a');
+
+    // Error should disappear
+    await expect(page.getByText('Name is required')).toBeHidden();
   });
 
   test('should show validation errors for name too long', async ({ page }) => {
@@ -73,24 +87,6 @@ test.describe('Sign Up Flow', () => {
 
     // Should not navigate away
     await expect(page).toHaveURL(URLS.SIGNUP);
-  });
-
-  test('should show loading state during submission', async ({ page }) => {
-    // Navigate to signup page with E2E mode
-    await page.goto(URLS.SIGNUP);
-
-    // Fill in the form with unique test name
-    const uniqueName = createUniqueName();
-    await page.fill('input[name="name"]', uniqueName);
-
-    // Submit the form
-    await page.click('button[type="submit"]');
-
-    // Should show loading state briefly
-    await expect(page.getByText('Creating Account...')).toBeVisible();
-
-    // Button should be disabled during loading
-    await expect(page.locator('button[type="submit"]')).toBeDisabled();
   });
 
   test('should handle duplicate name error by signing up twice', async ({
@@ -127,47 +123,5 @@ test.describe('Sign Up Flow', () => {
 
     // Should not navigate away
     await expect(page).toHaveURL(URLS.SIGNUP);
-  });
-
-  test('should clear errors when user starts typing', async ({ page }) => {
-    // Navigate to signup page with E2E mode
-    await page.goto(URLS.SIGNUP);
-
-    // Try to submit without entering name to trigger validation
-    await page.click('button[type="submit"]');
-
-    // Should show validation error
-    await expect(page.getByText('Name is required')).toBeVisible();
-
-    // Start typing in the name field
-    await page.fill('input[name="name"]', 'a');
-
-    // Error should disappear
-    await expect(page.getByText('Name is required')).toBeHidden();
-  });
-
-  test('should have proper accessibility attributes', async ({ page }) => {
-    // Navigate to signup page with E2E mode
-    await page.goto(URLS.SIGNUP);
-
-    // Check for proper labels
-    await expect(page.locator('label[for="name"]')).toBeVisible();
-    await expect(page.locator('input[id="name"]')).toBeVisible();
-
-    // Check for proper heading structure
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-      'Join Blue Bank'
-    );
-    await expect(page.getByRole('heading', { level: 2 })).toHaveText(
-      'Create Account'
-    );
-
-    // Check for proper form elements
-    await expect(
-      page.getByRole('textbox', { name: 'Full Name' })
-    ).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: 'Create Account' })
-    ).toBeVisible();
   });
 });

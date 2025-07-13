@@ -1,252 +1,236 @@
-import { describe, it, expect } from 'vitest';
-import { User, UserId, UserName } from './User';
-import { InvalidUserNameError } from '../errors';
+import { User, UserProps } from './User';
+import { UserValidationError } from '../errors';
 
-describe('User Entity', () => {
-  describe('create', () => {
-    it('should create a valid user with valid name', () => {
-      // Given
-      const validName = 'john-doe' as UserName;
+describe('User', () => {
+  const validProps: UserProps = {
+    id: 'user-123',
+    name: 'testuser',
+    createdAt: new Date('2024-01-01T00:00:00Z'),
+    isTest: false,
+  };
 
-      // When
-      const user = User.create(validName);
+  describe('constructor', () => {
+    it('should create a user with valid properties', () => {
+      const user = new User(validProps);
 
-      // Then
-      expect(user.id).toBeDefined();
-      expect(user.name).toBe(validName);
-      expect(user.createdAt).toBeInstanceOf(Date);
+      expect(user.id).toBe(validProps.id);
+      expect(user.name).toBe(validProps.name);
+      expect(user.createdAt).toEqual(validProps.createdAt);
       expect(user.isTest).toBe(false);
     });
 
-    it('should create test user when isTest flag is true', () => {
-      // Given
-      const testName = 'test-user' as UserName;
+    it('should default isTest to false when not provided', () => {
+      const props = { ...validProps };
+      delete props.isTest;
 
-      // When
-      const user = User.create(testName, true);
+      const user = new User(props);
 
-      // Then
-      expect(user.isTest).toBe(true);
-      expect(user.name).toBe(testName);
+      expect(user.isTest).toBe(false);
     });
 
-    describe('validation edge cases', () => {
-      it('should throw InvalidUserNameError for empty name', () => {
-        // Given
-        const emptyName = '' as UserName;
+    it('should accept isTest as true', () => {
+      const props = { ...validProps, isTest: true };
 
-        // When & Then
-        expect(() => User.create(emptyName)).toThrow(InvalidUserNameError);
-        expect(() => User.create(emptyName)).toThrow('name cannot be empty');
+      const user = new User(props);
+
+      expect(user.isTest).toBe(true);
+    });
+
+    it('should handle minimum length name', () => {
+      const props = { ...validProps, name: 'a' };
+
+      const user = new User(props);
+
+      expect(user.name).toBe('a');
+    });
+
+    it('should handle maximum length name', () => {
+      const props = { ...validProps, name: 'a'.repeat(50) };
+
+      const user = new User(props);
+
+      expect(user.name).toBe('a'.repeat(50));
+    });
+
+    it('should handle names with mixed valid characters', () => {
+      const props = { ...validProps, name: 'User_123-test' };
+
+      const user = new User(props);
+
+      expect(user.name).toBe('User_123-test');
+    });
+  });
+
+  describe('validation', () => {
+    describe('id validation', () => {
+      it('should throw UserValidationError when id is empty', () => {
+        const props = { ...validProps, id: '' };
+
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow('User ID cannot be empty');
       });
 
-      it('should throw InvalidUserNameError for whitespace-only name', () => {
-        // Given
-        const whitespaceOnlyName = '   ' as UserName;
+      it('should throw UserValidationError when id is whitespace', () => {
+        const props = { ...validProps, id: '   ' };
 
-        // When & Then
-        expect(() => User.create(whitespaceOnlyName)).toThrow(
-          InvalidUserNameError
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow('User ID cannot be empty');
+      });
+    });
+
+    describe('name validation', () => {
+      it('should throw UserValidationError when name is empty', () => {
+        const props = { ...validProps, name: '' };
+
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow(
+          'User name must be at least 1 character(s)'
         );
-        expect(() => User.create(whitespaceOnlyName)).toThrow(
-          'name cannot be empty'
+      });
+
+      it('should throw UserValidationError when name is whitespace', () => {
+        const props = { ...validProps, name: '   ' };
+
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow(
+          'User name must be at least 1 character(s)'
         );
       });
 
-      it('should throw InvalidUserNameError for name with invalid characters', () => {
-        // Given
-        const invalidName = 'john@doe!' as UserName;
+      it('should throw UserValidationError when name is too short', () => {
+        const props = { ...validProps, name: '' };
 
-        // When & Then
-        expect(() => User.create(invalidName)).toThrow(InvalidUserNameError);
-        expect(() => User.create(invalidName)).toThrow(
-          'name can only contain letters, numbers, hyphens, and underscores'
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow(
+          'User name must be at least 1 character(s)'
         );
       });
 
-      it('should throw InvalidUserNameError for name exceeding max length (50 chars)', () => {
-        // Given
-        const longName = 'a'.repeat(51) as UserName;
+      it('should throw UserValidationError when name is too long', () => {
+        const props = { ...validProps, name: 'a'.repeat(51) };
 
-        // When & Then
-        expect(() => User.create(longName)).toThrow(InvalidUserNameError);
-        expect(() => User.create(longName)).toThrow(
-          'name cannot exceed 50 characters'
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow(
+          'User name must be no more than 50 characters'
         );
       });
 
-      it('should accept name at max length boundary (50 chars)', () => {
-        // Given
-        const maxLengthName = 'a'.repeat(50) as UserName;
+      it('should throw UserValidationError when name contains invalid characters', () => {
+        const invalidNames = [
+          'user@test',
+          'user space',
+          'user!',
+          'user#test',
+          'user$',
+        ];
 
-        // When
-        const user = User.create(maxLengthName);
+        invalidNames.forEach(invalidName => {
+          const props = { ...validProps, name: invalidName };
 
-        // Then
-        expect(user.name).toBe(maxLengthName);
+          expect(() => new User(props)).toThrow(UserValidationError);
+          expect(() => new User(props)).toThrow(
+            'User name can only contain letters, numbers, hyphens, and underscores'
+          );
+        });
       });
 
-      it('should accept valid names with all allowed characters', () => {
-        // Given
+      it('should accept valid names', () => {
         const validNames = [
           'user123',
-          'test-user',
-          'user_name',
-          'User-123_test',
-          'a',
-          '1',
-          'user-name-with-dashes',
-          'user_name_with_underscores',
-        ] as UserName[];
+          'user_test',
+          'user-test',
+          'USER',
+          'User123',
+          'test_user-123',
+        ];
 
-        // When & Then
-        validNames.forEach(name => {
-          expect(() => User.create(name)).not.toThrow();
-        });
-      });
+        validNames.forEach(validName => {
+          const props = { ...validProps, name: validName };
 
-      it('should reject names with special characters', () => {
-        // Given
-        const invalidNames = [
-          'user@example.com',
-          'user with spaces',
-          'user.name',
-          'user+name',
-          'user#name',
-          'user$name',
-          'user%name',
-          'user&name',
-          'user*name',
-          'user(name)',
-          'user[name]',
-          'user{name}',
-          'user/name',
-          'user\\name',
-        ] as UserName[];
-
-        // When & Then
-        invalidNames.forEach(name => {
-          expect(() => User.create(name)).toThrow(InvalidUserNameError);
+          expect(() => new User(props)).not.toThrow();
         });
       });
     });
 
-    it('should generate unique IDs for multiple users', () => {
-      // Given
-      const name1 = 'user1' as UserName;
-      const name2 = 'user2' as UserName;
+    describe('createdAt validation', () => {
+      it('should throw UserValidationError when createdAt is not a Date', () => {
+        const props = {
+          ...validProps,
+          createdAt: 'invalid-date' as unknown as Date,
+        };
 
-      // When
-      const user1 = User.create(name1);
-      const user2 = User.create(name2);
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow(
+          'Created date must be a valid Date'
+        );
+      });
 
-      // Then
-      expect(user1.id).not.toBe(user2.id);
-      expect(user1.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-      );
-      expect(user2.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-      );
-    });
+      it('should throw UserValidationError when createdAt is in the future', () => {
+        const futureDate = new Date(Date.now() + 1000);
+        const props = { ...validProps, createdAt: futureDate };
 
-    it('should set createdAt to current time', () => {
-      // Given
-      const before = new Date();
-      const name = 'test-user' as UserName;
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow(
+          'Created date cannot be in the future'
+        );
+      });
 
-      // When
-      const user = User.create(name);
-      const after = new Date();
+      it('should accept past dates', () => {
+        const pastDate = new Date(Date.now() - 1000);
+        const props = { ...validProps, createdAt: pastDate };
 
-      // Then
-      expect(user.createdAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
-      expect(user.createdAt.getTime()).toBeLessThanOrEqual(after.getTime());
-    });
-  });
+        expect(() => new User(props)).not.toThrow();
+      });
 
-  describe('fromPersistence', () => {
-    it('should reconstruct user from persistence data', () => {
-      // Given
-      const persistenceData = {
-        id: 'user-123' as UserId,
-        name: 'john-doe' as UserName,
-        createdAt: '2024-01-01T00:00:00.000Z',
-        isTest: false,
-      };
+      it('should accept current date', () => {
+        const currentDate = new Date();
+        const props = { ...validProps, createdAt: currentDate };
 
-      // When
-      const user = User.fromPersistence(persistenceData);
-
-      // Then
-      expect(user.id).toBe(persistenceData.id);
-      expect(user.name).toBe(persistenceData.name);
-      expect(user.createdAt).toEqual(new Date(persistenceData.createdAt));
-      expect(user.isTest).toBe(false);
-    });
-
-    it('should reconstruct test user from persistence data', () => {
-      // Given
-      const persistenceData = {
-        id: 'test-user-456' as UserId,
-        name: 'test-john' as UserName,
-        createdAt: '2024-01-01T00:00:00.000Z',
-        isTest: true,
-      };
-
-      // When
-      const user = User.fromPersistence(persistenceData);
-
-      // Then
-      expect(user.id).toBe(persistenceData.id);
-      expect(user.name).toBe(persistenceData.name);
-      expect(user.createdAt).toEqual(new Date(persistenceData.createdAt));
-      expect(user.isTest).toBe(true);
+        expect(() => new User(props)).not.toThrow();
+      });
     });
   });
 
-  describe('toPersistence', () => {
-    it('should convert user to persistence format', () => {
-      // Given
-      const user = User.create('john-doe' as UserName);
+  describe('equals', () => {
+    it('should return true for identical users', () => {
+      const user1 = new User(validProps);
+      const user2 = new User(validProps);
 
-      // When
-      const persistenceData = user.toPersistence();
-
-      // Then
-      expect(persistenceData.id).toBe(user.id);
-      expect(persistenceData.name).toBe(user.name);
-      expect(persistenceData.createdAt).toBe(user.createdAt.toISOString());
-      expect(persistenceData.isTest).toBe(user.isTest);
+      expect(user1.equals(user2)).toBe(true);
     });
 
-    it('should convert test user to persistence format', () => {
-      // Given
-      const user = User.create('test-user' as UserName, true);
+    it('should return false for users with different ids', () => {
+      const user1 = new User(validProps);
+      const user2 = new User({ ...validProps, id: 'different-id' });
 
-      // When
-      const persistenceData = user.toPersistence();
-
-      // Then
-      expect(persistenceData.id).toBe(user.id);
-      expect(persistenceData.name).toBe(user.name);
-      expect(persistenceData.createdAt).toBe(user.createdAt.toISOString());
-      expect(persistenceData.isTest).toBe(true);
+      expect(user1.equals(user2)).toBe(false);
     });
 
-    it('should maintain data integrity through persistence round-trip', () => {
-      // Given
-      const originalUser = User.create('round-trip-test' as UserName, true);
+    it('should return false for users with different names', () => {
+      const user1 = new User(validProps);
+      const user2 = new User({
+        ...validProps,
+        name: 'different-name',
+      });
 
-      // When
-      const persistenceData = originalUser.toPersistence();
-      const reconstructedUser = User.fromPersistence(persistenceData);
+      expect(user1.equals(user2)).toBe(false);
+    });
 
-      // Then
-      expect(reconstructedUser.id).toBe(originalUser.id);
-      expect(reconstructedUser.name).toBe(originalUser.name);
-      expect(reconstructedUser.createdAt).toEqual(originalUser.createdAt);
-      expect(reconstructedUser.isTest).toBe(originalUser.isTest);
+    it('should return false for users with different creation dates', () => {
+      const user1 = new User(validProps);
+      const user2 = new User({
+        ...validProps,
+        createdAt: new Date('2024-01-02T00:00:00Z'),
+      });
+
+      expect(user1.equals(user2)).toBe(false);
+    });
+
+    it('should return false for users with different isTest values', () => {
+      const user1 = new User(validProps);
+      const user2 = new User({ ...validProps, isTest: true });
+
+      expect(user1.equals(user2)).toBe(false);
     });
   });
 });

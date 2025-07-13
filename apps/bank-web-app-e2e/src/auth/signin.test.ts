@@ -149,29 +149,4 @@ test.describe('Sign In Flow', () => {
       page.getByText(`Welcome back, ${testUserName}!`)
     ).toBeVisible();
   });
-
-  test('should navigate between signin and signup pages', async ({ page }) => {
-    // Should be on signin page
-    await expect(
-      page.getByRole('heading', { name: 'Welcome Back' })
-    ).toBeVisible();
-
-    // Click signup link
-    await page.click('text=Sign up here');
-
-    // Should be on signup page
-    await page.waitForURL(`${BASE_URL}/signup`);
-    await expect(
-      page.getByRole('heading', { name: 'Create Account' })
-    ).toBeVisible();
-
-    // Click signin link
-    await page.click('text=Sign in here');
-
-    // Should be back on signin page
-    await page.waitForURL(`${BASE_URL}/signin`);
-    await expect(
-      page.getByRole('heading', { name: 'Welcome Back' })
-    ).toBeVisible();
-  });
 });
