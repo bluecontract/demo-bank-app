@@ -1,6 +1,7 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { createSanitizedStringSchema } from './sanitization';
+import { AccountDto, CreateAccountRequestDto } from './schemas';
 
 const c = initContract();
 
@@ -73,6 +74,16 @@ export const bankApiContract = c.router(
         // 400: AuthErrorResponseSchema,
       },
       summary: 'Sign in with existing name',
+    },
+
+    banking: {
+      createAccount: {
+        method: 'POST',
+        path: '/v1/accounts',
+        body: CreateAccountRequestDto,
+        responses: { 201: AccountDto },
+        summary: 'Create a bank account',
+      },
     },
   },
   {

@@ -5,7 +5,6 @@ import type {
   APIGatewayEventRequestContextV2,
   Context,
   Callback,
-  APIGatewayProxyResult,
 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
@@ -20,7 +19,10 @@ import {
   DescribeTableCommand,
 } from '@aws-sdk/client-dynamodb';
 import jwt from 'jsonwebtoken';
-import { assertAllSecurityHeaders } from './test-helpers/security-assertions';
+import {
+  assertAllSecurityHeaders,
+  DEFAULT_TEST_ORIGIN,
+} from './test-helpers/security-assertions';
 
 /**
  * Integration Tests - Test against LocalStack AWS services
@@ -108,7 +110,6 @@ describe('Bank API Integration Tests', () => {
           path,
         });
         expect(result.statusCode).toBe(204);
-        assertAllSecurityHeaders(result);
         expect(result.headers).toMatchObject({
           'access-control-allow-methods': 'GET,POST,OPTIONS',
           'access-control-allow-headers':
@@ -121,31 +122,19 @@ describe('Bank API Integration Tests', () => {
   describe('Health Endpoint', () => {
     it('should return health status with correct format', async () => {
       // Given
-      const result = await invokeApi({
+      const health = await invokeApi({
         method: 'GET',
         path: '/health',
       });
 
       // Then
-      expect(result.statusCode).toBe(200);
-      expect(result.body).toEqual({
+      expect(health.statusCode).toBe(200);
+      expect(health.body).toEqual({
         status: 'healthy',
         timestamp: expect.any(String),
         version: expect.any(String),
         environment: expect.any(String),
       });
-
-      const eventWithOrigin = createTestEvent('GET', '/health');
-      eventWithOrigin.headers['Origin'] = 'https://app.example.com';
-
-      const corsResult = (await handler(
-        eventWithOrigin,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      expect(corsResult.statusCode).toBe(200);
-      assertAllSecurityHeaders(corsResult);
     });
   });
 
@@ -170,7 +159,6 @@ describe('Bank API Integration Tests', () => {
         message:
           'A user with this name already exists. Please choose a different name.',
       });
-      assertAllSecurityHeaders(signUp);
     });
 
     it('should return 400 for invalid request data', async () => {
@@ -197,7 +185,6 @@ describe('Bank API Integration Tests', () => {
           },
         ],
       });
-      assertAllSecurityHeaders(signUp);
     });
 
     it('should create test user with shorter TTL when dev=true', async () => {
@@ -212,7 +199,6 @@ describe('Bank API Integration Tests', () => {
       expect(cookieHeader).toContain(
         `Max-Age=${TEST_CONFIG.testUserTtlSeconds}`
       );
-      assertAllSecurityHeaders(signUp);
     });
 
     it('should handle complex XSS payloads in account creation', async () => {
@@ -266,7 +252,6 @@ describe('Bank API Integration Tests', () => {
       expect(decoded.sub).toBe(signIn.body.userId);
       expect(decoded.iat).toBeDefined();
       expect(decoded.exp).toBeDefined();
-      assertAllSecurityHeaders(signIn);
     });
 
     it('should return 401 when signing in with non-existing username', async () => {
@@ -283,7 +268,6 @@ describe('Bank API Integration Tests', () => {
         message:
           'User not found. Please check the name and try again or sign up.',
       });
-      assertAllSecurityHeaders(signIn);
     });
 
     it('should return 400 for invalid sign-in request data', async () => {
@@ -314,22 +298,6 @@ describe('Bank API Integration Tests', () => {
         queryParameterErrors: null,
         headerErrors: null,
       });
-      assertAllSecurityHeaders(signIn);
-    });
-
-    it('should include CORS headers when Origin is provided', async () => {
-      const creds = await signupUniqueTestUser('cors-signin-test');
-      const signIn = await invokeApi({
-        method: 'POST',
-        path: '/auth/signin',
-        body: { name: creds.userName },
-        headers: { Origin: 'https://app.example.com' },
-      });
-      expect(signIn.statusCode).toBe(200);
-      expect(signIn.headers).toMatchObject({
-        'access-control-allow-origin': 'https://app.example.com',
-      });
-      assertAllSecurityHeaders(signIn);
     });
 
     it('should work with test users created via dev=true', async () => {
@@ -345,6 +313,65 @@ describe('Bank API Integration Tests', () => {
       expect(signIn.body.name).toBe(creds.userName);
       const cookieHeader = signIn.headers?.['set-cookie'] as string;
       expect(cookieHeader).toContain(`Max-Age=600`);
+    });
+  });
+
+  describe('Create Account Endpoint', () => {
+    let jwtCookie: string;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('account-user');
+      jwtCookie = creds.jwtCookie;
+    });
+
+    it('should create a new account for authenticated user', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Test Account' },
+      });
+      expect(result.statusCode).toBe(201);
+      expect(result.body).toMatchObject({
+        accountId: expect.any(String),
+        accountNumber: expect.any(String),
+        currency: 'USD',
+        createdAt: expect.any(String),
+        ledgerBalanceMinor: 0,
+        availableBalanceMinor: 0,
+        status: 'ACTIVE',
+      });
+    });
+
+    it('should return 401 if not authenticated', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        body: { name: 'Test Account' },
+      });
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+
+    it('should handle complex XSS payloads in account creation', async () => {
+      const name = 'Pure Account Name';
+      const maliciousAccountName = `<img src="x" onerror="alert('XSS')"><script>document.cookie='stolen'</script>${name}`;
+
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: maliciousAccountName },
+      });
+
+      expect(result.body.name).toBe(name);
+      expect(result.body.name).not.toContain('<img');
+      expect(result.body.name).not.toContain('<script>');
+      expect(result.body.name).not.toContain('onerror');
+      expect(result.body.name).not.toContain('alert');
     });
   });
 });
@@ -550,9 +577,8 @@ async function invokeApi({
   method,
   path,
   body,
-  userId,
   jwtCookie,
-  headers = {},
+  headers = { origin: DEFAULT_TEST_ORIGIN },
 }: {
   method: string;
   path: string;
@@ -564,13 +590,11 @@ async function invokeApi({
 }) {
   const event = createTestEvent(method, path, body);
   if (jwtCookie) event.headers['cookie'] = jwtCookie;
-  if (userId) (event as any).userId = userId;
   Object.assign(event.headers, headers);
   console.log('Invoking API', {
     method,
     path,
     body,
-    userId,
     jwtCookie,
     headers,
   });
@@ -580,9 +604,11 @@ async function invokeApi({
     body: string;
     cookies: string[];
   };
+  const responseBody = result.body ? JSON.parse(result.body) : result.body;
+  assertAllSecurityHeaders(result, headers.origin);
   return {
     ...result,
-    body: result.body ? JSON.parse(result.body) : result.body,
+    body: responseBody,
   };
 }
 
@@ -601,7 +627,6 @@ async function signupUniqueTestUser(
   if (!signUp.headers || typeof signUp.headers['set-cookie'] !== 'string') {
     throw new Error('Missing set-cookie header in signUp response');
   }
-  assertAllSecurityHeaders(signUp);
   return {
     userId: signUp.body.userId,
     jwtCookie: signUp.headers['set-cookie'],
