@@ -19,24 +19,27 @@ API Lambda  -->  Application Layer (Commands / Queries) -->  Domain  -->  Dynamo
 
 ## 2 Domain Model
 
-| Object              | Kind           | Responsibilities                                                                                                               |
-| ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Account**         | Aggregate Root | Identity (`account_id`, `accountNumber`), balances, status; invariants such as `ensureSufficientFunds` or `ensureActive`.      |
-| **Transaction**     | Value Object   | Immutable descriptor containing ordered Postings; already balanced on creation.                                                |
-| **Posting**         | Value Object   | Atomic debit/credit line (`account_id`, `amount_minor`, `side`, `description`). The DB-only `posting_id` guarantees unique SK. |
-| **BalanceSnapshot** | Projection     | Read‑model for fast balance fetch; updated synchronously or rebuilt from Postings.                                             |
+| Object              | Kind           | Responsibilities                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Account**         | Aggregate Root | Identity (`accountId`, `accountNumber`), balances, status; invariants such as `ensureSufficientFunds` or `ensureActive`.                                                                                                                                                                                                                                          |
+| **Transaction**     | Entity         | Represents a single, atomic movement of value across accounts. Contains an immutable, ordered set of Postings (debits and credits) that must be balanced (Σ debits = Σ credits) at creation. Enforces double-entry invariants, records type (FUNDING, TRANSFER), status, description, and idempotency key. Transaction identity is globally unique and immutable. |
+| **Posting**         | Value Object   | Atomic debit/credit line (`accountId`, `amountMinor`, `side`, `description`). The DB-only `postingId` guarantees unique SK.                                                                                                                                                                                                                                       |
+| **BalanceSnapshot** | Projection     | Read‑model for fast balance fetch; updated synchronously or rebuilt from Postings.                                                                                                                                                                                                                                                                                |
 
 ---
 
 ## 3 Commands & Queries
 
-| Command / Query                      | Key Business Rules                                                                              |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| `CreateAccount()`                    | Generate IDs; snapshot starts at 0; TTL if `isTest`.                                            |
-| `FundAccount(amount)`                | Allowed only to fund user's own account < $1M at once                                           |
-| `TransferMoney(src, dst, amt, memo)` | Destination exists & active (command); source `Account.ensureSufficientFunds(amt)` (aggregate). |
-| `GetBalance(acct)`                   | Pure read                                                                                       |
-| `ListTransactions(acct, page)`       | Pure read                                                                                       |
+| Command / Query                      | Key Business Rules                                                                                     |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `CreateAccount()`                    | Generate IDs; snapshot starts at 0; TTL if `isTest`.                                                   |
+| `FundAccount(amount)`                | Allowed only to fund user's own account < $1M at once                                                  |
+| `TransferMoney(src, dst, amt, desc)` | Accounts exist and active, account ownership; source `Account.ensureSufficientFunds(amt)` (aggregate). |
+| `GetAccount(accId)`                  | Pure read                                                                                              |
+| `GetAccountByNumber(accNumber)`      | Pure read                                                                                              |
+| `GetBalance(accId)`                  | Pure read                                                                                              |
+| `ListAccounts(userId)`               | Pure read                                                                                              |
+| `ListTransactions(acct, page)`       | Pure read                                                                                              |
 
 ---
 
@@ -45,17 +48,22 @@ API Lambda  -->  Application Layer (Commands / Queries) -->  Domain  -->  Dynamo
 ```mermaid
 sequenceDiagram
     participant API
-    participant CMD as TransferMoney Command
-    participant REP as Repository
-    participant DB as DynamoDB.BankTable
+    participant CMD as transferMoney Command
+    participant REPO as BankingRepository
+    participant DB as DynamoDB
 
-    API->>CMD: Execute(idemKey, src, dst, amt)
-    CMD->>REP: loadSnapshot(src), loadSnapshot(dst)
-    CMD->>CMD: src.ensureSufficientFunds(amt)
-    CMD->>CMD: validate cross-account rules
-    CMD->>REP: saveTransaction(txnVO, postings, snapshotUpdates, idemKey, ttl?)
-    REP->>DB: TransactWriteItems
-    CMD--)API: 201 { ledger_balance, available_balance }
+    API->>CMD: transferMoney(cmd, deps)
+    CMD->>REPO: loadAccount(srcAccountId)
+    CMD->>REPO: loadAccount(dstAccountId)
+    REPO-->>CMD: srcAccount, dstAccount
+    CMD->>CMD: Check src ownership, ensureSufficientFunds, ensure dst active
+    CMD->>CMD: Create debit/credit Postings
+    CMD->>CMD: Apply Postings to src/dst
+    CMD->>CMD: Transaction.create([debit, credit], meta)
+    CMD->>REPO: saveTransactionWithAccounts(txn, [src, dst], ctx)
+    REPO->>DB: TransactWriteItems (txn, postings, account snapshots, idempotency)
+    REPO-->>CMD: (success)
+    CMD-->>API: { transactionId, balances }
 ```
 
 Snapshot rows are **ADD**‑updated in the same transaction for read‑your‑write consistency.  
@@ -65,15 +73,18 @@ A dormant Stream + Projector Lambda can replace the in‑transaction update when
 
 ## 5 DynamoDB Single‑Table Schema
 
-| PK                   | SK            | Item Type       | Core Attributes                                              |
-| -------------------- | ------------- | --------------- | ------------------------------------------------------------ |
-| `ACCOUNT#<id>`       | `META`        | Account         | accountNumber, ownerUserId, createdAt, currency              |
-| `ACCOUNT#<id>`       | `BALANCE`     | BalanceSnapshot | ledger_balance_minor, available_balance_minor, version, ttl? |
-| `TXN#<txnId>`        | `META`        | TxnHeader       | type, status, createdAt, idempotencyKey, ttl?                |
-| `TXN#<txnId>`        | `POST#<n>`    | Posting         | account_id, amount_minor, side, description                  |
-| `IDEMPOTENCY#<hash>` | `<timestamp>` | Guard           | ttl?                                                         |
+| PK                        | SK            | Item Type         | Core Attributes                                                                 |
+| ------------------------- | ------------- | ----------------- | ------------------------------------------------------------------------------- |
+| `ACCOUNT#<id>`            | `META`        | Account           | accountNumber, ownerUserId, createdAt, currency, BANKING_GSI1PK, BANKING_GSI1SK |
+| `ACCOUNT#<id>`            | `BALANCE`     | BalanceSnapshot   | ledgerBalanceMinor, availableBalanceMinor, version, ttl?                        |
+| `ACCOUNT_NUMBER#<number>` | `RESERVE`     | NumberReservation | accountId                                                                       |
+| `TXN#<txnId>`             | `META`        | TxnHeader         | type, status, createdAt, description, idempotencyKey,                           |
+| `TXN#<txnId>`             | `POST#<n>`    | Posting           | accountId, amountMinor, side, createdAt, BANKING_GSI2PK, BANKING_GSI2SK         |
+| `IDEMPOTENCY#<hash>`      | `<timestamp>` | Guard             | ttl?                                                                            |
 
-**GSI1** – `(PK = ACCOUNT#id, SK begins_with <txnTs>)` for transaction feed.
+**BANKING_GSI1** – `(BANKING_GSI1PK = USER#id, BANKING_GSI1SK = createdAt)` list accounts per user.
+**Account Number Lookup** – Uses direct item access with reservation pattern: `PK = ACCOUNT_NUMBER#number, SK = RESERVE` for account number to ID lookups.
+**BANKING_GSI2** – `(BANKING_GSI2PK = ACCOUNT#id, BANKING_GSI2SK = POST#<createdAt>)` for transaction feed, sort by time
 
 ---
 
@@ -86,5 +97,5 @@ A dormant Stream + Projector Lambda can replace the in‑transaction update when
 
 ## 7 Observability
 
-- Structured logs incl. `txn_id`, duration, result.
+- Structured logs incl. `txnId`, duration, result.
 - Metrics: `txn_create_p95_ms`, `transaction_failed`, `transaction_commited`, `account_created`.

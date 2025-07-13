@@ -1,0 +1,86 @@
+{
+  "name": "@demo-blue/banking",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!**/*.tsbuildinfo"
+  ],
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "@nx/esbuild:esbuild",
+        "outputs": [
+          "{options.outputPath}"
+        ],
+        "options": {
+          "outputPath": "libs/banking/dist",
+          "main": "libs/banking/src/index.ts",
+          "tsConfig": "libs/banking/tsconfig.lib.json",
+          "format": [
+            "esm"
+          ],
+          "declarationRootDir": "libs/banking/src"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx vitest run --config vitest.config.ts --exclude **/*.integration.test.ts",
+          "cwd": "libs/banking",
+          "env": {
+            "VITEST_EXCLUDE_INTEGRATION": "true"
+          }
+        },
+        "dependsOn": [
+          "^build"
+        ]
+      },
+      "test:integration": {
+        "executor": "nx:run-commands",
+        "options": {
+          "commands": [
+            "find src -name '*.integration.test.ts' -exec npx vitest run --config vitest.config.ts {} +"
+          ],
+          "cwd": "libs/banking",
+          "parallel": false
+        },
+        "dependsOn": [
+          "^build",
+          "localstack:serve"
+        ]
+      },
+      "test:integration:ci": {
+        "executor": "nx:run-commands",
+        "options": {
+          "commands": [
+            "find src -name '*.integration.test.ts' -exec npx vitest run --config vitest.config.ts {} +"
+          ],
+          "cwd": "libs/banking",
+          "parallel": false
+        },
+        "dependsOn": [
+          "^build"
+        ]
+      }
+    }
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.840.0",
+    "@aws-sdk/lib-dynamodb": "^3.840.0",
+    "@demo-blue/shared-core": "*",
+    "@demo-blue/shared-observability": "*"
+  }
+}

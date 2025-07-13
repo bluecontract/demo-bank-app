@@ -19,10 +19,16 @@
       "path": "./libs/shared/bank-api-client"
     },
     {
+      "path": "./libs/shared/core"
+    },
+    {
       "path": "./libs/auth"
     },
     {
       "path": "./libs/shared/observability"
+    },
+    {
+      "path": "./libs/banking"
     }
   ]
 }
