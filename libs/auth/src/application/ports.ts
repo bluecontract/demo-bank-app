@@ -1,4 +1,4 @@
-import { User, UserId } from '../domain/entities/User';
+import { User } from '../domain/entities/User';
 import { AuthConfiguration } from '../domain/types';
 
 export type {
@@ -8,7 +8,7 @@ export type {
 } from '@demo-blue/shared-observability';
 
 export interface JwtPayload {
-  sub: UserId;
+  sub: User['id'];
   iat: number;
   exp: number;
   isTest?: boolean;
@@ -17,8 +17,8 @@ export interface JwtPayload {
 // Repository ports
 export interface UserRepository {
   save(user: User): Promise<User>;
-  findById(id: UserId): Promise<User | null>;
-  findByName(name: string): Promise<User | null>;
+  findById(id: User['id']): Promise<User | null>;
+  findByName(name: User['name']): Promise<User | null>;
 }
 
 // Service ports
@@ -29,13 +29,13 @@ export interface JwtService {
    * @param isTest Whether this is a test user (affects TTL)
    * @returns Promise resolving to the JWT token string
    */
-  generateToken(userId: UserId, isTest?: boolean): Promise<string>;
+  generateToken(userId: User['id'], isTest?: boolean): Promise<string>;
 
   /**
    * Verify and decode a JWT token
    * @param token The JWT token to verify
    * @returns Promise resolving to the decoded payload
-   * @throws InvalidTokenError if token is invalid
+   * @throws TokenVerificationError if token is invalid
    * @throws TokenExpiredError if token has expired
    */
   verifyToken(token: string): Promise<JwtPayload>;

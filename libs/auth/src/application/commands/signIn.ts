@@ -1,19 +1,15 @@
-import { UserNotFoundError } from '../../domain/errors';
+import {
+  UserNotFoundError,
+  TokenGenerationError,
+} from '../../infrastructure/errors';
+import { AuthError } from '../errors';
 import type { UserRepository, JwtService, Logger, Metrics } from '../ports';
+import { AuthResult } from '../dtos';
 import { TimingUtils } from '@demo-blue/shared-observability';
+import { User } from '../../domain/entities/User';
 
 export interface SignInCommand {
   name: string;
-}
-
-export interface SignInResult {
-  user: {
-    id: string;
-    name: string;
-    createdAt: string;
-    isTest: boolean;
-  };
-  token: string;
 }
 
 export interface SignInDependencies {
@@ -23,10 +19,22 @@ export interface SignInDependencies {
   metrics: Metrics;
 }
 
+function toAuthResult(user: User, token: string): AuthResult {
+  return {
+    user: {
+      id: user.id,
+      name: user.name,
+      createdAt: user.createdAt.toISOString(),
+      isTest: user.isTest,
+    },
+    token,
+  };
+}
+
 export async function signIn(
   command: SignInCommand,
   dependencies: SignInDependencies
-): Promise<SignInResult> {
+): Promise<AuthResult> {
   const { userRepository, jwtService, logger, metrics } = dependencies;
 
   const { name } = command;
@@ -80,23 +88,15 @@ export async function signIn(
       ...TimingUtils.createTimingMetadata(completedTiming),
     });
 
-    return {
-      user: {
-        id: foundUser.id,
-        name: foundUser.name,
-        createdAt: foundUser.createdAt.toISOString(),
-        isTest: foundUser.isTest,
-      },
-      token,
-    };
+    return toAuthResult(foundUser, token);
   } catch (error: unknown) {
+    const failedTiming = TimingUtils.endTiming(timing);
+
     if (error instanceof UserNotFoundError) {
       throw error;
     }
 
-    const failedTiming = TimingUtils.endTiming(timing);
-
-    if (error instanceof Error && error.message.includes('JWT')) {
+    if (error instanceof TokenGenerationError) {
       logger.error('JWT generation failed during sign-in', {
         userName: name,
         userId: foundUser?.id || 'unknown',
@@ -107,7 +107,7 @@ export async function signIn(
       throw error;
     }
 
-    logger.error('User sign-in failed', {
+    logger.error('Unexpected error during user sign-in', {
       userName: name,
       error: error instanceof Error ? error.message : 'Unknown error',
       ...TimingUtils.createTimingMetadata(failedTiming),
@@ -115,6 +115,9 @@ export async function signIn(
 
     metrics.addMetric('UserSignInUnknownError', 'Count', 1);
 
-    throw error;
+    throw new AuthError(
+      'Unexpected error during user sign-in',
+      error instanceof Error ? error : new Error(String(error))
+    );
   }
 }

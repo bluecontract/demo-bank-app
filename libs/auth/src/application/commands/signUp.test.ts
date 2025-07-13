@@ -1,209 +1,232 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { signUp, SignUpCommand, SignUpDependencies } from './signUp';
+import { signUp } from './signUp';
+import type { SignUpCommand, SignUpDependencies } from './signUp';
+import { User } from '../../domain/entities/User';
+import {
+  TokenGenerationError,
+  UserAlreadyExistsError,
+} from '../../infrastructure/errors';
 import type { UserRepository, JwtService, Logger, Metrics } from '../ports';
-import { User, UserName } from '../../domain/entities/User';
-import { UserAlreadyExistsError } from '../../domain/errors';
-
-// Mock dependencies
-const mockUserRepository: UserRepository = {
-  save: vi.fn(),
-  findById: vi.fn(),
-  findByName: vi.fn(),
-};
-
-const mockJwtService: JwtService = {
-  generateToken: vi.fn(),
-  verifyToken: vi.fn(),
-};
-
-const mockLogger: Logger = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-  setCorrelationId: vi.fn(),
-};
-
-const mockMetrics: Metrics = {
-  addMetric: vi.fn(),
-  addMetadata: vi.fn(),
-  publishStoredMetrics: vi.fn(),
-  setDefaultDimensions: vi.fn(),
-};
-
-const dependencies: SignUpDependencies = {
-  userRepository: mockUserRepository,
-  jwtService: mockJwtService,
-  logger: mockLogger,
-  metrics: mockMetrics,
-};
+import { AuthError } from '../errors';
 
 describe('signUp', () => {
+  const mockUserRepository: UserRepository = {
+    save: vi.fn(),
+    findById: vi.fn(),
+    findByName: vi.fn(),
+  };
+
+  const mockJwtService: JwtService = {
+    generateToken: vi.fn(),
+    verifyToken: vi.fn(),
+  };
+
+  const mockLogger: Logger = {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    setCorrelationId: vi.fn(),
+    addContext: vi.fn(),
+  };
+
+  const mockMetrics: Metrics = {
+    addMetric: vi.fn(),
+    addMetadata: vi.fn(),
+    publishStoredMetrics: vi.fn(),
+    setDefaultDimensions: vi.fn(),
+  };
+
+  const dependencies: SignUpDependencies = {
+    userRepository: mockUserRepository,
+    jwtService: mockJwtService,
+    logger: mockLogger,
+    metrics: mockMetrics,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('execute', () => {
-    it('should successfully sign up a new user', async () => {
-      const command: SignUpCommand = {
-        name: 'johndoe',
-        isTest: false,
-      };
+  it('should create and save a new user successfully', async () => {
+    // Given
+    const command: SignUpCommand = { name: 'john-doe', isTest: false };
 
-      const mockUser = User.create('johndoe' as UserName, false);
-      const mockToken = 'jwt-token-123';
-
-      vi.mocked(mockUserRepository.save).mockResolvedValue(mockUser);
-      vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
-
-      const result = await signUp(command, dependencies);
-
-      expect(mockUserRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          name: 'johndoe',
-          isTest: false,
-        })
-      );
-      expect(mockJwtService.generateToken).toHaveBeenCalledWith(
-        mockUser.id,
-        mockUser.isTest
-      );
-      expect(mockMetrics.addMetric).toHaveBeenCalledWith(
-        'UserSignUp',
-        'Count',
-        1
-      );
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'User sign-up completed successfully',
-        expect.objectContaining({
-          userName: 'johndoe',
-          userId: mockUser.id,
-          isTest: false,
-        })
-      );
-
-      expect(result).toEqual({
-        user: {
-          id: mockUser.id,
-          name: 'johndoe',
-          createdAt: mockUser.createdAt.toISOString(),
-          isTest: false,
-        },
-        token: mockToken,
-      });
+    const mockUser = new User({
+      id: 'user-123',
+      name: 'john-doe',
+      createdAt: new Date(),
+      isTest: false,
     });
+    const mockToken = 'jwt-token-123';
 
-    it('should successfully sign up a test user', async () => {
-      const command: SignUpCommand = {
+    vi.mocked(mockUserRepository.save).mockResolvedValue(mockUser);
+    vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
+
+    // When
+    const result = await signUp(command, dependencies);
+
+    // Then
+    expect(result.user.id).toBe('user-123');
+    expect(result.user.name).toBe('john-doe');
+    expect(result.user.isTest).toBe(false);
+    expect(result.token).toBe(mockToken);
+    expect(mockUserRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'john-doe',
+        isTest: false,
+      })
+    );
+    expect(mockJwtService.generateToken).toHaveBeenCalledWith(
+      'user-123',
+      false
+    );
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      'User sign-up completed successfully',
+      expect.objectContaining({
+        userName: 'john-doe',
+        userId: 'user-123',
+        isTest: false,
+      })
+    );
+    expect(mockMetrics.addMetric).toHaveBeenCalledWith(
+      'UserSignUp',
+      'Count',
+      1
+    );
+  });
+
+  it('should create and save a test user successfully', async () => {
+    // Given
+    const command: SignUpCommand = { name: 'test-user', isTest: true };
+
+    const mockUser = new User({
+      id: 'test-user-123',
+      name: 'test-user',
+      createdAt: new Date(),
+      isTest: true,
+    });
+    const mockToken = 'jwt-token-test';
+
+    vi.mocked(mockUserRepository.save).mockResolvedValue(mockUser);
+    vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
+
+    // When
+    const result = await signUp(command, dependencies);
+
+    // Then
+    expect(result.user.id).toBe('test-user-123');
+    expect(result.user.name).toBe('test-user');
+    expect(result.user.isTest).toBe(true);
+    expect(result.token).toBe(mockToken);
+    expect(mockUserRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
         name: 'test-user',
         isTest: true,
-      };
+      })
+    );
+    expect(mockJwtService.generateToken).toHaveBeenCalledWith(
+      'test-user-123',
+      true
+    );
+    expect(mockMetrics.addMetric).toHaveBeenCalledWith(
+      'TestUserSignUp',
+      'Count',
+      1
+    );
+  });
 
-      const mockUser = User.create('test-user' as UserName, true);
-      const mockToken = 'jwt-token-test';
+  it('should throw UserAlreadyExistsError when user already exists', async () => {
+    // Given
+    const command: SignUpCommand = { name: 'existing-user' };
 
-      vi.mocked(mockUserRepository.save).mockResolvedValue(mockUser);
-      vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
+    const userAlreadyExistsError = new UserAlreadyExistsError('existing-user');
+    vi.mocked(mockUserRepository.save).mockRejectedValue(
+      userAlreadyExistsError
+    );
 
-      const result = await signUp(command, dependencies);
+    // When & Then
+    await expect(signUp(command, dependencies)).rejects.toThrow(
+      new UserAlreadyExistsError('existing-user')
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'User sign-up failed',
+      expect.objectContaining({
+        userName: 'existing-user',
+        error: 'User already exists',
+      })
+    );
+    expect(mockMetrics.addMetric).toHaveBeenCalledWith(
+      'UserSignUpError',
+      'Count',
+      1
+    );
+  });
 
-      expect(mockMetrics.addMetric).toHaveBeenCalledWith(
-        'TestUserSignUp',
-        'Count',
-        1
-      );
-      expect(result.user.isTest).toBe(true);
+  it('should rethrow error when JWT generation fails', async () => {
+    // Given
+    const command: SignUpCommand = { name: 'test-user' };
+
+    const mockUser = new User({
+      id: 'user-123',
+      name: 'test-user',
+      createdAt: new Date(),
+      isTest: false,
     });
+    const jwtError = new TokenGenerationError('user-123');
 
-    it('should throw UserAlreadyExistsError when user already exists', async () => {
-      const command: SignUpCommand = {
-        name: 'existinguser',
-      };
+    vi.mocked(mockUserRepository.save).mockResolvedValue(mockUser);
+    vi.mocked(mockJwtService.generateToken).mockRejectedValue(jwtError);
 
-      const error = new UserAlreadyExistsError('existinguser');
-      vi.mocked(mockUserRepository.save).mockRejectedValue(error);
+    // When & Then
+    await expect(signUp(command, dependencies)).rejects.toThrow(
+      new TokenGenerationError('user-123')
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'JWT generation failed during sign-up',
+      expect.objectContaining({
+        userName: 'test-user',
+        userId: 'user-123',
+        error: "Failed to generate token for user 'user-123'",
+      })
+    );
+    expect(mockMetrics.addMetric).toHaveBeenCalledWith(
+      'UserSignUpJwtError',
+      'Count',
+      1
+    );
+  });
 
-      await expect(signUp(command, dependencies)).rejects.toThrow(
-        UserAlreadyExistsError
-      );
+  it('should throw AuthError when unexpected error occurs', async () => {
+    // Given
+    const command: SignUpCommand = { name: 'test-user' };
 
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'User sign-up failed',
-        expect.objectContaining({
-          userName: 'existinguser',
-          error: 'User already exists',
-        })
-      );
-      expect(mockMetrics.addMetric).toHaveBeenCalledWith(
-        'UserSignUpError',
-        'Count',
-        1
-      );
+    const mockUser = new User({
+      id: 'user-123',
+      name: 'test-user',
+      createdAt: new Date(),
+      isTest: false,
     });
+    const unexpectedError = new Error('Unexpected error');
 
-    it('should handle repository errors gracefully', async () => {
-      const command: SignUpCommand = {
-        name: 'johndoe',
-      };
+    vi.mocked(mockUserRepository.save).mockResolvedValue(mockUser);
+    vi.mocked(mockJwtService.generateToken).mockRejectedValue(unexpectedError);
 
-      const error = new Error('Database connection failed');
-      vi.mocked(mockUserRepository.save).mockRejectedValue(error);
-
-      await expect(signUp(command, dependencies)).rejects.toThrow(
-        'Database connection failed'
-      );
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'User sign-up failed',
-        expect.objectContaining({
-          userName: 'johndoe',
-          error: 'Database connection failed',
-        })
-      );
-    });
-
-    it('should handle JWT service errors gracefully', async () => {
-      const command: SignUpCommand = {
-        name: 'johndoe',
-      };
-
-      const mockUser = User.create('johndoe' as UserName, false);
-      const jwtError = new Error('JWT generation failed');
-
-      vi.mocked(mockUserRepository.save).mockResolvedValue(mockUser);
-      vi.mocked(mockJwtService.generateToken).mockRejectedValue(jwtError);
-
-      await expect(signUp(command, dependencies)).rejects.toThrow(
-        'JWT generation failed'
-      );
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'JWT generation failed during sign-up',
-        expect.objectContaining({
-          userName: 'johndoe',
-          userId: mockUser.id,
-          error: 'JWT generation failed',
-        })
-      );
-    });
-
-    it('should handle unknown errors gracefully', async () => {
-      const command: SignUpCommand = {
-        name: 'johndoe',
-      };
-
-      const unknownError = new Error('Something went wrong');
-      vi.mocked(mockUserRepository.save).mockRejectedValue(unknownError);
-
-      await expect(signUp(command, dependencies)).rejects.toThrow(unknownError);
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'User sign-up failed',
-        expect.objectContaining({
-          userName: 'johndoe',
-          error: 'Something went wrong',
-        })
-      );
-    });
+    // When & Then
+    await expect(signUp(command, dependencies)).rejects.toThrow(
+      new AuthError('Unexpected error during user sign-up', unexpectedError)
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Unexpected error during user sign-up',
+      expect.objectContaining({
+        userName: 'test-user',
+        error: 'Unexpected error',
+      })
+    );
+    expect(mockMetrics.addMetric).toHaveBeenCalledWith(
+      'UserSignUpUnknownError',
+      'Count',
+      1
+    );
   });
 });

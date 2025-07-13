@@ -34,6 +34,46 @@
           ],
           "declarationRootDir": "libs/auth/src"
         }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx vitest run --config vite.config.ts --exclude **/*.integration.test.ts",
+          "cwd": "libs/auth",
+          "env": {
+            "VITEST_EXCLUDE_INTEGRATION": "true"
+          }
+        },
+        "dependsOn": [
+          "^build"
+        ]
+      },
+      "test:integration": {
+        "executor": "nx:run-commands",
+        "options": {
+          "commands": [
+            "find src -name '*.integration.test.ts' -exec npx vitest run --config vite.config.ts {} +"
+          ],
+          "cwd": "libs/auth",
+          "parallel": false
+        },
+        "dependsOn": [
+          "^build",
+          "localstack:serve"
+        ]
+      },
+      "test:integration:ci": {
+        "executor": "nx:run-commands",
+        "options": {
+          "commands": [
+            "find src -name '*.integration.test.ts' -exec npx vitest run --config vite.config.ts {} +"
+          ],
+          "cwd": "libs/auth",
+          "parallel": false
+        },
+        "dependsOn": [
+          "^build"
+        ]
       }
     }
   },

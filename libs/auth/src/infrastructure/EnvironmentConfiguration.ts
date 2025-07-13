@@ -1,6 +1,6 @@
 import type { Configuration } from '../application/ports';
 import type { AuthConfiguration } from '../domain/types';
-import { AppError } from '../domain/errors';
+import { AppError } from '@demo-blue/shared-core';
 import type { LogLevel } from '@demo-blue/shared-observability';
 
 export class ConfigurationValidationError extends AppError {
@@ -16,13 +16,16 @@ export class ConfigurationValidationError extends AppError {
 }
 
 export class EnvironmentConfiguration implements Configuration {
-  private readonly requiredVariables = ['DYNAMO_TABLE_NAME', 'JWT_SECRET_ARN'];
+  private readonly requiredVariables = [
+    'AUTH_DYNAMO_TABLE_NAME',
+    'JWT_SECRET_ARN',
+  ];
 
   async getAuthConfig(): Promise<AuthConfiguration> {
     this.validateConfiguration();
 
     return {
-      dynamoTableName: this.getRequiredStringEnv('DYNAMO_TABLE_NAME'),
+      dynamoTableName: this.getRequiredStringEnv('AUTH_DYNAMO_TABLE_NAME'),
       jwtSecretArn: this.getRequiredStringEnv('JWT_SECRET_ARN'),
       jwtTtlSeconds: this.getNumberEnv('JWT_TTL_SECONDS', 3600),
       testUserTtlSeconds: this.getNumberEnv('TEST_USER_TTL_SECONDS', 86400),

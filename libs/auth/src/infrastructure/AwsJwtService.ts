@@ -4,14 +4,20 @@ import {
 } from '@aws-sdk/client-secrets-manager';
 import jwt from 'jsonwebtoken';
 import type { JwtService, JwtPayload } from '../application/ports';
-import { UserId } from '../domain/entities/User';
-import { InvalidTokenError, TokenExpiredError } from '../domain/errors';
+import { User } from '../domain/entities/User';
+import {
+  TokenVerificationError,
+  TokenExpiredError,
+  TokenGenerationError,
+  TokenServiceError,
+} from './errors';
 import { AwsResilienceConfigBuilder } from '@demo-blue/shared-observability';
 
 export interface AwsJwtServiceConfig {
   region: string;
   jwtSecretArn: string;
   endpoint?: string; // For LocalStack testing
+  credentials?: { accessKeyId: string; secretAccessKey: string };
 }
 
 export class AwsJwtService implements JwtService {
@@ -24,12 +30,13 @@ export class AwsJwtService implements JwtService {
     this.secretsClient = new SecretsManagerClient({
       region: config.region,
       ...(config.endpoint && { endpoint: config.endpoint }),
+      ...(config.credentials && { credentials: config.credentials }),
       ...AwsResilienceConfigBuilder.toAwsConfig(resilienceConfig),
     });
     this.jwtSecretArn = config.jwtSecretArn;
   }
 
-  async generateToken(userId: UserId, isTest?: boolean): Promise<string> {
+  async generateToken(userId: User['id'], isTest?: boolean): Promise<string> {
     const secret = await this.getJwtSecret();
     const now = Math.floor(Date.now() / 1000);
 
@@ -42,8 +49,12 @@ export class AwsJwtService implements JwtService {
       exp: now + ttl,
       ...(isTest && { isTest: true }),
     };
-
-    return jwt.sign(payload, secret, { algorithm: 'HS256' });
+    try {
+      return jwt.sign(payload, secret, { algorithm: 'HS256' });
+    } catch (error: unknown) {
+      const cause = error instanceof Error ? error : undefined;
+      throw new TokenGenerationError(userId, cause);
+    }
   }
 
   async verifyToken(token: string): Promise<JwtPayload> {
@@ -58,18 +69,13 @@ export class AwsJwtService implements JwtService {
       const cause = error instanceof Error ? error : undefined;
 
       if (this.isTokenExpiredError(error)) {
-        console.error('Token verification failed - token expired:', {
-          error: cause?.message || 'Unknown error',
-        });
         throw new TokenExpiredError(cause);
       }
 
       const errorMessage =
         error instanceof Error ? error.message : 'Token verification failed';
-      console.error('Token verification failed - invalid token:', {
-        error: errorMessage,
-      });
-      throw new InvalidTokenError(errorMessage, cause);
+
+      throw new TokenVerificationError(errorMessage, cause);
     }
   }
 
@@ -86,12 +92,14 @@ export class AwsJwtService implements JwtService {
       const response = await this.secretsClient.send(command);
 
       if (!response.SecretString) {
-        throw new Error(`JWT secret not found: ${this.jwtSecretArn}`);
+        throw new TokenServiceError(
+          `JWT secret not found: ${this.jwtSecretArn}`
+        );
       }
 
       const secretData = JSON.parse(response.SecretString);
       if (!secretData.secret || typeof secretData.secret !== 'string') {
-        throw new Error(
+        throw new TokenServiceError(
           `JWT secret key not found in secret: ${this.jwtSecretArn}`
         );
       }
@@ -99,7 +107,14 @@ export class AwsJwtService implements JwtService {
       this.jwtSecret = secretData.secret as string;
       return this.jwtSecret;
     } catch (error) {
-      throw new Error(`Failed to retrieve JWT secret: ${error}`);
+      if (error instanceof TokenServiceError) {
+        throw error;
+      }
+      const cause = error instanceof Error ? error : undefined;
+      throw new TokenServiceError(
+        `Failed to retrieve JWT secret from ${this.jwtSecretArn}`,
+        cause
+      );
     }
   }
 

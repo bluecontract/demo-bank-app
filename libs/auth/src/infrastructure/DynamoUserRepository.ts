@@ -6,13 +6,8 @@ import {
   TransactWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import type { UserRepository } from '../application/ports';
-import {
-  User,
-  UserId,
-  UserName,
-  UserPersistenceData,
-} from '../domain/entities/User';
-import { UserAlreadyExistsError } from '../domain/errors';
+import { User } from '../domain/entities/User';
+import { UserAlreadyExistsError, AuthRepositoryError } from './errors';
 import { AwsResilienceConfigBuilder } from '@demo-blue/shared-observability';
 
 export interface DynamoUserRepositoryConfig {
@@ -20,12 +15,13 @@ export interface DynamoUserRepositoryConfig {
   region: string;
   testUserTtlSeconds: number;
   endpoint?: string; // For LocalStack testing
+  credentials?: { accessKeyId: string; secretAccessKey: string };
 }
 
 interface UsernameReservationDbItem {
   PK: string; // USERNAME#{userName}
   SK: 'USERNAME';
-  userId: UserId;
+  userId: User['id'];
   createdAt: string;
   ttl?: number; // Optional TTL for test users
 }
@@ -33,10 +29,10 @@ interface UsernameReservationDbItem {
 interface UserProfileDbItem {
   PK: string; // USER#{userId}
   SK: 'PROFILE';
-  GSI1PK: string; // USERNAME#{userName}
-  GSI1SK: 'PROFILE';
-  id: UserId;
-  name: UserName;
+  AUTH_GSI1PK: string; // USERNAME#{userName}
+  AUTH_GSI1SK: 'PROFILE';
+  id: User['id'];
+  name: User['name'];
   createdAt: string;
   isTest: boolean;
   ttl?: number; // Optional TTL for test users
@@ -46,8 +42,8 @@ interface UserProfileDbItem {
 interface UnknownDbItem {
   PK?: string;
   SK?: string;
-  GSI1PK?: string;
-  GSI1SK?: string;
+  AUTH_GSI1PK?: string;
+  AUTH_GSI1SK?: string;
   id?: string;
   name?: string;
   createdAt?: string;
@@ -66,6 +62,7 @@ export class DynamoUserRepository implements UserRepository {
     const dynamoClient = new DynamoDBClient({
       region: config.region,
       ...(config.endpoint && { endpoint: config.endpoint }),
+      ...(config.credentials && { credentials: config.credentials }),
       ...AwsResilienceConfigBuilder.toAwsConfig(resilienceConfig),
     });
 
@@ -75,10 +72,8 @@ export class DynamoUserRepository implements UserRepository {
   }
 
   async save(user: User): Promise<User> {
-    const persistence = user.toPersistence();
-    const userProfileItem = this.toUserProfileDbItem(persistence);
-    const usernameReservationItem =
-      this.toUsernameReservationDbItem(persistence);
+    const userProfileItem = this.buildUserProfileItem(user);
+    const usernameReservationItem = this.buildUsernameReservationItem(user);
 
     try {
       await this.client.send(
@@ -104,15 +99,21 @@ export class DynamoUserRepository implements UserRepository {
 
       return user;
     } catch (error: unknown) {
-      if (this.isConditionalCheckFailedException(error)) {
+      if (
+        this.isConditionalCheckFailedException(error) ||
+        this.isTransactionCanceledException(error)
+      ) {
         throw new UserAlreadyExistsError(user.name);
       }
 
-      throw error;
+      throw new AuthRepositoryError(
+        'save user',
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
-  async findById(userId: UserId): Promise<User | null> {
+  async findById(userId: User['id']): Promise<User | null> {
     try {
       const result = await this.client.send(
         new GetCommand({
@@ -128,23 +129,22 @@ export class DynamoUserRepository implements UserRepository {
         return null;
       }
 
-      return this.fromDbItem(result.Item);
+      return this.mapToUser(result.Item);
     } catch (error: unknown) {
-      console.error('Error finding user by ID in database:', {
-        userId,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      return null;
+      throw new AuthRepositoryError(
+        'find user by id',
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
-  async findByName(userName: UserName): Promise<User | null> {
+  async findByName(userName: User['name']): Promise<User | null> {
     try {
       const result = await this.client.send(
         new QueryCommand({
           TableName: this.tableName,
-          IndexName: 'GSI1',
-          KeyConditionExpression: 'GSI1PK = :name AND GSI1SK = :sk',
+          IndexName: 'AUTH_GSI1',
+          KeyConditionExpression: 'AUTH_GSI1PK = :name AND AUTH_GSI1SK = :sk',
           ExpressionAttributeValues: {
             ':name': `USERNAME#${userName}`,
             ':sk': 'PROFILE',
@@ -156,85 +156,111 @@ export class DynamoUserRepository implements UserRepository {
         return null;
       }
 
-      return this.fromDbItem(result.Items[0]);
+      return this.mapToUser(result.Items[0]);
     } catch (error: unknown) {
-      console.error('Error finding user by name in database:', {
-        userName,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      return null;
+      throw new AuthRepositoryError(
+        'find user by name',
+        error instanceof Error ? error : undefined
+      );
     }
   }
 
-  private toUsernameReservationDbItem(
-    persistence: UserPersistenceData
-  ): UsernameReservationDbItem {
+  private buildUsernameReservationItem(user: User): UsernameReservationDbItem {
     const item: UsernameReservationDbItem = {
-      PK: `USERNAME#${persistence.name}`,
+      PK: `USERNAME#${user.name}`,
       SK: 'USERNAME', // Fixed value for username reservations
-      userId: persistence.id,
-      createdAt: persistence.createdAt,
+      userId: user.id,
+      createdAt: user.createdAt.toISOString(),
     };
 
     // Add TTL for test users
-    if (persistence.isTest) {
+    if (user.isTest) {
       item.ttl = Math.floor(Date.now() / 1000) + this.testUserTtlSeconds;
     }
 
     return item;
   }
 
-  private toUserProfileDbItem(
-    persistence: UserPersistenceData
-  ): UserProfileDbItem {
+  private buildUserProfileItem(user: User): UserProfileDbItem {
     const item: UserProfileDbItem = {
-      PK: `USER#${persistence.id}`,
+      PK: `USER#${user.id}`,
       SK: 'PROFILE', // Use PROFILE for user authentication data
-      GSI1PK: `USERNAME#${persistence.name}`,
-      GSI1SK: 'PROFILE', // Only index profile records for username lookup
-      id: persistence.id,
-      name: persistence.name,
-      createdAt: persistence.createdAt,
-      isTest: persistence.isTest,
+      AUTH_GSI1PK: `USERNAME#${user.name}`,
+      AUTH_GSI1SK: 'PROFILE', // Only index profile records for username lookup
+      id: user.id,
+      name: user.name,
+      createdAt: user.createdAt.toISOString(),
+      isTest: user.isTest,
     };
 
     // Add TTL for test users
-    if (persistence.isTest) {
+    if (user.isTest) {
       item.ttl = Math.floor(Date.now() / 1000) + this.testUserTtlSeconds;
     }
 
     return item;
   }
 
-  private fromDbItem(item: UnknownDbItem): User {
-    // Validate required fields exist and have correct types
-    if (!item.id || !item.name || !item.createdAt) {
-      throw new Error('Invalid user item: missing required fields');
+  private mapToUser(item: UnknownDbItem): User {
+    try {
+      // Validate required fields exist and have correct types
+      if (!item.id || !item.name || !item.createdAt) {
+        throw new Error('Invalid user item: missing required fields');
+      }
+
+      if (
+        typeof item.id !== 'string' ||
+        typeof item.name !== 'string' ||
+        typeof item.createdAt !== 'string'
+      ) {
+        throw new Error('Invalid user item: incorrect field types');
+      }
+
+      const createdAt = new Date(item.createdAt);
+      if (isNaN(createdAt.getTime())) {
+        throw new Error('Invalid user item: invalid createdAt date');
+      }
+
+      // Handle isTest field - use explicit type assertion after validation
+      const isTestValue = item.isTest;
+      if (
+        isTestValue !== undefined &&
+        isTestValue !== null &&
+        typeof isTestValue !== 'boolean'
+      ) {
+        throw new Error('Invalid user item: isTest must be boolean');
+      }
+      const isTest = (isTestValue as boolean) ?? false;
+
+      return new User({
+        id: item.id,
+        name: item.name,
+        createdAt,
+        isTest,
+      });
+    } catch (error: unknown) {
+      throw new AuthRepositoryError(
+        'map database item to user',
+        error instanceof Error ? error : undefined
+      );
     }
-
-    if (
-      typeof item.id !== 'string' ||
-      typeof item.name !== 'string' ||
-      typeof item.createdAt !== 'string'
-    ) {
-      throw new Error('Invalid user item: incorrect field types');
-    }
-
-    const persistence: UserPersistenceData = {
-      id: item.id as UserId,
-      name: item.name as UserName,
-      createdAt: item.createdAt,
-      isTest: item.isTest || false,
-    };
-
-    return User.fromPersistence(persistence);
   }
 
   private isConditionalCheckFailedException(error: unknown): boolean {
-    return (
-      error instanceof Error &&
-      (error.name === 'ConditionalCheckFailedException' ||
-        error.name === 'TransactionCanceledException')
+    return Boolean(
+      error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        error.name === 'ConditionalCheckFailedException'
+    );
+  }
+
+  private isTransactionCanceledException(error: unknown): boolean {
+    return Boolean(
+      error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        error.name === 'TransactionCanceledException'
     );
   }
 }

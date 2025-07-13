@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DynamoUserRepository } from './DynamoUserRepository';
-import { User, UserId, UserName } from '../domain/entities/User';
-import { UserAlreadyExistsError } from '../domain/errors';
+import { User } from '../domain/entities/User';
+import { UserAlreadyExistsError, AuthRepositoryError } from './errors';
+import { randomUUID } from 'crypto';
 
 // Mock AWS SDK
 const mockSend = vi.fn();
@@ -46,7 +47,12 @@ describe('DynamoUserRepository', () => {
   describe('save', () => {
     it('should save a new user successfully', async () => {
       // Given
-      const user = User.create('john-doe' as UserName);
+      const user = new User({
+        id: randomUUID(),
+        name: 'john-doe',
+        isTest: false,
+        createdAt: new Date(),
+      });
       mockSend.mockResolvedValueOnce({});
 
       // When
@@ -80,8 +86,8 @@ describe('DynamoUserRepository', () => {
                 Item: expect.objectContaining({
                   PK: `USER#${user.id}`,
                   SK: 'PROFILE',
-                  GSI1PK: `USERNAME#${user.name}`,
-                  GSI1SK: 'PROFILE',
+                  AUTH_GSI1PK: `USERNAME#${user.name}`,
+                  AUTH_GSI1SK: 'PROFILE',
                   id: user.id,
                   name: user.name,
                   isTest: false,
@@ -99,7 +105,12 @@ describe('DynamoUserRepository', () => {
 
     it('should throw UserAlreadyExistsError when user already exists (ConditionalCheckFailedException)', async () => {
       // Given
-      const user = User.create('john-doe' as UserName);
+      const user = new User({
+        id: randomUUID(),
+        name: 'john-doe',
+        isTest: false,
+        createdAt: new Date(),
+      });
 
       const conditionalError = new Error('The conditional request failed');
       conditionalError.name = 'ConditionalCheckFailedException';
@@ -117,7 +128,12 @@ describe('DynamoUserRepository', () => {
 
     it('should throw UserAlreadyExistsError when transaction is cancelled (TransactionCanceledException)', async () => {
       // Given
-      const user = User.create('john-doe' as UserName);
+      const user = new User({
+        id: randomUUID(),
+        name: 'john-doe',
+        isTest: false,
+        createdAt: new Date(),
+      });
 
       const transactionError = new Error('Transaction cancelled');
       transactionError.name = 'TransactionCanceledException';
@@ -133,18 +149,23 @@ describe('DynamoUserRepository', () => {
       expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
-    it('should rethrow other DynamoDB errors without converting them', async () => {
+    it('should wrap other DynamoDB errors in AuthRepositoryError', async () => {
       // Given
-      const user = User.create('john-doe' as UserName);
+      const user = new User({
+        id: randomUUID(),
+        name: 'john-doe',
+        isTest: false,
+        createdAt: new Date(),
+      });
 
       const dynamoError = new Error('Service unavailable');
       dynamoError.name = 'ServiceUnavailableException';
-      mockSend.mockRejectedValueOnce(dynamoError);
+      mockSend.mockRejectedValue(dynamoError);
 
       // When & Then
-      const savePromise = repository.save(user);
-      await expect(savePromise).rejects.toThrow('Service unavailable');
-      await expect(savePromise).rejects.not.toThrow(UserAlreadyExistsError);
+      await expect(repository.save(user)).rejects.toThrow(
+        new AuthRepositoryError('save user', dynamoError)
+      );
 
       // Verify TransactWriteCommand was attempted
       expect(mockTransactWriteCommand).toHaveBeenCalledTimes(1);
@@ -153,7 +174,12 @@ describe('DynamoUserRepository', () => {
 
     it('should save test users with TTL', async () => {
       // Given
-      const testUser = User.create('test-user' as UserName, true);
+      const testUser = new User({
+        id: randomUUID(),
+        name: 'test-user',
+        isTest: true,
+        createdAt: new Date(),
+      });
       mockSend.mockResolvedValueOnce({});
 
       // When
@@ -187,8 +213,8 @@ describe('DynamoUserRepository', () => {
                 Item: expect.objectContaining({
                   PK: `USER#${testUser.id}`,
                   SK: 'PROFILE',
-                  GSI1PK: `USERNAME#${testUser.name}`,
-                  GSI1SK: 'PROFILE',
+                  AUTH_GSI1PK: `USERNAME#${testUser.name}`,
+                  AUTH_GSI1SK: 'PROFILE',
                   id: testUser.id,
                   name: testUser.name,
                   isTest: true,
@@ -208,13 +234,18 @@ describe('DynamoUserRepository', () => {
   describe('findById', () => {
     it('should return user when found', async () => {
       // Given
-      const user = User.create('john-doe' as UserName);
+      const user = new User({
+        id: randomUUID(),
+        name: 'john-doe',
+        isTest: false,
+        createdAt: new Date(),
+      });
       mockSend.mockResolvedValueOnce({
         Item: {
           PK: `USER#${user.id}`,
           SK: 'PROFILE',
-          GSI1PK: `USERNAME#${user.name}`,
-          GSI1SK: 'PROFILE',
+          AUTH_GSI1PK: `USERNAME#${user.name}`,
+          AUTH_GSI1SK: 'PROFILE',
           id: user.id,
           name: user.name,
           createdAt: user.createdAt.toISOString(),
@@ -249,7 +280,7 @@ describe('DynamoUserRepository', () => {
 
     it('should return null when user not found', async () => {
       // Given
-      const nonExistentId = 'non-existent' as UserId;
+      const nonExistentId = 'non-existent';
       mockSend.mockResolvedValueOnce({ Item: undefined });
 
       // When
@@ -277,14 +308,19 @@ describe('DynamoUserRepository', () => {
   describe('findByName', () => {
     it('should return user when found by name', async () => {
       // Given
-      const user = User.create('john-doe' as UserName);
+      const user = new User({
+        id: randomUUID(),
+        name: 'john-doe',
+        isTest: false,
+        createdAt: new Date(),
+      });
       mockSend.mockResolvedValueOnce({
         Items: [
           {
             PK: `USER#${user.id}`,
             SK: 'PROFILE',
-            GSI1PK: `USERNAME#${user.name}`,
-            GSI1SK: 'PROFILE',
+            AUTH_GSI1PK: `USERNAME#${user.name}`,
+            AUTH_GSI1SK: 'PROFILE',
             id: user.id,
             name: user.name,
             createdAt: user.createdAt.toISOString(),
@@ -306,8 +342,8 @@ describe('DynamoUserRepository', () => {
       expect(mockQueryCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           TableName: 'test-table',
-          IndexName: 'GSI1',
-          KeyConditionExpression: 'GSI1PK = :name AND GSI1SK = :sk',
+          IndexName: 'AUTH_GSI1',
+          KeyConditionExpression: 'AUTH_GSI1PK = :name AND AUTH_GSI1SK = :sk',
           ExpressionAttributeValues: {
             ':name': `USERNAME#${user.name}`,
             ':sk': 'PROFILE',
@@ -321,7 +357,7 @@ describe('DynamoUserRepository', () => {
 
     it('should return null when user not found by name', async () => {
       // Given
-      const nonExistentName = 'non-existent' as UserName;
+      const nonExistentName = 'non-existent';
       mockSend.mockResolvedValueOnce({ Items: [] });
 
       // When
@@ -335,8 +371,8 @@ describe('DynamoUserRepository', () => {
       expect(mockQueryCommand).toHaveBeenCalledWith(
         expect.objectContaining({
           TableName: 'test-table',
-          IndexName: 'GSI1',
-          KeyConditionExpression: 'GSI1PK = :name AND GSI1SK = :sk',
+          IndexName: 'AUTH_GSI1',
+          KeyConditionExpression: 'AUTH_GSI1PK = :name AND AUTH_GSI1SK = :sk',
           ExpressionAttributeValues: {
             ':name': `USERNAME#${nonExistentName}`,
             ':sk': 'PROFILE',
