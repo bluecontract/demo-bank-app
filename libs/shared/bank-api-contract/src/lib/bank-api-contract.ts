@@ -1,5 +1,6 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
+import { createSanitizedStringSchema } from './sanitization';
 
 const c = initContract();
 
@@ -15,7 +16,7 @@ export const HealthCheckSchema = z.object({
 
 // Auth schemas
 export const SignUpRequestSchema = z.object({
-  name: z.string().min(1).max(50),
+  name: createSanitizedStringSchema(z.string().min(1).max(50)),
 });
 
 export const SignInRequestSchema = SignUpRequestSchema;
