@@ -1,6 +1,6 @@
-import { AppError } from '@demo-blue/shared-core';
+import { ValidationError } from '@demo-blue/shared-core';
 
-export class UserValidationError extends AppError {
+export class UserValidationError extends ValidationError {
   readonly code = 'USER_VALIDATION_ERROR';
 
   constructor(field: string, message: string, cause?: Error) {

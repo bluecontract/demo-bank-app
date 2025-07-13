@@ -1,3 +1,5 @@
+import { ProblemDto } from '@demo-blue/shared-bank-api-contract';
+
 export const ERROR_CODES = {
   UNAUTHORIZED: 'UNAUTHORIZED',
   USER_ALREADY_EXISTS: 'USER_ALREADY_EXISTS',
@@ -5,8 +7,6 @@ export const ERROR_CODES = {
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
 } as const;
-
-import { ProblemDto } from '@demo-blue/shared-bank-api-contract';
 
 export const problemResponse = ({
   status,

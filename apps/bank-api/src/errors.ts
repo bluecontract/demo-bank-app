@@ -1,9 +1,10 @@
 import { TsRestResponse } from '@ts-rest/serverless/aws';
-import { UserValidationError } from '@demo-blue/auth';
 import type { Logger } from '@demo-blue/shared-observability';
-import { ERROR_CODES } from './shared/errors';
+import { ERROR_CODES, toUnauthorizedResponse } from './shared/errors';
+import { ValidationError } from '@demo-blue/shared-core';
+import { UnauthorizedRequestError } from './auth/errors';
 
-export const toValidationError = (error: unknown) => {
+const toValidationError = (error: unknown) => {
   const isRequestValidationError =
     (error as { name: string })?.name === 'RequestValidationError';
 
@@ -40,7 +41,14 @@ export const toValidationError = (error: unknown) => {
   );
 };
 
-export const toInternalServerError = () => {
+const toUnauthorizedError = () => {
+  return TsRestResponse.fromJson(
+    { error: ERROR_CODES.UNAUTHORIZED, message: 'Unauthorized' },
+    { status: 401 as const }
+  );
+};
+
+const toInternalServerError = () => {
   return TsRestResponse.fromJson(
     { error: ERROR_CODES.INTERNAL_ERROR, message: 'Internal server error' },
     { status: 500 as const }
@@ -50,10 +58,22 @@ export const toInternalServerError = () => {
 export const createErrorHandler = (logger: Logger) => {
   return (error: unknown) => {
     if (
-      error instanceof UserValidationError ||
+      error instanceof ValidationError ||
       (error as { name: string })?.name === 'RequestValidationError'
     ) {
+      logger.info('Validation error', {
+        error: String(error),
+        stack: (error as Error)?.stack,
+      });
       return toValidationError(error);
+    }
+
+    if (error instanceof UnauthorizedRequestError) {
+      logger.error('Unauthorized request error', {
+        error: String(error),
+        stack: (error as Error)?.stack,
+      });
+      return toUnauthorizedError();
     }
 
     logger.error('Internal server error', {
