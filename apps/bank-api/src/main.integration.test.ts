@@ -1,18 +1,18 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { handler } from './main';
 import type {
-  APIGatewayProxyEvent,
-  APIGatewayProxyResult,
-  APIGatewayEventRequestContext,
+  APIGatewayProxyEventV2,
+  APIGatewayEventRequestContextV2,
   Context,
   Callback,
+  APIGatewayProxyResult,
 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import {
   SecretsManagerClient,
   CreateSecretCommand,
   DeleteSecretCommand,
+  ResourceExistsException,
 } from '@aws-sdk/client-secrets-manager';
 import {
   CreateTableCommand,
@@ -20,6 +20,7 @@ import {
   DescribeTableCommand,
 } from '@aws-sdk/client-dynamodb';
 import jwt from 'jsonwebtoken';
+import { assertAllSecurityHeaders } from './test-helpers/security-assertions';
 
 /**
  * Integration Tests - Test against LocalStack AWS services
@@ -28,7 +29,7 @@ import jwt from 'jsonwebtoken';
 
 // Test configuration
 const TEST_CONFIG = {
-  tableName: 'demo-blue-integration-test',
+  tableName: `demo-blue-bank-api-integration-test-${Date.now()}`,
   jwtSecretArn: '/demo-blue/integration-test/jwt-secret',
   jwtSecret: 'integration-test-jwt-secret-key-12345',
   localstackEndpoint: 'http://localhost:4566',
@@ -39,12 +40,10 @@ const TEST_CONFIG = {
 
 // AWS clients configured for LocalStack
 let dynamoClient: DynamoDBClient;
-let dynamoDocClient: DynamoDBDocumentClient;
 let secretsManagerClient: SecretsManagerClient;
 
 describe('Bank API Integration Tests', () => {
   beforeAll(async () => {
-    // Given - LocalStack AWS services are configured
     dynamoClient = new DynamoDBClient({
       endpoint: TEST_CONFIG.localstackEndpoint,
       region: TEST_CONFIG.region,
@@ -53,8 +52,6 @@ describe('Bank API Integration Tests', () => {
         secretAccessKey: 'test',
       },
     });
-
-    dynamoDocClient = DynamoDBDocumentClient.from(dynamoClient);
 
     secretsManagerClient = new SecretsManagerClient({
       endpoint: TEST_CONFIG.localstackEndpoint,
@@ -66,7 +63,8 @@ describe('Bank API Integration Tests', () => {
     });
 
     // Set up environment variables for integration testing
-    process.env.DYNAMO_TABLE_NAME = TEST_CONFIG.tableName;
+    process.env.AUTH_DYNAMO_TABLE_NAME = TEST_CONFIG.tableName;
+    process.env.BANKING_DYNAMO_TABLE_NAME = TEST_CONFIG.tableName;
     process.env.JWT_SECRET_ARN = TEST_CONFIG.jwtSecretArn;
     process.env.JWT_TTL_SECONDS = TEST_CONFIG.jwtTtlSeconds.toString();
     process.env.TEST_USER_TTL_SECONDS =
@@ -87,7 +85,8 @@ describe('Bank API Integration Tests', () => {
   afterAll(async () => {
     await cleanupLocalStackResources();
 
-    delete process.env.DYNAMO_TABLE_NAME;
+    delete process.env.AUTH_DYNAMO_TABLE_NAME;
+    delete process.env.BANKING_DYNAMO_TABLE_NAME;
     delete process.env.JWT_SECRET_ARN;
     delete process.env.JWT_TTL_SECONDS;
     delete process.env.TEST_USER_TTL_SECONDS;
@@ -100,22 +99,36 @@ describe('Bank API Integration Tests', () => {
     delete process.env.AWS_SECRET_ACCESS_KEY;
   });
 
-  describe('Health Endpoint - LocalStack Integration', () => {
+  describe('Preflight Requests', () => {
+    it('should return 204 for OPTIONS requests', async () => {
+      const paths = ['/auth/signup', '/auth/signin', '/health'];
+      for (const path of paths) {
+        const result = await invokeApi({
+          method: 'OPTIONS',
+          path,
+        });
+        expect(result.statusCode).toBe(204);
+        assertAllSecurityHeaders(result);
+        expect(result.headers).toMatchObject({
+          'access-control-allow-methods': 'GET,POST,OPTIONS',
+          'access-control-allow-headers':
+            'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,idempotency-key',
+        });
+      }
+    });
+  });
+
+  describe('Health Endpoint', () => {
     it('should return health status with correct format', async () => {
       // Given
-      const event: APIGatewayProxyEvent = createTestEvent('GET', '/health');
-
-      // When
-      const result = (await handler(
-        event,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
+      const result = await invokeApi({
+        method: 'GET',
+        path: '/health',
+      });
 
       // Then
       expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body).toEqual({
+      expect(result.body).toEqual({
         status: 'healthy',
         timestamp: expect.any(String),
         version: expect.any(String),
@@ -132,195 +145,91 @@ describe('Bank API Integration Tests', () => {
       )) as APIGatewayProxyResult;
 
       expect(corsResult.statusCode).toBe(200);
-      expect(corsResult.headers).toMatchObject({
-        'access-control-allow-origin': 'https://app.example.com',
-      });
+      assertAllSecurityHeaders(corsResult);
     });
   });
 
-  describe('Sign-up Endpoint - LocalStack Integration', () => {
+  describe('Sign-up Endpoint', () => {
     it('should successfully sign up a new user with valid JWT cookie', async () => {
-      // Given
-      const testUserName = generateUniqueTestUserName('integration-test-user');
-      const event: APIGatewayProxyEvent = createTestEvent(
-        'POST',
-        '/auth/signup',
-        { name: testUserName }
-      );
-
-      // When - we call the sign-up handler
-      const result = (await handler(
-        event,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      // Then - it should return success with user data and auth cookie
-      expect(result.statusCode).toBe(201);
-
-      const body = JSON.parse(result.body);
-      expect(body).toEqual({
-        userId: expect.any(String),
-        name: testUserName,
-      });
-
-      // And - should set HttpOnly auth cookie
-      const cookieHeader = result.headers?.['set-cookie'] as string | undefined;
-      expect(cookieHeader).toBeDefined();
-      expect(cookieHeader).toContain('demoAuth=');
-      expect(cookieHeader).toContain('HttpOnly');
-      expect(cookieHeader).toContain('Secure');
-      expect(cookieHeader).toContain('SameSite=None');
-      expect(cookieHeader).toContain('Path=/');
-      expect(cookieHeader).toContain(`Max-Age=${TEST_CONFIG.jwtTtlSeconds}`);
-
-      // And - JWT token should be valid and contain correct data
-      if (!cookieHeader) {
-        throw new Error('Cookie header is undefined');
-      }
-      const token = extractTokenFromCookie(cookieHeader);
-      const decoded = jwt.verify(token, TEST_CONFIG.jwtSecret) as any;
-      expect(decoded.sub).toBe(body.userId); // JWT uses 'sub' for subject/userId
-      expect(decoded.iat).toBeDefined(); // Issued at timestamp
-      expect(decoded.exp).toBeDefined(); // Expiration timestamp
-      expect(decoded.isTest).toBeUndefined(); // Regular users don't have isTest flag
-
-      // And - user should be stored in DynamoDB with correct structure
-      const userData = await getUserFromDynamoDB(body.userId);
-      expect(userData).toBeDefined();
-      expect(userData).not.toBeNull();
-      expect(userData!.name).toBe(testUserName);
-      expect(userData!.id).toBe(body.userId);
-      expect(userData!.isTest).toBe(false);
-      expect(userData!.createdAt).toBeDefined();
-
-      // And - should include CORS headers when Origin is provided
-      const corsEvent = createTestEvent('POST', '/auth/signup', {
-        name: 'cors-test-' + Date.now(),
-      });
-      corsEvent.headers['Origin'] = 'https://app.example.com';
-
-      const corsResult = (await handler(
-        corsEvent,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      expect(corsResult.statusCode).toBe(201);
-      expect(corsResult.headers).toMatchObject({
-        'access-control-allow-origin': 'https://app.example.com',
-        'access-control-allow-credentials': 'true',
-      });
+      const creds = await signupUniqueTestUser('integration-test-user');
+      expect(creds.userId).toBeDefined();
+      expect(creds.userName).toContain('integration-test-user');
+      expect(creds.jwtCookie).toContain('demoAuth=');
     });
 
     it('should return 409 when signing up with existing username', async () => {
-      // Given - a user that already exists
-      const existingUserName = generateUniqueTestUserName('duplicate-test');
-      await handler(
-        createTestEvent('POST', '/auth/signup', { name: existingUserName }),
-        {} as Context,
-        {} as Callback
-      );
-
-      // When - attempting to sign up with the same name
-      const duplicateSignUpEvent = createTestEvent('POST', '/auth/signup', {
-        name: existingUserName,
+      const creds = await signupUniqueTestUser('duplicate-test');
+      const signUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: { name: creds.userName },
       });
-      const result = (await handler(
-        duplicateSignUpEvent,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      // Then - should return 409 Conflict
-      expect(result.statusCode).toBe(409);
-      const body = JSON.parse(result.body);
-      expect(body).toEqual({
+      expect(signUp.statusCode).toBe(409);
+      expect(signUp.body).toEqual({
         error: 'USER_ALREADY_EXISTS',
         message:
           'A user with this name already exists. Please choose a different name.',
       });
+      assertAllSecurityHeaders(signUp);
     });
 
     it('should return 400 for invalid request data', async () => {
-      // Given - invalid sign-up data (empty name)
-      const invalidEvent = createTestEvent('POST', '/auth/signup', {
-        name: '',
+      const signUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: { name: '' },
       });
-
-      // When
-      const result = (await handler(
-        invalidEvent,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      // Then
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.error).toBe('VALIDATION_ERROR');
+      expect(signUp.statusCode).toBe(400);
+      expect(signUp.body).toEqual({
+        error: 'VALIDATION_ERROR',
+        errors: expect.any(String),
+        message: 'Request validation failed',
+      });
+      expect(JSON.parse(signUp.body.errors)).toMatchObject({
+        bodyErrors: [
+          {
+            exact: false,
+            inclusive: true,
+            message: 'String must contain at least 1 character(s)',
+            minimum: 1,
+            path: ['name'],
+            type: 'string',
+          },
+        ],
+      });
+      assertAllSecurityHeaders(signUp);
     });
 
     it('should create test user with shorter TTL when dev=true', async () => {
-      // Given
-      const testUserName = generateUniqueTestUserName('dev-test-user');
-      const devEvent = createTestEvent('POST', '/auth/signup?dev=true', {
-        name: testUserName,
+      const name = await generateUniqueTestUserName('dev-test-user');
+      const signUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup?dev=true',
+        body: { name },
       });
-
-      // When
-      const result = (await handler(
-        devEvent,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      // Then
-      expect(result.statusCode).toBe(201);
-
-      const cookieHeader = result.headers?.['set-cookie'] as string;
+      expect(signUp.statusCode).toBe(201);
+      const cookieHeader = signUp.headers?.['set-cookie'] as string;
       expect(cookieHeader).toContain(
         `Max-Age=${TEST_CONFIG.testUserTtlSeconds}`
       );
-
-      const body = JSON.parse(result.body);
-      const userData = await getUserFromDynamoDB(body.userId);
-      expect(userData!.isTest).toBe(true);
+      assertAllSecurityHeaders(signUp);
     });
   });
 
-  describe('Sign-in Endpoint - LocalStack Integration', () => {
+  describe('Sign-in Endpoint', () => {
     it('should successfully sign in an existing user with valid JWT cookie', async () => {
-      // Given - a user that already exists
-      const existingUserName = generateUniqueTestUserName('signin-test-user');
-      const signUpResult = (await handler(
-        createTestEvent('POST', '/auth/signup', { name: existingUserName }),
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-      const signUpBody = JSON.parse(signUpResult.body);
-
-      // When - we call the sign-in handler
-      const signInEvent = createTestEvent('POST', '/auth/signin', {
-        name: existingUserName,
+      const creds = await signupUniqueTestUser('signin-test-user');
+      const signIn = await invokeApi({
+        method: 'POST',
+        path: '/auth/signin',
+        body: { name: creds.userName },
       });
-      const result = (await handler(
-        signInEvent,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      // Then - it should return success with user data and auth cookie
-      expect(result.statusCode).toBe(200);
-
-      const body = JSON.parse(result.body);
-      expect(body).toEqual({
-        userId: signUpBody.userId,
-        name: existingUserName,
+      expect(signIn.statusCode).toBe(200);
+      expect(signIn.body).toEqual({
+        userId: creds.userId,
+        name: creds.userName,
       });
-
-      // And - should set HttpOnly auth cookie
-      const cookieHeader = result.headers?.['set-cookie'] as string | undefined;
+      const cookieHeader = signIn.headers?.['set-cookie'] as string | undefined;
       expect(cookieHeader).toBeDefined();
       expect(cookieHeader).toContain('demoAuth=');
       expect(cookieHeader).toContain('HttpOnly');
@@ -328,120 +237,92 @@ describe('Bank API Integration Tests', () => {
       expect(cookieHeader).toContain('SameSite=None');
       expect(cookieHeader).toContain('Path=/');
       expect(cookieHeader).toContain(`Max-Age=${TEST_CONFIG.jwtTtlSeconds}`);
-
-      // And - JWT token should be valid and contain correct data
       if (!cookieHeader) {
         throw new Error('Cookie header is undefined');
       }
       const token = extractTokenFromCookie(cookieHeader);
       const decoded = jwt.verify(token, TEST_CONFIG.jwtSecret) as any;
-      expect(decoded.sub).toBe(body.userId);
+      expect(decoded.sub).toBe(signIn.body.userId);
       expect(decoded.iat).toBeDefined();
       expect(decoded.exp).toBeDefined();
+      assertAllSecurityHeaders(signIn);
     });
 
-    it('should return 404 when signing in with non-existing username', async () => {
-      // Given - a username that does not exist
+    it('should return 401 when signing in with non-existing username', async () => {
       const nonExistentUserName =
         generateUniqueTestUserName('nonexistent-user');
-
-      // When - attempting to sign in
-      const signInEvent = createTestEvent('POST', '/auth/signin', {
-        name: nonExistentUserName,
+      const signIn = await invokeApi({
+        method: 'POST',
+        path: '/auth/signin',
+        body: { name: nonExistentUserName },
       });
-      const result = (await handler(
-        signInEvent,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      // Then - should return 404 Not Found
-      expect(result.statusCode).toBe(404);
-      const body = JSON.parse(result.body);
-      expect(body).toEqual({
-        error: 'USER_NOT_FOUND',
-        message: 'User not found. Please check the name and try again.',
+      expect(signIn.statusCode).toBe(401);
+      expect(signIn.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message:
+          'User not found. Please check the name and try again or sign up.',
       });
+      assertAllSecurityHeaders(signIn);
     });
 
     it('should return 400 for invalid sign-in request data', async () => {
-      // Given - invalid sign-in data (empty name)
-      const invalidEvent = createTestEvent('POST', '/auth/signin', {
-        name: '',
+      const signIn = await invokeApi({
+        method: 'POST',
+        path: '/auth/signin',
+        body: { name: '' },
       });
-
-      // When
-      const result = (await handler(
-        invalidEvent,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      // Then
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.error).toBe('VALIDATION_ERROR');
+      expect(signIn.statusCode).toBe(400);
+      const body = signIn.body;
+      expect(body).toEqual({
+        error: 'VALIDATION_ERROR',
+        errors: expect.any(String),
+        message: 'Request validation failed',
+      });
+      expect(JSON.parse(body.errors)).toMatchObject({
+        bodyErrors: [
+          {
+            exact: false,
+            inclusive: true,
+            message: 'String must contain at least 1 character(s)',
+            minimum: 1,
+            path: ['name'],
+            type: 'string',
+          },
+        ],
+        pathParameterErrors: null,
+        queryParameterErrors: null,
+        headerErrors: null,
+      });
+      assertAllSecurityHeaders(signIn);
     });
 
     it('should include CORS headers when Origin is provided', async () => {
-      // Given - an existing user
-      const existingUserName = generateUniqueTestUserName('cors-signin-test');
-      await handler(
-        createTestEvent('POST', '/auth/signup', { name: existingUserName }),
-        {} as Context,
-        {} as Callback
-      );
-
-      // When - sign in with CORS origin header
-      const corsEvent = createTestEvent('POST', '/auth/signin', {
-        name: existingUserName,
+      const creds = await signupUniqueTestUser('cors-signin-test');
+      const signIn = await invokeApi({
+        method: 'POST',
+        path: '/auth/signin',
+        body: { name: creds.userName },
+        headers: { Origin: 'https://app.example.com' },
       });
-      corsEvent.headers['Origin'] = 'https://app.example.com';
-
-      const result = (await handler(
-        corsEvent,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      // Then
-      expect(result.statusCode).toBe(200);
-      expect(result.headers).toMatchObject({
+      expect(signIn.statusCode).toBe(200);
+      expect(signIn.headers).toMatchObject({
         'access-control-allow-origin': 'https://app.example.com',
-        'access-control-allow-credentials': 'true',
       });
+      assertAllSecurityHeaders(signIn);
     });
 
     it('should work with test users created via dev=true', async () => {
-      // Given - a test user created with dev=true
-      const testUserName = generateUniqueTestUserName('test-signin-user');
-      const signUpResult = (await handler(
-        createTestEvent('POST', '/auth/signup?dev=true', {
-          name: testUserName,
-        }),
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-      const signUpBody = JSON.parse(signUpResult.body);
-
-      // When - sign in with the test user
-      const signInEvent = createTestEvent('POST', '/auth/signin', {
-        name: testUserName,
+      const creds = await signupUniqueTestUser('test-signin-user', true);
+      const signIn = await invokeApi({
+        method: 'POST',
+        path: '/auth/signin?dev=true',
+        body: { name: creds.userName },
+        queryStringParameters: { dev: 'true' },
       });
-      const result = (await handler(
-        signInEvent,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      // Then - should sign in successfully
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.userId).toBe(signUpBody.userId);
-      expect(body.name).toBe(testUserName);
-
-      // And - should set JWT with regular TTL (test flag only affects creation)
-      const cookieHeader = result.headers?.['set-cookie'] as string;
+      expect(signIn.statusCode).toBe(200);
+      expect(signIn.body.userId).toBe(creds.userId);
+      expect(signIn.body.name).toBe(creds.userName);
+      const cookieHeader = signIn.headers?.['set-cookie'] as string;
       expect(cookieHeader).toContain(`Max-Age=600`);
     });
   });
@@ -458,21 +339,25 @@ function generateUniqueTestUserName(prefix = 'test-user'): string {
 function createTestEvent(
   method: string,
   path: string,
-  body?: any
-): APIGatewayProxyEvent {
+  body?: object
+): APIGatewayProxyEventV2 {
+  const requestBody =
+    method === 'GET' || method === 'DELETE' ? null : body || {};
+
+  const urlParams = new URLSearchParams(path.split('?')[1]);
+  const queryStringParameters = path.includes('?')
+    ? {
+        queryStringParameters: Object.fromEntries(
+          new URLSearchParams(path.split('?')[1])
+        ),
+        rawQueryString: urlParams.toString(),
+      }
+    : { rawQueryString: '' };
+
   return {
-    httpMethod: method,
-    path: path,
-    pathParameters: null,
-    queryStringParameters: path.includes('?')
-      ? Object.fromEntries(new URLSearchParams(path.split('?')[1]))
-      : null,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    multiValueHeaders: {},
-    body: body ? JSON.stringify(body) : null,
-    isBase64Encoded: false,
+    version: '2.0',
+    routeKey: '$default',
+    rawPath: path,
     requestContext: {
       requestId: 'test-request-id',
       stage: 'test',
@@ -481,10 +366,30 @@ function createTestEvent(
       accountId: '123456789012',
       resourceId: 'test-resource',
       apiId: 'test-api',
-    } as APIGatewayEventRequestContext,
-    resource: path,
-    stageVariables: null,
-    multiValueQueryStringParameters: null,
+      http: {
+        method: method,
+        path: path,
+        protocol: 'http',
+        sourceIp: '127.0.0.1',
+        userAgent: 'test-user-agent',
+      },
+      time: new Date().toISOString(),
+      timeEpoch: Date.now(),
+      identity: {
+        accessKey: 'test',
+        accountId: '123456789012',
+        apiKey: 'test',
+      },
+      domainName: 'localhost',
+      domainPrefix: 'test',
+      routeKey: '$default',
+    } as APIGatewayEventRequestContextV2,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    ...queryStringParameters,
+    ...(requestBody ? { body: JSON.stringify(requestBody) } : {}),
+    isBase64Encoded: false,
   };
 }
 
@@ -506,8 +411,13 @@ async function setupLocalStackResources(): Promise<void> {
         AttributeDefinitions: [
           { AttributeName: 'PK', AttributeType: 'S' },
           { AttributeName: 'SK', AttributeType: 'S' },
-          { AttributeName: 'GSI1PK', AttributeType: 'S' },
-          { AttributeName: 'GSI1SK', AttributeType: 'S' },
+          { AttributeName: 'AUTH_GSI1PK', AttributeType: 'S' },
+          { AttributeName: 'AUTH_GSI1SK', AttributeType: 'S' },
+          { AttributeName: 'BANKING_GSI1PK', AttributeType: 'S' },
+          { AttributeName: 'BANKING_GSI1SK', AttributeType: 'S' },
+
+          { AttributeName: 'BANKING_GSI2PK', AttributeType: 'S' },
+          { AttributeName: 'BANKING_GSI2SK', AttributeType: 'S' },
         ],
         KeySchema: [
           { AttributeName: 'PK', KeyType: 'HASH' },
@@ -515,10 +425,27 @@ async function setupLocalStackResources(): Promise<void> {
         ],
         GlobalSecondaryIndexes: [
           {
-            IndexName: 'GSI1',
+            IndexName: 'AUTH_GSI1',
             KeySchema: [
-              { AttributeName: 'GSI1PK', KeyType: 'HASH' },
-              { AttributeName: 'GSI1SK', KeyType: 'RANGE' },
+              { AttributeName: 'AUTH_GSI1PK', KeyType: 'HASH' },
+              { AttributeName: 'AUTH_GSI1SK', KeyType: 'RANGE' },
+            ],
+            Projection: { ProjectionType: 'ALL' },
+          },
+          {
+            IndexName: 'BANKING_GSI1',
+            KeySchema: [
+              { AttributeName: 'BANKING_GSI1PK', KeyType: 'HASH' },
+              { AttributeName: 'BANKING_GSI1SK', KeyType: 'RANGE' },
+            ],
+            Projection: { ProjectionType: 'ALL' },
+          },
+
+          {
+            IndexName: 'BANKING_GSI2',
+            KeySchema: [
+              { AttributeName: 'BANKING_GSI2PK', KeyType: 'HASH' },
+              { AttributeName: 'BANKING_GSI2SK', KeyType: 'RANGE' },
             ],
             Projection: { ProjectionType: 'ALL' },
           },
@@ -548,13 +475,19 @@ async function setupLocalStackResources(): Promise<void> {
     }
 
     // Create Secrets Manager secret
-    await secretsManagerClient.send(
-      new CreateSecretCommand({
-        Name: TEST_CONFIG.jwtSecretArn,
-        SecretString: JSON.stringify({ secret: TEST_CONFIG.jwtSecret }),
-        Description: 'JWT secret for integration tests',
-      })
-    );
+    try {
+      await secretsManagerClient.send(
+        new CreateSecretCommand({
+          Name: TEST_CONFIG.jwtSecretArn,
+          SecretString: JSON.stringify({ secret: TEST_CONFIG.jwtSecret }),
+          Description: 'JWT secret for integration tests',
+        })
+      );
+    } catch (error) {
+      if (error instanceof ResourceExistsException) {
+        console.info('Secrets Manager secret already exists:', error);
+      }
+    }
   } catch (error) {
     console.error('Failed to setup LocalStack resources:', error);
     throw error;
@@ -591,20 +524,66 @@ async function cleanupLocalStackResources(): Promise<void> {
   await Promise.all(cleanupPromises);
 }
 
-async function getUserFromDynamoDB(userId: string) {
-  try {
-    const result = await dynamoDocClient.send(
-      new GetCommand({
-        TableName: TEST_CONFIG.tableName,
-        Key: {
-          PK: `USER#${userId}`,
-          SK: 'PROFILE', // Correct SK structure from DynamoUserRepository
-        },
-      })
-    );
-    return result.Item;
-  } catch {
-    console.error('Failed to get user from DynamoDB');
-    return null;
+// DRY helper for invoking the API handler
+async function invokeApi({
+  method,
+  path,
+  body,
+  userId,
+  jwtCookie,
+  headers = {},
+}: {
+  method: string;
+  path: string;
+  body?: object;
+  queryStringParameters?: Record<string, string>;
+  userId?: string;
+  jwtCookie?: string;
+  headers?: Record<string, string>;
+}) {
+  const event = createTestEvent(method, path, body);
+  if (jwtCookie) event.headers['cookie'] = jwtCookie;
+  if (userId) (event as any).userId = userId;
+  Object.assign(event.headers, headers);
+  console.log('Invoking API', {
+    method,
+    path,
+    body,
+    userId,
+    jwtCookie,
+    headers,
+  });
+  const result = (await handler(event, {} as Context, {} as Callback)) as {
+    statusCode: number;
+    headers: Record<string, string>;
+    body: string;
+    cookies: string[];
+  };
+  return {
+    ...result,
+    body: result.body ? JSON.parse(result.body) : result.body,
+  };
+}
+
+// DRY helper for signing up a unique test user and extracting credentials
+async function signupUniqueTestUser(
+  namePrefix = 'test-user',
+  isTest = false
+): Promise<{ userId: string; jwtCookie: string; userName: string }> {
+  const userName = generateUniqueTestUserName(namePrefix);
+  const signUp = await invokeApi({
+    method: 'POST',
+    path: isTest ? '/auth/signup?dev=true' : '/auth/signup',
+    body: { name: userName },
+  });
+  expect(signUp.statusCode).toBe(201);
+  if (!signUp.headers || typeof signUp.headers['set-cookie'] !== 'string') {
+    throw new Error('Missing set-cookie header in signUp response');
   }
+  assertAllSecurityHeaders(signUp);
+  return {
+    userId: signUp.body.userId,
+    jwtCookie: signUp.headers['set-cookie'],
+    userName,
+  };
 }

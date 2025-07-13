@@ -11,7 +11,13 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
+      "path": "../../libs/shared/observability/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/shared/bank-api-contract/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/banking/tsconfig.lib.json"
     },
     {
       "path": "../../libs/auth/tsconfig.lib.json"

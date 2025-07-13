@@ -269,21 +269,21 @@ demo-blue/
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     /apps (Adapters)                       │
+│                     /apps (Adapters)                        │
 ├─────────────────────────────────────────────────────────────┤
 │  bank-web-app/     │  bank-api/        │  bank-web-app-e2e/ │
 │  (React SPA)       │  (AWS Lambda)     │  (E2E Tests)       │
 └─────────────────────────────────────────────────────────────┘
                                │
-                ┌──────────────┼──────────────┐
-                │              │              │
-┌───────────────▼───┐   ┌──────▼─────┐   ┌───▼────────────┐
-│   /libs/domain/   │   │ /libs/app/ │   │ /libs/infra/   │
-│  (Business Logic) │   │ (Use Cases)│   │   (Adapters)   │
-│  • Accounts       │   │ • Services │   │ • DynamoDB     │
-│  • Transfers      │   │ • Commands │   │ • MyOS Client  │
-│  • Blue Docs      │   │ • Queries  │   │ • S3 Storage   │
-└───────────────────┘   └────────────┘   └────────────────┘
+                ┌──────────────┼───────────────┐
+                │              │               │
+┌───────────────▼───┐   ┌──────▼───────┐   ┌───▼────────────┐
+│   /libs/domain/   │   │ /libs/app/   │   │ /libs/infra/   │
+│  (Business Logic) │   │ (Application)│   │   (Adapters)   │
+│  • Accounts       │   │ • Ports      │   │ • DynamoDB     │
+│  • Transfers      │   │ • Commands   │   │ • MyOS Client  │
+│  • Blue Docs      │   │ • Queries    │   │ • S3 Storage   │
+└───────────────────┘   └──────────────┘   └────────────────┘
 ```
 
 #### 🏢 Infrastructure Colocation

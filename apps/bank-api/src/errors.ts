@@ -1,60 +1,40 @@
 import { TsRestResponse } from '@ts-rest/serverless/aws';
-import { UserAlreadyExistsError, UserNotFoundError } from '@demo-blue/auth';
-
-export const ERROR_CODES = {
-  USER_ALREADY_EXISTS: 'USER_ALREADY_EXISTS',
-  USER_NOT_FOUND: 'USER_NOT_FOUND',
-  VALIDATION_ERROR: 'VALIDATION_ERROR',
-  INTERNAL_ERROR: 'INTERNAL_ERROR',
-} as const;
-
-export const toUserAlreadyExistsError = (error: UserAlreadyExistsError) => {
-  return TsRestResponse.fromJson(
-    {
-      error: error.code,
-      message:
-        'A user with this name already exists. Please choose a different name.',
-    },
-    { status: 409 as const }
-  );
-};
-
-export const toUserNotFoundError = (error: UserNotFoundError) => {
-  return TsRestResponse.fromJson(
-    {
-      error: error.code,
-      message: 'User not found. Please check the name and try again.',
-    },
-    { status: 404 as const }
-  );
-};
+import { UserValidationError } from '@demo-blue/auth';
+import type { Logger } from '@demo-blue/shared-observability';
+import { ERROR_CODES } from './shared/errors';
 
 export const toValidationError = (error: unknown) => {
   const isRequestValidationError =
     (error as { name: string })?.name === 'RequestValidationError';
 
+  let errors: string | undefined;
+
+  if (isRequestValidationError) {
+    const body = (error as { body: Record<string, unknown> }).body || {};
+    const extractIssues = (errObj: { issues: unknown[] } | null) =>
+      errObj && Array.isArray(errObj?.issues) ? errObj?.issues : null;
+    const validationErrors = {
+      pathParameterErrors: extractIssues(
+        body.pathParameterErrors as { issues: unknown[] } | null
+      ),
+      headerErrors: extractIssues(
+        body.headerErrors as { issues: unknown[] } | null
+      ),
+      queryParameterErrors: extractIssues(
+        body.queryParameterErrors as { issues: unknown[] } | null
+      ),
+      bodyErrors: extractIssues(
+        body.bodyErrors as { issues: unknown[] } | null
+      ),
+    };
+    errors = JSON.stringify(validationErrors);
+  }
+
   return TsRestResponse.fromJson(
     {
       error: ERROR_CODES.VALIDATION_ERROR,
       message: (error as { message: string })?.message,
-      ...(isRequestValidationError
-        ? {
-            errors: {
-              pathParamsError: JSON.stringify(
-                (error as { pathParamsError: string })?.pathParamsError
-              ),
-              queryParamsError: JSON.stringify(
-                (error as { queryParamsError: string })?.queryParamsError
-              ),
-              bodyError: JSON.stringify(
-                (error as { bodyError: string })?.bodyError
-              ),
-              headerError: JSON.stringify(
-                (error as { headerError: string })?.headerError
-              ),
-            },
-          }
-        : {}),
+      errors,
     },
     { status: 400 as const }
   );
@@ -62,7 +42,24 @@ export const toValidationError = (error: unknown) => {
 
 export const toInternalServerError = () => {
   return TsRestResponse.fromJson(
-    { message: ERROR_CODES.INTERNAL_ERROR },
+    { error: ERROR_CODES.INTERNAL_ERROR, message: 'Internal server error' },
     { status: 500 as const }
   );
+};
+
+export const createErrorHandler = (logger: Logger) => {
+  return (error: unknown) => {
+    if (
+      error instanceof UserValidationError ||
+      (error as { name: string })?.name === 'RequestValidationError'
+    ) {
+      return toValidationError(error);
+    }
+
+    logger.error('Internal server error', {
+      error: String(error),
+      stack: (error as Error)?.stack,
+    });
+    return toInternalServerError();
+  };
 };

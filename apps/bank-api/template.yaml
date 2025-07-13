@@ -23,7 +23,7 @@ Resources:
   BankTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub 'demo-blue-${Environment}'
+      TableName: !Sub 'demo-bank-${Environment}'
       BillingMode: PAY_PER_REQUEST
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
@@ -32,9 +32,18 @@ Resources:
           AttributeType: S
         - AttributeName: SK
           AttributeType: S
-        - AttributeName: GSI1PK
+        - AttributeName: AUTH_GSI1PK
           AttributeType: S
-        - AttributeName: GSI1SK
+        - AttributeName: AUTH_GSI1SK
+          AttributeType: S
+        - AttributeName: BANKING_GSI1PK
+          AttributeType: S
+        - AttributeName: BANKING_GSI1SK
+          AttributeType: S
+
+        - AttributeName: BANKING_GSI2PK
+          AttributeType: S
+        - AttributeName: BANKING_GSI2SK
           AttributeType: S
       KeySchema:
         - AttributeName: PK
@@ -42,11 +51,31 @@ Resources:
         - AttributeName: SK
           KeyType: RANGE
       GlobalSecondaryIndexes:
-        - IndexName: GSI1
+        # AUTH_GSI1 –(PK = USERNAME#name, SK PROFILE)` get user by username.
+        - IndexName: AUTH_GSI1
           KeySchema:
-            - AttributeName: GSI1PK
+            - AttributeName: AUTH_GSI1PK
               KeyType: HASH
-            - AttributeName: GSI1SK
+            - AttributeName: AUTH_GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        # BANKING_GSI1 –(PK = USER#id, SK createdAt)` list accounts per user.
+        - IndexName: BANKING_GSI1
+          KeySchema:
+            - AttributeName: BANKING_GSI1PK
+              KeyType: HASH
+            - AttributeName: BANKING_GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+        # BANKING_GSI2 – (PK = ACCOUNT#id, POST#<createdAt>)` for transaction feed, sort by time
+        - IndexName: BANKING_GSI2
+          KeySchema:
+            - AttributeName: BANKING_GSI2PK
+              KeyType: HASH
+            - AttributeName: BANKING_GSI2SK
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
@@ -65,7 +94,7 @@ Resources:
   JwtSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub '/demo-blue/${Environment}/jwt-secret'
+      Name: !Sub '/demo-blue/${Environment}/auth-jwt-secret'
       Description: !Sub 'JWT signing secret for demo-blue ${Environment}'
       GenerateSecretString:
         SecretStringTemplate: '{}'
@@ -91,12 +120,14 @@ Resources:
   BankLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub 'bank-api-${Environment}'
+      FunctionName: !Sub 'blue-bank-api-${Environment}'
       Handler: main.handler
+      CodeUri: ../../dist/apps/bank-api/lambda/
       Description: Banking API Lambda function
       Environment:
         Variables:
-          DYNAMO_TABLE_NAME: !Ref BankTable
+          AUTH_DYNAMO_TABLE_NAME: !Ref BankTable
+          BANKING_DYNAMO_TABLE_NAME: !Ref BankTable
           JWT_SECRET_ARN: !Ref JwtSecret
           JWT_TTL_SECONDS: 3600
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
@@ -154,6 +185,28 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /auth/signin
             Method: OPTIONS
+  # ------------------------------------------------------------------
+  # Seed the FUNDING_SOURCE account and its BALANCE row (idempotent)
+  # ------------------------------------------------------------------
+  SeedFundingSourceFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: seed-funding-source.handler
+      CodeUri: ../../dist/apps/bank-api/seed/
+      Environment:
+        Variables:
+          TABLE: !Ref BankTable
+          AWS_ENDPOINT_URL: '' # only for local development
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BankTable
+
+  FundingSourceSeed:
+    Type: Custom::Seed
+    DependsOn: BankTable # ensure table exists first
+    Properties:
+      ServiceToken: !GetAtt SeedFundingSourceFn.Arn
 
 Outputs:
   BankApiUrl:

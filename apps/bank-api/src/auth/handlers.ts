@@ -1,14 +1,17 @@
 import {
   signUp,
   signIn,
-  type SignUpResult,
-  type SignInResult,
+  type AuthResult,
+  UserNotFoundError,
+  UserAlreadyExistsError,
 } from '@demo-blue/auth';
 
 import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
-import { AppRouteImplementation } from '@ts-rest/serverless/aws';
 
 import { getDependencies } from './dependencies';
+import { ServerInferRequest } from '@ts-rest/core';
+import { toUnauthorizedResponse } from '../shared/errors';
+import { toUserAlreadyExistsError } from './errors';
 
 const COOKIE_CONFIG = {
   NAME: 'demoAuth',
@@ -20,24 +23,20 @@ const createAuthCookie = (token: string, ttlSeconds: number): string => {
 };
 
 const getTtlSeconds = (
-  user: SignUpResult['user'] | SignInResult['user'],
+  user: AuthResult['user'],
   config: { jwtTtlSeconds: number; testUserTtlSeconds: number }
 ): number => {
   return user?.isTest ? config.testUserTtlSeconds : config.jwtTtlSeconds;
 };
 
-const formatResponse = (
-  status: number,
-  {
-    user,
-    token,
-  }: { user: SignUpResult['user'] | SignInResult['user']; token: string },
+const toAuthResponse = (
+  status: 200 | 201,
+  { user, token }: { user: AuthResult['user']; token: string },
   config: { jwtTtlSeconds: number; testUserTtlSeconds: number },
   responseHeaders: Headers
 ) => {
   const ttlSeconds = getTtlSeconds(user, config);
   responseHeaders.set('Set-Cookie', createAuthCookie(token, ttlSeconds));
-  responseHeaders.set('Access-Control-Allow-Credentials', 'true');
   return {
     status,
     body: {
@@ -47,9 +46,10 @@ const formatResponse = (
   };
 };
 
-export const signUpHandler: AppRouteImplementation<
-  typeof bankApiContract
->['signUp'] = async ({ body, query }, { responseHeaders }) => {
+export const signUpHandler = async (
+  { body, query }: ServerInferRequest<(typeof bankApiContract)['signUp']>,
+  { responseHeaders }: { responseHeaders: Headers }
+) => {
   const deps = await getDependencies();
   const { logger, config } = deps;
 
@@ -61,29 +61,42 @@ export const signUpHandler: AppRouteImplementation<
       },
       deps
     );
-    return formatResponse(201, result, config, responseHeaders);
+    return toAuthResponse(201, result, config, responseHeaders);
   } catch (error: unknown) {
     logger.error('Sign-up failed', { error: String(error) });
+    if (error instanceof UserAlreadyExistsError) {
+      return toUserAlreadyExistsError(
+        'A user with this name already exists. Please choose a different name.'
+      );
+    }
     throw error;
   }
 };
 
-export const signInHandler: AppRouteImplementation<
-  typeof bankApiContract
->['signIn'] = async ({ body }, { responseHeaders }) => {
+export const signInHandler = async (
+  { body }: ServerInferRequest<(typeof bankApiContract)['signIn']>,
+  { responseHeaders }: { responseHeaders: Headers }
+) => {
   const deps = await getDependencies();
   const { logger, config } = deps;
 
   try {
+    logger.info('Signing in', { name: body.name });
     const result = await signIn(
       {
         name: body.name,
       },
       deps
     );
-    return formatResponse(200, result, config, responseHeaders);
+    logger.info('Signed in', { userId: result.user.id });
+    return toAuthResponse(200, result, config, responseHeaders);
   } catch (error: unknown) {
-    logger.error('Sign-in failed', { error: String(error) });
+    logger.error('Sign-in failed', { error: String(error), name: body.name });
+    if (error instanceof UserNotFoundError) {
+      return toUnauthorizedResponse(
+        'User not found. Please check the name and try again or sign up.'
+      );
+    }
     throw error;
   }
 };

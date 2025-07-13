@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getDependencies, resetDependencies } from './dependencies';
+import {
+  PowertoolsLogger,
+  PowertoolsMetrics,
+} from '@demo-blue/shared-observability';
 
 // Mock the auth module
 vi.mock('@demo-blue/auth', () => ({
@@ -45,8 +49,8 @@ describe('Dependencies Module', () => {
       expect(deps).toBeDefined();
       expect(deps.userRepository).toBeDefined();
       expect(deps.jwtService).toBeDefined();
-      expect(deps.logger).toBeDefined();
-      expect(deps.metrics).toBeDefined();
+      expect(deps.logger).toBeInstanceOf(PowertoolsLogger);
+      expect(deps.metrics).toBeInstanceOf(PowertoolsMetrics);
       expect(deps.config).toBeDefined();
       expect(deps.config.jwtTtlSeconds).toBe(3600);
       expect(deps.config.testUserTtlSeconds).toBe(600);

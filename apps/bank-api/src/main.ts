@@ -1,23 +1,25 @@
-import { createLambdaHandler } from '@ts-rest/serverless/aws';
-import type { Handler } from 'aws-lambda';
+import { createLambdaHandler, tsr } from '@ts-rest/serverless/aws';
 import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
-import {
-  UserAlreadyExistsError,
-  UserNotFoundError,
-  InvalidUserNameError,
-} from '@demo-blue/auth';
-import { signUpHandler, signInHandler } from './auth';
-import {
-  toUserAlreadyExistsError,
-  toUserNotFoundError,
-  toValidationError,
-  toInternalServerError,
-} from './errors';
-import { getDependencies } from './dependencies';
+import { signUpHandler, signInHandler } from './auth/handlers';
 
-export const handler: Handler = createLambdaHandler(
+import { createErrorHandler } from './errors';
+import {
+  createAuthMiddleware,
+  MaybeAuthenticatedRequestContext,
+} from './auth/middleware';
+import { getMetrics } from './shared/metrics';
+import { getLogger } from './shared/logger';
+import { getSecurityHeaders } from './shared/security';
+import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
+
+const metrics = getMetrics();
+const logger = getLogger();
+const securityHeaders = getSecurityHeaders();
+
+// Create the ts-rest handler
+export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
   bankApiContract,
-  {
+  tsr.routerWithMiddleware(bankApiContract)<MaybeAuthenticatedRequestContext>({
     health: async () => {
       const healthData = {
         status: 'healthy' as const,
@@ -34,47 +36,44 @@ export const handler: Handler = createLambdaHandler(
 
     signUp: signUpHandler,
     signIn: signInHandler,
-  },
+  }),
   {
     cors: {
       origin: true,
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'OPTIONS'],
       allowHeaders: [
         'Content-Type',
         'X-Amz-Date',
-        'Authorization',
         'X-Api-Key',
         'X-Amz-Security-Token',
+        'idempotency-key',
       ],
-      maxAge: 600,
+      credentials: true,
     },
-    errorHandler: error => {
-      if (error instanceof UserAlreadyExistsError) {
-        return toUserAlreadyExistsError(error);
-      }
-
-      if (error instanceof UserNotFoundError) {
-        return toUserNotFoundError(error);
-      }
-
-      if (
-        error instanceof InvalidUserNameError ||
-        (error as { name: string })?.name === 'RequestValidationError'
-      ) {
-        return toValidationError(error);
-      }
-
-      return toInternalServerError();
-    },
+    requestMiddleware: [
+      createAuthMiddleware({
+        exclusions: [
+          { path: /^\/health\/?$/, method: 'GET' },
+          { path: '/auth/signup', method: 'POST' },
+          { path: '/auth/signin', method: 'POST' },
+        ],
+      }),
+    ],
+    errorHandler: createErrorHandler(logger),
     responseHandlers: [
       async response => {
+        // Add security headers for all requests
+        Object.entries(securityHeaders).forEach(([key, value]) => {
+          response.headers.set(key, value);
+        });
+        return response;
+      },
+      async response => {
         try {
-          const { metrics, logger } = await getDependencies();
           await metrics.publishStoredMetrics();
           logger.debug('Metrics published successfully');
         } catch (error) {
-          // Log error but don't fail the response
-          console.error('Failed to publish metrics:', error);
+          logger.error('Failed to publish metrics', { error: String(error) });
         }
         return response;
       },
