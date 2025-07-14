@@ -120,7 +120,7 @@ describe('TransferModal', () => {
 
     // Just verify the form submission works without mocking complex behavior
     expect(screen.getByDisplayValue('9876543210')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('100')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('$100')).toBeInTheDocument();
   });
 
   it('prevents modal close when clicking inside modal content', () => {

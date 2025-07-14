@@ -92,11 +92,11 @@ export function HorizontalAccountsList({
       {showLeftArrow && (
         <button
           onClick={scrollLeft}
-          className="absolute left-0 top-1/2 transform -translate-y-1/2 z-10 bg-white shadow-lg rounded-full p-2 hover:bg-gray-50 transition-colors"
+          className="absolute left-4 top-1/2 transform -translate-y-1/2 z-10 bg-gradient-to-r from-green-400 to-yellow-400 shadow-lg rounded-full p-2 hover:shadow-xl transition-all"
           data-testid="scroll-left-btn"
         >
           <svg
-            className="w-5 h-5 text-gray-600"
+            className="w-5 h-5 text-white"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -115,11 +115,11 @@ export function HorizontalAccountsList({
       {showRightArrow && (
         <button
           onClick={scrollRight}
-          className="absolute right-0 top-1/2 transform -translate-y-1/2 z-10 bg-white shadow-lg rounded-full p-2 hover:bg-gray-50 transition-colors"
+          className="absolute right-4 top-1/2 transform -translate-y-1/2 z-10 bg-gradient-to-r from-green-400 to-yellow-400 shadow-lg rounded-full p-2 hover:shadow-xl transition-all"
           data-testid="scroll-right-btn"
         >
           <svg
-            className="w-5 h-5 text-gray-600"
+            className="w-5 h-5 text-white"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

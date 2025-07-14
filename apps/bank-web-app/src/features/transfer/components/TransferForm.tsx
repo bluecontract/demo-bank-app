@@ -170,22 +170,28 @@ export function TransferForm({
         <div>
           <label
             htmlFor="amount"
-            className="block text-sm font-medium text-gray-700"
+            className="block text-sm font-medium text-gray-700 text-center mb-4"
           >
             Amount
           </label>
-          <Input
-            id="amount"
-            type="number"
-            step="0.01"
-            value={amount}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              handleInputChange('amount', e.target.value)
-            }
-            placeholder="0.00"
-            disabled={isLoading}
-            error={errors.amount}
-          />
+          <div className="text-center mb-4">
+            <div className="text-4xl font-bold text-gray-900 mb-2">
+              {amount ? `$${parseFloat(amount).toFixed(0)}` : '$0'}
+            </div>
+            <Input
+              id="amount"
+              type="number"
+              step="0.01"
+              value={amount}
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                handleInputChange('amount', e.target.value)
+              }
+              placeholder="0.00"
+              disabled={isLoading}
+              error={errors.amount}
+              className="text-center text-lg font-medium"
+            />
+          </div>
         </div>
 
         {mode === 'transfer' && (

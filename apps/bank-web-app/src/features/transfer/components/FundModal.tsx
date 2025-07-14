@@ -74,8 +74,11 @@ export function FundModal({
   };
 
   const handleAmountChange = (value: string) => {
+    // Remove dollar sign if present
+    const cleanValue = value.replace(/^\$/, '');
+
     // Allow only digits and one decimal point
-    const sanitized = value.replace(/[^0-9.]/g, '');
+    const sanitized = cleanValue.replace(/[^0-9.]/g, '');
 
     // Prevent multiple decimal points
     const parts = sanitized.split('.');
@@ -217,18 +220,27 @@ export function FundModal({
                 <div>
                   <label
                     htmlFor="amount"
-                    className="block text-sm font-medium text-gray-700"
+                    className="block text-sm font-medium text-gray-700 text-center mb-3"
                   >
                     Amount
                   </label>
-                  <div>
+                  <div className="text-center">
                     <input
                       type="text"
                       id="amount"
-                      value={formData.amount}
+                      value={formData.amount ? `$${formData.amount}` : ''}
                       onChange={e => handleAmountChange(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 border-gray-300 text-gray-900 placeholder-gray-400 focus:border-green-500 bg-white"
+                      placeholder="$0"
+                      className="w-full text-center text-4xl font-bold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-0 placeholder-gray-400 mb-5"
+                      style={{
+                        textAlign: 'center',
+                        fontSize: '2.25rem',
+                        fontWeight: 'bold',
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        boxShadow: 'none',
+                      }}
                       required
                     />
                     {errors.amount && (
@@ -241,7 +253,7 @@ export function FundModal({
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3">
+              <div className="flex gap-3 mt-8">
                 <button
                   type="button"
                   onClick={handleClose}

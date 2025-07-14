@@ -14,7 +14,7 @@ export function AddAccountCard({
   return (
     <Card variant="dashed" data-testid={testId}>
       <button
-        className={`w-full h-full flex flex-col items-center justify-center space-y-4 p-6 min-h-[175px] disabled:opacity-50 ${
+        className={`w-full h-full flex flex-col items-center justify-center space-y-4 min-h-[168px] disabled:opacity-50 ${
           onClick && !isLoading ? 'cursor-pointer hover:bg-gray-50' : ''
         }`}
         onClick={isLoading ? undefined : onClick}
