@@ -30,6 +30,9 @@
   "include": ["src/**/*.js", "src/**/*.jsx", "src/**/*.ts", "src/**/*.tsx"],
   "references": [
     {
+      "path": "../../libs/shared/bank-api-contract/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/shared/bank-api-client/tsconfig.lib.json"
     }
   ]

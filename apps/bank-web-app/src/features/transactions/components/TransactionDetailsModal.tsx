@@ -3,17 +3,7 @@ import { useTransaction } from '../hooks/useTransaction';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
 import { Spinner } from '../../../ui/Spinner';
 import { Button } from '../../../ui/Button';
-
-type Account = {
-  accountId: string;
-  accountNumber: string;
-  name: string;
-  currency: 'USD';
-  createdAt: string;
-  ledgerBalanceMinor: number;
-  availableBalanceMinor: number;
-  status: string;
-};
+import { Account } from '../../../types/api';
 
 interface TransactionDetailsModalProps {
   isOpen: boolean;

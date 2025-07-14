@@ -1,14 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
+import { FundAccountResponse } from '../../../types/api';
 
 export interface FundAccountRequest {
   accountId: string;
   amountMinor: number;
-}
-
-export interface FundAccountResponse {
-  txnId: string;
 }
 
 interface UseFundAccountOptions {

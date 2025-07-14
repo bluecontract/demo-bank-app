@@ -3,9 +3,10 @@ import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useApiClient } from '../../../app/providers/ApiProvider';
 import { useAuth } from '../../../app/providers/AuthProvider';
+import { User } from '../../../types/api';
 
 interface SignUpFormProps {
-  onSuccess?: (user: { userId: string; name: string }) => void;
+  onSuccess?: (user: User) => void;
 }
 
 export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {

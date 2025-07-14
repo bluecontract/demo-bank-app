@@ -1,16 +1,6 @@
 import { AccountCard } from './AccountCard';
 import { AddAccountCard } from './AddAccountCard';
-
-// Define Account type based on API contract
-type Account = {
-  accountId: string;
-  accountNumber: string;
-  currency: 'USD';
-  createdAt: string;
-  ledgerBalanceMinor: number;
-  availableBalanceMinor: number;
-  status: string;
-};
+import { Account } from '../../../types/api';
 
 interface AccountsListProps {
   accounts: Account[];

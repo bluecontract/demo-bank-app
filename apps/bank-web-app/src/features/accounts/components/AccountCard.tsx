@@ -1,18 +1,7 @@
 import { Card } from '../../../ui/Card';
 import { Button } from '../../../ui/Button';
 import { formatCurrency, formatAccountNumber } from '../../../lib';
-
-// Define Account type based on API contract
-type Account = {
-  accountId: string;
-  accountNumber: string;
-  name: string;
-  currency: 'USD';
-  createdAt: string;
-  ledgerBalanceMinor: number;
-  availableBalanceMinor: number;
-  status: string;
-};
+import { Account } from '../../../types/api';
 
 interface AccountCardProps {
   account: Account;

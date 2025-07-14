@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useApiClient } from '../../app/providers/ApiProvider';
+import { HealthCheck } from '../../types/api';
 
 export function HealthStatus() {
   const apiClient = useApiClient();
@@ -10,7 +11,7 @@ export function HealthStatus() {
     error,
   } = useQuery({
     queryKey: ['health'],
-    queryFn: async () => {
+    queryFn: async (): Promise<HealthCheck> => {
       const response = await apiClient.health();
       if (response.status === 200) {
         return response.body;

@@ -1,18 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
-
-// Define Account type based on API contract
-type Account = {
-  accountId: string;
-  accountNumber: string;
-  name: string;
-  currency: 'USD';
-  createdAt: string;
-  ledgerBalanceMinor: number;
-  availableBalanceMinor: number;
-  status: string;
-};
+import { Account, AccountsList } from '../../../types/api';
 
 export function useAccounts() {
   const { handleAuthError } = useAuthErrorHandler();

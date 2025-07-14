@@ -3,17 +3,7 @@ import { TransactionItem } from './TransactionItem';
 import { TransactionDetailsModal } from './TransactionDetailsModal';
 import { Transaction } from '../hooks/useTransactions';
 import { Spinner } from '../../../ui/Spinner';
-
-type Account = {
-  accountId: string;
-  accountNumber: string;
-  name: string;
-  currency: 'USD';
-  createdAt: string;
-  ledgerBalanceMinor: number;
-  availableBalanceMinor: number;
-  status: string;
-};
+import { Account } from '../../../types/api';
 
 interface TransactionListProps {
   transactions: Transaction[];

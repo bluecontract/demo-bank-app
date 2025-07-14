@@ -7,11 +7,7 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-
-interface User {
-  userId: string;
-  name: string;
-}
+import { User } from '../../types/api';
 
 interface AuthContextType {
   user: User | null;

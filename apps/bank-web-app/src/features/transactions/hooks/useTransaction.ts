@@ -10,8 +10,8 @@ export type TransactionDetails = ClientInferResponseBody<
 >;
 
 export interface UseTransactionOptions {
-  accountId: string;
-  txnId: string;
+  accountId: TransactionDetails['accountId'];
+  txnId: TransactionDetails['txnId'];
 }
 
 export function useTransaction({ accountId, txnId }: UseTransactionOptions) {

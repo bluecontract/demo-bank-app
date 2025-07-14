@@ -6,16 +6,7 @@ import {
   useEffect,
 } from 'react';
 import { useAuth } from './AuthProvider';
-
-type Account = {
-  accountId: string;
-  accountNumber: string;
-  currency: 'USD';
-  createdAt: string;
-  ledgerBalanceMinor: number;
-  availableBalanceMinor: number;
-  status: string;
-};
+import { Account } from '../../types/api';
 
 interface SelectedAccountContextType {
   selectedAccount: Account | null;
