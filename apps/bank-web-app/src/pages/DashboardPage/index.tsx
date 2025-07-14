@@ -1,19 +1,83 @@
+import { useState } from 'react';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { DashboardHeader } from '../../features/dashboard/components';
 import {
   AccountsList,
   AddAccountCard,
 } from '../../features/accounts/components';
+import { TransferModal, FundModal } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import { useCreateAccount } from '../../features/accounts/hooks/useCreateAccount';
+
+type Account = {
+  accountId: string;
+  accountNumber: string;
+  currency: 'USD';
+  createdAt: string;
+  ledgerBalanceMinor: number;
+  availableBalanceMinor: number;
+  status: string;
+};
 
 export function DashboardPage() {
   const { user } = useAuth();
   const { data: accounts, isLoading, error } = useAccounts();
   const { mutate: createAccount, isPending: isCreating } = useCreateAccount();
 
+  const [transferModal, setTransferModal] = useState<{
+    isOpen: boolean;
+    defaultAccountId: string | undefined;
+  }>({
+    isOpen: false,
+    defaultAccountId: undefined,
+  });
+
+  const [fundModal, setFundModal] = useState<{
+    isOpen: boolean;
+    sourceAccount: Account | null;
+  }>({
+    isOpen: false,
+    sourceAccount: null,
+  });
+
   const handleCreateAccount = () => {
     createAccount({ currency: 'USD' });
+  };
+
+  const handleAccountDetails = (accountId: string) => {
+    // TODO: Navigate to account details page
+    console.log('Navigate to account details:', accountId);
+  };
+
+  const handleTransfer = (accountId: string) => {
+    setTransferModal({
+      isOpen: true,
+      defaultAccountId: accountId,
+    });
+  };
+
+  const handleFund = (accountId: string) => {
+    const account = accounts?.find(acc => acc.accountId === accountId);
+    if (account) {
+      setFundModal({
+        isOpen: true,
+        sourceAccount: account,
+      });
+    }
+  };
+
+  const closeTransferModal = () => {
+    setTransferModal({
+      isOpen: false,
+      defaultAccountId: undefined,
+    });
+  };
+
+  const closeFundModal = () => {
+    setFundModal({
+      isOpen: false,
+      sourceAccount: null,
+    });
   };
 
   if (isLoading) {
@@ -47,6 +111,9 @@ export function DashboardPage() {
             <AccountsList
               accounts={accounts}
               onCreateAccount={handleCreateAccount}
+              onAccountDetails={handleAccountDetails}
+              onTransfer={handleTransfer}
+              onFund={handleFund}
               isCreatingAccount={isCreating}
             />
           ) : (
@@ -66,6 +133,24 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Transfer Modal */}
+      {accounts && accounts.length > 0 && (
+        <TransferModal
+          isOpen={transferModal.isOpen}
+          onClose={closeTransferModal}
+          accounts={accounts}
+          defaultAccountId={transferModal.defaultAccountId}
+        />
+      )}
+
+      {/* Fund Modal */}
+      <FundModal
+        isOpen={fundModal.isOpen}
+        onClose={closeFundModal}
+        accounts={accounts || []}
+        defaultAccountId={fundModal.sourceAccount?.accountId}
+      />
     </div>
   );
 }

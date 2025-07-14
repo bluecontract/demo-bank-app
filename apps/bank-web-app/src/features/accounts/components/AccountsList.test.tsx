@@ -25,7 +25,14 @@ const mockAccounts = [
 
 describe('AccountsList', () => {
   it('should render list of accounts', () => {
-    render(<AccountsList accounts={mockAccounts} onCreateAccount={vi.fn()} />);
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+      />
+    );
 
     expect(screen.getByText('$10,300')).toBeInTheDocument();
     expect(screen.getByText('$5,000')).toBeInTheDocument();
@@ -34,7 +41,14 @@ describe('AccountsList', () => {
   });
 
   it('should render add account card', () => {
-    render(<AccountsList accounts={mockAccounts} onCreateAccount={vi.fn()} />);
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+      />
+    );
 
     expect(screen.getByText('Add new account')).toBeInTheDocument();
   });
@@ -45,6 +59,8 @@ describe('AccountsList', () => {
       <AccountsList
         accounts={mockAccounts}
         onCreateAccount={handleCreateAccount}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
       />
     );
 
@@ -54,11 +70,51 @@ describe('AccountsList', () => {
     expect(handleCreateAccount).toHaveBeenCalledTimes(1);
   });
 
+  it('should handle account details click', () => {
+    const handleAccountDetails = vi.fn();
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={handleAccountDetails}
+        onTransfer={vi.fn()}
+      />
+    );
+
+    const detailsButton = screen.getAllByText('Details')[0];
+    detailsButton.click();
+
+    expect(handleAccountDetails).toHaveBeenCalledTimes(1);
+    expect(handleAccountDetails).toHaveBeenCalledWith(
+      mockAccounts[0].accountId
+    );
+  });
+
+  it('should handle transfer click', () => {
+    const handleTransfer = vi.fn();
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={handleTransfer}
+      />
+    );
+
+    const transferButton = screen.getAllByText('New transfer')[0];
+    transferButton.click();
+
+    expect(handleTransfer).toHaveBeenCalledTimes(1);
+    expect(handleTransfer).toHaveBeenCalledWith(mockAccounts[0].accountId);
+  });
+
   it('should have responsive grid layout', () => {
     render(
       <AccountsList
         accounts={mockAccounts}
         onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
         data-testid="accounts-list"
       />
     );
@@ -68,7 +124,14 @@ describe('AccountsList', () => {
   });
 
   it('should render empty state when no accounts', () => {
-    render(<AccountsList accounts={[]} onCreateAccount={vi.fn()} />);
+    render(
+      <AccountsList
+        accounts={[]}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+      />
+    );
 
     expect(screen.getByText('Add new account')).toBeInTheDocument();
   });
@@ -78,10 +141,27 @@ describe('AccountsList', () => {
       <AccountsList
         accounts={mockAccounts}
         onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
         isCreatingAccount={true}
       />
     );
 
     expect(screen.getByText('Creating...')).toBeInTheDocument();
+  });
+
+  it('should render correct number of account cards', () => {
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+      />
+    );
+
+    // 2 account cards + 1 add account card
+    const detailsButtons = screen.getAllByText('Details');
+    expect(detailsButtons).toHaveLength(2);
   });
 });

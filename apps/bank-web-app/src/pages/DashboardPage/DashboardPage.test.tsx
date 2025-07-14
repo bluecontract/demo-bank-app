@@ -26,14 +26,37 @@ vi.mock('../../features/dashboard/components', () => ({
 }));
 
 vi.mock('../../features/accounts/components', () => ({
-  AccountsList: vi.fn(({ accounts, onCreateAccount }) => (
-    <div data-testid="accounts-list">
-      Accounts List - {accounts.length} accounts
-      <button onClick={onCreateAccount} data-testid="create-account-btn">
-        Create Account
-      </button>
-    </div>
-  )),
+  AccountsList: vi.fn(
+    ({
+      accounts,
+      onCreateAccount,
+      onAccountDetails,
+      onTransfer,
+      isCreatingAccount,
+    }) => (
+      <div data-testid="accounts-list">
+        Accounts List - {accounts.length} accounts
+        <button onClick={onCreateAccount} data-testid="create-account-btn">
+          Create Account
+        </button>
+        <button
+          onClick={() => onAccountDetails('test-id')}
+          data-testid="account-details-btn"
+        >
+          Account Details
+        </button>
+        <button
+          onClick={() => onTransfer('test-id')}
+          data-testid="transfer-btn"
+        >
+          Transfer
+        </button>
+        {isCreatingAccount && (
+          <div data-testid="creating-account">Creating...</div>
+        )}
+      </div>
+    )
+  ),
   AddAccountCard: vi.fn(({ onClick, isLoading }) => (
     <div data-testid="add-account-card">
       <button onClick={onClick} data-testid="add-account-btn">
@@ -200,6 +223,17 @@ describe('DashboardPage', () => {
     expect(mockMutate).toHaveBeenCalledWith({ currency: 'USD' });
   });
 
+  it('should show loading state when creating account', () => {
+    mockUseCreateAccount.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: true,
+    });
+
+    render(<DashboardPage />, { wrapper: createTestWrapper() });
+
+    expect(screen.getByTestId('creating-account')).toBeInTheDocument();
+  });
+
   it('should show loading state in empty state when creating account', () => {
     mockUseCreateAccount.mockReturnValue({
       mutate: vi.fn(),
@@ -215,6 +249,32 @@ describe('DashboardPage', () => {
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
     expect(screen.getByTestId('loading')).toBeInTheDocument();
+  });
+
+  it('should handle account details action', () => {
+    const consoleSpy = vi
+      .spyOn(console, 'log')
+      .mockImplementation(() => undefined);
+
+    render(<DashboardPage />, { wrapper: createTestWrapper() });
+
+    fireEvent.click(screen.getByTestId('account-details-btn'));
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      'Navigate to account details:',
+      'test-id'
+    );
+
+    consoleSpy.mockRestore();
+  });
+
+  it('should handle transfer action', () => {
+    render(<DashboardPage />, { wrapper: createTestWrapper() });
+
+    fireEvent.click(screen.getByTestId('transfer-btn'));
+
+    // Check that the transfer modal is opened
+    expect(screen.getByTestId('transfer-modal')).toBeInTheDocument();
   });
 
   it('should handle guest user name', () => {

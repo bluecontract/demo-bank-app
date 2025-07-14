@@ -28,6 +28,66 @@ describe('AccountCard', () => {
     expect(screen.getByText(customName)).toBeInTheDocument();
   });
 
+  it('calls onDetailsClick when Details button is clicked', () => {
+    const onDetailsClick = vi.fn();
+    render(
+      <AccountCard account={mockAccount} onDetailsClick={onDetailsClick} />
+    );
+
+    const detailsButton = screen.getByRole('button', { name: 'Details' });
+    fireEvent.click(detailsButton);
+
+    expect(onDetailsClick).toHaveBeenCalledWith(mockAccount.accountId);
+  });
+
+  it('calls onTransferClick when New transfer button is clicked', () => {
+    const onTransferClick = vi.fn();
+    render(
+      <AccountCard account={mockAccount} onTransferClick={onTransferClick} />
+    );
+
+    const transferButton = screen.getByRole('button', { name: 'New transfer' });
+    fireEvent.click(transferButton);
+
+    expect(onTransferClick).toHaveBeenCalledWith(mockAccount.accountId);
+  });
+
+  it('calls onFundClick when Fund Account button is clicked', () => {
+    const onFundClick = vi.fn();
+    render(<AccountCard account={mockAccount} onFundClick={onFundClick} />);
+
+    const fundButton = screen.getByRole('button', { name: 'Fund Account' });
+    fireEvent.click(fundButton);
+
+    expect(onFundClick).toHaveBeenCalledWith(mockAccount.accountId);
+  });
+
+  it('renders all three action buttons', () => {
+    render(<AccountCard account={mockAccount} />);
+
+    expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'New transfer' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Fund Account' })
+    ).toBeInTheDocument();
+  });
+
+  it('does not call handlers when not provided', () => {
+    render(<AccountCard account={mockAccount} />);
+
+    const detailsButton = screen.getByRole('button', { name: 'Details' });
+    const transferButton = screen.getByRole('button', { name: 'New transfer' });
+    const fundButton = screen.getByRole('button', { name: 'Fund Account' });
+
+    expect(() => {
+      fireEvent.click(detailsButton);
+      fireEvent.click(transferButton);
+      fireEvent.click(fundButton);
+    }).not.toThrow();
+  });
+
   it('displays correct currency formatting', () => {
     const highBalanceAccount = {
       ...mockAccount,

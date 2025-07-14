@@ -15,6 +15,9 @@ type Account = {
 interface AccountsListProps {
   accounts: Account[];
   onCreateAccount: () => void;
+  onAccountDetails: (accountId: string) => void;
+  onTransfer: (accountId: string) => void;
+  onFund?: (accountId: string) => void;
   isCreatingAccount?: boolean;
   'data-testid'?: string;
 }
@@ -22,6 +25,9 @@ interface AccountsListProps {
 export function AccountsList({
   accounts,
   onCreateAccount,
+  onAccountDetails,
+  onTransfer,
+  onFund,
   isCreatingAccount = false,
   'data-testid': testId,
 }: AccountsListProps) {
@@ -32,7 +38,13 @@ export function AccountsList({
     >
       {/* Render account cards */}
       {accounts.map(account => (
-        <AccountCard key={account.accountId} account={account} />
+        <AccountCard
+          key={account.accountId}
+          account={account}
+          onDetailsClick={onAccountDetails}
+          onTransferClick={onTransfer}
+          onFundClick={onFund}
+        />
       ))}
 
       {/* Add account card */}
