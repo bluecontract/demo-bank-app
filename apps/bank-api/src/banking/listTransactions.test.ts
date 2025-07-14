@@ -3,10 +3,7 @@ import jwt from 'jsonwebtoken';
 
 import * as dependencies from './dependencies';
 import * as banking from '@demo-blue/banking';
-import type {
-  DynamoBankingRepository,
-  TransactionSummary,
-} from '@demo-blue/banking';
+import type { DynamoBankingRepository } from '@demo-blue/banking';
 import type {
   PowertoolsLogger,
   PowertoolsMetrics,
@@ -15,7 +12,6 @@ import { Account } from '@demo-blue/banking';
 import { MaybeAuthenticatedTsRestRequestContext } from '../auth/middleware';
 import { Money } from '@demo-blue/banking';
 import type { SimpleAccountNumberGenerator } from '@demo-blue/banking';
-import { listAccountsHandler } from './listAccounts';
 import { listTransactionsHandler } from './listTransactions';
 import { UnauthorizedRequestError } from '../auth/errors';
 import { ERROR_CODES } from '../shared/errors';
