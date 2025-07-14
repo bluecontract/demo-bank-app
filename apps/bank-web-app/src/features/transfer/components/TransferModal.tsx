@@ -62,9 +62,10 @@ export function TransferModal({
     onError: error => {
       // Check if this is an account not found error
       const errorBody = (error as any)?.body;
-      if (errorBody?.title === 'Account Not Found') {
+      if (errorBody?.error === 'ACCOUNT_NOT_FOUND') {
         setErrors({
-          destinationAccountNumber: errorBody.message || 'Account not found',
+          destinationAccountNumber:
+            'Account not found. External outgoing transfers are not yet supported.',
         });
       } else {
         setErrors({ amount: error.message });
@@ -92,7 +93,7 @@ export function TransferModal({
       const availableBalance = selectedAccount.availableBalanceMinor / 100;
       if (numValue > availableBalance) {
         return `Amount exceeds available balance of ${formatCurrency(
-          availableBalance
+          selectedAccount.availableBalanceMinor
         )}`;
       }
     }
