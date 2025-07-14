@@ -10,6 +10,7 @@ export function createApiClient(config: ApiClientConfig) {
   return initClient(bankApiContract, {
     baseUrl: config.baseUrl,
     baseHeaders: config.headers || {},
+    credentials: 'include',
   });
 }
 
