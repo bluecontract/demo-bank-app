@@ -27,9 +27,13 @@ export function useTransactions({
   return useQuery({
     queryKey: ['transactions', accountId, limit, cursor],
     queryFn: async (): Promise<TransactionsData> => {
+      if (!accountId) {
+        throw new Error('Account ID is required');
+      }
+
       try {
         const response = await apiClient.banking.listTransactions({
-          params: { accountId: accountId! },
+          params: { accountId },
           query: { limit, cursor },
           overrideClientOptions: { credentials: 'include' },
         });

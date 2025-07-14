@@ -165,7 +165,11 @@ describe('DropdownItem', () => {
   });
 
   it('should render with icon', () => {
-    const icon = <span data-testid="test-icon">🔥</span>;
+    const icon = (
+      <span data-testid="test-icon" role="img" aria-label="Fire">
+        🔥
+      </span>
+    );
 
     render(
       <DropdownItem onClick={mockOnClick} icon={icon}>
@@ -175,7 +179,7 @@ describe('DropdownItem', () => {
 
     expect(screen.getByTestId('test-icon')).toBeInTheDocument();
     expect(
-      screen.getByRole('menuitem', { name: '🔥 Test Item' })
+      screen.getByRole('menuitem', { name: 'Fire Test Item' })
     ).toBeInTheDocument();
   });
 

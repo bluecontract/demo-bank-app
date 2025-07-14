@@ -19,6 +19,8 @@ vi.mock('./TransactionItem', () => ({
   ),
 }));
 
+const mockAccountId = 'test-account-id';
+
 const mockTransactions: Transaction[] = [
   {
     txnId: 'txn-123',
@@ -49,6 +51,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={[]}
+        accountId={mockAccountId}
         isLoading={true}
         isError={false}
         isEmpty={false}
@@ -64,6 +67,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={[]}
+        accountId={mockAccountId}
         isLoading={false}
         isError={true}
         isEmpty={false}
@@ -82,6 +86,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={[]}
+        accountId={mockAccountId}
         isLoading={false}
         isError={false}
         isEmpty={true}
@@ -102,6 +107,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={mockTransactions}
+        accountId={mockAccountId}
         isLoading={false}
         isError={false}
         isEmpty={false}
@@ -125,6 +131,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={singleTransaction}
+        accountId={mockAccountId}
         isLoading={false}
         isError={false}
         isEmpty={false}
@@ -142,6 +149,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={mockTransactions}
+        accountId={mockAccountId}
         isLoading={false}
         isError={false}
         isEmpty={false}
@@ -159,6 +167,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={mockTransactions}
+        accountId={mockAccountId}
         isLoading={false}
         isError={false}
         isEmpty={false}
@@ -184,6 +193,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={[]}
+        accountId={mockAccountId}
         isLoading={false}
         isError={false}
         isEmpty={true}
@@ -205,6 +215,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={manyTransactions}
+        accountId={mockAccountId}
         isLoading={false}
         isError={false}
         isEmpty={false}
@@ -223,6 +234,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={mockTransactions}
+        accountId={mockAccountId}
         isLoading={true}
         isError={true}
         isEmpty={true}
@@ -241,6 +253,7 @@ describe('TransactionList', () => {
     render(
       <TransactionList
         transactions={[]}
+        accountId={mockAccountId}
         isLoading={false}
         isError={true}
         isEmpty={true}

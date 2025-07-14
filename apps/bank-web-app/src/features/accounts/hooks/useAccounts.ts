@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
-import { Account, AccountsList } from '../../../types/api';
+import { Account } from '../../../types/api';
 
 export function useAccounts() {
   const { handleAuthError } = useAuthErrorHandler();

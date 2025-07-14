@@ -1,5 +1,3 @@
-import { ReactNode } from 'react';
-
 interface SpinnerProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   color?: 'white' | 'green' | 'blue' | 'gray';

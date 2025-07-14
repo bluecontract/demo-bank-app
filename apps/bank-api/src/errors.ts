@@ -1,6 +1,6 @@
 import { TsRestResponse } from '@ts-rest/serverless/aws';
 import type { Logger } from '@demo-blue/shared-observability';
-import { ERROR_CODES, toUnauthorizedResponse } from './shared/errors';
+import { ERROR_CODES } from './shared/errors';
 import { ValidationError } from '@demo-blue/shared-core';
 import { UnauthorizedRequestError } from './auth/errors';
 

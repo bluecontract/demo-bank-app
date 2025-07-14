@@ -64,7 +64,11 @@ export function TransactionDetailsModal({
 
         {isError && (
           <div className="p-8 text-center">
-            <div className="text-6xl mb-4">⚠️</div>
+            <div className="text-6xl mb-4">
+              <span role="img" aria-label="Warning">
+                ⚠️
+              </span>
+            </div>
             <h2 className="text-xl font-bold text-gray-900 mb-2">
               Transaction Not Found
             </h2>

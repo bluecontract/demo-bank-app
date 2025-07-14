@@ -9,6 +9,7 @@ import {
 const mockAccount = {
   accountId: 'test-account-id',
   accountNumber: '1234567890',
+  name: 'Test Account',
   currency: 'USD' as const,
   createdAt: '2023-01-01T00:00:00Z',
   ledgerBalanceMinor: 100000,

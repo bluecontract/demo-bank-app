@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import { HorizontalAccountsList } from './HorizontalAccountsList';
@@ -12,6 +12,7 @@ const mockAccounts = [
   {
     accountId: '1',
     accountNumber: '1234567890',
+    name: 'Checking Account',
     currency: 'USD' as const,
     createdAt: '2023-01-01T00:00:00Z',
     ledgerBalanceMinor: 100000,
@@ -21,6 +22,7 @@ const mockAccounts = [
   {
     accountId: '2',
     accountNumber: '9876543210',
+    name: 'Savings Account',
     currency: 'USD' as const,
     createdAt: '2023-01-02T00:00:00Z',
     ledgerBalanceMinor: 250000,

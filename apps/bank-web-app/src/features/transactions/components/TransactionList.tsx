@@ -56,7 +56,11 @@ export function TransactionList({
         data-testid={testId}
       >
         <div className="text-center text-gray-500">
-          <div className="text-6xl mb-4">⚠️</div>
+          <div className="text-6xl mb-4">
+            <span role="img" aria-label="Warning">
+              ⚠️
+            </span>
+          </div>
           <div className="text-xl mb-2">Failed to load transactions</div>
           <p className="text-sm">Please try refreshing the page</p>
         </div>
@@ -71,7 +75,11 @@ export function TransactionList({
         data-testid={testId}
       >
         <div className="text-center text-gray-500">
-          <div className="text-6xl mb-4">📋</div>
+          <div className="text-6xl mb-4">
+            <span role="img" aria-label="Clipboard">
+              📋
+            </span>
+          </div>
           <div className="text-xl mb-2">No transactions yet</div>
           <p className="text-sm">
             Your transaction history will appear here once you make your first

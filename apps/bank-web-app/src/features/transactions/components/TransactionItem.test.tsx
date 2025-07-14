@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
 import { TransactionItem } from './TransactionItem';
 import { Transaction } from '../hooks/useTransactions';
@@ -28,9 +28,18 @@ const mockDebitTransaction: Transaction = {
   counterpartyAccountNumber: '0987654321',
 };
 
+const mockAccountId = 'test-account-id';
+const mockOnTransactionClick = vi.fn();
+
 describe('TransactionItem', () => {
   it('should render credit transaction correctly', () => {
-    render(<TransactionItem transaction={mockCreditTransaction} />);
+    render(
+      <TransactionItem
+        transaction={mockCreditTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
 
     expect(screen.getByText('Incoming')).toBeInTheDocument();
     expect(screen.getByText('COMPLETED')).toBeInTheDocument();
@@ -41,7 +50,13 @@ describe('TransactionItem', () => {
   });
 
   it('should render debit transaction correctly', () => {
-    render(<TransactionItem transaction={mockDebitTransaction} />);
+    render(
+      <TransactionItem
+        transaction={mockDebitTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
 
     expect(screen.getByText('Outgoing')).toBeInTheDocument();
     expect(screen.getByText('COMPLETED')).toBeInTheDocument();
@@ -57,21 +72,39 @@ describe('TransactionItem', () => {
       description: undefined,
     };
 
-    render(<TransactionItem transaction={transactionWithoutDescription} />);
+    render(
+      <TransactionItem
+        transaction={transactionWithoutDescription}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
 
     expect(screen.getByText('Incoming')).toBeInTheDocument();
     expect(screen.queryByText('Test deposit')).not.toBeInTheDocument();
   });
 
   it('should show correct icon for credit transaction', () => {
-    render(<TransactionItem transaction={mockCreditTransaction} />);
+    render(
+      <TransactionItem
+        transaction={mockCreditTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
 
     const iconContainer = screen.getByText('↓').closest('div');
     expect(iconContainer).toHaveClass('bg-green-100');
   });
 
   it('should show correct icon for debit transaction', () => {
-    render(<TransactionItem transaction={mockDebitTransaction} />);
+    render(
+      <TransactionItem
+        transaction={mockDebitTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
 
     const iconContainer = screen.getByText('↑').closest('div');
     expect(iconContainer).toHaveClass('bg-red-100');
@@ -83,7 +116,13 @@ describe('TransactionItem', () => {
       status: 'PENDING',
     };
 
-    render(<TransactionItem transaction={pendingTransaction} />);
+    render(
+      <TransactionItem
+        transaction={pendingTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
 
     const statusElement = screen.getByText('PENDING');
     expect(statusElement).toBeInTheDocument();
@@ -91,7 +130,13 @@ describe('TransactionItem', () => {
   });
 
   it('should render completed status correctly', () => {
-    render(<TransactionItem transaction={mockCreditTransaction} />);
+    render(
+      <TransactionItem
+        transaction={mockCreditTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
 
     const statusElement = screen.getByText('COMPLETED');
     expect(statusElement).toBeInTheDocument();
@@ -104,7 +149,13 @@ describe('TransactionItem', () => {
       type: 'WITHDRAWAL',
     };
 
-    render(<TransactionItem transaction={withdrawalTransaction} />);
+    render(
+      <TransactionItem
+        transaction={withdrawalTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
     expect(screen.getByText('Withdrawal')).toBeInTheDocument();
   });
 
@@ -114,7 +165,13 @@ describe('TransactionItem', () => {
       type: 'UNKNOWN_TYPE',
     };
 
-    render(<TransactionItem transaction={unknownTransaction} />);
+    render(
+      <TransactionItem
+        transaction={unknownTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
     expect(screen.getByText('UNKNOWN_TYPE')).toBeInTheDocument();
   });
 
@@ -124,7 +181,13 @@ describe('TransactionItem', () => {
       amountMinor: 123456789, // $1,234,567.89
     };
 
-    render(<TransactionItem transaction={largeAmountTransaction} />);
+    render(
+      <TransactionItem
+        transaction={largeAmountTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
     expect(screen.getByText('+$1,234,567.89')).toBeInTheDocument();
   });
 
@@ -134,7 +197,13 @@ describe('TransactionItem', () => {
       amountMinor: 1, // $0.01
     };
 
-    render(<TransactionItem transaction={smallAmountTransaction} />);
+    render(
+      <TransactionItem
+        transaction={smallAmountTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
+      />
+    );
     expect(screen.getByText('+$0.01')).toBeInTheDocument();
   });
 
@@ -142,6 +211,8 @@ describe('TransactionItem', () => {
     render(
       <TransactionItem
         transaction={mockCreditTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
         data-testid="transaction-item"
       />
     );
@@ -154,6 +225,8 @@ describe('TransactionItem', () => {
     render(
       <TransactionItem
         transaction={mockCreditTransaction}
+        accountId={mockAccountId}
+        onTransactionClick={mockOnTransactionClick}
         data-testid="transaction-item"
       />
     );

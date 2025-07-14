@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
-import { Account, CreateAccountResponse } from '../../../types/api';
+import { Account } from '../../../types/api';
 
 type CreateAccountData = {
   name: string;

@@ -19,6 +19,17 @@
         "parallel": false
       },
       "dependsOn": ["build"]
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint",
+      "outputs": ["{options.outputFile}"],
+      "options": {
+        "lintFilePatterns": [
+          "apps/bank-web-app/**/*.{ts,tsx,js,jsx}",
+          "apps/bank-web-app/package.json"
+        ]
+      },
+      "dependsOn": ["typecheck"]
     }
   }
 }

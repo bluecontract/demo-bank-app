@@ -35,7 +35,10 @@ export function useFundAccount(options?: UseFundAccountOptions) {
 
       if (response.status !== 201) {
         // Create error object that includes the response details
-        const error = new Error('Fund account failed') as any;
+        const error = new Error('Fund account failed') as Error & {
+          status: number;
+          body: unknown;
+        };
         error.status = response.status;
         error.body = response.body;
         throw error;

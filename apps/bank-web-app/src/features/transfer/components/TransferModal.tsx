@@ -61,7 +61,7 @@ export function TransferModal({
     },
     onError: error => {
       // Check if this is an account not found error
-      const errorBody = (error as any)?.body;
+      const errorBody = (error as { body?: { error?: string } })?.body;
       if (errorBody?.error === 'ACCOUNT_NOT_FOUND') {
         setErrors({
           destinationAccountNumber:

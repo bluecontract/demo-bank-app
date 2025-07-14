@@ -5,9 +5,17 @@ export function useAuthErrorHandler() {
   const navigate = useNavigate();
 
   const handleAuthError = useCallback(
-    (error: any) => {
+    (error: unknown) => {
       // Check if it's a 401 error
-      if (error?.status === 401 || error?.response?.status === 401) {
+      const errorWithStatus = error as {
+        status?: number;
+        response?: { status?: number };
+      };
+
+      if (
+        errorWithStatus?.status === 401 ||
+        errorWithStatus?.response?.status === 401
+      ) {
         // Show session expired message
         alert('Your session has expired. Please sign in again.');
 

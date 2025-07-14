@@ -78,6 +78,7 @@ export function HorizontalAccountsList({
       container.addEventListener('scroll', updateArrows);
       return () => container.removeEventListener('scroll', updateArrows);
     }
+    return undefined;
   }, []);
 
   // Auto-select first account when accounts are loaded
