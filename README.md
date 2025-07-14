@@ -80,29 +80,40 @@ The app will be available at:
 
 ### Available Scripts
 
-| Command                   | Description                               |
-| ------------------------- | ----------------------------------------- |
-| `npm start`               | Start development server                  |
-| `npm test`                | Run tests for affected projects           |
-| `npm run test:all`        | Run tests for all projects                |
-| `npm run test:watch`      | Run tests in watch mode                   |
-| `npm run e2e`             | Run E2E tests                             |
-| `npm run build`           | Build affected projects                   |
-| `npm run build:all`       | Build all projects                        |
-| `npm run lint`            | Lint affected projects                    |
-| `npm run lint:all`        | Lint all projects                         |
-| `npm run lint:fix`        | Lint and auto-fix affected issues         |
-| `npm run format`          | Format code with Prettier                 |
-| `npm run format:check`    | Check code formatting                     |
-| `npm run format:staged`   | Format only staged files with Prettier    |
-| `npm run pre-commit`      | Run pre-commit checks manually            |
-| `npm run validate-commit` | Validate commit message format            |
-| `npm run generate-docs`   | Generate OpenAPI docs from TypeScript     |
-| `npm run clean`           | Reset Nx cache                            |
-| `npm run graph`           | View dependency graph                     |
-| `npm run serve:all`       | Start all services with Nx                |
-| `npm run serve:stack`     | Start backend stack (LocalStack + Lambda) |
-| `npm run docker:check`    | Verify Docker is running                  |
+| Command                          | Description                                    |
+| -------------------------------- | ---------------------------------------------- |
+| `npm start`                      | Start development server                       |
+| `npm run dev`                    | Start development server (alias)               |
+| `npm test`                       | Run tests for affected projects                |
+| `npm run test:all`               | Run tests for all projects                     |
+| `npm run test:integration`       | Run integration tests for affected projects    |
+| `npm run test:integration:all`   | Run integration tests for all projects         |
+| `npm run test:watch`             | Run tests in watch mode                        |
+| `npm run e2e`                    | Run E2E tests locally                          |
+| `npm run e2e:dev`                | Run E2E tests against dev environment          |
+| `npm run e2e:prod`               | Run E2E tests against production environment   |
+| `npm run build`                  | Build affected projects                        |
+| `npm run build:all`              | Build all projects                             |
+| `npm run lint`                   | Lint affected projects                         |
+| `npm run lint:all`               | Lint all projects                              |
+| `npm run lint:fix`               | Lint and auto-fix affected issues              |
+| `npm run typecheck`              | Run TypeScript type checking for all projects  |
+| `npm run typecheck:bank-web-app` | Run TypeScript type checking for bank-web-app  |
+| `npm run format`                 | Format code with Prettier                      |
+| `npm run format:check`           | Check code formatting                          |
+| `npm run format:staged`          | Format only staged files with Prettier         |
+| `npm run security:audit`         | Run security audit on production dependencies  |
+| `npm run security:audit:dev`     | Run security audit on development dependencies |
+| `npm run security:audit:fix`     | Fix security vulnerabilities                   |
+| `npm run pre-commit`             | Run pre-commit checks manually                 |
+| `npm run validate-commit`        | Validate commit message format                 |
+| `npm run generate-docs`          | Generate OpenAPI docs from TypeScript          |
+| `npm run wait-for-backend`       | Wait for backend to be ready                   |
+| `npm run clean`                  | Reset Nx cache                                 |
+| `npm run graph`                  | View dependency graph                          |
+| `npm run serve:all`              | Start all services with Nx                     |
+| `npm run serve:stack`            | Start backend stack (LocalStack + Lambda)      |
+| `npm run docker:check`           | Verify Docker is running                       |
 
 > **💡 Affected vs All**: By default, commands run only on "affected" projects (those changed since the last commit). Use `:all` variants to run on all projects.
 
@@ -114,12 +125,9 @@ Start all services with Nx orchestration:
 # Start all services with dependency management
 npm run serve:all
 
-# Start backend stack only (useful for API development)
-npm run serve:stack
-
 # Start individual services
-nx serve localstack              # LocalStack only
-nx serve @demo-blue/bank-api  # Backend API only
+nx serve localstack           # ensures LocalStack is running
+nx serve @demo-blue/bank-api  # Backend API only (starts localstack)
 nx serve @demo-blue/bank-web-app # Frontend only
 
 # Check service status
@@ -152,7 +160,7 @@ npm run e2e:prod  # Test against production environment
 
 ```bash
 # Terminal 1: Start the full stack
-npm run serve
+npm run serve:all
 
 # Terminal 2: Run E2E tests (includes automatic health check)
 npm run e2e
@@ -198,34 +206,12 @@ npm run clean  # Reset Nx cache
 npm run graph  # View dependency graph
 ```
 
-## 🎯 Code Quality & Git Hooks
+## 📚 Project Documentation
 
-### Automatic Quality Enforcement
-
-This project uses **automated git hooks** to ensure code quality and security:
-
-```bash
-# Pre-commit (automatic on git commit)
-- Phase 1: Format staged files with Prettier + ESLint
-- Phase 2: Security audit (production: moderate+, dev: high+ only)
-- Phase 3: Run affected tests
-- Block commit if any phase fails
-
-# Commit message (automatic on git commit)
-- Validate conventional commit format
-- Ensure consistent commit history
-```
-
-### Git Hook Setup
-
-Git hooks are automatically installed via **Husky**:
-
-- ✅ **Pre-commit**: Formats code + security audit + runs tests
-- ✅ **Commit-msg**: Validates conventional commit format
-- ✅ **Security audit**: Blocks commits with vulnerabilities (moderate+ in prod, high+ in dev)
-- ✅ **Staged-only formatting**: Fast iteration (formats only changed files)
-
-**Conventional Commit Format:** `type: description` (feat, fix, docs, chore, etc.)
+- **[docs/problem-exploration](./docs/problem-exploration/)**: Project context and problem exploration
+- **[docs/requirements/](./docs/requirements/)**: Functional requirements & UX
+- **[docs/adr/](./docs/adr/)**: Architectural decisions & rationale
+- **[docs/design/](./docs/design/)**: Technical design & architecture
 
 ## 🏗️ Repository Structure
 
@@ -350,6 +336,35 @@ npm run generate-docs       # Creates docs/api/openapi.{json,yaml}
 - **Deployment**: AWS SAM, GitHub Actions
 - **Local development** Localstack / Docker
 
+## 🎯 Code Quality & Git Hooks
+
+### Automatic Quality Enforcement
+
+This project uses **automated git hooks** to ensure code quality and security:
+
+```bash
+# Pre-commit (automatic on git commit)
+- Phase 1: Format staged files with Prettier + ESLint
+- Phase 2: Security audit (production: moderate+, dev: high+ only)
+- Phase 3: Run affected tests
+- Block commit if any phase fails
+
+# Commit message (automatic on git commit)
+- Validate conventional commit format
+- Ensure consistent commit history
+```
+
+### Git Hook Setup
+
+Git hooks are automatically installed via **Husky**:
+
+- ✅ **Pre-commit**: Formats code + security audit + runs tests
+- ✅ **Commit-msg**: Validates conventional commit format
+- ✅ **Security audit**: Blocks commits with vulnerabilities (moderate+ in prod, high+ in dev)
+- ✅ **Staged-only formatting**: Fast iteration (formats only changed files)
+
+**Conventional Commit Format:** `type: description` (feat, fix, docs, chore, etc.)
+
 ## 🚀 CI/CD Pipeline
 
 ### Pipeline Flow
@@ -406,13 +421,6 @@ graph TB
 - **PR to main** → Deploy to dev environment + run cloud E2E tests
 - **Merge to main** → Deploy to production + run cloud E2E tests
 - **Zero manual approvals** - Fully automated with proper test gates
-
-## 📚 Project Documentation
-
-- **[docs/problem-exploration](./docs/problem-exploration/)**: Project context and problem exploration
-- **[docs/requirements/](./docs/requirements/)**: Functional requirements & UX
-- **[docs/adr/](./docs/adr/)**: Architectural decisions & rationale
-- **[docs/design/](./docs/design/)**: Technical design & architecture
 
 ---
 
