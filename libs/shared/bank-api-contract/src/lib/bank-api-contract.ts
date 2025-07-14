@@ -1,7 +1,14 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { createSanitizedStringSchema } from './sanitization';
-import { AccountDto, CreateAccountRequestDto, ProblemDto } from './schemas';
+import {
+  AccountDto,
+  CreateAccountRequestDto,
+  FundingReqDto,
+  ProblemDto,
+  TransferResponseDto,
+  IdempotencyKeyHeaderSchema,
+} from './schemas';
 
 const c = initContract();
 
@@ -105,11 +112,26 @@ export const bankApiContract = c.router(
         responses: { 200: AccountDto, 404: ProblemDto },
         summary: 'Get a bank account by ID',
       },
+
+      fundAccount: {
+        method: 'POST',
+        path: '/v1/accounts/:accountId/funding',
+        pathParams: z.object({ accountId: z.string().uuid() }),
+        body: FundingReqDto,
+        headers: IdempotencyKeyHeaderSchema,
+        responses: {
+          201: TransferResponseDto,
+          400: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Fund a bank account',
+      },
     },
   },
   {
     commonResponses: {
       401: ProblemDto,
+      403: ProblemDto,
       400: ProblemDto,
       500: ProblemDto,
     },

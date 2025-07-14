@@ -6,7 +6,7 @@ import type {
   Context,
   Callback,
 } from 'aws-lambda';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import {
   SecretsManagerClient,
   CreateSecretCommand,
@@ -503,6 +503,176 @@ describe('Bank API Integration Tests', () => {
       });
     });
   });
+
+  describe('Fund Account Endpoint', () => {
+    let jwtCookie: string;
+    let accountId: string;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('fund-account-user');
+      jwtCookie = creds.jwtCookie;
+      // Create an account for the user
+      const create = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Test Account' },
+      });
+      expect(create.statusCode).toBe(201);
+      accountId = create.body.accountId;
+    });
+
+    it('should fund the account and return 201 with txnId', async () => {
+      const idempotencyKey = crypto.randomUUID();
+      const fund = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': idempotencyKey,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 500 },
+      });
+      expect(fund.statusCode).toBe(201);
+      expect(fund.body).toHaveProperty('txnId');
+      // Check balance increased
+      const get = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}`,
+        jwtCookie,
+      });
+      expect(get.statusCode).toBe(200);
+      expect(get.body.ledgerBalanceMinor).toBe(500);
+      expect(get.body.availableBalanceMinor).toBe(500);
+    });
+
+    it('should return 401 if user is not authenticated', async () => {
+      const fund = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 100 },
+      });
+      expect(fund.statusCode).toBe(401);
+      expect(fund.body).toMatchObject({
+        message: 'Unauthorized',
+      });
+    });
+
+    it('should return 400 if idempotency-key is missing', async () => {
+      const fund = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        body: { amountMinor: 100 },
+      });
+      expect(fund.statusCode).toBe(400);
+      const body = fund.body;
+      expect(body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        errors: expect.any(String),
+        message: expect.any(String),
+      });
+      expect(JSON.parse(body.errors)).toMatchObject({
+        bodyErrors: null,
+        pathParameterErrors: null,
+        queryParameterErrors: null,
+        headerErrors: [
+          {
+            code: 'invalid_type',
+            expected: 'string',
+            received: 'undefined',
+            path: ['idempotency-key'],
+            message: 'Required',
+          },
+        ],
+      });
+    });
+
+    it('should return 404 if account does not exist', async () => {
+      const nonExistentAccountId = crypto.randomUUID();
+      const fund = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${nonExistentAccountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 100 },
+      });
+      expect(fund.statusCode).toBe(404);
+      expect(fund.body).toMatchObject({
+        error: 'ACCOUNT_NOT_FOUND',
+        message: 'Account not found',
+      });
+    });
+
+    it('should return 400 if amountMinor is invalid', async () => {
+      const fund = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: -100 },
+      });
+      expect(fund.statusCode).toBe(400);
+      expect(fund.body.error).toMatch(/VALIDATION|amount/i);
+    });
+
+    it('should be idempotent for same idempotency-key', async () => {
+      const create = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Test Account' },
+      });
+      expect(create.statusCode).toBe(201);
+      expect(create.body.accountId).toBeDefined();
+
+      const idempotencyKey = crypto.randomUUID();
+      const fund1 = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${create.body.accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': idempotencyKey,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 200 },
+      });
+      expect(fund1.statusCode).toBe(201);
+      expect(fund1.body).toHaveProperty('txnId');
+      const fund2 = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${create.body.accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': idempotencyKey,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 200 },
+      });
+      expect(fund2.statusCode).toBe(201);
+      expect(fund2.body).toHaveProperty('txnId');
+      expect(fund2.body.txnId).toBe(fund1.body.txnId);
+      // Balance should not double-fund
+      const get = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${create.body.accountId}`,
+        jwtCookie,
+      });
+      expect(get.statusCode).toBe(200);
+      expect(get.body.ledgerBalanceMinor).toBe(200);
+    });
+  });
 });
 
 // Helper functions
@@ -646,6 +816,55 @@ async function setupLocalStackResources(): Promise<void> {
       }
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
+
+    // FUNDING_SOURCE META ROW
+    const fundingSourceCreatedAt = new Date().toISOString();
+    await dynamoClient.send(
+      new PutItemCommand({
+        TableName: TEST_CONFIG.tableName,
+        Item: {
+          PK: { S: 'ACCOUNT#FUNDING_SOURCE' },
+          SK: { S: 'META' },
+          BANKING_GSI1PK: { S: 'USER#SYSTEM' },
+          BANKING_GSI1SK: { S: fundingSourceCreatedAt },
+          accountNumber: { S: '0000000000' },
+          name: { S: 'System Funding Source' },
+          ownerUserId: { S: 'SYSTEM' },
+          status: { S: 'ACTIVE' },
+          currency: { S: 'USD' },
+          createdAt: { S: fundingSourceCreatedAt },
+        },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+
+    // FUNDING_SOURCE BALANCE ROW
+    await dynamoClient.send(
+      new PutItemCommand({
+        TableName: TEST_CONFIG.tableName,
+        Item: {
+          PK: { S: 'ACCOUNT#FUNDING_SOURCE' },
+          SK: { S: 'BALANCE' },
+          ledgerBalanceMinor: { N: '0' },
+          availableBalanceMinor: { N: '0' },
+          version: { N: '0' },
+        },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+
+    // FUNDING_SOURCE ACCOUNT NUMBER RESERVATION
+    await dynamoClient.send(
+      new PutItemCommand({
+        TableName: TEST_CONFIG.tableName,
+        Item: {
+          PK: { S: 'ACCOUNT_NUMBER#0000000000' },
+          SK: { S: 'RESERVE' },
+          accountId: { S: 'FUNDING_SOURCE' },
+        },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
 
     if (!tableReady) {
       throw new Error('DynamoDB table failed to become active');

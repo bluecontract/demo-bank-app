@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { createSanitizedStringSchema } from './sanitization';
+import {
+  createSanitizedOptionalStringSchema,
+  createSanitizedStringSchema,
+} from './sanitization';
 
 export const ProblemDto = z.object({
   error: z.string(),
@@ -29,4 +32,25 @@ export const CreateAccountRequestDto = z.object({
       .min(1, 'Account name is required')
       .max(100, 'Account name must be 100 characters or less')
   ),
+});
+
+export const FundingReqDto = z.object({
+  amountMinor: MoneyMinor.positive(),
+});
+
+export const TransferReqDto = z.object({
+  sourceAccountId: z.string().uuid(),
+  destinationAccountNumber: z.string().length(10),
+  amountMinor: MoneyMinor.positive(),
+  description: createSanitizedOptionalStringSchema(
+    z.string().max(140).optional()
+  ),
+});
+
+export const TransferResponseDto = z.object({
+  txnId: z.string().uuid(),
+});
+
+export const IdempotencyKeyHeaderSchema = z.object({
+  'idempotency-key': z.string(),
 });

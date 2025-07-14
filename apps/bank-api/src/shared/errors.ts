@@ -7,10 +7,14 @@ export const ERROR_CODES = {
   ACCOUNT_NOT_FOUND: 'ACCOUNT_NOT_FOUND',
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  MISSING_IDEMPOTENCY_KEY: 'MISSING_IDEMPOTENCY_KEY',
+  FORBIDDEN: 'FORBIDDEN',
+  INSUFFICIENT_FUNDS: 'INSUFFICIENT_FUNDS',
 } as const;
 
+type StatusCode = 400 | 401 | 403 | 404 | 409 | 500;
 interface ProblemResponseOptions {
-  status: 401 | 404 | 409 | 500;
+  status: StatusCode;
   code: ProblemDto['error'];
   message: ProblemDto['message'];
   detail?: ProblemDto['detail'];
@@ -23,7 +27,7 @@ export const problemResponse = ({
   detail,
 }: ProblemResponseOptions): {
   body: ProblemDto;
-  status: 401 | 404 | 409 | 500;
+  status: StatusCode;
 } => {
   return {
     status,
