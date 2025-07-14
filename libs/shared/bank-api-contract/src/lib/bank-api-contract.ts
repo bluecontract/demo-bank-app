@@ -97,6 +97,14 @@ export const bankApiContract = c.router(
         }),
         summary: 'List user bank accounts',
       },
+
+      getAccount: {
+        method: 'GET',
+        path: '/v1/accounts/:accountId',
+        pathParams: z.object({ accountId: z.string().uuid() }),
+        responses: { 200: AccountDto, 404: ProblemDto },
+        summary: 'Get a bank account by ID',
+      },
     },
   },
   {

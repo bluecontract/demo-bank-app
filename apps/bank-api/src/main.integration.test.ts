@@ -103,7 +103,13 @@ describe('Bank API Integration Tests', () => {
 
   describe('Preflight Requests', () => {
     it('should return 204 for OPTIONS requests', async () => {
-      const paths = ['/auth/signup', '/auth/signin', '/health'];
+      const paths = [
+        '/auth/signup',
+        '/auth/signin',
+        '/health',
+        '/v1/accounts',
+        '/v1/accounts/:accountId',
+      ];
       for (const path of paths) {
         const result = await invokeApi({
           method: 'OPTIONS',
@@ -376,12 +382,10 @@ describe('Bank API Integration Tests', () => {
   });
 
   describe('List Accounts Endpoint', () => {
-    let userId: string;
     let jwtCookie: string;
 
     beforeAll(async () => {
       const creds = await signupUniqueTestUser('list-accounts-user');
-      userId = creds.userId;
       jwtCookie = creds.jwtCookie;
     });
 
@@ -389,7 +393,6 @@ describe('Bank API Integration Tests', () => {
       const result = await invokeApi({
         method: 'GET',
         path: '/v1/accounts',
-        userId,
         jwtCookie,
       });
       expect(result.statusCode).toBe(200);
@@ -401,7 +404,6 @@ describe('Bank API Integration Tests', () => {
         const create = await invokeApi({
           method: 'POST',
           path: '/v1/accounts',
-          userId,
           jwtCookie,
           body: { name: 'Test Account' },
         });
@@ -410,7 +412,6 @@ describe('Bank API Integration Tests', () => {
       const result = await invokeApi({
         method: 'GET',
         path: '/v1/accounts',
-        userId,
         jwtCookie,
       });
       expect(result.statusCode).toBe(200);
@@ -431,6 +432,69 @@ describe('Bank API Integration Tests', () => {
       const result = await invokeApi({
         method: 'GET',
         path: '/v1/accounts',
+      });
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+  });
+
+  describe('Get Account Endpoint', () => {
+    let jwtCookie: string;
+    let accountId: string;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('get-account-user');
+      jwtCookie = creds.jwtCookie;
+      // Create an account for the user
+      const create = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Test Account' },
+      });
+      expect(create.statusCode).toBe(201);
+      accountId = create.body.accountId;
+    });
+
+    it('should return the account for authenticated user', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}`,
+        jwtCookie,
+      });
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toMatchObject({
+        accountId,
+        accountNumber: expect.any(String),
+        currency: 'USD',
+        createdAt: expect.any(String),
+        ledgerBalanceMinor: 0,
+        availableBalanceMinor: 0,
+        status: 'ACTIVE',
+      });
+    });
+
+    it('should return 404 if account does not exist', async () => {
+      const nonExistentAccountId = crypto.randomUUID();
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${nonExistentAccountId}`,
+        jwtCookie,
+      });
+      expect(result.statusCode).toBe(404);
+      expect(result.body).toMatchObject({
+        error: 'ACCOUNT_NOT_FOUND',
+        message: 'Account not found',
+      });
+    });
+
+    it('should return 401 if user is not authenticated', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}`,
       });
       expect(result.statusCode).toBe(401);
       expect(result.body).toEqual({
@@ -649,7 +713,6 @@ async function invokeApi({
   path: string;
   body?: object;
   queryStringParameters?: Record<string, string>;
-  userId?: string;
   jwtCookie?: string;
   headers?: Record<string, string>;
 }) {
