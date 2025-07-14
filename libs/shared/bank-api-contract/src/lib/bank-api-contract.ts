@@ -8,6 +8,7 @@ import {
   ProblemDto,
   TransferResponseDto,
   IdempotencyKeyHeaderSchema,
+  TransferReqDto,
 } from './schemas';
 
 const c = initContract();
@@ -125,6 +126,20 @@ export const bankApiContract = c.router(
           404: ProblemDto,
         },
         summary: 'Fund a bank account',
+      },
+
+      transferMoney: {
+        method: 'POST',
+        path: '/v1/transfers',
+        body: TransferReqDto,
+        headers: IdempotencyKeyHeaderSchema,
+        responses: {
+          201: TransferResponseDto,
+          400: ProblemDto,
+          403: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Transfer money between bank accounts',
       },
     },
   },

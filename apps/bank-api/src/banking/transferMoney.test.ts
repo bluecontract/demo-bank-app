@@ -9,11 +9,11 @@ import type {
   PowertoolsMetrics,
 } from '@demo-blue/shared-observability';
 import { Account } from '@demo-blue/banking';
-import { MaybeAuthenticatedTsRestRequestContext } from '../auth/middleware';
 import { Money } from '@demo-blue/banking';
 import type { SimpleAccountNumberGenerator } from '@demo-blue/banking';
-import { fundAccountHandler } from './fundAccount';
 import { ERROR_CODES } from '../shared/errors';
+import { transferMoneyHandler } from './transferMoney';
+import { MaybeAuthenticatedTsRestRequestContext } from '../auth/middleware';
 import { UnauthorizedRequestError } from '../auth/errors';
 
 const mockLogger: PowertoolsLogger = {
@@ -27,6 +27,7 @@ const mockLogger: PowertoolsLogger = {
 
 const mockRepository = {
   saveAccount: vi.fn(async (account: Account) => account),
+  getAccountIdByNumber: vi.fn(),
 } as unknown as DynamoBankingRepository;
 
 const mockAccountNumberGenerator = {
@@ -55,7 +56,7 @@ const setAuthHeader = (headers: Headers) => {
   return headers;
 };
 
-describe('fundAccountHandler', () => {
+describe('transferMoneyHandler', () => {
   beforeEach(() => {
     vi.spyOn(dependencies, 'getDependencies').mockResolvedValue({
       repository: mockRepository,
@@ -64,7 +65,10 @@ describe('fundAccountHandler', () => {
       metrics: mockMetrics,
       config: mockConfig,
     });
-    vi.spyOn(banking, 'fundAccount').mockResolvedValue('txn-456');
+    vi.spyOn(banking, 'transferMoney').mockResolvedValue('txn-123');
+    vi.spyOn(mockRepository, 'getAccountIdByNumber').mockResolvedValue(
+      minimalAccount.id
+    );
     vi.clearAllMocks();
   });
 
@@ -72,16 +76,32 @@ describe('fundAccountHandler', () => {
     vi.restoreAllMocks();
   });
 
-  const accountId = 'acc-123';
-  const userId = 'user-1';
-  const idempotencyKey = 'idemp-2';
+  const minimalAccount = {
+    id: 'acc-2',
+    accountNumber: '1234567890',
+    ownerUserId: 'user-2',
+    status: 'ACTIVE',
+    currency: 'USD',
+    createdAt: new Date(),
+    ledgerBalanceMinor: 1000,
+    availableBalanceMinor: 1000,
+    balanceVersion: 1,
+    postings: [],
+    applyPosting: vi.fn(),
+    isOwnedBy: vi.fn(() => true),
+    ensureSufficientFunds: vi.fn(),
+    ensureActive: vi.fn(),
+  } as unknown as Account;
 
-  it('should return 201 and txnId for valid funding', async () => {
-    const result = await fundAccountHandler(
+  it('should return 201 and txnId for valid transfer', async () => {
+    const result = await transferMoneyHandler(
       {
-        params: { accountId },
-        body: { amountMinor: 100 },
-        headers: { 'idempotency-key': idempotencyKey },
+        body: {
+          sourceAccountId: minimalAccount.id,
+          destinationAccountNumber: '1234567890',
+          amountMinor: 100,
+        },
+        headers: { 'idempotency-key': 'idemp-1' },
       },
       {
         request: {
@@ -90,35 +110,45 @@ describe('fundAccountHandler', () => {
       }
     );
     expect(result.status).toBe(201);
-    expect(result.body).toEqual({ txnId: 'txn-456' });
-    expect(banking.fundAccount).toHaveBeenCalledWith(
+    expect(result.body).toEqual({ txnId: 'txn-123' });
+    expect(banking.transferMoney).toHaveBeenCalledWith(
       {
-        accountId,
+        srcAccountId: minimalAccount.id,
+        dstAccountNumber: '1234567890',
         amountMinor: new Money(100),
-        ctx: { userId, idempotencyKey },
+        description: '',
+        ctx: {
+          idempotencyKey: 'idemp-1',
+          userId: TEST_USER_ID,
+        },
       },
       { repository: mockRepository }
     );
-    expect(mockLogger.info).toHaveBeenCalledWith('Funding account', {
-      userId,
-      accountId,
+    expect(mockLogger.info).toHaveBeenCalledWith('Transferring money', {
+      userId: TEST_USER_ID,
+      sourceAccountId: minimalAccount.id,
+      destinationAccountNumber: '1234567890',
       amountMinor: 100,
     });
-    expect(mockLogger.info).toHaveBeenCalledWith('Account funded', {
-      userId,
-      accountId,
-      txnId: 'txn-456',
+    expect(mockLogger.info).toHaveBeenCalledWith('Money transferred', {
+      userId: TEST_USER_ID,
+      txnId: 'txn-123',
+      sourceAccountId: minimalAccount.id,
+      destinationAccountNumber: '1234567890',
       amountMinor: 100,
     });
   });
 
   it('should return 401 if JWT token is missing', async () => {
-    await expect(
-      fundAccountHandler(
+    const result = await expect(
+      transferMoneyHandler(
         {
-          params: { accountId },
-          body: { amountMinor: 100 },
-          headers: { 'idempotency-key': idempotencyKey },
+          body: {
+            sourceAccountId: minimalAccount.id,
+            destinationAccountNumber: '1234567890',
+            amountMinor: 100,
+          },
+          headers: { 'idempotency-key': 'idemp-1' },
         },
         {
           request: {
@@ -134,10 +164,13 @@ describe('fundAccountHandler', () => {
   });
 
   it('should return 400 if Idempotency-Key is missing', async () => {
-    const result = await fundAccountHandler(
+    const result = await transferMoneyHandler(
       {
-        params: { accountId },
-        body: { amountMinor: 100 },
+        body: {
+          sourceAccountId: minimalAccount.id,
+          destinationAccountNumber: '1234567890',
+          amountMinor: 100,
+        },
         headers: {} as unknown as { 'idempotency-key': string },
       },
       {
@@ -153,15 +186,18 @@ describe('fundAccountHandler', () => {
     });
   });
 
-  it('should return 404 if AccountNotFoundError thrown', async () => {
-    (banking.fundAccount as any).mockRejectedValueOnce(
+  it('should return 404 if destination account not found', async () => {
+    (banking.transferMoney as any).mockRejectedValueOnce(
       new banking.AccountNotFoundError('non-existent-account')
     );
-    const result = await fundAccountHandler(
+    const result = await transferMoneyHandler(
       {
-        params: { accountId },
-        body: { amountMinor: 100 },
-        headers: { 'idempotency-key': idempotencyKey },
+        body: {
+          sourceAccountId: 'acc-1',
+          destinationAccountNumber: 'non-existent-account',
+          amountMinor: 100,
+        },
+        headers: { 'idempotency-key': 'idemp-1' },
       },
       {
         request: {
@@ -177,14 +213,20 @@ describe('fundAccountHandler', () => {
   });
 
   it('should return 403 if ForbiddenError thrown', async () => {
-    (banking.fundAccount as any).mockRejectedValueOnce(
+    vi.spyOn(mockRepository, 'getAccountIdByNumber').mockResolvedValue(
+      minimalAccount.id
+    );
+    (banking.transferMoney as any).mockRejectedValueOnce(
       new banking.ForbiddenError('forbidden')
     );
-    const result = await fundAccountHandler(
+    const result = await transferMoneyHandler(
       {
-        params: { accountId },
-        body: { amountMinor: 100 },
-        headers: { 'idempotency-key': idempotencyKey },
+        body: {
+          sourceAccountId: 'acc-1',
+          destinationAccountNumber: '1234567890',
+          amountMinor: 100,
+        },
+        headers: { 'idempotency-key': 'idemp-1' },
       },
       {
         request: {
@@ -200,14 +242,20 @@ describe('fundAccountHandler', () => {
   });
 
   it('should return 400 if InsufficientFundsError thrown', async () => {
-    (banking.fundAccount as any).mockRejectedValueOnce(
+    vi.spyOn(mockRepository, 'getAccountIdByNumber').mockResolvedValue(
+      minimalAccount.id
+    );
+    (banking.transferMoney as any).mockRejectedValueOnce(
       new banking.InsufficientFundsError(100, 0)
     );
-    const result = await fundAccountHandler(
+    const result = await transferMoneyHandler(
       {
-        params: { accountId },
-        body: { amountMinor: 100 },
-        headers: { 'idempotency-key': idempotencyKey },
+        body: {
+          sourceAccountId: 'acc-1',
+          destinationAccountNumber: '1234567890',
+          amountMinor: 100,
+        },
+        headers: { 'idempotency-key': 'idemp-1' },
       },
       {
         request: {
@@ -223,13 +271,19 @@ describe('fundAccountHandler', () => {
   });
 
   it('should propagate unexpected errors', async () => {
-    (banking.fundAccount as any).mockRejectedValueOnce(new Error('fail'));
+    vi.spyOn(mockRepository, 'getAccountIdByNumber').mockResolvedValue(
+      minimalAccount.id
+    );
+    (banking.transferMoney as any).mockRejectedValueOnce(new Error('fail'));
     await expect(
-      fundAccountHandler(
+      transferMoneyHandler(
         {
-          params: { accountId },
-          body: { amountMinor: 100 },
-          headers: { 'idempotency-key': idempotencyKey },
+          body: {
+            sourceAccountId: 'acc-1',
+            destinationAccountNumber: '1234567890',
+            amountMinor: 100,
+          },
+          headers: { 'idempotency-key': 'idemp-1' },
         },
         {
           request: {

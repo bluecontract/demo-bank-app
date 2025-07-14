@@ -673,6 +673,201 @@ describe('Bank API Integration Tests', () => {
       expect(get.body.ledgerBalanceMinor).toBe(200);
     });
   });
+
+  describe('Transfer Money Endpoint', () => {
+    let user1: { userId: string; jwtCookie: string; userName: string };
+    let user2: { userId: string; jwtCookie: string; userName: string };
+    let user1Account: { accountId: string };
+    let user2Account: { accountId: string; accountNumber: string };
+
+    beforeAll(async () => {
+      user1 = await signupUniqueTestUser('transfer-user-1');
+      user2 = await signupUniqueTestUser('transfer-user-2');
+      // Create accounts for both users
+      const acc1 = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: user1.jwtCookie,
+        body: { name: 'Test Account 1' },
+      });
+      user1Account = acc1.body;
+      const acc2 = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: user2.jwtCookie,
+        body: { name: 'Test Account 2' },
+      });
+      user2Account = acc2.body;
+      // Fund user1's account for transfer
+      await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${user1Account.accountId}/funding`,
+        jwtCookie: user1.jwtCookie,
+        body: { amountMinor: 200 },
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+      });
+    });
+
+    it('should transfer money between users and return 201 with txnId', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie: user1.jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: user2Account.accountNumber,
+          amountMinor: 100,
+        },
+      });
+      expect(result.statusCode).toBe(201);
+      expect(result.body).toHaveProperty('txnId');
+      // Check balances
+      const get1 = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${user1Account.accountId}`,
+        jwtCookie: user1.jwtCookie,
+      });
+      expect(get1.statusCode).toBe(200);
+      expect(get1.body.ledgerBalanceMinor).toBe(100);
+      expect(get1.body.availableBalanceMinor).toBe(100);
+      const get2 = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${user2Account.accountId}`,
+        jwtCookie: user2.jwtCookie,
+      });
+      expect(get2.statusCode).toBe(200);
+      expect(get2.body.ledgerBalanceMinor).toBe(100);
+      expect(get2.body.availableBalanceMinor).toBe(100);
+    });
+
+    it('should return 401 if not authenticated', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: user2Account.accountNumber,
+          amountMinor: 100,
+        },
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+      });
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toMatchObject({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+
+    it('should return 400 if idempotency-key is missing', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie: user1.jwtCookie,
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: user2Account.accountNumber,
+          amountMinor: 100,
+        },
+      });
+      expect(result.statusCode).toBe(400);
+      const body = result.body;
+      expect(body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        errors: expect.any(String),
+        message: expect.any(String),
+      });
+      expect(JSON.parse(body.errors)).toMatchObject({
+        bodyErrors: null,
+        pathParameterErrors: null,
+        queryParameterErrors: null,
+        headerErrors: [
+          {
+            code: 'invalid_type',
+            expected: 'string',
+            received: 'undefined',
+            path: ['idempotency-key'],
+            message: 'Required',
+          },
+        ],
+      });
+    });
+
+    it('should return 404 if destination account not found', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie: user1.jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: '1111111111',
+          amountMinor: 100,
+        },
+      });
+      expect(result.body).toMatchObject({
+        error: 'ACCOUNT_NOT_FOUND',
+        message: 'Account not found',
+      });
+      expect(result.statusCode).toBe(404);
+    });
+
+    it('should return 400 if insufficient funds', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie: user1.jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: user2Account.accountNumber,
+          amountMinor: 9999999,
+        },
+      });
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'INSUFFICIENT_FUNDS',
+        message: 'Insufficient funds',
+      });
+    });
+
+    it('should return 403 if forbidden (not owner)', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie: user2.jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: user2Account.accountNumber,
+          amountMinor: 100,
+        },
+      });
+      expect(result.statusCode).toBe(403);
+      expect(result.body).toMatchObject({
+        error: 'FORBIDDEN',
+        message: 'Forbidden access',
+      });
+    });
+  });
 });
 
 // Helper functions

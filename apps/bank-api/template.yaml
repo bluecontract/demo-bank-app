@@ -227,7 +227,18 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /v1/accounts/{accountId}/funding
             Method: OPTIONS
-
+        TransferMoneyApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/transfers
+            Method: POST
+        TransferMoneyOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/transfers
+            Method: OPTIONS
   # ------------------------------------------------------------------
   # Seed the FUNDING_SOURCE account and its BALANCE row (idempotent)
   # ------------------------------------------------------------------
