@@ -1,0 +1,202 @@
+# Bank Web App E2E Tests
+
+This directory contains comprehensive end-to-end tests for the Bank Web App using Playwright.
+
+## Test Structure
+
+The test suite is organized into the following modules:
+
+### Authentication Tests (`src/auth/`)
+
+- **`signin.test.ts`** - User sign-in functionality
+- **`signup.test.ts`** - User registration functionality
+
+### Banking Features Tests (`src/banking/`)
+
+- **`banking-core-flows.test.ts`** - Core banking operations
+- **`form-validation.test.ts`** - Form validation scenarios
+
+### Health Check Tests (`src/`)
+
+- **`health.test.ts`** - Application health status verification
+
+## Banking Features Test Coverage
+
+The banking core flows test comprehensively covers:
+
+### 1. Account Creation
+
+- ✅ Create new account with modal interface
+- ✅ Display account in horizontal list
+- ✅ Verify initial $0.00 balance
+
+### 2. Account List & Navigation
+
+- ✅ Display multiple accounts in horizontal scrollable list
+- ✅ Test horizontal scrolling functionality with scroll arrows
+- ✅ Account selection and switching
+
+### 3. Fund Account Operations
+
+- ✅ Fund account using modal interface
+- ✅ Confirmation page display
+- ✅ Account balance refresh after funding
+- ✅ Multiple funding operations and cumulative balance updates
+
+### 4. Transfer Money Operations
+
+- ✅ Transfer money between accounts with modal interface
+- ✅ Form validation (account number format, amount validation)
+- ✅ Transfer confirmation page
+- ✅ Source account balance refresh after transfer
+
+### 5. Transaction History
+
+- ✅ Display transaction history for selected account
+- ✅ Show account-specific transactions
+- ✅ Switch between accounts and see respective transaction history
+- ✅ Empty state display for accounts with no transactions
+
+### 6. Transaction Details
+
+- ✅ Display transaction details for incoming transfers (funding)
+- ✅ Display transaction details for outgoing transfers
+- ✅ Transaction status display (COMPLETED)
+- ✅ Transaction amount and direction display (+/-)
+- ✅ Counterparty account information (To/From)
+
+### 7. Balance Updates
+
+- ✅ Real-time balance updates after fund operations
+- ✅ Real-time balance updates after transfer operations
+- ✅ Multiple operation balance accumulation
+
+### 8. Form Validation
+
+- ✅ Account creation form validation (required fields, max length)
+- ✅ Fund account form validation (required amount, positive values, decimal places)
+- ✅ Transfer form validation (account number format, amount validation, insufficient funds)
+- ✅ Input sanitization (account numbers, amounts)
+- ✅ Error message clearing on user correction
+
+## Test Configuration
+
+### Environment Variables
+
+- `E2E_BASE_URL` - Base URL for the application (defaults to `http://localhost:4200`)
+
+### Test Data
+
+- All tests use unique, generated names to avoid conflicts
+- Test users are created with unique identifiers
+- Account names are generated uniquely per test run
+
+### Timeouts
+
+- **Navigation**: 10 seconds
+- **Modal load**: 5 seconds
+- **API response**: 8 seconds
+- **Balance update**: 5 seconds
+
+## Running the Tests
+
+```bash
+# Run all e2e tests
+npx nx run bank-web-app-e2e:e2e
+
+# Run specific test file
+npx nx run bank-web-app-e2e:e2e --spec="src/banking/banking-core-flows.test.ts"
+
+# Run with UI mode
+npx nx run bank-web-app-e2e:e2e --ui
+
+# Run with headed browser
+npx nx run bank-web-app-e2e:e2e --headed
+```
+
+## Test Principles
+
+### 1. Independence
+
+Each test is completely independent and creates its own test data:
+
+- Unique user accounts for each test
+- Unique account names and amounts
+- No shared state between tests
+
+### 2. Comprehensive Coverage
+
+Tests cover complete user journeys:
+
+- **Happy path flows** - Normal user operations
+- **Edge cases** - Form validation, error handling
+- **State verification** - Balance updates, transaction history
+
+### 3. Realistic User Behavior
+
+Tests simulate real user interactions:
+
+- Modal opening and closing
+- Form filling and submission
+- Account selection and switching
+- Transaction detail viewing
+
+### 4. Reliable Assertions
+
+Tests use appropriate waiting strategies:
+
+- Wait for modals to open/close
+- Wait for API responses
+- Wait for balance updates
+- Verify specific UI elements are visible
+
+## Key Features Tested
+
+### Modal Interactions
+
+- Account creation modal
+- Fund account modal
+- Transfer money modal
+- Transaction details modal
+- Confirmation pages
+
+### Form Validation
+
+- Required field validation
+- Amount format validation
+- Account number format validation
+- Insufficient funds validation
+
+### UI State Management
+
+- Account selection state
+- Transaction history filtering
+- Balance display updates
+- Loading states
+
+### Navigation & Scrolling
+
+- Horizontal account list scrolling
+- Scroll arrow visibility and functionality
+- Account switching via click
+
+## Maintenance Notes
+
+### Adding New Tests
+
+1. Follow the existing pattern in `banking-core-flows.test.ts`
+2. Use helper functions from `constants.ts`
+3. Create unique test data for each test
+4. Ensure proper cleanup (modal closing, state reset)
+
+### Updating Selectors
+
+- Use data-testid attributes where available
+- Prefer semantic selectors (text content, roles)
+- Update constants.ts helper functions as needed
+
+### Test Debugging
+
+- Use `--headed` flag to see browser interactions
+- Use `--ui` flag for interactive test debugging
+- Check screenshot and video outputs for failed tests
