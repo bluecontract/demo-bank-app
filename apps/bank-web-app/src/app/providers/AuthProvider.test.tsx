@@ -17,6 +17,18 @@ Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
 });
 
+// Mock the QueryClient clear method
+const mockQueryClientClear = vi.fn();
+vi.mock('@tanstack/react-query', async () => {
+  const actual = await vi.importActual('@tanstack/react-query');
+  return {
+    ...actual,
+    useQueryClient: () => ({
+      clear: mockQueryClientClear,
+    }),
+  };
+});
+
 // Test component to expose auth context
 const TestComponent = () => {
   const { user, isAuthenticated, isLoading, signIn, signOut } = useAuth();
@@ -226,6 +238,40 @@ describe('AuthProvider', () => {
     expect(localStorageMock.removeItem).toHaveBeenCalledWith(
       'demo-blue-auth-user'
     );
+  });
+
+  it('should clear React Query cache on sign out to prevent data leakage', async () => {
+    const TestWrapper = createTestWrapper();
+
+    render(
+      <TestWrapper>
+        <TestComponent />
+      </TestWrapper>
+    );
+
+    // Wait for initial loading
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('Not Loading');
+    });
+
+    // Sign in first
+    act(() => {
+      screen.getByText('Sign In').click();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('authenticated')).toHaveTextContent(
+        'Authenticated'
+      );
+    });
+
+    // Sign out
+    act(() => {
+      screen.getByText('Sign Out').click();
+    });
+
+    // Should clear the query cache
+    expect(mockQueryClientClear).toHaveBeenCalledTimes(1);
   });
 
   it('should throw error when useAuth is used outside AuthProvider', () => {

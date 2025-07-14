@@ -4,7 +4,6 @@ import { SelectedAccountProvider } from '../../app/providers/SelectedAccountProv
 import { DashboardHeader } from '../../features/dashboard/components';
 import {
   HorizontalAccountsList,
-  AddAccountCard,
   AccountCreationModal,
 } from '../../features/accounts/components';
 import {
@@ -123,38 +122,20 @@ export function DashboardPage() {
 
           <div className="mt-4">
             {/* Accounts Section */}
-            {accounts && accounts.length > 0 ? (
-              <HorizontalAccountsList
-                accounts={accounts}
-                onCreateAccount={handleCreateAccount}
-                onTransfer={handleTransfer}
-                onFund={handleFund}
-                isCreatingAccount={false}
-              />
-            ) : (
-              <div className="text-center">
-                <div className="text-white mb-8">
-                  <p className="text-lg">
-                    No accounts yet. Create your first account to get started!
-                  </p>
-                </div>
-                <div className="flex justify-center">
-                  <AddAccountCard
-                    onClick={handleCreateAccount}
-                    isLoading={false}
-                  />
-                </div>
-              </div>
-            )}
+            <HorizontalAccountsList
+              accounts={accounts || []}
+              onCreateAccount={handleCreateAccount}
+              onTransfer={handleTransfer}
+              onFund={handleFund}
+              isCreatingAccount={false}
+            />
           </div>
         </div>
 
         {/* Transaction History Section - Full Width and Fill Height */}
-        {accounts && accounts.length > 0 && (
-          <div className="flex-1 px-4 pb-4 pt-2 flex flex-col min-h-0">
-            <TransactionHistory />
-          </div>
-        )}
+        <div className="flex-1 px-4 pb-4 pt-2 flex flex-col min-h-0">
+          <TransactionHistory />
+        </div>
       </div>
 
       {/* Account Creation Modal */}

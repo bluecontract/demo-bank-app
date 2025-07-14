@@ -16,6 +16,12 @@ const mockAccount = {
   status: 'ACTIVE',
 };
 
+// Mock the AuthProvider
+const mockUseAuth = vi.fn();
+vi.mock('./AuthProvider', () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
 const TestComponent = () => {
   const { selectedAccount, setSelectedAccount } = useSelectedAccount();
 
@@ -35,6 +41,15 @@ const TestComponent = () => {
 };
 
 describe('SelectedAccountProvider', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({
+      user: { userId: 'user-1', name: 'Test User' },
+      isAuthenticated: true,
+      isLoading: false,
+    });
+  });
+
   it('should start with no selected account', () => {
     render(
       <SelectedAccountProvider>
@@ -82,6 +97,76 @@ describe('SelectedAccountProvider', () => {
       screen.getByText('Clear Selection').click();
     });
 
+    expect(screen.getByTestId('selected-account')).toHaveTextContent(
+      'No Account Selected'
+    );
+  });
+
+  it('should clear selected account when user changes to prevent data leakage', () => {
+    const { rerender } = render(
+      <SelectedAccountProvider>
+        <TestComponent />
+      </SelectedAccountProvider>
+    );
+
+    // Select an account
+    act(() => {
+      screen.getByText('Select Account').click();
+    });
+
+    expect(screen.getByTestId('selected-account')).toHaveTextContent(
+      'Selected: 1234567890'
+    );
+
+    // Change user (simulate sign out/sign in with different user)
+    mockUseAuth.mockReturnValue({
+      user: { userId: 'user-2', name: 'Different User' },
+      isAuthenticated: true,
+      isLoading: false,
+    });
+
+    rerender(
+      <SelectedAccountProvider>
+        <TestComponent />
+      </SelectedAccountProvider>
+    );
+
+    // Selected account should be cleared
+    expect(screen.getByTestId('selected-account')).toHaveTextContent(
+      'No Account Selected'
+    );
+  });
+
+  it('should clear selected account when user signs out', () => {
+    const { rerender } = render(
+      <SelectedAccountProvider>
+        <TestComponent />
+      </SelectedAccountProvider>
+    );
+
+    // Select an account
+    act(() => {
+      screen.getByText('Select Account').click();
+    });
+
+    expect(screen.getByTestId('selected-account')).toHaveTextContent(
+      'Selected: 1234567890'
+    );
+
+    // User signs out
+    mockUseAuth.mockReturnValue({
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+
+    rerender(
+      <SelectedAccountProvider>
+        <TestComponent />
+      </SelectedAccountProvider>
+    );
+
+    // Selected account should be cleared
     expect(screen.getByTestId('selected-account')).toHaveTextContent(
       'No Account Selected'
     );

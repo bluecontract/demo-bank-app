@@ -231,12 +231,8 @@ describe('DashboardPage', () => {
 
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
-    expect(
-      screen.getByText(
-        'No accounts yet. Create your first account to get started!'
-      )
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('add-account-card')).toBeInTheDocument();
+    expect(screen.getByTestId('horizontal-accounts-list')).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-history')).toBeInTheDocument();
   });
 
   it('should handle create account action', () => {
@@ -253,26 +249,6 @@ describe('DashboardPage', () => {
     expect(screen.getByTestId('account-creation-modal')).toBeInTheDocument();
   });
 
-  it('should handle create account action from empty state', () => {
-    const mockMutate = vi.fn();
-    mockUseCreateAccount.mockReturnValue({
-      mutate: mockMutate,
-      isPending: false,
-    });
-
-    mockUseAccounts.mockReturnValue({
-      data: [],
-      isLoading: false,
-      error: null,
-    });
-
-    render(<DashboardPage />, { wrapper: createTestWrapper() });
-
-    fireEvent.click(screen.getByTestId('add-account-btn'));
-
-    expect(screen.getByTestId('account-creation-modal')).toBeInTheDocument();
-  });
-
   it('should show loading state when creating account', () => {
     mockUseCreateAccount.mockReturnValue({
       mutate: vi.fn(),
@@ -281,28 +257,7 @@ describe('DashboardPage', () => {
 
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
-    // Open the modal first
     fireEvent.click(screen.getByTestId('create-account-btn'));
-
-    expect(screen.getByTestId('account-creation-modal')).toBeInTheDocument();
-  });
-
-  it('should show loading state in empty state when creating account', () => {
-    mockUseCreateAccount.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: true,
-    });
-
-    mockUseAccounts.mockReturnValue({
-      data: [],
-      isLoading: false,
-      error: null,
-    });
-
-    render(<DashboardPage />, { wrapper: createTestWrapper() });
-
-    // Open the modal first
-    fireEvent.click(screen.getByTestId('add-account-btn'));
 
     expect(screen.getByTestId('account-creation-modal')).toBeInTheDocument();
   });

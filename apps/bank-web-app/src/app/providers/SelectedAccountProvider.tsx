@@ -1,4 +1,11 @@
-import { createContext, useContext, ReactNode, useState } from 'react';
+import {
+  createContext,
+  useContext,
+  ReactNode,
+  useState,
+  useEffect,
+} from 'react';
+import { useAuth } from './AuthProvider';
 
 type Account = {
   accountId: string;
@@ -36,7 +43,13 @@ interface SelectedAccountProviderProps {
 export const SelectedAccountProvider = ({
   children,
 }: SelectedAccountProviderProps) => {
+  const { user } = useAuth();
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+
+  // Clear selected account when user changes (sign out/sign in)
+  useEffect(() => {
+    setSelectedAccount(null);
+  }, [user?.userId]);
 
   const value: SelectedAccountContextType = {
     selectedAccount,

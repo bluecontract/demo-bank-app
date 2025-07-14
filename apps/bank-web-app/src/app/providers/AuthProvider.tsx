@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface User {
   userId: string;
@@ -38,6 +39,7 @@ const AUTH_STORAGE_KEY = 'demo-blue-auth-user';
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -76,6 +78,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       console.error('Failed to clear auth state:', error);
     }
     document.cookie = 'demoAuth=; Max-Age=0; path=/';
+
+    // Clear all cached data to prevent data leakage between users
+    queryClient.clear();
+
     navigate('/');
   };
 
