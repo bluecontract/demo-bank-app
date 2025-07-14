@@ -11,11 +11,17 @@ export default defineConfig({
   expect: {
     timeout: 5000,
   },
-  reporter: [
-    ['html', { outputFolder: 'test-output/html-report' }],
-    ['json', { outputFile: 'test-output/results.json' }],
-    ['junit', { outputFile: 'test-output/junit.xml' }],
-  ],
+  reporter: process.env.CI
+    ? [
+        ['json', { outputFile: 'test-output/results.json' }],
+        ['junit', { outputFile: 'test-output/junit.xml' }],
+        ['github'],
+      ]
+    : [
+        ['list'],
+        ['html', { outputFolder: 'test-output/html-report' }],
+        ['json', { outputFile: 'test-output/results.json' }],
+      ],
   use: {
     baseURL: process.env.E2E_BASE_URL || 'http://localhost:4200',
     trace: 'retain-on-failure',
