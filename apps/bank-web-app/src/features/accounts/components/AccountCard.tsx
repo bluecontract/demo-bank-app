@@ -1,5 +1,6 @@
 import { Card } from '../../../ui/Card';
 import { Button } from '../../../ui/Button';
+import { Tooltip } from '../../../ui/Tooltip';
 import { formatCurrency, formatAccountNumber } from '../../../lib';
 import { Account } from '../../../types/api';
 
@@ -39,10 +40,12 @@ export function AccountCard({
       <div className="space-y-4">
         {/* Account Name and Fund Button */}
         <div className="flex items-start justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              {account.name}
-            </h3>
+          <div className="flex-1 mr-2 min-w-0">
+            <Tooltip content={account.name} position="top">
+              <h3 className="text-lg font-semibold text-gray-900 truncate">
+                {account.name}
+              </h3>
+            </Tooltip>
             <p className="account-number text-sm text-gray-600 mt-1">
               {formatAccountNumber(account.accountNumber)}
             </p>

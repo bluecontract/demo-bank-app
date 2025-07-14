@@ -151,4 +151,60 @@ describe('AccountCard', () => {
     );
     expect(cardElement).not.toBeInTheDocument();
   });
+
+  it('should show tooltip with full account name on hover', () => {
+    render(<AccountCard account={mockAccount} />);
+
+    const accountName = screen.getByText('Checking Account');
+    fireEvent.mouseEnter(accountName);
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toBeInTheDocument();
+    expect(tooltip).toHaveTextContent('Checking Account');
+  });
+
+  it('should hide tooltip when mouse leaves', () => {
+    render(<AccountCard account={mockAccount} />);
+
+    const accountName = screen.getByText('Checking Account');
+    fireEvent.mouseEnter(accountName);
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+
+    fireEvent.mouseLeave(accountName);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('should apply text truncation to account name', () => {
+    const longNameAccount = {
+      ...mockAccount,
+      name: 'This is a very long account name that should be truncated with ellipsis',
+    };
+
+    render(<AccountCard account={longNameAccount} />);
+
+    const accountName = screen.getByText(
+      'This is a very long account name that should be truncated with ellipsis'
+    );
+    expect(accountName).toHaveClass('truncate');
+  });
+
+  it('should show full account name in tooltip even when truncated', () => {
+    const longNameAccount = {
+      ...mockAccount,
+      name: 'This is a very long account name that should be truncated with ellipsis',
+    };
+
+    render(<AccountCard account={longNameAccount} />);
+
+    const accountName = screen.getByText(
+      'This is a very long account name that should be truncated with ellipsis'
+    );
+    fireEvent.mouseEnter(accountName);
+
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveAttribute(
+      'aria-label',
+      'This is a very long account name that should be truncated with ellipsis'
+    );
+  });
 });
