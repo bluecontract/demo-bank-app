@@ -1,0 +1,72 @@
+import { useState } from 'react';
+
+interface AvatarProps {
+  name: string;
+  src?: string;
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+  'data-testid'?: string;
+}
+
+export function Avatar({
+  name,
+  src,
+  size = 'md',
+  className = '',
+  'data-testid': testId,
+}: AvatarProps) {
+  const [imageError, setImageError] = useState(false);
+
+  const getInitials = (fullName: string): string => {
+    if (!fullName.trim()) return '?';
+
+    const names = fullName.trim().split(' ');
+    if (names.length === 1) {
+      return names[0][0]?.toUpperCase() || '?';
+    }
+
+    // Take first letter of first name and first letter of second name
+    const firstInitial = names[0][0]?.toUpperCase() || '';
+    const secondInitial = names[1][0]?.toUpperCase() || '';
+
+    return `${firstInitial}${secondInitial}`;
+  };
+
+  const sizeClasses = {
+    sm: 'w-8 h-8 text-xs',
+    md: 'w-10 h-10 text-sm',
+    lg: 'w-12 h-12 text-base',
+  };
+
+  const backgroundColorClass = name.trim() ? 'bg-green-500' : 'bg-gray-400';
+
+  const baseClasses = `${sizeClasses[size]} ${backgroundColorClass} rounded-full flex items-center justify-center text-white font-semibold`;
+  const finalClasses = `${baseClasses} ${className}`.trim();
+
+  const handleImageError = () => {
+    setImageError(true);
+  };
+
+  // Show image if src is provided and hasn't failed to load
+  const showImage = src && !imageError;
+
+  if (showImage) {
+    return (
+      <div className={finalClasses} data-testid={testId}>
+        <img
+          src={src}
+          alt={name}
+          className="w-full h-full rounded-full object-cover"
+          onError={handleImageError}
+        />
+      </div>
+    );
+  }
+
+  // Show initials fallback
+  return (
+    <div className={finalClasses} data-testid={testId}>
+      {getInitials(name)}
+    </div>
+  );
+}
