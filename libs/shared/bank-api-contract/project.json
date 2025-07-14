@@ -23,14 +23,15 @@
           "libs/shared/bank-api-contract/**/*.{ts,tsx,js,jsx}",
           "libs/shared/bank-api-contract/package.json"
         ]
+      },
+      "dependsOn": ["typecheck"]
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx vitest run --config vitest.config.ts",
+        "cwd": "libs/shared/bank-api-contract"
       }
-    }
-  },
-  "test": {
-    "executor": "nx:run-commands",
-    "options": {
-      "command": "npx vitest run --config vitest.config.ts",
-      "cwd": "libs/shared/bank-api-contract"
     }
   },
   "implicitDependencies": []

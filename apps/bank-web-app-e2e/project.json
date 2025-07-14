@@ -21,7 +21,8 @@
       "options": {
         "cwd": "apps/bank-web-app-e2e",
         "command": "eslint ."
-      }
+      },
+      "dependsOn": ["typecheck"]
     }
   }
 }

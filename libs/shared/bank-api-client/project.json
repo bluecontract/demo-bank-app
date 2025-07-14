@@ -23,7 +23,8 @@
           "libs/shared/bank-api-client/**/*.{ts,tsx,js,jsx}",
           "libs/shared/bank-api-client/package.json"
         ]
-      }
+      },
+      "dependsOn": ["typecheck"]
     }
   },
   "implicitDependencies": []

@@ -34,7 +34,10 @@
           ],
           "declarationRootDir": "libs/shared/observability/src"
         }
-      }
+      },
+      "dependsOn": [
+        "typecheck"
+      ]
     }
   },
   "dependencies": {

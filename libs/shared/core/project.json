@@ -23,7 +23,8 @@
           "libs/shared/core/**/*.{ts,tsx,js,jsx}",
           "libs/shared/core/package.json"
         ]
-      }
+      },
+      "dependsOn": ["typecheck"]
     }
   },
   "implicitDependencies": []

@@ -74,6 +74,21 @@
         "dependsOn": [
           "^build"
         ]
+      },
+      "lint": {
+        "executor": "@nx/eslint:lint",
+        "outputs": [
+          "{options.outputFile}"
+        ],
+        "options": {
+          "lintFilePatterns": [
+            "libs/banking/**/*.{ts,tsx,js,jsx}",
+            "libs/banking/package.json"
+          ]
+        },
+        "dependsOn": [
+          "typecheck"
+        ]
       }
     }
   },

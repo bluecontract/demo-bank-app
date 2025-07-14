@@ -111,7 +111,8 @@
           "apps/bank-api/**/*.{ts,tsx,js,jsx}",
           "apps/bank-api/package.json"
         ]
-      }
+      },
+      "dependsOn": ["typecheck"]
     },
     "deploy": {
       "executor": "nx:run-commands",

@@ -1,0 +1,169 @@
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { AccountsList } from './AccountsList';
+
+const mockAccounts = [
+  {
+    accountId: '123e4567-e89b-12d3-a456-426614174000',
+    accountNumber: '1234567890',
+    name: 'Checking Account',
+    currency: 'USD' as const,
+    createdAt: '2023-01-01T00:00:00Z',
+    ledgerBalanceMinor: 1030000,
+    availableBalanceMinor: 1030000,
+    status: 'ACTIVE',
+  },
+  {
+    accountId: '123e4567-e89b-12d3-a456-426614174001',
+    accountNumber: '1234567891',
+    name: 'Savings Account',
+    currency: 'USD' as const,
+    createdAt: '2023-01-01T00:00:00Z',
+    ledgerBalanceMinor: 500000,
+    availableBalanceMinor: 500000,
+    status: 'ACTIVE',
+  },
+];
+
+describe('AccountsList', () => {
+  it('should render list of accounts', () => {
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('$10,300')).toBeInTheDocument();
+    expect(screen.getByText('$5,000')).toBeInTheDocument();
+    expect(screen.getByText('123 456 7890')).toBeInTheDocument();
+    expect(screen.getByText('123 456 7891')).toBeInTheDocument();
+  });
+
+  it('should render add account card', () => {
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Add new account')).toBeInTheDocument();
+  });
+
+  it('should handle create account click', () => {
+    const handleCreateAccount = vi.fn();
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={handleCreateAccount}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+      />
+    );
+
+    const addAccountCard = screen.getByText('Add new account');
+    addAccountCard.click();
+
+    expect(handleCreateAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle account details click', () => {
+    const handleAccountDetails = vi.fn();
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={handleAccountDetails}
+        onTransfer={vi.fn()}
+      />
+    );
+
+    const detailsButton = screen.getAllByText('Details')[0];
+    detailsButton.click();
+
+    expect(handleAccountDetails).toHaveBeenCalledTimes(1);
+    expect(handleAccountDetails).toHaveBeenCalledWith(
+      mockAccounts[0].accountId
+    );
+  });
+
+  it('should handle transfer click', () => {
+    const handleTransfer = vi.fn();
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={handleTransfer}
+      />
+    );
+
+    const transferButton = screen.getAllByText('New transfer')[0];
+    transferButton.click();
+
+    expect(handleTransfer).toHaveBeenCalledTimes(1);
+    expect(handleTransfer).toHaveBeenCalledWith(mockAccounts[0].accountId);
+  });
+
+  it('should have responsive grid layout', () => {
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+        data-testid="accounts-list"
+      />
+    );
+
+    const grid = screen.getByTestId('accounts-list');
+    expect(grid).toHaveClass('grid');
+  });
+
+  it('should render empty state when no accounts', () => {
+    render(
+      <AccountsList
+        accounts={[]}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Add new account')).toBeInTheDocument();
+  });
+
+  it('should show loading state for add account card', () => {
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+        isCreatingAccount={true}
+      />
+    );
+
+    expect(screen.getByText('Creating...')).toBeInTheDocument();
+  });
+
+  it('should render correct number of account cards', () => {
+    render(
+      <AccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onAccountDetails={vi.fn()}
+        onTransfer={vi.fn()}
+      />
+    );
+
+    // 2 account cards + 1 add account card
+    const detailsButtons = screen.getAllByText('Details');
+    expect(detailsButtons).toHaveLength(2);
+  });
+});

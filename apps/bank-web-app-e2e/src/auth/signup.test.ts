@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { URLS, TEST_DATA, createUniqueName } from '../constants';
+import {
+  URLS,
+  TEST_DATA,
+  createUniqueName,
+  DASHBOARD_HEADING_TEXT,
+} from '../constants';
 
 test.describe('Sign Up Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -44,7 +49,7 @@ test.describe('Sign Up Flow', () => {
     });
 
     // Should see dashboard content
-    await expect(page.getByText('Welcome to Blue Bank')).toBeVisible();
+    await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
   });
 
   test('should show validation errors for empty name and clear them when typing', async ({
