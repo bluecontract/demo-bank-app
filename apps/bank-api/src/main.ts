@@ -17,6 +17,7 @@ import { getAccountHandler } from './banking/getAccount';
 import { fundAccountHandler } from './banking/fundAccount';
 import { transferMoneyHandler } from './banking/transferMoney';
 import { listTransactionsHandler } from './banking/listTransactions';
+import { getTransactionHandler } from './banking/getTransaction';
 
 const metrics = getMetrics();
 const logger = getLogger();
@@ -50,6 +51,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       fundAccount: fundAccountHandler,
       transferMoney: transferMoneyHandler,
       listTransactions: listTransactionsHandler,
+      getTransaction: getTransactionHandler,
     },
   }),
   {

@@ -155,6 +155,17 @@ export const bankApiContract = c.router(
         responses: { 200: PaginatedDto(TransactionDto), 404: ProblemDto },
         summary: 'List transactions for a bank account',
       },
+
+      getTransaction: {
+        method: 'GET',
+        path: '/v1/accounts/:accountId/transactions/:txnId',
+        pathParams: z.object({
+          accountId: z.string().uuid(),
+          txnId: z.string().uuid(),
+        }),
+        responses: { 200: TransactionDto, 404: ProblemDto },
+        summary: 'Get a transaction by ID',
+      },
     },
   },
   {
