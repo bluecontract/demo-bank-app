@@ -3,7 +3,7 @@ import { useState } from 'react';
 interface AvatarProps {
   name: string;
   src?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
   'data-testid'?: string;
 }
@@ -36,6 +36,7 @@ export function Avatar({
     sm: 'w-8 h-8 text-xs',
     md: 'w-10 h-10 text-sm',
     lg: 'w-12 h-12 text-base',
+    xl: 'w-16 h-16 text-lg',
   };
 
   const backgroundColorClass = name.trim() ? 'bg-green-500' : 'bg-gray-400';

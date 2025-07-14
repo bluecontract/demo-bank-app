@@ -1,13 +1,19 @@
 import { useState } from 'react';
 import { useAuth } from '../../app/providers/AuthProvider';
+import { SelectedAccountProvider } from '../../app/providers/SelectedAccountProvider';
 import { DashboardHeader } from '../../features/dashboard/components';
 import {
-  AccountsList,
+  HorizontalAccountsList,
   AddAccountCard,
 } from '../../features/accounts/components';
-import { TransferModal, FundModal } from '../../features/transfer';
+import {
+  TransferModal,
+  FundModal,
+  TransactionHistory,
+} from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import { useCreateAccount } from '../../features/accounts/hooks/useCreateAccount';
+import { SpinnerWithText } from '../../ui/Spinner';
 
 type Account = {
   accountId: string;
@@ -44,11 +50,6 @@ export function DashboardPage() {
     createAccount({ currency: 'USD' });
   };
 
-  const handleAccountDetails = (accountId: string) => {
-    // TODO: Navigate to account details page
-    console.log('Navigate to account details:', accountId);
-  };
-
   const handleTransfer = (accountId: string) => {
     setTransferModal({
       isOpen: true,
@@ -83,7 +84,12 @@ export function DashboardPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-400 to-yellow-400 flex items-center justify-center">
-        <div className="text-white text-xl">Loading your accounts...</div>
+        <SpinnerWithText
+          text="Loading your accounts..."
+          size="xl"
+          color="white"
+          data-testid="accounts-loading-spinner"
+        />
       </div>
     );
   }
@@ -99,39 +105,48 @@ export function DashboardPage() {
   }
 
   return (
-    <div
-      className="min-h-screen bg-gradient-to-br from-green-400 to-yellow-400"
-      data-testid="dashboard-main-container"
-    >
-      <div className="container mx-auto px-4 py-8">
-        <DashboardHeader userName={user?.name || 'Guest'} />
+    <SelectedAccountProvider>
+      <div
+        className="min-h-screen bg-gradient-to-br from-green-400 to-yellow-400 flex flex-col"
+        data-testid="dashboard-main-container"
+      >
+        <div className="px-4 py-4">
+          <DashboardHeader userName={user?.name || 'Guest'} />
 
-        <div className="mt-8">
-          {accounts && accounts.length > 0 ? (
-            <AccountsList
-              accounts={accounts}
-              onCreateAccount={handleCreateAccount}
-              onAccountDetails={handleAccountDetails}
-              onTransfer={handleTransfer}
-              onFund={handleFund}
-              isCreatingAccount={isCreating}
-            />
-          ) : (
-            <div className="text-center">
-              <div className="text-white mb-8">
-                <p className="text-lg">
-                  No accounts yet. Create your first account to get started!
-                </p>
+          <div className="mt-4">
+            {/* Accounts Section */}
+            {accounts && accounts.length > 0 ? (
+              <HorizontalAccountsList
+                accounts={accounts}
+                onCreateAccount={handleCreateAccount}
+                onTransfer={handleTransfer}
+                onFund={handleFund}
+                isCreatingAccount={isCreating}
+              />
+            ) : (
+              <div className="text-center">
+                <div className="text-white mb-8">
+                  <p className="text-lg">
+                    No accounts yet. Create your first account to get started!
+                  </p>
+                </div>
+                <div className="flex justify-center">
+                  <AddAccountCard
+                    onClick={handleCreateAccount}
+                    isLoading={isCreating}
+                  />
+                </div>
               </div>
-              <div className="flex justify-center">
-                <AddAccountCard
-                  onClick={handleCreateAccount}
-                  isLoading={isCreating}
-                />
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
+
+        {/* Transaction History Section - Full Width and Fill Height */}
+        {accounts && accounts.length > 0 && (
+          <div className="flex-1 px-4 pb-4 pt-2 flex flex-col">
+            <TransactionHistory />
+          </div>
+        )}
       </div>
 
       {/* Transfer Modal */}
@@ -151,6 +166,6 @@ export function DashboardPage() {
         accounts={accounts || []}
         defaultAccountId={fundModal.sourceAccount?.accountId}
       />
-    </div>
+    </SelectedAccountProvider>
   );
 }

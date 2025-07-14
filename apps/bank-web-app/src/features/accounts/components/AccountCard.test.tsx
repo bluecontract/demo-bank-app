@@ -119,4 +119,35 @@ describe('AccountCard', () => {
     const balance = screen.getByText('$450');
     expect(balance).toHaveClass('balance-display', 'text-green-600');
   });
+
+  it('applies selected styling when isSelected is true', () => {
+    const { container } = render(
+      <AccountCard account={mockAccount} isSelected={true} />
+    );
+
+    const cardElement = container.querySelector(
+      '.border-2.border-blue-300.bg-blue-50'
+    );
+    expect(cardElement).toBeInTheDocument();
+  });
+
+  it('applies default styling when isSelected is false', () => {
+    const { container } = render(
+      <AccountCard account={mockAccount} isSelected={false} />
+    );
+
+    const cardElement = container.querySelector(
+      '.border-2.border-blue-300.bg-blue-50'
+    );
+    expect(cardElement).not.toBeInTheDocument();
+  });
+
+  it('applies default styling when isSelected is not provided', () => {
+    const { container } = render(<AccountCard account={mockAccount} />);
+
+    const cardElement = container.querySelector(
+      '.border-2.border-blue-300.bg-blue-50'
+    );
+    expect(cardElement).not.toBeInTheDocument();
+  });
 });

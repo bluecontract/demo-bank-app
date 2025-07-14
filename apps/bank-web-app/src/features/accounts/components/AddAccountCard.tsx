@@ -14,7 +14,7 @@ export function AddAccountCard({
   return (
     <Card variant="dashed" data-testid={testId}>
       <button
-        className={`w-full h-full flex flex-col items-center justify-center space-y-4 p-6 min-h-[160px] disabled:opacity-50 ${
+        className={`w-full h-full flex flex-col items-center justify-center space-y-4 p-6 min-h-[175px] disabled:opacity-50 ${
           onClick && !isLoading ? 'cursor-pointer hover:bg-gray-50' : ''
         }`}
         onClick={isLoading ? undefined : onClick}
@@ -22,8 +22,8 @@ export function AddAccountCard({
         aria-label="Add new account"
       >
         {/* Plus Icon */}
-        <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-          <span className="text-green-600 text-2xl font-bold">+</span>
+        <div className="w-20 h-20 rounded-full bg-gradient-to-r from-green-400 to-yellow-400 flex items-center justify-center">
+          <span className="text-white text-4xl font-bold">+</span>
         </div>
 
         {/* Text */}

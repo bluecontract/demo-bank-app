@@ -19,21 +19,21 @@ export function DashboardHeader({
 
   return (
     <header
-      className="flex justify-between items-center p-6 bg-white border-b border-gray-200"
+      className="flex justify-between items-center p-6"
       data-testid={testId}
     >
       {/* Left side - App name and welcome message */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Demo Bank</h1>
-        <p className="text-gray-600">Welcome back</p>
+        <h1 className="text-4xl font-bold text-white">Demo Bank</h1>
+        <p className="text-lg text-white/80">Welcome back</p>
       </div>
 
       {/* Right side - User profile */}
       <div className="flex items-center space-x-3">
         <div className="text-right">
-          <p className="text-sm font-medium text-gray-900">{userName}</p>
+          <p className="text-sm font-medium text-white">{userName}</p>
         </div>
-        <Dropdown trigger={<Avatar name={userName} size="md" />} align="right">
+        <Dropdown trigger={<Avatar name={userName} size="xl" />} align="right">
           <DropdownItem
             onClick={handleSignOut}
             icon={

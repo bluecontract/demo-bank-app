@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 
 interface ButtonProps {
   children: ReactNode;
-  variant?: 'primary' | 'secondary' | 'outline';
+  variant?: 'primary' | 'secondary' | 'outline' | 'gradient';
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
   disabled?: boolean;
@@ -22,7 +22,7 @@ export function Button({
   'data-testid': testId,
 }: ButtonProps) {
   const baseClasses =
-    'font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
+    'font-bold rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
 
   const variantClasses = {
     primary: 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500',
@@ -30,6 +30,8 @@ export function Button({
       'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500',
     outline:
       'border-2 border-green-600 text-green-600 bg-transparent hover:bg-green-50 focus:ring-green-500',
+    gradient:
+      'bg-gradient-to-r from-green-400 to-yellow-400 text-white hover:from-green-500 hover:to-yellow-500 focus:ring-green-500',
   };
 
   const sizeClasses = {

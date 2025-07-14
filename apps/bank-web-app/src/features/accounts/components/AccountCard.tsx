@@ -16,6 +16,7 @@ type Account = {
 interface AccountCardProps {
   account: Account;
   accountName?: string;
+  isSelected?: boolean;
   onDetailsClick?: (accountId: string) => void;
   onTransferClick?: (accountId: string) => void;
   onFundClick?: (accountId: string) => void;
@@ -24,6 +25,7 @@ interface AccountCardProps {
 export function AccountCard({
   account,
   accountName = 'Checking Account',
+  isSelected = false,
   onDetailsClick,
   onTransferClick,
   onFundClick,
@@ -40,8 +42,12 @@ export function AccountCard({
     onFundClick?.(account.accountId);
   };
 
+  const cardClassName = isSelected
+    ? 'p-6 border-2 border-blue-300 bg-blue-50'
+    : 'p-6';
+
   return (
-    <Card className="p-6">
+    <Card className={cardClassName}>
       <div className="space-y-4">
         {/* Account Name */}
         <h3 className="text-lg font-semibold text-gray-900">{accountName}</h3>
@@ -58,7 +64,7 @@ export function AccountCard({
 
         {/* Action Buttons */}
         <div className="flex gap-2">
-          <Button variant="primary" size="sm" onClick={handleDetailsClick}>
+          <Button variant="gradient" size="sm" onClick={handleDetailsClick}>
             Details
           </Button>
           <Button variant="outline" size="sm" onClick={handleTransferClick}>

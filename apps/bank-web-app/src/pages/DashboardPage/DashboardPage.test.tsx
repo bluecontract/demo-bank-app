@@ -19,6 +19,32 @@ vi.mock('../../features/accounts/hooks/useCreateAccount', () => ({
   useCreateAccount: vi.fn(),
 }));
 
+vi.mock('../../features/transfer', () => ({
+  TransferModal: vi.fn(({ isOpen, onClose, accounts, defaultAccountId }) =>
+    isOpen ? (
+      <div data-testid="transfer-modal">
+        Transfer Modal
+        <button onClick={onClose} data-testid="close-transfer-modal">
+          Close
+        </button>
+      </div>
+    ) : null
+  ),
+  FundModal: vi.fn(({ isOpen, onClose, accounts, defaultAccountId }) =>
+    isOpen ? (
+      <div data-testid="fund-modal">
+        Fund Modal
+        <button onClick={onClose} data-testid="close-fund-modal">
+          Close
+        </button>
+      </div>
+    ) : null
+  ),
+  TransactionHistory: vi.fn(() => (
+    <div data-testid="transaction-history">Transaction History</div>
+  )),
+}));
+
 vi.mock('../../features/dashboard/components', () => ({
   DashboardHeader: vi.fn(({ userName }) => (
     <div data-testid="dashboard-header">Dashboard Header - {userName}</div>
@@ -26,24 +52,12 @@ vi.mock('../../features/dashboard/components', () => ({
 }));
 
 vi.mock('../../features/accounts/components', () => ({
-  AccountsList: vi.fn(
-    ({
-      accounts,
-      onCreateAccount,
-      onAccountDetails,
-      onTransfer,
-      isCreatingAccount,
-    }) => (
-      <div data-testid="accounts-list">
-        Accounts List - {accounts.length} accounts
+  HorizontalAccountsList: vi.fn(
+    ({ accounts, onCreateAccount, onTransfer, isCreatingAccount }) => (
+      <div data-testid="horizontal-accounts-list">
+        Horizontal Accounts List - {accounts.length} accounts
         <button onClick={onCreateAccount} data-testid="create-account-btn">
           Create Account
-        </button>
-        <button
-          onClick={() => onAccountDetails('test-id')}
-          data-testid="account-details-btn"
-        >
-          Account Details
         </button>
         <button
           onClick={() => onTransfer('test-id')}
@@ -124,9 +138,11 @@ describe('DashboardPage', () => {
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
     expect(screen.getByText('Loading your accounts...')).toBeInTheDocument();
+    expect(screen.getByTestId('accounts-loading-spinner')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeInTheDocument();
 
     const container = screen
-      .getByText('Loading your accounts...')
+      .getByTestId('accounts-loading-spinner')
       .closest('div');
     expect(container?.parentElement).toHaveClass(
       'bg-gradient-to-br',
@@ -165,11 +181,19 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Dashboard Header - Alice')).toBeInTheDocument();
   });
 
-  it('should render accounts list when accounts exist', () => {
+  it('should render horizontal accounts list when accounts exist', () => {
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
-    expect(screen.getByTestId('accounts-list')).toBeInTheDocument();
-    expect(screen.getByText('Accounts List - 2 accounts')).toBeInTheDocument();
+    expect(screen.getByTestId('horizontal-accounts-list')).toBeInTheDocument();
+    expect(
+      screen.getByText('Horizontal Accounts List - 2 accounts')
+    ).toBeInTheDocument();
+  });
+
+  it('should render transaction history when accounts exist', () => {
+    render(<DashboardPage />, { wrapper: createTestWrapper() });
+
+    expect(screen.getByTestId('transaction-history')).toBeInTheDocument();
   });
 
   it('should render empty state when no accounts exist', () => {
@@ -249,23 +273,6 @@ describe('DashboardPage', () => {
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
     expect(screen.getByTestId('loading')).toBeInTheDocument();
-  });
-
-  it('should handle account details action', () => {
-    const consoleSpy = vi
-      .spyOn(console, 'log')
-      .mockImplementation(() => undefined);
-
-    render(<DashboardPage />, { wrapper: createTestWrapper() });
-
-    fireEvent.click(screen.getByTestId('account-details-btn'));
-
-    expect(consoleSpy).toHaveBeenCalledWith(
-      'Navigate to account details:',
-      'test-id'
-    );
-
-    consoleSpy.mockRestore();
   });
 
   it('should handle transfer action', () => {
