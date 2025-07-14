@@ -20,7 +20,6 @@ interface FundModalProps {
 interface FundFormData {
   accountId: string;
   amount: string;
-  description: string;
 }
 
 type ModalView = 'form' | 'confirmation';
@@ -35,7 +34,6 @@ export function FundModal({
   const [formData, setFormData] = useState<FundFormData>({
     accountId: defaultAccountId || accounts[0]?.accountId || '',
     amount: '',
-    description: '',
   });
 
   // Reset form when modal opens with a new default account
@@ -45,7 +43,6 @@ export function FundModal({
         ...prev,
         accountId: defaultAccountId,
         amount: '',
-        description: '',
       }));
       setErrors({});
     }
@@ -113,7 +110,6 @@ export function FundModal({
     fundAccount.mutate({
       accountId: formData.accountId,
       amountMinor,
-      description: formData.description || undefined,
     });
   };
 
@@ -122,7 +118,6 @@ export function FundModal({
     setFormData({
       accountId: defaultAccountId || accounts[0]?.accountId || '',
       amount: '',
-      description: '',
     });
     setErrors({});
     onClose();
@@ -242,35 +237,6 @@ export function FundModal({
                       </p>
                     )}
                   </div>
-                </div>
-
-                {/* Description Field */}
-                <div>
-                  <label
-                    htmlFor="description"
-                    className="block text-sm font-medium text-gray-700"
-                  >
-                    Description (optional)
-                  </label>
-                  <div>
-                    <input
-                      type="text"
-                      id="description"
-                      value={formData.description}
-                      onChange={e =>
-                        setFormData(prev => ({
-                          ...prev,
-                          description: e.target.value,
-                        }))
-                      }
-                      placeholder="Enter description"
-                      maxLength={140}
-                      className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 border-gray-300 text-gray-900 placeholder-gray-400 focus:border-green-500 bg-white"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {formData.description.length}/140 characters
-                  </p>
                 </div>
               </div>
 

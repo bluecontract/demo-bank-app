@@ -35,7 +35,6 @@ describe('useFundAccount', () => {
     const fundData = {
       accountId: '123e4567-e89b-12d3-a456-426614174000',
       amountMinor: 50000,
-      description: 'Test funding',
     };
 
     result.current.mutate(fundData);
@@ -122,7 +121,6 @@ describe('useFundAccount', () => {
     const fundData = {
       accountId: '123e4567-e89b-12d3-a456-426614174000',
       amountMinor: 50000,
-      description: 'Test funding',
     };
 
     result.current.mutate(fundData);
@@ -139,7 +137,6 @@ describe('useFundAccount', () => {
       },
       body: {
         amountMinor: fundData.amountMinor,
-        description: fundData.description,
       },
       overrideClientOptions: {
         credentials: 'include',

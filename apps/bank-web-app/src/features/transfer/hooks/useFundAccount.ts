@@ -5,7 +5,6 @@ import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
 export interface FundAccountRequest {
   accountId: string;
   amountMinor: number;
-  description?: string;
 }
 
 export interface FundAccountResponse {

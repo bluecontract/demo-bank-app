@@ -105,7 +105,6 @@ export function TransferForm({
       onSubmit({
         accountId: sourceAccount.accountId,
         amountMinor,
-        description: description || undefined,
       });
     }
   };
@@ -189,29 +188,31 @@ export function TransferForm({
           />
         </div>
 
-        <div>
-          <label
-            htmlFor="description"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Description (optional)
-          </label>
-          <Input
-            id="description"
-            type="text"
-            value={description}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              setDescription(e.target.value)
-            }
-            placeholder="Enter description"
-            maxLength={140}
-            disabled={isLoading}
-            error={errors.description}
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            {description.length}/140 characters
-          </p>
-        </div>
+        {mode === 'transfer' && (
+          <div>
+            <label
+              htmlFor="description"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Description (optional)
+            </label>
+            <Input
+              id="description"
+              type="text"
+              value={description}
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                setDescription(e.target.value)
+              }
+              placeholder="Enter description"
+              maxLength={140}
+              disabled={isLoading}
+              error={errors.description}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              {description.length}/140 characters
+            </p>
+          </div>
+        )}
       </div>
 
       {error && (

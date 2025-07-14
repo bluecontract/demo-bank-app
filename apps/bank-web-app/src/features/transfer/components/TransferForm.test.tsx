@@ -45,7 +45,7 @@ describe('TransferForm', () => {
       screen.queryByLabelText(/destination account number/i)
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText(/amount/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/description/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/description/i)).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /fund account/i })
     ).toBeInTheDocument();
@@ -156,9 +156,6 @@ describe('TransferForm', () => {
     fireEvent.change(screen.getByLabelText(/amount/i), {
       target: { value: '250' },
     });
-    fireEvent.change(screen.getByLabelText(/description/i), {
-      target: { value: 'Account funding' },
-    });
 
     fireEvent.click(screen.getByRole('button', { name: /fund account/i }));
 
@@ -166,7 +163,6 @@ describe('TransferForm', () => {
       expect(mockOnSubmit).toHaveBeenCalledWith({
         accountId: '123e4567-e89b-12d3-a456-426614174000',
         amountMinor: 25000,
-        description: 'Account funding',
       });
     });
   });
