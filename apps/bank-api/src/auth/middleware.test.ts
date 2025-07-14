@@ -61,19 +61,17 @@ describe('createAuthMiddleware', () => {
   it('should return 401 if no cookie', async () => {
     const middleware = createAuthMiddleware();
     const request = makeRequest();
-    const result = await middleware(request as any, {} as any);
-    const expected = toUnauthorizedResponse('Unauthorized');
-    expect(result.status).toBe(expected.status);
-    expect(JSON.stringify(result.body)).toBe(JSON.stringify(expected.body));
+    await expect(middleware(request as any, {} as any)).rejects.toThrow(
+      'Missing cookie header'
+    );
   });
 
   it('should return 401 if no demoAuth cookie', async () => {
     const middleware = createAuthMiddleware();
     const request = makeRequest({ headers: { cookie: 'other=foo' } });
-    const result = await middleware(request as any, {} as any);
-    const expected = toUnauthorizedResponse('Unauthorized');
-    expect(result.status).toBe(expected.status);
-    expect(JSON.stringify(result.body)).toBe(JSON.stringify(expected.body));
+    await expect(middleware(request as any, {} as any)).rejects.toThrow(
+      'Missing cookie header'
+    );
   });
 
   it('should return 401 if jwtService.verify throws', async () => {
@@ -85,9 +83,8 @@ describe('createAuthMiddleware', () => {
     });
     const middleware = createAuthMiddleware();
     const request = makeRequest({ headers: { cookie: 'demoAuth=badtoken' } });
-    const result = await middleware(request as any, {} as any);
-    const expected = toUnauthorizedResponse('Unauthorized');
-    expect(result.status).toBe(expected.status);
-    expect(JSON.stringify(result.body)).toBe(JSON.stringify(expected.body));
+    await expect(middleware(request as any, {} as any)).rejects.toThrow(
+      'Invalid token'
+    );
   });
 });

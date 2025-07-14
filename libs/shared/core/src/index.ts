@@ -10,3 +10,5 @@ export abstract class AppError extends Error {
     }
   }
 }
+
+export abstract class ValidationError extends AppError {}

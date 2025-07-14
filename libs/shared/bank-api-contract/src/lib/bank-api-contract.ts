@@ -1,6 +1,17 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
 import { createSanitizedStringSchema } from './sanitization';
+import {
+  AccountDto,
+  CreateAccountRequestDto,
+  FundingReqDto,
+  ProblemDto,
+  TransferResponseDto,
+  IdempotencyKeyHeaderSchema,
+  TransferReqDto,
+  PaginatedDto,
+  TransactionDto,
+} from './schemas';
 
 const c = initContract();
 
@@ -57,8 +68,8 @@ export const bankApiContract = c.router(
         .optional(),
       responses: {
         201: AuthSuccessResponseSchema,
-        409: AuthErrorResponseSchema,
-        // 400: AuthErrorResponseSchema,
+        401: ProblemDto,
+        409: ProblemDto,
       },
       summary: 'Sign up with a unique name',
     },
@@ -69,16 +80,100 @@ export const bankApiContract = c.router(
       body: SignInRequestSchema,
       responses: {
         200: AuthSuccessResponseSchema,
-        404: AuthErrorResponseSchema,
-        // 400: AuthErrorResponseSchema,
+        401: ProblemDto,
+        404: ProblemDto,
       },
       summary: 'Sign in with existing name',
+    },
+
+    banking: {
+      createAccount: {
+        method: 'POST',
+        path: '/v1/accounts',
+        body: CreateAccountRequestDto,
+        responses: { 201: AccountDto },
+        summary: 'Create a bank account',
+      },
+
+      listAccounts: {
+        method: 'GET',
+        path: '/v1/accounts',
+        responses: {
+          200: z.object({ accounts: z.array(AccountDto) }),
+        },
+        query: z.object({
+          limit: z.coerce.number().int().positive().optional(),
+          cursor: z.string().optional(),
+        }),
+        summary: 'List user bank accounts',
+      },
+
+      getAccount: {
+        method: 'GET',
+        path: '/v1/accounts/:accountId',
+        pathParams: z.object({ accountId: z.string().uuid() }),
+        responses: { 200: AccountDto, 404: ProblemDto },
+        summary: 'Get a bank account by ID',
+      },
+
+      fundAccount: {
+        method: 'POST',
+        path: '/v1/accounts/:accountId/funding',
+        pathParams: z.object({ accountId: z.string().uuid() }),
+        body: FundingReqDto,
+        headers: IdempotencyKeyHeaderSchema,
+        responses: {
+          201: TransferResponseDto,
+          400: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Fund a bank account',
+      },
+
+      transferMoney: {
+        method: 'POST',
+        path: '/v1/transfers',
+        body: TransferReqDto,
+        headers: IdempotencyKeyHeaderSchema,
+        responses: {
+          201: TransferResponseDto,
+          400: ProblemDto,
+          403: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Transfer money between bank accounts',
+      },
+
+      listTransactions: {
+        method: 'GET',
+        path: '/v1/accounts/:accountId/transactions',
+        pathParams: z.object({ accountId: z.string().uuid() }),
+        query: z.object({
+          limit: z.coerce.number().positive().optional(),
+          cursor: z.string().optional(),
+        }),
+        responses: { 200: PaginatedDto(TransactionDto), 404: ProblemDto },
+        summary: 'List transactions for a bank account',
+      },
+
+      getTransaction: {
+        method: 'GET',
+        path: '/v1/accounts/:accountId/transactions/:txnId',
+        pathParams: z.object({
+          accountId: z.string().uuid(),
+          txnId: z.string().uuid(),
+        }),
+        responses: { 200: TransactionDto, 404: ProblemDto },
+        summary: 'Get a transaction by ID',
+      },
     },
   },
   {
     commonResponses: {
-      400: AuthErrorResponseSchema,
-      500: AuthErrorResponseSchema,
+      401: ProblemDto,
+      403: ProblemDto,
+      400: ProblemDto,
+      500: ProblemDto,
     },
   }
 );

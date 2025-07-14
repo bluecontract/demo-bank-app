@@ -11,6 +11,13 @@ import { getMetrics } from './shared/metrics';
 import { getLogger } from './shared/logger';
 import { getSecurityHeaders } from './shared/security';
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
+import { createAccountHandler } from './banking/createAccount';
+import { listAccountsHandler } from './banking/listAccounts';
+import { getAccountHandler } from './banking/getAccount';
+import { fundAccountHandler } from './banking/fundAccount';
+import { transferMoneyHandler } from './banking/transferMoney';
+import { listTransactionsHandler } from './banking/listTransactions';
+import { getTransactionHandler } from './banking/getTransaction';
 
 const metrics = getMetrics();
 const logger = getLogger();
@@ -36,6 +43,16 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
 
     signUp: signUpHandler,
     signIn: signInHandler,
+
+    banking: {
+      createAccount: createAccountHandler,
+      listAccounts: listAccountsHandler,
+      getAccount: getAccountHandler,
+      fundAccount: fundAccountHandler,
+      transferMoney: transferMoneyHandler,
+      listTransactions: listTransactionsHandler,
+      getTransaction: getTransactionHandler,
+    },
   }),
   {
     cors: {
@@ -51,6 +68,12 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       credentials: true,
     },
     requestMiddleware: [
+      async request => {
+        logger.info('Received request', {
+          method: request.method,
+          path: request.url,
+        });
+      },
       createAuthMiddleware({
         exclusions: [
           { path: /^\/health\/?$/, method: 'GET' },
@@ -75,6 +98,14 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
         } catch (error) {
           logger.error('Failed to publish metrics', { error: String(error) });
         }
+        return response;
+      },
+      async (response, request) => {
+        logger.info('Sending response', {
+          status: response.status,
+          method: request.method,
+          path: request.url,
+        });
         return response;
       },
     ],

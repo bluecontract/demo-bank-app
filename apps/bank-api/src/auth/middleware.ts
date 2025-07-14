@@ -1,7 +1,7 @@
 import { tsr } from '@ts-rest/serverless/aws';
 import type { TsRestRequest } from '@ts-rest/serverless';
 import { getDependencies } from './dependencies';
-import { toUnauthorizedResponse } from '../shared/errors';
+import { UnauthorizedRequestError } from './errors';
 
 export type MaybeAuthenticatedRequestContext = {
   userId?: string;
@@ -36,33 +36,39 @@ function matchExclusion(
   });
 }
 
-export async function extractAuthInfo(
-  headers: Headers
-): Promise<{ userId?: string; isTest?: boolean }> {
-  const cookieHeader = headers.get('cookie');
-  if (!cookieHeader) {
-    return {};
-  }
-  const match = cookieHeader.match(/demoAuth=([^;]+)/);
-  if (!match) {
-    return {};
-  }
-  const token = match[1];
-  // JWT: header.payload.signature
-  const parts = token.split('.');
-  if (parts.length !== 3) {
-    return {};
-  }
+export async function extractAuthInfo(request: {
+  headers: Headers;
+}): Promise<{ userId: string; isTest: boolean }> {
   try {
+    const cookieHeader = request.headers.get('cookie');
+    if (!cookieHeader) {
+      throw new Error('Missing cookie header');
+    }
+    const match = cookieHeader.match(/demoAuth=([^;]+)/);
+    if (!match) {
+      throw new Error('Missing demoAuth cookie');
+    }
+    const token = match[1];
+    // JWT: header.payload.signature
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      throw new Error('Invalid token');
+    }
     const payload = JSON.parse(
       Buffer.from(parts[1], 'base64').toString('utf-8')
     );
+    if (!payload.sub) {
+      throw new Error('Invalid token');
+    }
     return {
       userId: payload.sub,
-      isTest: payload.isTest,
+      isTest: !!payload.isTest,
     };
-  } catch {
-    return {};
+  } catch (error: unknown) {
+    throw new UnauthorizedRequestError(
+      'Failed to extract auth info from the request',
+      error instanceof Error ? error : undefined
+    );
   }
 }
 
@@ -76,18 +82,18 @@ export function createAuthMiddleware(
     }
     const cookieHeader = request.headers.get('cookie');
     if (!cookieHeader) {
-      return toUnauthorizedResponse('Unauthorized');
+      throw new UnauthorizedRequestError('Missing cookie header');
     }
     const match = cookieHeader.match(/demoAuth=([^;]+)/);
     if (!match) {
-      return toUnauthorizedResponse('Unauthorized');
+      throw new UnauthorizedRequestError('Missing cookie header');
     }
     const token = match[1];
     const deps = await getDependencies();
     try {
       await deps.jwtService.verifyToken(token);
     } catch {
-      return toUnauthorizedResponse('Unauthorized');
+      throw new UnauthorizedRequestError('Invalid token');
     }
   });
 }

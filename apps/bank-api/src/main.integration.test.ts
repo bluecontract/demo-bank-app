@@ -5,9 +5,8 @@ import type {
   APIGatewayEventRequestContextV2,
   Context,
   Callback,
-  APIGatewayProxyResult,
 } from 'aws-lambda';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
 import {
   SecretsManagerClient,
   CreateSecretCommand,
@@ -20,7 +19,10 @@ import {
   DescribeTableCommand,
 } from '@aws-sdk/client-dynamodb';
 import jwt from 'jsonwebtoken';
-import { assertAllSecurityHeaders } from './test-helpers/security-assertions';
+import {
+  assertAllSecurityHeaders,
+  DEFAULT_TEST_ORIGIN,
+} from './test-helpers/security-assertions';
 
 /**
  * Integration Tests - Test against LocalStack AWS services
@@ -101,14 +103,19 @@ describe('Bank API Integration Tests', () => {
 
   describe('Preflight Requests', () => {
     it('should return 204 for OPTIONS requests', async () => {
-      const paths = ['/auth/signup', '/auth/signin', '/health'];
+      const paths = [
+        '/auth/signup',
+        '/auth/signin',
+        '/health',
+        '/v1/accounts',
+        '/v1/accounts/:accountId',
+      ];
       for (const path of paths) {
         const result = await invokeApi({
           method: 'OPTIONS',
           path,
         });
         expect(result.statusCode).toBe(204);
-        assertAllSecurityHeaders(result);
         expect(result.headers).toMatchObject({
           'access-control-allow-methods': 'GET,POST,OPTIONS',
           'access-control-allow-headers':
@@ -121,31 +128,19 @@ describe('Bank API Integration Tests', () => {
   describe('Health Endpoint', () => {
     it('should return health status with correct format', async () => {
       // Given
-      const result = await invokeApi({
+      const health = await invokeApi({
         method: 'GET',
         path: '/health',
       });
 
       // Then
-      expect(result.statusCode).toBe(200);
-      expect(result.body).toEqual({
+      expect(health.statusCode).toBe(200);
+      expect(health.body).toEqual({
         status: 'healthy',
         timestamp: expect.any(String),
         version: expect.any(String),
         environment: expect.any(String),
       });
-
-      const eventWithOrigin = createTestEvent('GET', '/health');
-      eventWithOrigin.headers['Origin'] = 'https://app.example.com';
-
-      const corsResult = (await handler(
-        eventWithOrigin,
-        {} as Context,
-        {} as Callback
-      )) as APIGatewayProxyResult;
-
-      expect(corsResult.statusCode).toBe(200);
-      assertAllSecurityHeaders(corsResult);
     });
   });
 
@@ -170,7 +165,6 @@ describe('Bank API Integration Tests', () => {
         message:
           'A user with this name already exists. Please choose a different name.',
       });
-      assertAllSecurityHeaders(signUp);
     });
 
     it('should return 400 for invalid request data', async () => {
@@ -197,7 +191,6 @@ describe('Bank API Integration Tests', () => {
           },
         ],
       });
-      assertAllSecurityHeaders(signUp);
     });
 
     it('should create test user with shorter TTL when dev=true', async () => {
@@ -212,7 +205,6 @@ describe('Bank API Integration Tests', () => {
       expect(cookieHeader).toContain(
         `Max-Age=${TEST_CONFIG.testUserTtlSeconds}`
       );
-      assertAllSecurityHeaders(signUp);
     });
 
     it('should handle complex XSS payloads in account creation', async () => {
@@ -266,7 +258,6 @@ describe('Bank API Integration Tests', () => {
       expect(decoded.sub).toBe(signIn.body.userId);
       expect(decoded.iat).toBeDefined();
       expect(decoded.exp).toBeDefined();
-      assertAllSecurityHeaders(signIn);
     });
 
     it('should return 401 when signing in with non-existing username', async () => {
@@ -283,7 +274,6 @@ describe('Bank API Integration Tests', () => {
         message:
           'User not found. Please check the name and try again or sign up.',
       });
-      assertAllSecurityHeaders(signIn);
     });
 
     it('should return 400 for invalid sign-in request data', async () => {
@@ -314,22 +304,6 @@ describe('Bank API Integration Tests', () => {
         queryParameterErrors: null,
         headerErrors: null,
       });
-      assertAllSecurityHeaders(signIn);
-    });
-
-    it('should include CORS headers when Origin is provided', async () => {
-      const creds = await signupUniqueTestUser('cors-signin-test');
-      const signIn = await invokeApi({
-        method: 'POST',
-        path: '/auth/signin',
-        body: { name: creds.userName },
-        headers: { Origin: 'https://app.example.com' },
-      });
-      expect(signIn.statusCode).toBe(200);
-      expect(signIn.headers).toMatchObject({
-        'access-control-allow-origin': 'https://app.example.com',
-      });
-      assertAllSecurityHeaders(signIn);
     });
 
     it('should work with test users created via dev=true', async () => {
@@ -345,6 +319,979 @@ describe('Bank API Integration Tests', () => {
       expect(signIn.body.name).toBe(creds.userName);
       const cookieHeader = signIn.headers?.['set-cookie'] as string;
       expect(cookieHeader).toContain(`Max-Age=600`);
+    });
+  });
+
+  describe('Create Account Endpoint', () => {
+    let jwtCookie: string;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('account-user');
+      jwtCookie = creds.jwtCookie;
+    });
+
+    it('should create a new account for authenticated user', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Test Account' },
+      });
+      expect(result.statusCode).toBe(201);
+      expect(result.body).toMatchObject({
+        accountId: expect.any(String),
+        accountNumber: expect.any(String),
+        currency: 'USD',
+        createdAt: expect.any(String),
+        ledgerBalanceMinor: 0,
+        availableBalanceMinor: 0,
+        status: 'ACTIVE',
+      });
+    });
+
+    it('should return 401 if not authenticated', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        body: { name: 'Test Account' },
+      });
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+
+    it('should handle complex XSS payloads in account creation', async () => {
+      const name = 'Pure Account Name';
+      const maliciousAccountName = `<img src="x" onerror="alert('XSS')"><script>document.cookie='stolen'</script>${name}`;
+
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: maliciousAccountName },
+      });
+
+      expect(result.body.name).toBe(name);
+      expect(result.body.name).not.toContain('<img');
+      expect(result.body.name).not.toContain('<script>');
+      expect(result.body.name).not.toContain('onerror');
+      expect(result.body.name).not.toContain('alert');
+    });
+  });
+
+  describe('List Accounts Endpoint', () => {
+    let jwtCookie: string;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('list-accounts-user');
+      jwtCookie = creds.jwtCookie;
+    });
+
+    it('should return an empty array if user has no accounts', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+        jwtCookie,
+      });
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toEqual({ accounts: [] });
+    });
+
+    it('should return a list of accounts for authenticated user', async () => {
+      for (let i = 0; i < 2; i++) {
+        const create = await invokeApi({
+          method: 'POST',
+          path: '/v1/accounts',
+          jwtCookie,
+          body: { name: 'Test Account' },
+        });
+        expect(create.statusCode).toBe(201);
+      }
+      const result = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+        jwtCookie,
+      });
+      expect(result.statusCode).toBe(200);
+      expect(Array.isArray(result.body.accounts)).toBe(true);
+      expect(result.body.accounts.length).toBeGreaterThanOrEqual(2);
+      for (const acc of result.body.accounts) {
+        expect(acc).toMatchObject({
+          accountId: expect.any(String),
+          accountNumber: expect.any(String),
+          currency: 'USD',
+          createdAt: expect.any(String),
+          status: 'ACTIVE',
+        });
+      }
+    });
+
+    it('should return 401 if user is not authenticated', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+      });
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+  });
+
+  describe('Get Account Endpoint', () => {
+    let jwtCookie: string;
+    let accountId: string;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('get-account-user');
+      jwtCookie = creds.jwtCookie;
+      // Create an account for the user
+      const create = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Test Account' },
+      });
+      expect(create.statusCode).toBe(201);
+      accountId = create.body.accountId;
+    });
+
+    it('should return the account for authenticated user', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}`,
+        jwtCookie,
+      });
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toMatchObject({
+        accountId,
+        accountNumber: expect.any(String),
+        currency: 'USD',
+        createdAt: expect.any(String),
+        ledgerBalanceMinor: 0,
+        availableBalanceMinor: 0,
+        status: 'ACTIVE',
+      });
+    });
+
+    it('should return 404 if account does not exist', async () => {
+      const nonExistentAccountId = crypto.randomUUID();
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${nonExistentAccountId}`,
+        jwtCookie,
+      });
+      expect(result.statusCode).toBe(404);
+      expect(result.body).toMatchObject({
+        error: 'ACCOUNT_NOT_FOUND',
+        message: 'Account not found',
+      });
+    });
+
+    it('should return 401 if user is not authenticated', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}`,
+      });
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+  });
+
+  describe('Fund Account Endpoint', () => {
+    let jwtCookie: string;
+    let accountId: string;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('fund-account-user');
+      jwtCookie = creds.jwtCookie;
+      // Create an account for the user
+      const create = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Test Account' },
+      });
+      expect(create.statusCode).toBe(201);
+      accountId = create.body.accountId;
+    });
+
+    it('should fund the account and return 201 with txnId', async () => {
+      const idempotencyKey = crypto.randomUUID();
+      const fund = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': idempotencyKey,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 500 },
+      });
+      expect(fund.statusCode).toBe(201);
+      expect(fund.body).toHaveProperty('txnId');
+      // Check balance increased
+      const get = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}`,
+        jwtCookie,
+      });
+      expect(get.statusCode).toBe(200);
+      expect(get.body.ledgerBalanceMinor).toBe(500);
+      expect(get.body.availableBalanceMinor).toBe(500);
+    });
+
+    it('should return 401 if user is not authenticated', async () => {
+      const fund = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 100 },
+      });
+      expect(fund.statusCode).toBe(401);
+      expect(fund.body).toMatchObject({
+        message: 'Unauthorized',
+      });
+    });
+
+    it('should return 400 if idempotency-key is missing', async () => {
+      const fund = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        body: { amountMinor: 100 },
+      });
+      expect(fund.statusCode).toBe(400);
+      const body = fund.body;
+      expect(body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        errors: expect.any(String),
+        message: expect.any(String),
+      });
+      expect(JSON.parse(body.errors)).toMatchObject({
+        bodyErrors: null,
+        pathParameterErrors: null,
+        queryParameterErrors: null,
+        headerErrors: [
+          {
+            code: 'invalid_type',
+            expected: 'string',
+            received: 'undefined',
+            path: ['idempotency-key'],
+            message: 'Required',
+          },
+        ],
+      });
+    });
+
+    it('should return 404 if account does not exist', async () => {
+      const nonExistentAccountId = crypto.randomUUID();
+      const fund = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${nonExistentAccountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 100 },
+      });
+      expect(fund.statusCode).toBe(404);
+      expect(fund.body).toMatchObject({
+        error: 'ACCOUNT_NOT_FOUND',
+        message: 'Account not found',
+      });
+    });
+
+    it('should return 400 if amountMinor is invalid', async () => {
+      const fund = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: -100 },
+      });
+      expect(fund.statusCode).toBe(400);
+      expect(fund.body.error).toMatch(/VALIDATION|amount/i);
+    });
+
+    it('should be idempotent for same idempotency-key', async () => {
+      const create = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Test Account' },
+      });
+      expect(create.statusCode).toBe(201);
+      expect(create.body.accountId).toBeDefined();
+
+      const idempotencyKey = crypto.randomUUID();
+      const fund1 = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${create.body.accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': idempotencyKey,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 200 },
+      });
+      expect(fund1.statusCode).toBe(201);
+      expect(fund1.body).toHaveProperty('txnId');
+      const fund2 = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${create.body.accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': idempotencyKey,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 200 },
+      });
+      expect(fund2.statusCode).toBe(201);
+      expect(fund2.body).toHaveProperty('txnId');
+      expect(fund2.body.txnId).toBe(fund1.body.txnId);
+      // Balance should not double-fund
+      const get = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${create.body.accountId}`,
+        jwtCookie,
+      });
+      expect(get.statusCode).toBe(200);
+      expect(get.body.ledgerBalanceMinor).toBe(200);
+    });
+  });
+
+  describe('Transfer Money Endpoint', () => {
+    let user1: { userId: string; jwtCookie: string; userName: string };
+    let user2: { userId: string; jwtCookie: string; userName: string };
+    let user1Account: { accountId: string };
+    let user2Account: { accountId: string; accountNumber: string };
+
+    beforeAll(async () => {
+      user1 = await signupUniqueTestUser('transfer-user-1');
+      user2 = await signupUniqueTestUser('transfer-user-2');
+      // Create accounts for both users
+      const acc1 = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: user1.jwtCookie,
+        body: { name: 'Test Account 1' },
+      });
+      user1Account = acc1.body;
+      const acc2 = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: user2.jwtCookie,
+        body: { name: 'Test Account 2' },
+      });
+      user2Account = acc2.body;
+      // Fund user1's account for transfer
+      await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${user1Account.accountId}/funding`,
+        jwtCookie: user1.jwtCookie,
+        body: { amountMinor: 200 },
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+      });
+    });
+
+    it('should transfer money between users and return 201 with txnId', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie: user1.jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: user2Account.accountNumber,
+          amountMinor: 100,
+        },
+      });
+      expect(result.statusCode).toBe(201);
+      expect(result.body).toHaveProperty('txnId');
+      // Check balances
+      const get1 = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${user1Account.accountId}`,
+        jwtCookie: user1.jwtCookie,
+      });
+      expect(get1.statusCode).toBe(200);
+      expect(get1.body.ledgerBalanceMinor).toBe(100);
+      expect(get1.body.availableBalanceMinor).toBe(100);
+      const get2 = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${user2Account.accountId}`,
+        jwtCookie: user2.jwtCookie,
+      });
+      expect(get2.statusCode).toBe(200);
+      expect(get2.body.ledgerBalanceMinor).toBe(100);
+      expect(get2.body.availableBalanceMinor).toBe(100);
+    });
+
+    it('should return 401 if not authenticated', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: user2Account.accountNumber,
+          amountMinor: 100,
+        },
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+      });
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toMatchObject({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+
+    it('should return 400 if idempotency-key is missing', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie: user1.jwtCookie,
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: user2Account.accountNumber,
+          amountMinor: 100,
+        },
+      });
+      expect(result.statusCode).toBe(400);
+      const body = result.body;
+      expect(body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        errors: expect.any(String),
+        message: expect.any(String),
+      });
+      expect(JSON.parse(body.errors)).toMatchObject({
+        bodyErrors: null,
+        pathParameterErrors: null,
+        queryParameterErrors: null,
+        headerErrors: [
+          {
+            code: 'invalid_type',
+            expected: 'string',
+            received: 'undefined',
+            path: ['idempotency-key'],
+            message: 'Required',
+          },
+        ],
+      });
+    });
+
+    it('should return 404 if destination account not found', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie: user1.jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: '1111111111',
+          amountMinor: 100,
+        },
+      });
+      expect(result.body).toMatchObject({
+        error: 'ACCOUNT_NOT_FOUND',
+        message: 'Account not found',
+      });
+      expect(result.statusCode).toBe(404);
+    });
+
+    it('should return 400 if insufficient funds', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie: user1.jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: user2Account.accountNumber,
+          amountMinor: 9999999,
+        },
+      });
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'INSUFFICIENT_FUNDS',
+        message: 'Insufficient funds',
+      });
+    });
+
+    it('should return 403 if forbidden (not owner)', async () => {
+      const result = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie: user2.jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: user1Account.accountId,
+          destinationAccountNumber: user2Account.accountNumber,
+          amountMinor: 100,
+        },
+      });
+      expect(result.statusCode).toBe(403);
+      expect(result.body).toMatchObject({
+        error: 'FORBIDDEN',
+        message: 'Forbidden access',
+      });
+    });
+  });
+
+  describe('List Transactions Endpoint', () => {
+    let jwtCookie: string;
+    let accountId: string;
+    const txnIds: string[] = [];
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('list-transactions-user');
+      jwtCookie = creds.jwtCookie;
+
+      // Create an account
+      const createAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Test Account' },
+      });
+      expect(createAccount.statusCode).toBe(201);
+      accountId = createAccount.body.accountId;
+
+      // Fund the account to create transactions
+      const fundResult = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 1000 },
+      });
+      expect(fundResult.statusCode).toBe(201);
+      txnIds.push(fundResult.body.txnId);
+
+      // Create a second account for transfer
+      const secondUser = await signupUniqueTestUser('list-transactions-user-2');
+      const secondAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: secondUser.jwtCookie,
+        body: { name: 'Second Account' },
+      });
+      expect(secondAccount.statusCode).toBe(201);
+
+      // Transfer money to create another transaction
+      const transferResult = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: accountId,
+          destinationAccountNumber: secondAccount.body.accountNumber,
+          amountMinor: 200,
+        },
+      });
+      expect(transferResult.statusCode).toBe(201);
+      txnIds.push(transferResult.body.txnId);
+    });
+
+    it('should list transactions for authenticated user', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/transactions`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toHaveProperty('items');
+      expect(Array.isArray(result.body.items)).toBe(true);
+      expect(result.body.items.length).toBe(2);
+
+      // Verify transaction structure
+      for (const txn of result.body.items) {
+        expect(txn).toMatchObject({
+          txnId: expect.any(String),
+          accountId: accountId,
+          side: expect.stringMatching(/^(DEBIT|CREDIT)$/),
+          amountMinor: expect.any(Number),
+          type: expect.any(String),
+          status: expect.any(String),
+          timestamp: expect.any(String),
+          counterpartyAccountNumber: expect.any(String),
+        });
+        expect(txn.description).toBeDefined();
+      }
+
+      // Verify we have our expected transactions
+      const returnedTxnIds = result.body.items.map((t: any) => t.txnId);
+      expect(returnedTxnIds).toEqual(expect.arrayContaining(txnIds));
+    });
+
+    it('should return empty list for account with no transactions', async () => {
+      // Create a new account with no transactions
+      const newAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Empty Account' },
+      });
+      expect(newAccount.statusCode).toBe(201);
+
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${newAccount.body.accountId}/transactions`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toEqual({
+        items: [],
+        next: undefined,
+      });
+    });
+
+    it('should support pagination with limit parameter', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/transactions?limit=1`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body.items).toHaveLength(1);
+      expect(result.body.items[0]).toMatchObject({
+        txnId: expect.any(String),
+        accountId: accountId,
+        side: expect.stringMatching(/^(DEBIT|CREDIT)$/),
+        amountMinor: expect.any(Number),
+        type: expect.any(String),
+        status: expect.any(String),
+        timestamp: expect.any(String),
+        counterpartyAccountNumber: expect.any(String),
+      });
+    });
+
+    it('should return 404 if account does not exist', async () => {
+      const nonExistentAccountId = crypto.randomUUID();
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${nonExistentAccountId}/transactions`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(404);
+      expect(result.body).toMatchObject({
+        error: 'ACCOUNT_NOT_FOUND',
+        message: `Account ${nonExistentAccountId} not found`,
+      });
+    });
+
+    it('should return 401 if user is not authenticated', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/transactions`,
+      });
+
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+
+    it('should return 400 for invalid limit parameter', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/transactions?limit=0`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        message: expect.any(String),
+      });
+    });
+
+    it('should return 400 for invalid accountId parameter', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/invalid-uuid/transactions`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        message: expect.any(String),
+      });
+    });
+  });
+
+  describe('Get Transaction Endpoint', () => {
+    let jwtCookie: string;
+    let accountId: string;
+    let fundingTxnId: string;
+    let transferTxnId: string;
+    let secondAccountId: string;
+    let secondUserJwtCookie: string;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('get-transaction-user');
+      jwtCookie = creds.jwtCookie;
+
+      // Create an account
+      const createAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Test Account' },
+      });
+      expect(createAccount.statusCode).toBe(201);
+      accountId = createAccount.body.accountId;
+
+      // Fund the account to create a funding transaction
+      const fundResult = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 1000 },
+      });
+      expect(fundResult.statusCode).toBe(201);
+      fundingTxnId = fundResult.body.txnId;
+
+      // Create a second account and transfer money to create a transfer transaction
+      const secondUser = await signupUniqueTestUser('get-transaction-user-2');
+      secondUserJwtCookie = secondUser.jwtCookie;
+      const secondAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: secondUser.jwtCookie,
+        body: { name: 'Second Account' },
+      });
+      expect(secondAccount.statusCode).toBe(201);
+      secondAccountId = secondAccount.body.accountId;
+
+      // Transfer money to create a transfer transaction
+      const transferResult = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: accountId,
+          destinationAccountNumber: secondAccount.body.accountNumber,
+          amountMinor: 300,
+        },
+      });
+      expect(transferResult.statusCode).toBe(201);
+      transferTxnId = transferResult.body.txnId;
+    });
+
+    it('should get a funding transaction for authenticated user', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/transactions/${fundingTxnId}`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toMatchObject({
+        txnId: fundingTxnId,
+        accountId: accountId,
+        side: 'CREDIT',
+        amountMinor: 1000,
+        type: 'FUNDING',
+        status: 'POSTED',
+        timestamp: expect.any(String),
+        description: expect.any(String),
+        counterpartyAccountNumber: expect.any(String),
+      });
+
+      // Verify timestamp is valid ISO string
+      expect(new Date(result.body.timestamp).toISOString()).toBe(
+        result.body.timestamp
+      );
+    });
+
+    it('should get a transfer transaction for authenticated user', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/transactions/${transferTxnId}`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toMatchObject({
+        txnId: transferTxnId,
+        accountId: accountId,
+        side: 'DEBIT',
+        amountMinor: 300,
+        type: 'TRANSFER',
+        status: 'POSTED',
+        timestamp: expect.any(String),
+        description: expect.any(String),
+        counterpartyAccountNumber: expect.any(String),
+      });
+    });
+
+    it('should get transaction from recipient account perspective', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${secondAccountId}/transactions/${transferTxnId}`,
+        jwtCookie: secondUserJwtCookie,
+      });
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toMatchObject({
+        txnId: transferTxnId,
+        accountId: secondAccountId,
+        side: 'CREDIT',
+        amountMinor: 300,
+        type: 'TRANSFER',
+        status: 'POSTED',
+        timestamp: expect.any(String),
+        description: expect.any(String),
+        counterpartyAccountNumber: expect.any(String),
+      });
+    });
+
+    it('should return 404 if transaction does not exist', async () => {
+      const nonExistentTxnId = crypto.randomUUID();
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/transactions/${nonExistentTxnId}`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(404);
+      expect(result.body).toMatchObject({
+        error: 'TRANSACTION_NOT_FOUND',
+        message: expect.any(String),
+      });
+    });
+
+    it('should return 404 if account does not exist', async () => {
+      const nonExistentAccountId = crypto.randomUUID();
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${nonExistentAccountId}/transactions/${fundingTxnId}`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(404);
+      expect(result.body).toMatchObject({
+        error: 'TRANSACTION_NOT_FOUND',
+        message: expect.any(String),
+      });
+    });
+
+    it('should return 404 if transaction exists but not for the specified account', async () => {
+      // Create a different account
+      const differentAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Different Account' },
+      });
+      expect(differentAccount.statusCode).toBe(201);
+
+      // Try to get funding transaction from different account
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${differentAccount.body.accountId}/transactions/${fundingTxnId}`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(404);
+      expect(result.body).toMatchObject({
+        error: 'TRANSACTION_NOT_FOUND',
+        message: `Transaction ${fundingTxnId} not found`,
+      });
+    });
+
+    it('should return 401 if user is not authenticated', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/transactions/${fundingTxnId}`,
+      });
+
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+
+    it('should return 400 for invalid accountId parameter', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/invalid-uuid/transactions/${fundingTxnId}`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        message: expect.any(String),
+      });
+    });
+
+    it('should return 400 for invalid txnId parameter', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/transactions/invalid-uuid`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+        message: expect.any(String),
+      });
     });
   });
 });
@@ -491,6 +1438,55 @@ async function setupLocalStackResources(): Promise<void> {
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
+    // FUNDING_SOURCE META ROW
+    const fundingSourceCreatedAt = new Date().toISOString();
+    await dynamoClient.send(
+      new PutItemCommand({
+        TableName: TEST_CONFIG.tableName,
+        Item: {
+          PK: { S: 'ACCOUNT#FUNDING_SOURCE' },
+          SK: { S: 'META' },
+          BANKING_GSI1PK: { S: 'USER#SYSTEM' },
+          BANKING_GSI1SK: { S: fundingSourceCreatedAt },
+          accountNumber: { S: '0000000000' },
+          name: { S: 'System Funding Source' },
+          ownerUserId: { S: 'SYSTEM' },
+          status: { S: 'ACTIVE' },
+          currency: { S: 'USD' },
+          createdAt: { S: fundingSourceCreatedAt },
+        },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+
+    // FUNDING_SOURCE BALANCE ROW
+    await dynamoClient.send(
+      new PutItemCommand({
+        TableName: TEST_CONFIG.tableName,
+        Item: {
+          PK: { S: 'ACCOUNT#FUNDING_SOURCE' },
+          SK: { S: 'BALANCE' },
+          ledgerBalanceMinor: { N: '0' },
+          availableBalanceMinor: { N: '0' },
+          version: { N: '0' },
+        },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+
+    // FUNDING_SOURCE ACCOUNT NUMBER RESERVATION
+    await dynamoClient.send(
+      new PutItemCommand({
+        TableName: TEST_CONFIG.tableName,
+        Item: {
+          PK: { S: 'ACCOUNT_NUMBER#0000000000' },
+          SK: { S: 'RESERVE' },
+          accountId: { S: 'FUNDING_SOURCE' },
+        },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+
     if (!tableReady) {
       throw new Error('DynamoDB table failed to become active');
     }
@@ -550,27 +1546,23 @@ async function invokeApi({
   method,
   path,
   body,
-  userId,
   jwtCookie,
-  headers = {},
+  headers = { origin: DEFAULT_TEST_ORIGIN },
 }: {
   method: string;
   path: string;
   body?: object;
   queryStringParameters?: Record<string, string>;
-  userId?: string;
   jwtCookie?: string;
   headers?: Record<string, string>;
 }) {
   const event = createTestEvent(method, path, body);
   if (jwtCookie) event.headers['cookie'] = jwtCookie;
-  if (userId) (event as any).userId = userId;
   Object.assign(event.headers, headers);
   console.log('Invoking API', {
     method,
     path,
     body,
-    userId,
     jwtCookie,
     headers,
   });
@@ -580,9 +1572,11 @@ async function invokeApi({
     body: string;
     cookies: string[];
   };
+  const responseBody = result.body ? JSON.parse(result.body) : result.body;
+  assertAllSecurityHeaders(result, headers.origin);
   return {
     ...result,
-    body: result.body ? JSON.parse(result.body) : result.body,
+    body: responseBody,
   };
 }
 
@@ -601,7 +1595,6 @@ async function signupUniqueTestUser(
   if (!signUp.headers || typeof signUp.headers['set-cookie'] !== 'string') {
     throw new Error('Missing set-cookie header in signUp response');
   }
-  assertAllSecurityHeaders(signUp);
   return {
     userId: signUp.body.userId,
     jwtCookie: signUp.headers['set-cookie'],

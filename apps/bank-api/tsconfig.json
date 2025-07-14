@@ -7,6 +7,9 @@
       "path": "../../libs/shared/observability"
     },
     {
+      "path": "../../libs/shared/core"
+    },
+    {
       "path": "../../libs/shared/bank-api-contract"
     },
     {

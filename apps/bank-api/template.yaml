@@ -185,6 +185,72 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /auth/signin
             Method: OPTIONS
+        CreateAccountApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts
+            Method: POST
+        ListAccountsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts
+            Method: GET
+        V1AccountsOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts
+            Method: OPTIONS
+        GetAccountApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountId}
+            Method: GET
+        GetAccountOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountId}
+            Method: OPTIONS
+        FundAccountApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountId}/funding
+            Method: POST
+        FundAccountOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountId}/funding
+            Method: OPTIONS
+        TransferMoneyApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/transfers
+            Method: POST
+        TransferMoneyOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/transfers
+            Method: OPTIONS
+        ListTransactionsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountId}/transactions
+            Method: GET
+        ListTransactionsOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountId}/transactions
+            Method: OPTIONS
   # ------------------------------------------------------------------
   # Seed the FUNDING_SOURCE account and its BALANCE row (idempotent)
   # ------------------------------------------------------------------

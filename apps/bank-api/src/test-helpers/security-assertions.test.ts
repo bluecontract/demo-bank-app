@@ -24,6 +24,8 @@ describe('Security Assertion Helpers', () => {
         'referrer-policy': 'no-referrer',
         'content-security-policy': "default-src 'self'; script-src 'self'",
         'strict-transport-security': 'max-age=31536000; includeSubDomains',
+        'access-control-allow-origin': 'https://example.com',
+        'access-control-allow-credentials': 'true',
       });
 
       expect(() => assertSecurityHeaders(response)).not.toThrow();
@@ -42,9 +44,11 @@ describe('Security Assertion Helpers', () => {
         'cross-origin-opener-policy': 'same-origin',
         'cross-origin-resource-policy': 'same-origin',
         'origin-agent-cluster': '?1',
+        'access-control-allow-origin': 'https://example.com',
+        'access-control-allow-credentials': 'true',
       });
 
-      expect(() => assertCrossOriginHeaders(response)).not.toThrow();
+      assertCrossOriginHeaders(response, 'https://example.com');
     });
   });
 
@@ -63,9 +67,10 @@ describe('Security Assertion Helpers', () => {
         'access-control-allow-origin': 'https://example.com',
         'access-control-allow-methods': 'GET, POST, PUT, DELETE',
         'access-control-allow-headers': 'Content-Type, Authorization',
+        'access-control-allow-credentials': 'true',
       });
 
-      expect(() => assertAllSecurityHeaders(response)).not.toThrow();
+      assertAllSecurityHeaders(response, 'https://example.com');
     });
   });
 });
