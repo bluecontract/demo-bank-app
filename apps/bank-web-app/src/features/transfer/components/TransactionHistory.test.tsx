@@ -1,11 +1,40 @@
 import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
-import { vi } from 'vitest';
 import { TransactionHistory } from './TransactionHistory';
+import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
+import { useTransactions } from '../../transactions/hooks/useTransactions';
 
-const mockUseSelectedAccount = vi.fn();
+// Mock the providers and hooks
 vi.mock('../../../app/providers/SelectedAccountProvider', () => ({
-  useSelectedAccount: () => mockUseSelectedAccount(),
+  useSelectedAccount: vi.fn(),
+}));
+
+vi.mock('../../transactions/hooks/useTransactions', () => ({
+  useTransactions: vi.fn(),
+}));
+
+// Mock the TransactionList component
+vi.mock('../../transactions/components/TransactionList', () => ({
+  TransactionList: ({
+    transactions,
+    isLoading,
+    isError,
+    isEmpty,
+    'data-testid': testId,
+  }: {
+    transactions: any[];
+    isLoading: boolean;
+    isError: boolean;
+    isEmpty: boolean;
+    'data-testid'?: string;
+  }) => (
+    <div data-testid={testId}>
+      Mock TransactionList - Loading: {isLoading.toString()} - Error:{' '}
+      {isError.toString()} - Empty: {isEmpty.toString()} - Count:{' '}
+      {transactions.length}
+    </div>
+  ),
 }));
 
 const mockAccount = {
@@ -18,64 +47,238 @@ const mockAccount = {
   status: 'ACTIVE',
 };
 
+const mockTransactions = [
+  {
+    txnId: 'txn-123',
+    accountId: 'test-account-id',
+    side: 'CREDIT' as const,
+    amountMinor: 100000,
+    type: 'FUNDING',
+    status: 'COMPLETED',
+    timestamp: '2023-01-15T10:30:00Z',
+    description: 'Test deposit',
+    counterpartyAccountNumber: '1234567890',
+  },
+];
+
 describe('TransactionHistory', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('should show transaction history header even when no account is selected', () => {
-    mockUseSelectedAccount.mockReturnValue({
+    (useSelectedAccount as any).mockReturnValue({
       selectedAccount: null,
       setSelectedAccount: vi.fn(),
     });
 
-    render(<TransactionHistory />);
-
-    expect(screen.getByText('Transaction History')).toBeInTheDocument();
-    expect(screen.getByText('No transactions yet')).toBeInTheDocument();
-  });
-
-  it('should show transaction history header with account number when account is selected', () => {
-    mockUseSelectedAccount.mockReturnValue({
-      selectedAccount: mockAccount,
-      setSelectedAccount: vi.fn(),
+    (useTransactions as any).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      isError: false,
     });
 
     render(<TransactionHistory />);
 
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
-    expect(screen.getByText('Account: 1234567890')).toBeInTheDocument();
-  });
-
-  it('should show empty state when account is selected but no transactions exist', () => {
-    mockUseSelectedAccount.mockReturnValue({
-      selectedAccount: mockAccount,
-      setSelectedAccount: vi.fn(),
-    });
-
-    render(<TransactionHistory />);
-
-    expect(screen.getByText('No transactions yet')).toBeInTheDocument();
+    expect(screen.queryByText('Account:')).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your transaction history will appear here once you make your first transfer'
+        'Mock TransactionList - Loading: false - Error: false - Empty: true - Count: 0'
       )
     ).toBeInTheDocument();
   });
 
-  it('should display the correct account number', () => {
-    const customAccount = {
-      ...mockAccount,
-      accountNumber: '9876543210',
-    };
-
-    mockUseSelectedAccount.mockReturnValue({
-      selectedAccount: customAccount,
+  it('should show transaction history header with account number when account is selected', () => {
+    (useSelectedAccount as any).mockReturnValue({
+      selectedAccount: mockAccount,
       setSelectedAccount: vi.fn(),
+    });
+
+    (useTransactions as any).mockReturnValue({
+      data: { items: mockTransactions },
+      isLoading: false,
+      isError: false,
     });
 
     render(<TransactionHistory />);
 
-    expect(screen.getByText('Account: 9876543210')).toBeInTheDocument();
+    expect(screen.getByText('Transaction History')).toBeInTheDocument();
+    expect(screen.getByText('Account:')).toBeInTheDocument();
+    expect(screen.getByText('1234567890')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Mock TransactionList - Loading: false - Error: false - Empty: false - Count: 1'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('should show loading state when transactions are being fetched', () => {
+    (useSelectedAccount as any).mockReturnValue({
+      selectedAccount: mockAccount,
+      setSelectedAccount: vi.fn(),
+    });
+
+    (useTransactions as any).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    });
+
+    render(<TransactionHistory />);
+
+    expect(screen.getByText('Transaction History')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Mock TransactionList - Loading: true - Error: false - Empty: false - Count: 0'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('should show error state when transactions fail to load', () => {
+    (useSelectedAccount as any).mockReturnValue({
+      selectedAccount: mockAccount,
+      setSelectedAccount: vi.fn(),
+    });
+
+    (useTransactions as any).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    });
+
+    render(<TransactionHistory />);
+
+    expect(screen.getByText('Transaction History')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Mock TransactionList - Loading: false - Error: true - Empty: false - Count: 0'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('should show empty state when account is selected but no transactions exist', () => {
+    (useSelectedAccount as any).mockReturnValue({
+      selectedAccount: mockAccount,
+      setSelectedAccount: vi.fn(),
+    });
+
+    (useTransactions as any).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<TransactionHistory />);
+
+    expect(screen.getByText('Transaction History')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Mock TransactionList - Loading: false - Error: false - Empty: true - Count: 0'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('should pass correct accountId to useTransactions hook', () => {
+    (useSelectedAccount as any).mockReturnValue({
+      selectedAccount: mockAccount,
+      setSelectedAccount: vi.fn(),
+    });
+
+    (useTransactions as any).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<TransactionHistory />);
+
+    expect(useTransactions).toHaveBeenCalledWith({
+      accountId: 'test-account-id',
+    });
+  });
+
+  it('should pass null accountId when no account is selected', () => {
+    (useSelectedAccount as any).mockReturnValue({
+      selectedAccount: null,
+      setSelectedAccount: vi.fn(),
+    });
+
+    (useTransactions as any).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<TransactionHistory />);
+
+    expect(useTransactions).toHaveBeenCalledWith({
+      accountId: null,
+    });
+  });
+
+  it('should handle transactions data correctly', () => {
+    (useSelectedAccount as any).mockReturnValue({
+      selectedAccount: mockAccount,
+      setSelectedAccount: vi.fn(),
+    });
+
+    (useTransactions as any).mockReturnValue({
+      data: { items: mockTransactions },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<TransactionHistory />);
+
+    expect(
+      screen.getByText(
+        'Mock TransactionList - Loading: false - Error: false - Empty: false - Count: 1'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('should handle undefined transactions data', () => {
+    (useSelectedAccount as any).mockReturnValue({
+      selectedAccount: mockAccount,
+      setSelectedAccount: vi.fn(),
+    });
+
+    (useTransactions as any).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<TransactionHistory />);
+
+    expect(
+      screen.getByText(
+        'Mock TransactionList - Loading: false - Error: false - Empty: true - Count: 0'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('should have proper Card styling', () => {
+    (useSelectedAccount as any).mockReturnValue({
+      selectedAccount: mockAccount,
+      setSelectedAccount: vi.fn(),
+    });
+
+    (useTransactions as any).mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      isError: false,
+    });
+
+    const { container } = render(<TransactionHistory />);
+
+    expect(container.querySelector('.p-8')).toBeInTheDocument();
+    expect(container.querySelector('.flex')).toBeInTheDocument();
+    expect(container.querySelector('.flex-col')).toBeInTheDocument();
+    // Check for flex-1 and min-h-0 classes
+    const cardElement = container.querySelector('.p-8');
+    expect(cardElement).toHaveClass('flex-1');
+    expect(cardElement).toHaveClass('min-h-0');
   });
 });

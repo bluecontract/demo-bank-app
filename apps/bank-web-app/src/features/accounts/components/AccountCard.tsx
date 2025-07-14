@@ -64,7 +64,7 @@ export function AccountCard({
 
         {/* Action Buttons */}
         <div className="flex gap-2">
-          <Button variant="gradient" size="sm" onClick={handleDetailsClick}>
+          <Button variant="outline" size="sm" onClick={handleDetailsClick}>
             Details
           </Button>
           <Button variant="outline" size="sm" onClick={handleTransferClick}>

@@ -1,32 +1,43 @@
 import { Card } from '../../../ui/Card';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
+import { useTransactions } from '../../transactions/hooks/useTransactions';
+import { TransactionList } from '../../transactions/components/TransactionList';
 
 export function TransactionHistory() {
   const { selectedAccount } = useSelectedAccount();
 
+  const {
+    data: transactionsData,
+    isLoading,
+    isError,
+  } = useTransactions({
+    accountId: selectedAccount?.accountId || null,
+  });
+
+  const transactions = transactionsData?.items || [];
+  const isEmpty = !isLoading && !isError && transactions.length === 0;
+
   return (
-    <Card className="p-8 flex-1 flex flex-col">
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">
+    <Card className="p-8 flex flex-col flex-1 min-h-0">
+      <div className="mb-6 flex-shrink-0 flex items-center gap-4">
+        <h2 className="text-xl font-semibold text-gray-900">
           Transaction History
         </h2>
         {selectedAccount && (
-          <p className="text-sm text-gray-600">
-            Account: {selectedAccount.accountNumber}
-          </p>
+          <div className="text-base text-gray-700 bg-green-100 px-4 py-2 rounded-lg">
+            Account:{' '}
+            <span className="font-medium">{selectedAccount.accountNumber}</span>
+          </div>
         )}
       </div>
 
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center text-gray-500">
-          <div className="text-6xl mb-4">📋</div>
-          <div className="text-xl mb-2">No transactions yet</div>
-          <p className="text-sm">
-            Your transaction history will appear here once you make your first
-            transfer
-          </p>
-        </div>
-      </div>
+      <TransactionList
+        transactions={transactions}
+        isLoading={isLoading}
+        isError={isError}
+        isEmpty={isEmpty}
+        data-testid="transaction-history-list"
+      />
     </Card>
   );
 }

@@ -83,7 +83,7 @@ export function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-400 to-yellow-400 flex items-center justify-center">
+      <div className="h-screen bg-gradient-to-br from-green-400 to-yellow-400 flex items-center justify-center">
         <SpinnerWithText
           text="Loading your accounts..."
           size="xl"
@@ -96,7 +96,7 @@ export function DashboardPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-400 to-yellow-400 flex items-center justify-center">
+      <div className="h-screen bg-gradient-to-br from-green-400 to-yellow-400 flex items-center justify-center">
         <div className="text-white text-xl">
           Error loading accounts. Please try again.
         </div>
@@ -107,7 +107,7 @@ export function DashboardPage() {
   return (
     <SelectedAccountProvider>
       <div
-        className="min-h-screen bg-gradient-to-br from-green-400 to-yellow-400 flex flex-col"
+        className="h-screen bg-gradient-to-br from-green-400 to-yellow-400 flex flex-col overflow-hidden"
         data-testid="dashboard-main-container"
       >
         <div className="px-4 py-4">
@@ -143,7 +143,7 @@ export function DashboardPage() {
 
         {/* Transaction History Section - Full Width and Fill Height */}
         {accounts && accounts.length > 0 && (
-          <div className="flex-1 px-4 pb-4 pt-2 flex flex-col">
+          <div className="flex-1 px-4 pb-4 pt-2 flex flex-col min-h-0">
             <TransactionHistory />
           </div>
         )}

@@ -5,10 +5,10 @@ export function formatCurrency(amountMinor: number): string {
   // Convert from minor units (cents) to dollars
   const dollars = absAmount / 100;
 
-  // Check if we have cents
+  // Check if there are cents to display
   const hasCents = absAmount % 100 !== 0;
 
-  // Format with appropriate decimal places
+  // Format with or without decimal places based on whether there are cents
   const formattedAmount = hasCents ? dollars.toFixed(2) : dollars.toFixed(0);
 
   // Add comma separators for thousands

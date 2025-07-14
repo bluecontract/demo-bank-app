@@ -37,14 +37,22 @@ export function useTransferMoney(options?: UseTransferMoneyOptions) {
       });
 
       if (response.status !== 201) {
-        throw new Error('Transfer failed');
+        // Create error object that includes the response details
+        const error = new Error('Transfer failed') as any;
+        error.status = response.status;
+        error.body = response.body;
+        throw error;
       }
 
       return response.body;
     },
-    onSuccess: data => {
+    onSuccess: (data, variables) => {
       // Invalidate accounts query to refresh balances
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      // Invalidate transactions query to refresh transaction history for source account
+      queryClient.invalidateQueries({
+        queryKey: ['transactions', variables.sourceAccountId],
+      });
       options?.onSuccess?.(data);
     },
     onError: error => {

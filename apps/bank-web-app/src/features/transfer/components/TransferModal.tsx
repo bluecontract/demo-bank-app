@@ -60,7 +60,15 @@ export function TransferModal({
       setCurrentView('confirmation');
     },
     onError: error => {
-      setErrors({ amount: error.message });
+      // Check if this is an account not found error
+      const errorBody = (error as any)?.body;
+      if (errorBody?.title === 'Account Not Found') {
+        setErrors({
+          destinationAccountNumber: errorBody.message || 'Account not found',
+        });
+      } else {
+        setErrors({ amount: error.message });
+      }
     },
   });
 

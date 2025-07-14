@@ -145,6 +145,7 @@ describe('DashboardPage', () => {
       .getByTestId('accounts-loading-spinner')
       .closest('div');
     expect(container?.parentElement).toHaveClass(
+      'h-screen',
       'bg-gradient-to-br',
       'from-green-400',
       'to-yellow-400'
@@ -168,6 +169,7 @@ describe('DashboardPage', () => {
       .getByText('Error loading accounts. Please try again.')
       .closest('div');
     expect(container?.parentElement).toHaveClass(
+      'h-screen',
       'bg-gradient-to-br',
       'from-green-400',
       'to-yellow-400'
@@ -299,9 +301,10 @@ describe('DashboardPage', () => {
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
     const mainContainer = screen.getByTestId('dashboard-main-container');
-    expect(mainContainer).toHaveClass('min-h-screen');
+    expect(mainContainer).toHaveClass('h-screen');
     expect(mainContainer).toHaveClass('bg-gradient-to-br');
     expect(mainContainer).toHaveClass('from-green-400');
     expect(mainContainer).toHaveClass('to-yellow-400');
+    expect(mainContainer).toHaveClass('overflow-hidden');
   });
 });
