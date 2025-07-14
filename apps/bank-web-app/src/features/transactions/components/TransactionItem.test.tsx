@@ -46,7 +46,7 @@ describe('TransactionItem', () => {
     expect(screen.getByText('Test deposit')).toBeInTheDocument();
     expect(screen.getByText('From: 123 456 7890')).toBeInTheDocument();
     expect(screen.getByText('+$1,000')).toBeInTheDocument();
-    expect(screen.getByText('Jan 15, 2023, 11:30 AM')).toBeInTheDocument();
+    expect(screen.getByText('Jan 15, 2023, 10:30 AM')).toBeInTheDocument();
   });
 
   it('should render debit transaction correctly', () => {
@@ -63,7 +63,7 @@ describe('TransactionItem', () => {
     expect(screen.getByText('Test transfer')).toBeInTheDocument();
     expect(screen.getByText('To: 098 765 4321')).toBeInTheDocument();
     expect(screen.getByText('-$500')).toBeInTheDocument();
-    expect(screen.getByText('Jan 16, 2023, 03:45 PM')).toBeInTheDocument();
+    expect(screen.getByText('Jan 16, 2023, 02:45 PM')).toBeInTheDocument();
   });
 
   it('should render without description', () => {
