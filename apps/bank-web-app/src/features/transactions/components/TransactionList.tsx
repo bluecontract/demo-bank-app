@@ -4,9 +4,22 @@ import { TransactionDetailsModal } from './TransactionDetailsModal';
 import { Transaction } from '../hooks/useTransactions';
 import { Spinner } from '../../../ui/Spinner';
 
+type Account = {
+  accountId: string;
+  accountNumber: string;
+  name: string;
+  currency: 'USD';
+  createdAt: string;
+  ledgerBalanceMinor: number;
+  availableBalanceMinor: number;
+  status: string;
+};
+
 interface TransactionListProps {
   transactions: Transaction[];
   accountId: string;
+  currentAccountNumber?: string;
+  accounts?: Account[];
   isLoading: boolean;
   isError: boolean;
   isEmpty: boolean;
@@ -16,6 +29,8 @@ interface TransactionListProps {
 export function TransactionList({
   transactions,
   accountId,
+  currentAccountNumber,
+  accounts = [],
   isLoading,
   isError,
   isEmpty,
@@ -101,6 +116,8 @@ export function TransactionList({
           onClose={handleCloseModal}
           accountId={accountId}
           txnId={selectedTxnId}
+          currentAccountNumber={currentAccountNumber}
+          accounts={accounts}
         />
       )}
     </>

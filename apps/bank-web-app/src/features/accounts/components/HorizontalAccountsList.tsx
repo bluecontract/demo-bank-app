@@ -7,6 +7,7 @@ import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvid
 type Account = {
   accountId: string;
   accountNumber: string;
+  name: string;
   currency: 'USD';
   createdAt: string;
   ledgerBalanceMinor: number;

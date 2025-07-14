@@ -5,6 +5,7 @@ import { apiClient } from '../../../api/client';
 type Account = {
   accountId: string;
   accountNumber: string;
+  name: string;
   currency: 'USD';
   createdAt: string;
   ledgerBalanceMinor: number;
@@ -13,7 +14,7 @@ type Account = {
 };
 
 type CreateAccountData = {
-  currency: 'USD';
+  name: string;
 };
 
 export function useCreateAccount() {

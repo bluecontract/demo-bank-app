@@ -79,6 +79,28 @@ vi.mock('../../features/accounts/components', () => ({
       {isLoading && <div data-testid="loading">Loading...</div>}
     </div>
   )),
+  AccountCreationModal: vi.fn(({ isOpen, onClose, onSuccess }) =>
+    isOpen ? (
+      <div data-testid="account-creation-modal">
+        Account Creation Modal
+        <button onClick={onClose} data-testid="close-modal">
+          Close
+        </button>
+        <button
+          onClick={() =>
+            onSuccess({
+              accountId: 'test-id',
+              accountNumber: '1234567890',
+              name: 'Test Account',
+            })
+          }
+          data-testid="create-account-success"
+        >
+          Create Account
+        </button>
+      </div>
+    ) : null
+  ),
 }));
 
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
@@ -89,6 +111,7 @@ const mockAccounts = [
   {
     accountId: '1',
     accountNumber: '1234567890',
+    name: 'Primary Account',
     currency: 'USD' as const,
     createdAt: '2023-01-01T00:00:00Z',
     ledgerBalanceMinor: 100000,
@@ -98,6 +121,7 @@ const mockAccounts = [
   {
     accountId: '2',
     accountNumber: '9876543210',
+    name: 'Savings Account',
     currency: 'USD' as const,
     createdAt: '2023-01-02T00:00:00Z',
     ledgerBalanceMinor: 250000,
@@ -226,7 +250,7 @@ describe('DashboardPage', () => {
 
     fireEvent.click(screen.getByTestId('create-account-btn'));
 
-    expect(mockMutate).toHaveBeenCalledWith({ currency: 'USD' });
+    expect(screen.getByTestId('account-creation-modal')).toBeInTheDocument();
   });
 
   it('should handle create account action from empty state', () => {
@@ -246,7 +270,7 @@ describe('DashboardPage', () => {
 
     fireEvent.click(screen.getByTestId('add-account-btn'));
 
-    expect(mockMutate).toHaveBeenCalledWith({ currency: 'USD' });
+    expect(screen.getByTestId('account-creation-modal')).toBeInTheDocument();
   });
 
   it('should show loading state when creating account', () => {
@@ -257,7 +281,10 @@ describe('DashboardPage', () => {
 
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
-    expect(screen.getByTestId('creating-account')).toBeInTheDocument();
+    // Open the modal first
+    fireEvent.click(screen.getByTestId('create-account-btn'));
+
+    expect(screen.getByTestId('account-creation-modal')).toBeInTheDocument();
   });
 
   it('should show loading state in empty state when creating account', () => {
@@ -274,7 +301,10 @@ describe('DashboardPage', () => {
 
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
-    expect(screen.getByTestId('loading')).toBeInTheDocument();
+    // Open the modal first
+    fireEvent.click(screen.getByTestId('add-account-btn'));
+
+    expect(screen.getByTestId('account-creation-modal')).toBeInTheDocument();
   });
 
   it('should handle transfer action', () => {

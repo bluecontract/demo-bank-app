@@ -6,6 +6,7 @@ import { formatCurrency, formatAccountNumber } from '../../../lib';
 type Account = {
   accountId: string;
   accountNumber: string;
+  name: string;
   currency: 'USD';
   createdAt: string;
   ledgerBalanceMinor: number;
@@ -15,7 +16,6 @@ type Account = {
 
 interface AccountCardProps {
   account: Account;
-  accountName?: string;
   isSelected?: boolean;
   onDetailsClick?: (accountId: string) => void;
   onTransferClick?: (accountId: string) => void;
@@ -24,7 +24,6 @@ interface AccountCardProps {
 
 export function AccountCard({
   account,
-  accountName = 'Checking Account',
   isSelected = false,
   onDetailsClick,
   onTransferClick,
@@ -53,7 +52,7 @@ export function AccountCard({
         <div className="flex items-start justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">
-              {accountName}
+              {account.name}
             </h3>
             <p className="account-number text-sm text-gray-600 mt-1">
               {formatAccountNumber(account.accountNumber)}

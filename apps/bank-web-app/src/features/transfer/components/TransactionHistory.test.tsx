@@ -1,11 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { TransactionHistory } from './TransactionHistory';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
 import { useTransactions } from '../../transactions/hooks/useTransactions';
+import { useAccounts } from '../../accounts/hooks/useAccounts';
 
-// Mock the providers and hooks
 vi.mock('../../../app/providers/SelectedAccountProvider', () => ({
   useSelectedAccount: vi.fn(),
 }));
@@ -14,7 +15,10 @@ vi.mock('../../transactions/hooks/useTransactions', () => ({
   useTransactions: vi.fn(),
 }));
 
-// Mock the TransactionList component
+vi.mock('../../accounts/hooks/useAccounts', () => ({
+  useAccounts: vi.fn(),
+}));
+
 vi.mock('../../transactions/components/TransactionList', () => ({
   TransactionList: ({
     transactions,
@@ -40,12 +44,15 @@ vi.mock('../../transactions/components/TransactionList', () => ({
 const mockAccount = {
   accountId: 'test-account-id',
   accountNumber: '1234567890',
+  name: 'Test Account',
   currency: 'USD' as const,
   createdAt: '2023-01-01T00:00:00Z',
   ledgerBalanceMinor: 100000,
   availableBalanceMinor: 100000,
   status: 'ACTIVE',
 };
+
+const mockAccounts = [mockAccount];
 
 const mockTransactions = [
   {
@@ -61,9 +68,18 @@ const mockTransactions = [
   },
 ];
 
+const renderWithRouter = (component: React.ReactElement) => {
+  return render(<MemoryRouter>{component}</MemoryRouter>);
+};
+
 describe('TransactionHistory', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (useAccounts as any).mockReturnValue({
+      data: mockAccounts,
+      isLoading: false,
+      isError: false,
+    });
   });
 
   it('should show transaction history header even when no account is selected', () => {
@@ -78,7 +94,7 @@ describe('TransactionHistory', () => {
       isError: false,
     });
 
-    render(<TransactionHistory />);
+    renderWithRouter(<TransactionHistory />);
 
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
     expect(screen.queryByText('Account:')).not.toBeInTheDocument();
@@ -101,7 +117,7 @@ describe('TransactionHistory', () => {
       isError: false,
     });
 
-    render(<TransactionHistory />);
+    renderWithRouter(<TransactionHistory />);
 
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
     expect(screen.getByText('Account:')).toBeInTheDocument();
@@ -125,7 +141,7 @@ describe('TransactionHistory', () => {
       isError: false,
     });
 
-    render(<TransactionHistory />);
+    renderWithRouter(<TransactionHistory />);
 
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
     expect(
@@ -147,7 +163,7 @@ describe('TransactionHistory', () => {
       isError: true,
     });
 
-    render(<TransactionHistory />);
+    renderWithRouter(<TransactionHistory />);
 
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
     expect(
@@ -169,7 +185,7 @@ describe('TransactionHistory', () => {
       isError: false,
     });
 
-    render(<TransactionHistory />);
+    renderWithRouter(<TransactionHistory />);
 
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
     expect(
@@ -191,7 +207,7 @@ describe('TransactionHistory', () => {
       isError: false,
     });
 
-    render(<TransactionHistory />);
+    renderWithRouter(<TransactionHistory />);
 
     expect(useTransactions).toHaveBeenCalledWith({
       accountId: 'test-account-id',
@@ -210,7 +226,7 @@ describe('TransactionHistory', () => {
       isError: false,
     });
 
-    render(<TransactionHistory />);
+    renderWithRouter(<TransactionHistory />);
 
     expect(useTransactions).toHaveBeenCalledWith({
       accountId: null,
@@ -229,7 +245,7 @@ describe('TransactionHistory', () => {
       isError: false,
     });
 
-    render(<TransactionHistory />);
+    renderWithRouter(<TransactionHistory />);
 
     expect(
       screen.getByText(
@@ -250,7 +266,7 @@ describe('TransactionHistory', () => {
       isError: false,
     });
 
-    render(<TransactionHistory />);
+    renderWithRouter(<TransactionHistory />);
 
     expect(
       screen.getByText(
@@ -271,14 +287,11 @@ describe('TransactionHistory', () => {
       isError: false,
     });
 
-    const { container } = render(<TransactionHistory />);
+    const { container } = renderWithRouter(<TransactionHistory />);
 
-    expect(container.querySelector('.p-8')).toBeInTheDocument();
-    expect(container.querySelector('.flex')).toBeInTheDocument();
-    expect(container.querySelector('.flex-col')).toBeInTheDocument();
-    // Check for flex-1 and min-h-0 classes
-    const cardElement = container.querySelector('.p-8');
-    expect(cardElement).toHaveClass('flex-1');
-    expect(cardElement).toHaveClass('min-h-0');
+    const cardElement = container.querySelector(
+      '.p-8.flex.flex-col.flex-1.min-h-0'
+    );
+    expect(cardElement).toBeInTheDocument();
   });
 });

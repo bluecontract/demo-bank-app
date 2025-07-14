@@ -35,6 +35,7 @@ const mockAccounts = [
   {
     accountId: '123e4567-e89b-12d3-a456-426614174000',
     accountNumber: '1234567890',
+    name: 'My Checking Account',
     currency: 'USD' as const,
     createdAt: '2023-01-01T00:00:00Z',
     ledgerBalanceMinor: 1030000,
@@ -44,6 +45,7 @@ const mockAccounts = [
   {
     accountId: '123e4567-e89b-12d3-a456-426614174001',
     accountNumber: '1234567891',
+    name: 'My Savings Account',
     currency: 'USD' as const,
     createdAt: '2023-01-01T00:00:00Z',
     ledgerBalanceMinor: 500000,

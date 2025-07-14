@@ -1,7 +1,19 @@
 import { TransactionDetails } from './TransactionDetails';
 import { useTransaction } from '../hooks/useTransaction';
+import { useAccounts } from '../../accounts/hooks/useAccounts';
 import { Spinner } from '../../../ui/Spinner';
 import { Button } from '../../../ui/Button';
+
+type Account = {
+  accountId: string;
+  accountNumber: string;
+  name: string;
+  currency: 'USD';
+  createdAt: string;
+  ledgerBalanceMinor: number;
+  availableBalanceMinor: number;
+  status: string;
+};
 
 interface TransactionDetailsModalProps {
   isOpen: boolean;
@@ -9,6 +21,7 @@ interface TransactionDetailsModalProps {
   accountId: string;
   txnId: string;
   currentAccountNumber?: string;
+  accounts?: Account[];
 }
 
 export function TransactionDetailsModal({
@@ -17,6 +30,7 @@ export function TransactionDetailsModal({
   accountId,
   txnId,
   currentAccountNumber,
+  accounts: propAccounts,
 }: TransactionDetailsModalProps) {
   const {
     data: transaction,
@@ -26,6 +40,9 @@ export function TransactionDetailsModal({
     accountId,
     txnId,
   });
+
+  const { data: fetchedAccounts } = useAccounts();
+  const accounts = propAccounts || fetchedAccounts || [];
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -69,10 +86,9 @@ export function TransactionDetailsModal({
         )}
 
         {transaction && (
-          <div className="p-6">
-            {/* Header with close button */}
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">
+          <div className="p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-lg font-semibold text-gray-900">
                 Transaction Details
               </h2>
               <button
@@ -81,7 +97,7 @@ export function TransactionDetailsModal({
                 aria-label="Close modal"
               >
                 <svg
-                  className="w-6 h-6"
+                  className="w-5 h-5"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -96,16 +112,15 @@ export function TransactionDetailsModal({
               </button>
             </div>
 
-            {/* Transaction Details Component */}
             <TransactionDetails
               transaction={transaction}
               currentAccountId={accountId}
               currentAccountNumber={currentAccountNumber || accountId}
+              accounts={accounts || []}
               data-testid="modal-transaction-details"
             />
 
-            {/* Footer with close button */}
-            <div className="mt-6 pt-4 border-t border-gray-200">
+            <div className="mt-3 pt-2 border-t border-gray-200">
               <Button onClick={onClose} variant="primary" className="w-full">
                 Close
               </Button>

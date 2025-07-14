@@ -24,6 +24,7 @@ const createWrapper = () => {
 const mockCreatedAccount = {
   accountId: '123e4567-e89b-12d3-a456-426614174000',
   accountNumber: '1234567890',
+  name: 'My Savings Account',
   currency: 'USD' as const,
   createdAt: '2023-01-01T00:00:00Z',
   ledgerBalanceMinor: 0,
@@ -53,7 +54,7 @@ describe('useCreateAccount', () => {
     expect(result.current.error).toBeNull();
 
     // Call the mutate function
-    result.current.mutate({ currency: 'USD' as const });
+    result.current.mutate({ name: 'My Savings Account' });
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
@@ -75,7 +76,7 @@ describe('useCreateAccount', () => {
     });
 
     // Call the mutate function
-    result.current.mutate({ currency: 'USD' as const });
+    result.current.mutate({ name: 'My Savings Account' });
 
     await waitFor(() => {
       expect(result.current.isPending).toBe(true);
@@ -94,7 +95,7 @@ describe('useCreateAccount', () => {
     });
 
     // Call the mutate function
-    result.current.mutate({ currency: 'USD' as const });
+    result.current.mutate({ name: 'My Savings Account' });
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
@@ -117,7 +118,7 @@ describe('useCreateAccount', () => {
       wrapper: createWrapper(),
     });
 
-    const createData = { currency: 'USD' as const };
+    const createData = { name: 'My Savings Account' };
 
     // Call the mutate function with data
     result.current.mutate(createData);
@@ -149,7 +150,7 @@ describe('useCreateAccount', () => {
     });
 
     // Call the mutate function with onSuccess callback
-    result.current.mutate({ currency: 'USD' as const }, { onSuccess });
+    result.current.mutate({ name: 'My Savings Account' }, { onSuccess });
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
@@ -158,7 +159,7 @@ describe('useCreateAccount', () => {
     expect(onSuccess).toHaveBeenCalledTimes(1);
     expect(onSuccess).toHaveBeenCalledWith(
       mockCreatedAccount,
-      { currency: 'USD' as const },
+      { name: 'My Savings Account' },
       undefined
     );
   });
@@ -173,7 +174,7 @@ describe('useCreateAccount', () => {
     });
 
     // Call the mutate function with onError callback
-    result.current.mutate({ currency: 'USD' as const }, { onError });
+    result.current.mutate({ name: 'My Savings Account' }, { onError });
 
     await waitFor(() => {
       expect(result.current.isError).toBe(true);
@@ -182,7 +183,7 @@ describe('useCreateAccount', () => {
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith(
       mockError,
-      { currency: 'USD' as const },
+      { name: 'My Savings Account' },
       undefined
     );
   });
@@ -200,21 +201,20 @@ describe('useCreateAccount', () => {
     });
 
     // Call the mutate function
-    result.current.mutate({ currency: 'USD' as const });
+    result.current.mutate({ name: 'My Savings Account' });
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
 
+    expect(result.current.isSuccess).toBe(true);
     expect(result.current.data).toEqual(mockCreatedAccount);
 
-    // Reset the mutation
+    // Reset the mutation state
     result.current.reset();
 
     await waitFor(() => {
-      expect(result.current.isPending).toBe(false);
-      expect(result.current.isSuccess).toBe(false);
-      expect(result.current.isError).toBe(false);
+      expect(result.current.isIdle).toBe(true);
     });
 
     expect(result.current.data).toBeUndefined();

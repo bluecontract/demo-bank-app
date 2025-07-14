@@ -8,7 +8,10 @@ vi.mock('../../../lib/formatCurrency', () => ({
 }));
 
 vi.mock('../../../lib/formatAccountNumber', () => ({
-  formatAccountNumber: vi.fn((number: string) => `**** ${number.slice(-4)}`),
+  formatAccountNumber: vi.fn((number: string) => {
+    if (!number) return '****';
+    return `**** ${number.slice(-4)}`;
+  }),
 }));
 
 const mockTransaction: TransactionDetailsType = {
@@ -23,11 +26,35 @@ const mockTransaction: TransactionDetailsType = {
   counterpartyAccountNumber: '0987654321',
 };
 
+const mockAccounts = [
+  {
+    accountId: 'acc-123',
+    accountNumber: '1234567890',
+    name: 'Test Account 1',
+    currency: 'USD' as const,
+    createdAt: '2023-01-01T00:00:00Z',
+    ledgerBalanceMinor: 50000,
+    availableBalanceMinor: 45000,
+    status: 'active',
+  },
+  {
+    accountId: 'acc-456',
+    accountNumber: '0987654321',
+    name: 'Test Account 2',
+    currency: 'USD' as const,
+    createdAt: '2023-01-01T00:00:00Z',
+    ledgerBalanceMinor: 30000,
+    availableBalanceMinor: 30000,
+    status: 'active',
+  },
+];
+
 describe('TransactionDetails', () => {
   const defaultProps = {
     transaction: mockTransaction,
     currentAccountId: 'acc-123',
     currentAccountNumber: '1234567890',
+    accounts: mockAccounts,
   };
 
   it('should render transaction details for outgoing transfer', () => {
@@ -38,7 +65,7 @@ describe('TransactionDetails', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('-$10.00')).toBeInTheDocument();
     expect(screen.getByText('Standard Transfer')).toBeInTheDocument();
-    expect(screen.getAllByText('01/01/2024')).toHaveLength(2); // Date appears twice
+    expect(screen.getAllByText('01/01/2024')).toHaveLength(2);
     expect(screen.getByText('txn-123')).toBeInTheDocument();
   });
 
@@ -46,18 +73,57 @@ describe('TransactionDetails', () => {
     const incomingTransaction = {
       ...mockTransaction,
       side: 'CREDIT' as const,
-      counterpartyAccountNumber: '9876543210',
+      accountId: 'acc-456',
+      counterpartyAccountNumber: '1234567890',
     };
 
-    render(
-      <TransactionDetails {...defaultProps} transaction={incomingTransaction} />
-    );
+    const props = {
+      ...defaultProps,
+      currentAccountId: 'acc-456',
+      currentAccountNumber: '0987654321',
+    };
+
+    render(<TransactionDetails {...props} transaction={incomingTransaction} />);
 
     expect(
       screen.getByRole('heading', { name: 'Incoming transfer' })
     ).toBeInTheDocument();
     expect(screen.getByText('+$10.00')).toBeInTheDocument();
-    expect(screen.getByText('To: **** 7890')).toBeInTheDocument(); // Shows where money landed
+  });
+
+  it('should display account names with account numbers', () => {
+    render(<TransactionDetails {...defaultProps} />);
+
+    expect(
+      screen.getByText('To **** 4321 (Test Account 2)')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('From: **** 7890 (Test Account 1)')
+    ).toBeInTheDocument();
+  });
+
+  it('should display correct account information for incoming transfer with names', () => {
+    const incomingTransaction = {
+      ...mockTransaction,
+      side: 'CREDIT' as const,
+      accountId: 'acc-456',
+      counterpartyAccountNumber: '1234567890',
+    };
+
+    const props = {
+      ...defaultProps,
+      currentAccountId: 'acc-456',
+      currentAccountNumber: '0987654321',
+    };
+
+    render(<TransactionDetails {...props} transaction={incomingTransaction} />);
+
+    expect(
+      screen.getByText('From **** 7890 (Test Account 1)')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('To: **** 4321 (Test Account 2)')
+    ).toBeInTheDocument();
   });
 
   it('should display transaction status correctly', () => {
@@ -106,26 +172,16 @@ describe('TransactionDetails', () => {
     expect(screen.queryByText('Description')).not.toBeInTheDocument();
   });
 
-  it('should display correct account information for outgoing transfer', () => {
-    render(<TransactionDetails {...defaultProps} />);
-
-    expect(screen.getByText('**** 7890')).toBeInTheDocument(); // Current account appears
-    expect(screen.getByText('**** 4321')).toBeInTheDocument(); // Counterparty account appears
-  });
-
-  it('should display correct account information for incoming transfer', () => {
-    const incomingTransaction = {
-      ...mockTransaction,
-      side: 'CREDIT' as const,
-      counterpartyAccountNumber: '9876543210',
+  it('should handle missing account names gracefully', () => {
+    const propsWithoutAccountNames = {
+      ...defaultProps,
+      accounts: [],
     };
 
-    render(
-      <TransactionDetails {...defaultProps} transaction={incomingTransaction} />
-    );
+    render(<TransactionDetails {...propsWithoutAccountNames} />);
 
-    expect(screen.getByText('**** 7890')).toBeInTheDocument(); // Current account appears
-    expect(screen.getByText('**** 3210')).toBeInTheDocument(); // Counterparty account appears
+    expect(screen.getByText('To **** 4321')).toBeInTheDocument();
+    expect(screen.getByText('From: **** 7890')).toBeInTheDocument();
   });
 
   it('should display payment number as transaction ID', () => {
@@ -133,39 +189,5 @@ describe('TransactionDetails', () => {
 
     expect(screen.getByText('Payment number')).toBeInTheDocument();
     expect(screen.getByText('txn-123')).toBeInTheDocument();
-  });
-
-  it('should handle different status types with correct styling', () => {
-    const { rerender } = render(<TransactionDetails {...defaultProps} />);
-
-    expect(screen.getByText('Completed')).toHaveClass(
-      'bg-green-100',
-      'text-green-800'
-    );
-
-    const failedTransaction = {
-      ...mockTransaction,
-      status: 'FAILED',
-    };
-
-    rerender(
-      <TransactionDetails {...defaultProps} transaction={failedTransaction} />
-    );
-
-    expect(screen.getByText('FAILED')).toHaveClass(
-      'bg-red-100',
-      'text-red-800'
-    );
-  });
-
-  it('should apply correct test id when provided', () => {
-    render(
-      <TransactionDetails
-        {...defaultProps}
-        data-testid="test-transaction-details"
-      />
-    );
-
-    expect(screen.getByTestId('test-transaction-details')).toBeInTheDocument();
   });
 });

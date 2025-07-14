@@ -5,6 +5,7 @@ import { DashboardHeader } from '../../features/dashboard/components';
 import {
   HorizontalAccountsList,
   AddAccountCard,
+  AccountCreationModal,
 } from '../../features/accounts/components';
 import {
   TransferModal,
@@ -12,12 +13,12 @@ import {
   TransactionHistory,
 } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
-import { useCreateAccount } from '../../features/accounts/hooks/useCreateAccount';
 import { SpinnerWithText } from '../../ui/Spinner';
 
 type Account = {
   accountId: string;
   accountNumber: string;
+  name: string;
   currency: 'USD';
   createdAt: string;
   ledgerBalanceMinor: number;
@@ -28,7 +29,10 @@ type Account = {
 export function DashboardPage() {
   const { user } = useAuth();
   const { data: accounts, isLoading, error } = useAccounts();
-  const { mutate: createAccount, isPending: isCreating } = useCreateAccount();
+
+  const [accountCreationModal, setAccountCreationModal] = useState({
+    isOpen: false,
+  });
 
   const [transferModal, setTransferModal] = useState<{
     isOpen: boolean;
@@ -47,7 +51,11 @@ export function DashboardPage() {
   });
 
   const handleCreateAccount = () => {
-    createAccount({ currency: 'USD' });
+    setAccountCreationModal({ isOpen: true });
+  };
+
+  const closeAccountCreationModal = () => {
+    setAccountCreationModal({ isOpen: false });
   };
 
   const handleTransfer = (accountId: string) => {
@@ -121,7 +129,7 @@ export function DashboardPage() {
                 onCreateAccount={handleCreateAccount}
                 onTransfer={handleTransfer}
                 onFund={handleFund}
-                isCreatingAccount={isCreating}
+                isCreatingAccount={false}
               />
             ) : (
               <div className="text-center">
@@ -133,7 +141,7 @@ export function DashboardPage() {
                 <div className="flex justify-center">
                   <AddAccountCard
                     onClick={handleCreateAccount}
-                    isLoading={isCreating}
+                    isLoading={false}
                   />
                 </div>
               </div>
@@ -148,6 +156,12 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Account Creation Modal */}
+      <AccountCreationModal
+        isOpen={accountCreationModal.isOpen}
+        onClose={closeAccountCreationModal}
+      />
 
       {/* Transfer Modal */}
       {accounts && accounts.length > 0 && (

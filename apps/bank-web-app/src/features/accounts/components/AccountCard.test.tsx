@@ -5,6 +5,7 @@ import { AccountCard } from './AccountCard';
 const mockAccount = {
   accountId: 'acc-123',
   accountNumber: '1234567890',
+  name: 'Checking Account',
   currency: 'USD' as const,
   createdAt: '2023-01-01T00:00:00Z',
   ledgerBalanceMinor: 50000,
@@ -22,10 +23,10 @@ describe('AccountCard', () => {
   });
 
   it('renders custom account name when provided', () => {
-    const customName = 'Business Account';
-    render(<AccountCard account={mockAccount} accountName={customName} />);
+    const customAccount = { ...mockAccount, name: 'Business Account' };
+    render(<AccountCard account={customAccount} />);
 
-    expect(screen.getByText(customName)).toBeInTheDocument();
+    expect(screen.getByText('Business Account')).toBeInTheDocument();
   });
 
   it('calls onDetailsClick when Details button is clicked', () => {

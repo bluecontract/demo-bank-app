@@ -3,10 +3,22 @@ import { Card } from '../../../ui/Card';
 import { formatCurrency } from '../../../lib/formatCurrency';
 import { formatAccountNumber } from '../../../lib/formatAccountNumber';
 
+type Account = {
+  accountId: string;
+  accountNumber: string;
+  name: string;
+  currency: 'USD';
+  createdAt: string;
+  ledgerBalanceMinor: number;
+  availableBalanceMinor: number;
+  status: string;
+};
+
 interface TransactionDetailsProps {
   transaction: TransactionDetailsType;
   currentAccountId: string;
   currentAccountNumber: string;
+  accounts: Account[];
   'data-testid'?: string;
 }
 
@@ -14,10 +26,31 @@ export function TransactionDetails({
   transaction,
   currentAccountId,
   currentAccountNumber,
+  accounts,
   'data-testid': testId,
 }: TransactionDetailsProps) {
   const getTransactionDirection = () => {
     return transaction.side === 'CREDIT' ? 'Incoming' : 'Outgoing';
+  };
+
+  const getAccountNameByNumber = (accountNumber: string): string => {
+    const account = accounts.find(acc => acc.accountNumber === accountNumber);
+    return account?.name || '';
+  };
+
+  const getCurrentAccountName = (): string => {
+    const account = accounts.find(acc => acc.accountId === currentAccountId);
+    return account?.name || '';
+  };
+
+  const formatAccountWithName = (
+    accountNumber: string,
+    accountName: string
+  ): string => {
+    const formattedNumber = formatAccountNumber(accountNumber);
+    return accountName
+      ? `${formattedNumber} (${accountName})`
+      : formattedNumber;
   };
 
   const isCredit = getTransactionDirection() === 'Incoming';
@@ -27,6 +60,10 @@ export function TransactionDetails({
     ? `+${formattedAmount}`
     : `-${formattedAmount}`;
   const counterpartyAccountNumber = transaction.counterpartyAccountNumber;
+  const counterpartyAccountName = getAccountNameByNumber(
+    counterpartyAccountNumber
+  );
+  const currentAccountName = getCurrentAccountName();
 
   const getStatusBadge = (status: string) => {
     const baseClasses =
@@ -60,24 +97,25 @@ export function TransactionDetails({
   return (
     <div className="max-w-2xl mx-auto" data-testid={testId}>
       <Card className="p-0">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="mb-2">
-            <h1 className="text-xl font-semibold text-gray-900">
+        <div className="px-4 py-3 border-b border-gray-200">
+          <div className="mb-1">
+            <h1 className="text-lg font-semibold text-gray-900">
               {getTransactionDirection()} transfer
             </h1>
           </div>
           {counterpartyAccountNumber && (
             <p className="text-sm text-gray-600">
               {isCredit ? 'From' : 'To'}{' '}
-              {formatAccountNumber(counterpartyAccountNumber)}
+              {formatAccountWithName(
+                counterpartyAccountNumber,
+                counterpartyAccountName
+              )}
             </p>
           )}
         </div>
 
-        {/* Transaction Summary */}
-        <div className="px-6 py-6 bg-gray-50">
-          <div className="flex items-center justify-between mb-4">
+        <div className="px-4 py-4 bg-gray-50">
+          <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-gray-600">
               {formatDate(transaction.timestamp)}
             </span>
@@ -86,7 +124,7 @@ export function TransactionDetails({
             </span>
           </div>
 
-          <div className="flex items-center mb-4">
+          <div className="flex items-center mb-3">
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
                 isCredit ? 'bg-green-100' : 'bg-red-100'
@@ -109,16 +147,18 @@ export function TransactionDetails({
             {counterpartyAccountNumber && (
               <>
                 {isCredit ? 'To' : 'From'}:{' '}
-                {formatAccountNumber(currentAccountNumber)}
+                {formatAccountWithName(
+                  currentAccountNumber,
+                  currentAccountName
+                )}
                 <br />
               </>
             )}
           </div>
         </div>
 
-        {/* Transaction Details */}
-        <div className="px-6 py-6">
-          <div className="space-y-4">
+        <div className="px-4 py-4">
+          <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Operation</span>
               <span className="text-sm text-gray-900">
@@ -170,13 +210,12 @@ export function TransactionDetails({
           </div>
         </div>
 
-        {/* Description */}
         {transaction.description && (
-          <div className="px-6 py-4 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-900 mb-2">
+          <div className="px-4 py-3 border-t border-gray-200">
+            <h3 className="text-sm font-medium text-gray-900 mb-1">
               Description
             </h3>
-            <div className="bg-gray-50 rounded-lg p-4">
+            <div className="bg-gray-50 rounded-lg p-3">
               <p className="text-sm text-gray-700 leading-relaxed">
                 {transaction.description}
               </p>

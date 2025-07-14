@@ -6,6 +6,7 @@ import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
 type Account = {
   accountId: string;
   accountNumber: string;
+  name: string;
   currency: 'USD';
   createdAt: string;
   ledgerBalanceMinor: number;

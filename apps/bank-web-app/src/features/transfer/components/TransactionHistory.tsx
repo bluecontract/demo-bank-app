@@ -1,10 +1,12 @@
 import { Card } from '../../../ui/Card';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
 import { useTransactions } from '../../transactions/hooks/useTransactions';
+import { useAccounts } from '../../accounts/hooks/useAccounts';
 import { TransactionList } from '../../transactions/components/TransactionList';
 
 export function TransactionHistory() {
   const { selectedAccount } = useSelectedAccount();
+  const { data: accounts } = useAccounts();
 
   const {
     data: transactionsData,
@@ -34,6 +36,8 @@ export function TransactionHistory() {
       <TransactionList
         transactions={transactions}
         accountId={selectedAccount?.accountId || ''}
+        currentAccountNumber={selectedAccount?.accountNumber}
+        accounts={accounts}
         isLoading={isLoading}
         isError={isError}
         isEmpty={isEmpty}
