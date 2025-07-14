@@ -24,3 +24,5 @@ export const createUniqueName = (prefix = 'testuser') => {
     .toString(36)
     .substring(2, 5)}`;
 };
+
+export const DASHBOARD_HEADING_TEXT = 'Welcome back';

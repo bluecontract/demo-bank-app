@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { BASE_URL } from '../constants';
+import { BASE_URL, DASHBOARD_HEADING_TEXT } from '../constants';
 
 test.describe('Sign In Flow', () => {
   test.beforeEach(async ({ page }) => {
@@ -18,12 +18,13 @@ test.describe('Sign In Flow', () => {
     await page.waitForURL(`${BASE_URL}/dashboard`);
 
     // Verify we're on the dashboard
-    await expect(page.getByText('Welcome to Blue Bank')).toBeVisible();
-    await expect(
-      page.getByText(`Welcome back, ${testUserName}!`)
-    ).toBeVisible();
+    await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+    await expect(page.getByText(testUserName)).toBeVisible();
 
     // Sign out
+    // First click on the avatar to open the dropdown
+    await page.click('button[aria-haspopup="true"]');
+    // Then click on the Sign Out button
     await page.click('button:has-text("Sign Out")');
 
     // Should be redirected to home page
@@ -38,10 +39,8 @@ test.describe('Sign In Flow', () => {
     await page.waitForURL(`${BASE_URL}/dashboard`);
 
     // Verify we're on the dashboard again
-    await expect(page.getByText('Welcome to Blue Bank')).toBeVisible();
-    await expect(
-      page.getByText(`Welcome back, ${testUserName}!`)
-    ).toBeVisible();
+    await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+    await expect(page.getByText(testUserName)).toBeVisible();
   });
 
   test('should show error for non-existent user', async ({ page }) => {
@@ -85,10 +84,8 @@ test.describe('Sign In Flow', () => {
 
     // Try to access dashboard directly - should stay on dashboard
     await page.goto(`${BASE_URL}/dashboard`);
-    await expect(page.getByText('Welcome to Blue Bank')).toBeVisible();
-    await expect(
-      page.getByText(`Welcome back, ${testUserName}!`)
-    ).toBeVisible();
+    await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+    await expect(page.getByText(testUserName)).toBeVisible();
   });
 
   test('should redirect to signin when accessing protected route while unauthenticated', async ({
@@ -116,6 +113,9 @@ test.describe('Sign In Flow', () => {
     await page.waitForURL(`${BASE_URL}/dashboard`);
 
     // Sign out
+    // First click on the avatar to open the dropdown
+    await page.click('button[aria-haspopup="true"]');
+    // Then click on the Sign Out button
     await page.click('button:has-text("Sign Out")');
 
     // Should be redirected to home page
@@ -144,9 +144,7 @@ test.describe('Sign In Flow', () => {
     await page.reload();
 
     // Should still be authenticated and on dashboard
-    await expect(page.getByText('Welcome to Blue Bank')).toBeVisible();
-    await expect(
-      page.getByText(`Welcome back, ${testUserName}!`)
-    ).toBeVisible();
+    await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+    await expect(page.getByText(testUserName)).toBeVisible();
   });
 });
