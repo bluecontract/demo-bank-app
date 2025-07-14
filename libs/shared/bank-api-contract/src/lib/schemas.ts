@@ -54,3 +54,21 @@ export const TransferResponseDto = z.object({
 export const IdempotencyKeyHeaderSchema = z.object({
   'idempotency-key': z.string(),
 });
+
+export const TransactionDto = z.object({
+  txnId: z.string().uuid(),
+  accountId: z.string().uuid(),
+  side: z.enum(['DEBIT', 'CREDIT']),
+  amountMinor: MoneyMinor,
+  type: z.string(),
+  status: z.string(),
+  timestamp: z.string().datetime({ offset: true }),
+  description: z.string().optional(),
+  counterpartyAccountNumber: z.string(),
+});
+
+export const PaginatedDto = <T extends z.ZodTypeAny>(item: T) =>
+  z.object({
+    items: z.array(item),
+    next: z.string().optional(),
+  });

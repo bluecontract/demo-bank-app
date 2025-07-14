@@ -9,6 +9,8 @@ import {
   TransferResponseDto,
   IdempotencyKeyHeaderSchema,
   TransferReqDto,
+  PaginatedDto,
+  TransactionDto,
 } from './schemas';
 
 const c = initContract();
@@ -140,6 +142,18 @@ export const bankApiContract = c.router(
           404: ProblemDto,
         },
         summary: 'Transfer money between bank accounts',
+      },
+
+      listTransactions: {
+        method: 'GET',
+        path: '/v1/accounts/:accountId/transactions',
+        pathParams: z.object({ accountId: z.string().uuid() }),
+        query: z.object({
+          limit: z.coerce.number().positive().optional(),
+          cursor: z.string().optional(),
+        }),
+        responses: { 200: PaginatedDto(TransactionDto), 404: ProblemDto },
+        summary: 'List transactions for a bank account',
       },
     },
   },
