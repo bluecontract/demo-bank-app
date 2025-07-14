@@ -23,6 +23,7 @@ export function App() {
               </ProtectedRoute>
             }
           />
+
           <Route path="*" element={<HomePage />} />
         </Routes>
       </AuthProvider>

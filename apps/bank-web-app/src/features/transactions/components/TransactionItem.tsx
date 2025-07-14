@@ -4,11 +4,15 @@ import { formatAccountNumber } from '../../../lib/formatAccountNumber';
 
 interface TransactionItemProps {
   transaction: Transaction;
+  accountId: string;
+  onTransactionClick: (txnId: string) => void;
   'data-testid'?: string;
 }
 
 export function TransactionItem({
   transaction,
+  accountId,
+  onTransactionClick,
   'data-testid': testId,
 }: TransactionItemProps) {
   const isCredit = transaction.side === 'CREDIT';
@@ -59,9 +63,14 @@ export function TransactionItem({
     }
   };
 
+  const handleClick = () => {
+    onTransactionClick(transaction.txnId);
+  };
+
   return (
     <div
-      className="flex items-center p-4 hover:bg-gray-50 transition-colors"
+      className="flex items-center p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+      onClick={handleClick}
       data-testid={testId}
     >
       {/* Left Section: Transaction Details */}

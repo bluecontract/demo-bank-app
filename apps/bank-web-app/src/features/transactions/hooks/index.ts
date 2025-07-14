@@ -1,1 +1,2 @@
-export * from './useTransactions';
+export { useTransactions } from './useTransactions';
+export { useTransaction } from './useTransaction';

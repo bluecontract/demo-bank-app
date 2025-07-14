@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { TransactionItem } from './TransactionItem';
+import { TransactionDetailsModal } from './TransactionDetailsModal';
 import { Transaction } from '../hooks/useTransactions';
 import { Spinner } from '../../../ui/Spinner';
 
 interface TransactionListProps {
   transactions: Transaction[];
+  accountId: string;
   isLoading: boolean;
   isError: boolean;
   isEmpty: boolean;
@@ -12,11 +15,21 @@ interface TransactionListProps {
 
 export function TransactionList({
   transactions,
+  accountId,
   isLoading,
   isError,
   isEmpty,
   'data-testid': testId,
 }: TransactionListProps) {
+  const [selectedTxnId, setSelectedTxnId] = useState<string | null>(null);
+
+  const handleTransactionClick = (txnId: string) => {
+    setSelectedTxnId(txnId);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedTxnId(null);
+  };
   if (isLoading) {
     return (
       <div
@@ -65,18 +78,31 @@ export function TransactionList({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0" data-testid={testId}>
-      <div className="flex-1 overflow-y-auto bg-white rounded-lg border border-gray-200">
-        <div className="divide-y divide-gray-100">
-          {transactions.map(transaction => (
-            <TransactionItem
-              key={transaction.txnId}
-              transaction={transaction}
-              data-testid={`transaction-item-${transaction.txnId}`}
-            />
-          ))}
+    <>
+      <div className="flex-1 flex flex-col min-h-0" data-testid={testId}>
+        <div className="flex-1 overflow-y-auto bg-white rounded-lg border border-gray-200">
+          <div className="divide-y divide-gray-100">
+            {transactions.map(transaction => (
+              <TransactionItem
+                key={transaction.txnId}
+                transaction={transaction}
+                accountId={accountId}
+                onTransactionClick={handleTransactionClick}
+                data-testid={`transaction-item-${transaction.txnId}`}
+              />
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+
+      {selectedTxnId && (
+        <TransactionDetailsModal
+          isOpen={!!selectedTxnId}
+          onClose={handleCloseModal}
+          accountId={accountId}
+          txnId={selectedTxnId}
+        />
+      )}
+    </>
   );
 }

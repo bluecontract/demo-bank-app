@@ -1,23 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
+import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { ClientInferResponseBody } from '@ts-rest/core';
 
-export interface Transaction {
-  txnId: string;
-  accountId: string;
-  side: 'DEBIT' | 'CREDIT';
-  amountMinor: number;
-  type: string;
-  status: string;
-  timestamp: string;
-  description?: string;
-  counterpartyAccountNumber: string;
-}
+export type TransactionsData = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['listTransactions'],
+  200
+>;
 
-export interface TransactionsData {
-  items: Transaction[];
-  next?: string;
-}
+export type Transaction = TransactionsData['items'][0];
 
 export interface UseTransactionsOptions {
   accountId: string | null;

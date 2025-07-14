@@ -33,6 +33,7 @@ export function TransactionHistory() {
 
       <TransactionList
         transactions={transactions}
+        accountId={selectedAccount?.accountId || ''}
         isLoading={isLoading}
         isError={isError}
         isEmpty={isEmpty}
