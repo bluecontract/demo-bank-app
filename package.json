@@ -46,6 +46,7 @@
     "@aws-sdk/lib-dynamodb": "^3.840.0",
     "@demo-blue/shared-bank-api-client": "*",
     "@demo-blue/shared-bank-api-contract": "*",
+    "@demo-blue/shared-config": "*",
     "@demo-blue/shared-core": "*",
     "@demo-blue/shared-observability": "*",
     "@tanstack/react-query": "^5.17.10",

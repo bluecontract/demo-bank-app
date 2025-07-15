@@ -16,5 +16,3 @@ export { PowertoolsMetrics } from './implementations/PowertoolsMetrics';
 
 // Utils
 export { TimingUtils } from './utils/TimingUtils';
-export { AwsResilienceConfigBuilder } from './utils/AwsResilienceConfig';
-export type { AwsResilienceConfig } from './utils/AwsResilienceConfig';

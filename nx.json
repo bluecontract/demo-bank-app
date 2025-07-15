@@ -55,6 +55,7 @@
         "libs/shared/bank-api-client/*",
         "libs/shared/observability/*",
         "libs/shared/core/*",
+        "libs/shared/config/*",
         "libs/auth/*",
         "libs/banking/*"
       ],

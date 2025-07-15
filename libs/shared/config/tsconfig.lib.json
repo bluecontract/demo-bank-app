@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
     "rootDir": "src",
@@ -14,13 +14,7 @@
   "include": ["src/**/*.ts"],
   "references": [
     {
-      "path": "../shared/observability/tsconfig.lib.json"
-    },
-    {
-      "path": "../shared/core/tsconfig.lib.json"
-    },
-    {
-      "path": "../shared/config/tsconfig.lib.json"
+      "path": "../core/tsconfig.lib.json"
     }
   ],
   "exclude": [

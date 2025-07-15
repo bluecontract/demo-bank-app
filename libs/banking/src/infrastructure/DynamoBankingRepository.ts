@@ -24,7 +24,7 @@ import {
   RepositoryError,
 } from './repositoryErrors';
 import { PostingSide, Posting } from '../domain/valueObjects/Posting';
-import { AwsResilienceConfigBuilder } from '@demo-blue/shared-observability';
+import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
 
 export interface DynamoBankingRepositoryConfig {
   tableName: string;

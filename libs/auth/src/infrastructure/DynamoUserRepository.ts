@@ -8,7 +8,7 @@ import {
 import type { UserRepository } from '../application/ports';
 import { User } from '../domain/entities/User';
 import { UserAlreadyExistsError, AuthRepositoryError } from './errors';
-import { AwsResilienceConfigBuilder } from '@demo-blue/shared-observability';
+import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
 
 export interface DynamoUserRepositoryConfig {
   tableName: string;

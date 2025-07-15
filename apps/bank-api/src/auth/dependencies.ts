@@ -1,7 +1,7 @@
 import {
   DynamoUserRepository,
   AwsJwtService,
-  EnvironmentConfiguration,
+  AuthEnvironmentConfiguration,
 } from '@demo-blue/auth';
 import type {
   PowertoolsLogger,
@@ -19,7 +19,7 @@ const initializeDependencies = async (
   logger: PowertoolsLogger,
   metrics: PowertoolsMetrics
 ) => {
-  const envConfig = new EnvironmentConfiguration();
+  const envConfig = new AuthEnvironmentConfiguration();
   const authConfig = await envConfig.getAuthConfig();
 
   const awsRegion = process.env.AWS_REGION || 'eu-central-1';

@@ -19,7 +19,7 @@ vi.mock('@demo-blue/auth', () => ({
     addMetric: vi.fn(),
     publishStoredMetrics: vi.fn(),
   })),
-  EnvironmentConfiguration: vi.fn(() => ({
+  AuthEnvironmentConfiguration: vi.fn(() => ({
     getAuthConfig: vi.fn().mockResolvedValue({
       dynamoTableName: 'test-table',
       jwtSecretArn: 'test-secret-arn',

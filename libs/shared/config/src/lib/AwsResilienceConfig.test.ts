@@ -3,7 +3,7 @@ import { AwsResilienceConfigBuilder } from './AwsResilienceConfig';
 
 describe('AwsResilienceConfigBuilder', () => {
   describe('forDynamoDB', () => {
-    it('should return correct configuration for DynamoDB', () => {
+    it('should return correct DynamoDB configuration', () => {
       const config = AwsResilienceConfigBuilder.forDynamoDB();
 
       expect(config).toEqual({
@@ -19,7 +19,7 @@ describe('AwsResilienceConfigBuilder', () => {
   });
 
   describe('forSecretsManager', () => {
-    it('should return correct configuration for Secrets Manager', () => {
+    it('should return correct Secrets Manager configuration', () => {
       const config = AwsResilienceConfigBuilder.forSecretsManager();
 
       expect(config).toEqual({
@@ -35,8 +35,20 @@ describe('AwsResilienceConfigBuilder', () => {
   });
 
   describe('toAwsConfig', () => {
-    it('should convert resilience config to AWS SDK config format', () => {
-      const resilienceConfig = {
+    it('should convert AwsResilienceConfig to AWS SDK format', () => {
+      const resilienceConfig = AwsResilienceConfigBuilder.forDynamoDB();
+      const awsConfig =
+        AwsResilienceConfigBuilder.toAwsConfig(resilienceConfig);
+
+      expect(awsConfig).toEqual({
+        maxAttempts: 3,
+        retryMode: 'standard',
+        requestTimeout: 5000,
+      });
+    });
+
+    it('should convert custom AwsResilienceConfig to AWS SDK format', () => {
+      const customConfig = {
         retry: {
           maxAttempts: 5,
           mode: 'adaptive' as const,
@@ -46,8 +58,7 @@ describe('AwsResilienceConfigBuilder', () => {
         },
       };
 
-      const awsConfig =
-        AwsResilienceConfigBuilder.toAwsConfig(resilienceConfig);
+      const awsConfig = AwsResilienceConfigBuilder.toAwsConfig(customConfig);
 
       expect(awsConfig).toEqual({
         maxAttempts: 5,
