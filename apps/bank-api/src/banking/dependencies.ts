@@ -1,7 +1,7 @@
 import {
   DynamoBankingRepository,
   SimpleAccountNumberGenerator,
-  EnvironmentConfiguration,
+  BankingEnvironmentConfiguration,
 } from '@demo-blue/banking';
 import type {
   PowertoolsLogger,
@@ -18,7 +18,7 @@ const initializeDependencies = async (
   logger: PowertoolsLogger,
   metrics: PowertoolsMetrics
 ) => {
-  const envConfig = new EnvironmentConfiguration();
+  const envConfig = new BankingEnvironmentConfiguration();
 
   const awsRegion = process.env.AWS_REGION || 'eu-central-1';
   const awsEndpoint = process.env.AWS_ENDPOINT_URL;

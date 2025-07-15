@@ -5,10 +5,8 @@ export { DynamoUserRepository } from './DynamoUserRepository';
 export type { DynamoUserRepositoryConfig } from './DynamoUserRepository';
 
 // Service implementations
-export {
-  EnvironmentConfiguration,
-  ConfigurationValidationError,
-} from './EnvironmentConfiguration';
+export { AuthEnvironmentConfiguration } from './AuthConfiguration';
+export { ConfigurationValidationError } from '@demo-blue/shared-config';
 export {
   TokenGenerationError,
   TokenVerificationError,

@@ -95,6 +95,7 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
+    "@demo-blue/shared-config": "*",
     "@demo-blue/shared-core": "*",
     "@demo-blue/shared-observability": "*"
   }

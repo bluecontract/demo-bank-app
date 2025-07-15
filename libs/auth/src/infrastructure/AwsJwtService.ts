@@ -11,7 +11,7 @@ import {
   TokenGenerationError,
   TokenServiceError,
 } from './errors';
-import { AwsResilienceConfigBuilder } from '@demo-blue/shared-observability';
+import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
 
 export interface AwsJwtServiceConfig {
   region: string;
