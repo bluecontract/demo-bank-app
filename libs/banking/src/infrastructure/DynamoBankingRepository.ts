@@ -25,12 +25,21 @@ import {
 } from './repositoryErrors';
 import { PostingSide, Posting } from '../domain/valueObjects/Posting';
 import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
+import type { Logger, Metrics } from '../domain/types';
+import {
+  TimingUtils,
+  METRIC_NAMES,
+  OPERATION_NAMES,
+  METRIC_UNITS,
+} from '@demo-blue/shared-observability';
 
 export interface DynamoBankingRepositoryConfig {
   tableName: string;
   region: string;
   endpoint?: string;
   credentials?: { accessKeyId: string; secretAccessKey: string };
+  logger?: Logger;
+  metrics?: Metrics;
 }
 
 // Export database schema interfaces for testing
@@ -150,6 +159,8 @@ const DYNAMO_ERROR_CODES = {
 export class DynamoBankingRepository implements BankingRepository {
   private readonly client: DynamoDBDocumentClient;
   private readonly tableName: string;
+  private readonly logger?: Logger;
+  private readonly metrics?: Metrics;
 
   constructor(config: DynamoBankingRepositoryConfig) {
     const resilienceConfig = AwsResilienceConfigBuilder.forDynamoDB();
@@ -161,6 +172,8 @@ export class DynamoBankingRepository implements BankingRepository {
     });
     this.client = DynamoDBDocumentClient.from(dynamoClient);
     this.tableName = config.tableName;
+    this.logger = config.logger;
+    this.metrics = config.metrics;
   }
 
   private buildIdempotencyItem(
@@ -387,96 +400,188 @@ export class DynamoBankingRepository implements BankingRepository {
     accounts: Account[],
     context: TransactionContext
   ): Promise<Transaction['id']> {
-    const transactItems = [];
+    const timing = TimingUtils.startTiming(
+      OPERATION_NAMES.BANKING.REPOSITORY_SAVE_TRANSACTION
+    );
 
-    if (context.idempotencyKey) {
-      transactItems.push(this.buildIdempotencyItem(context, transaction));
-    }
-
-    transactItems.push(this.buildTransactionHeaderItem(transaction));
-
-    transactItems.push(...this.buildPostingItems(transaction));
-
-    transactItems.push(...this.buildAccountBalanceUpdates(accounts));
-
-    const command = new TransactWriteCommand({
-      TransactItems: transactItems,
+    this.logger?.debug('Repository save transaction started', {
+      transactionId: transaction.id,
+      transactionType: transaction.type,
+      accountCount: accounts.length,
+      userId: context.userId,
+      idempotencyKey: context.idempotencyKey,
+      ...TimingUtils.createTimingMetadata(timing),
     });
 
     try {
+      const transactItems = [];
+
+      if (context.idempotencyKey) {
+        transactItems.push(this.buildIdempotencyItem(context, transaction));
+      }
+
+      transactItems.push(this.buildTransactionHeaderItem(transaction));
+
+      transactItems.push(...this.buildPostingItems(transaction));
+
+      transactItems.push(...this.buildAccountBalanceUpdates(accounts));
+
+      const command = new TransactWriteCommand({
+        TransactItems: transactItems,
+      });
+
       await this.client.send(command);
       accounts.forEach(account => {
         account.flushPendingDelta();
         account.balanceVersion++;
       });
+
+      const completedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING.REPOSITORY_SAVE_TRANSACTION_SUCCESS,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      this.logger?.debug('Repository save transaction completed', {
+        transactionId: transaction.id,
+        transactionType: transaction.type,
+        accountCount: accounts.length,
+        userId: context.userId,
+        idempotencyKey: context.idempotencyKey,
+        ...TimingUtils.createTimingMetadata(completedTiming),
+      });
+
       return transaction.id;
     } catch (error: unknown) {
+      const failedTiming = TimingUtils.endTiming(timing);
+
+      this.logger?.error('Repository save transaction failed', {
+        transactionId: transaction.id,
+        transactionType: transaction.type,
+        accountCount: accounts.length,
+        userId: context.userId,
+        idempotencyKey: context.idempotencyKey,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING.REPOSITORY_SAVE_TRANSACTION_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
       return this.handleTransactionSaveError(error, transaction, context);
     }
   }
 
   async saveAccount(account: Account): Promise<Account> {
-    const accountItem = {
-      PK: `${TABLE_PREFIXES.ACCOUNT}${account.id}`,
-      SK: SORT_KEYS.META,
-      [GSI_PARTITION_KEYS.BANKING_GSI1PK]: `${TABLE_PREFIXES.USER}${account.ownerUserId}`,
-      [GSI_SORT_KEYS.BANKING_GSI1SK]: account.createdAt.toISOString(),
-      accountNumber: account.accountNumber,
-      name: account.name,
-      ownerUserId: account.ownerUserId,
-      status: account.status,
-      currency: account.currency,
-      createdAt: account.createdAt.toISOString(),
-      isTest: account.isTest,
-    };
+    const timing = TimingUtils.startTiming(
+      OPERATION_NAMES.BANKING.REPOSITORY_SAVE_ACCOUNT
+    );
 
-    const balanceItem = {
-      PK: `${TABLE_PREFIXES.ACCOUNT}${account.id}`,
-      SK: SORT_KEYS.BALANCE,
-      [GSI_PARTITION_KEYS.BANKING_GSI1PK]: `${TABLE_PREFIXES.USER}${account.ownerUserId}`,
-      [GSI_SORT_KEYS.BANKING_GSI1SK]: account.createdAt.toISOString(),
-      ledgerBalanceMinor: account.ledgerBalanceMinor.toCents(),
-      availableBalanceMinor: account.availableBalanceMinor.toCents(),
-      version: account.balanceVersion,
-    };
-
-    const reservationItem = {
-      PK: `${TABLE_PREFIXES.ACCOUNT_NUMBER}${account.accountNumber}`,
-      SK: SORT_KEYS.RESERVE,
+    this.logger?.debug('Repository save account started', {
       accountId: account.id,
-    };
-
-    const command = new TransactWriteCommand({
-      TransactItems: [
-        {
-          Put: {
-            TableName: this.tableName,
-            Item: accountItem,
-            ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
-          },
-        },
-        {
-          Put: {
-            TableName: this.tableName,
-            Item: balanceItem,
-            ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
-          },
-        },
-        {
-          Put: {
-            TableName: this.tableName,
-            Item: reservationItem,
-            ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
-          },
-        },
-      ],
+      accountNumber: account.accountNumber,
+      ownerUserId: account.ownerUserId,
+      ...TimingUtils.createTimingMetadata(timing),
     });
 
     try {
+      const accountItem = {
+        PK: `${TABLE_PREFIXES.ACCOUNT}${account.id}`,
+        SK: SORT_KEYS.META,
+        [GSI_PARTITION_KEYS.BANKING_GSI1PK]: `${TABLE_PREFIXES.USER}${account.ownerUserId}`,
+        [GSI_SORT_KEYS.BANKING_GSI1SK]: account.createdAt.toISOString(),
+        accountNumber: account.accountNumber,
+        name: account.name,
+        ownerUserId: account.ownerUserId,
+        status: account.status,
+        currency: account.currency,
+        createdAt: account.createdAt.toISOString(),
+        isTest: account.isTest,
+      };
+
+      const balanceItem = {
+        PK: `${TABLE_PREFIXES.ACCOUNT}${account.id}`,
+        SK: SORT_KEYS.BALANCE,
+        [GSI_PARTITION_KEYS.BANKING_GSI1PK]: `${TABLE_PREFIXES.USER}${account.ownerUserId}`,
+        [GSI_SORT_KEYS.BANKING_GSI1SK]: account.createdAt.toISOString(),
+        ledgerBalanceMinor: account.ledgerBalanceMinor.toCents(),
+        availableBalanceMinor: account.availableBalanceMinor.toCents(),
+        version: account.balanceVersion,
+      };
+
+      const reservationItem = {
+        PK: `${TABLE_PREFIXES.ACCOUNT_NUMBER}${account.accountNumber}`,
+        SK: SORT_KEYS.RESERVE,
+        accountId: account.id,
+      };
+
+      const command = new TransactWriteCommand({
+        TransactItems: [
+          {
+            Put: {
+              TableName: this.tableName,
+              Item: accountItem,
+              ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
+            },
+          },
+          {
+            Put: {
+              TableName: this.tableName,
+              Item: balanceItem,
+              ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
+            },
+          },
+          {
+            Put: {
+              TableName: this.tableName,
+              Item: reservationItem,
+              ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
+            },
+          },
+        ],
+      });
+
       await this.client.send(command);
+
+      const completedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING.REPOSITORY_SAVE_ACCOUNT_SUCCESS,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      this.logger?.debug('Repository save account completed', {
+        accountId: account.id,
+        accountNumber: account.accountNumber,
+        ownerUserId: account.ownerUserId,
+        ...TimingUtils.createTimingMetadata(completedTiming),
+      });
+
       return account;
     } catch (error: unknown) {
-      throw new RepositoryError(`account_save_(${account.id})`, error as Error);
+      const failedTiming = TimingUtils.endTiming(timing);
+
+      this.logger?.error('Repository save account failed', {
+        accountId: account.id,
+        accountNumber: account.accountNumber,
+        ownerUserId: account.ownerUserId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING.REPOSITORY_SAVE_ACCOUNT_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      throw new RepositoryError(`save_account(${account.id})`, error as Error);
     }
   }
 

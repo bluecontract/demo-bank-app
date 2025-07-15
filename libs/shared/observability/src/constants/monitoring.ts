@@ -1,0 +1,111 @@
+// Metric Names
+export const METRIC_NAMES = {
+  // Auth metrics
+  AUTH: {
+    USER_SIGN_IN: 'UserSignIn',
+    USER_SIGN_UP: 'UserSignUp',
+    TEST_USER_SIGN_IN: 'TestUserSignIn',
+    TEST_USER_SIGN_UP: 'TestUserSignUp',
+    USER_SIGN_IN_DURATION: 'UserSignInDuration',
+    USER_SIGN_UP_DURATION: 'UserSignUpDuration',
+    USER_SIGN_IN_FAILURE_DURATION: 'UserSignInFailureDuration',
+    USER_SIGN_UP_FAILURE_DURATION: 'UserSignUpFailureDuration',
+    USER_SIGN_IN_ERROR: 'UserSignInError',
+    USER_SIGN_UP_ERROR: 'UserSignUpError',
+    USER_SIGN_IN_JWT_ERROR: 'UserSignInJwtError',
+    USER_SIGN_UP_JWT_ERROR: 'UserSignUpJwtError',
+    USER_SIGN_IN_UNKNOWN_ERROR: 'UserSignInUnknownError',
+    USER_SIGN_UP_UNKNOWN_ERROR: 'UserSignUpUnknownError',
+    JWT_GENERATE_SUCCESS: 'JwtGenerateSuccess',
+    JWT_GENERATE_ERROR: 'JwtGenerateError',
+    JWT_VERIFY_SUCCESS: 'JwtVerifySuccess',
+    JWT_VERIFY_ERROR: 'JwtVerifyError',
+    USER_REPOSITORY_SAVE_SUCCESS: 'UserRepositorySaveSuccess',
+    USER_REPOSITORY_SAVE_ERROR: 'UserRepositorySaveError',
+    USER_REPOSITORY_FIND_SUCCESS: 'UserRepositoryFindSuccess',
+    USER_REPOSITORY_FIND_ERROR: 'UserRepositoryFindError',
+  },
+
+  // Banking metrics
+  BANKING: {
+    ACCOUNT_CREATE: 'AccountCreate',
+    ACCOUNT_CREATE_DURATION: 'AccountCreateDuration',
+    ACCOUNT_CREATE_ERROR: 'AccountCreateError',
+    ACCOUNT_FUND: 'AccountFund',
+    ACCOUNT_FUND_DURATION: 'AccountFundDuration',
+    ACCOUNT_FUND_ERROR: 'AccountFundError',
+    MONEY_TRANSFER: 'MoneyTransfer',
+    MONEY_TRANSFER_DURATION: 'MoneyTransferDuration',
+    MONEY_TRANSFER_ERROR: 'MoneyTransferError',
+    ACCOUNT_GET: 'AccountGet',
+    ACCOUNT_GET_DURATION: 'AccountGetDuration',
+    ACCOUNT_GET_ERROR: 'AccountGetError',
+    ACCOUNT_LIST: 'AccountList',
+    ACCOUNT_LIST_DURATION: 'AccountListDuration',
+    ACCOUNT_LIST_ERROR: 'AccountListError',
+    TRANSACTION_GET: 'TransactionGet',
+    TRANSACTION_GET_DURATION: 'TransactionGetDuration',
+    TRANSACTION_GET_ERROR: 'TransactionGetError',
+    TRANSACTION_LIST: 'TransactionList',
+    TRANSACTION_LIST_DURATION: 'TransactionListDuration',
+    TRANSACTION_LIST_ERROR: 'TransactionListError',
+    REPOSITORY_SAVE_ACCOUNT_SUCCESS: 'RepositorySaveAccountSuccess',
+    REPOSITORY_SAVE_ACCOUNT_ERROR: 'RepositorySaveAccountError',
+    REPOSITORY_SAVE_TRANSACTION_SUCCESS: 'RepositorySaveTransactionSuccess',
+    REPOSITORY_SAVE_TRANSACTION_ERROR: 'RepositorySaveTransactionError',
+    REPOSITORY_GET_ACCOUNT_SUCCESS: 'RepositoryGetAccountSuccess',
+    REPOSITORY_GET_ACCOUNT_ERROR: 'RepositoryGetAccountError',
+    REPOSITORY_GET_TRANSACTION_SUCCESS: 'RepositoryGetTransactionSuccess',
+    REPOSITORY_GET_TRANSACTION_ERROR: 'RepositoryGetTransactionError',
+    ACCOUNT_NUMBER_GENERATE: 'AccountNumberGenerate',
+  },
+
+  // Infrastructure metrics
+  INFRASTRUCTURE: {
+    AWS_DYNAMO_OPERATION_SUCCESS: 'AwsDynamoOperationSuccess',
+    AWS_DYNAMO_OPERATION_ERROR: 'AwsDynamoOperationError',
+    AWS_DYNAMO_OPERATION_DURATION: 'AwsDynamoOperationDuration',
+    AWS_SECRETS_OPERATION_SUCCESS: 'AwsSecretsOperationSuccess',
+    AWS_SECRETS_OPERATION_ERROR: 'AwsSecretsOperationError',
+    AWS_SECRETS_OPERATION_DURATION: 'AwsSecretsOperationDuration',
+  },
+} as const;
+
+// Operation Names for Timing
+export const OPERATION_NAMES = {
+  AUTH: {
+    SIGN_IN: 'user-signin',
+    SIGN_UP: 'user-signup',
+    JWT_GENERATE: 'jwt-generate',
+    JWT_VERIFY: 'jwt-verify',
+    USER_REPOSITORY_SAVE: 'user-repository-save',
+    USER_REPOSITORY_FIND: 'user-repository-find',
+  },
+  BANKING: {
+    ACCOUNT_CREATE: 'account-create',
+    ACCOUNT_FUND: 'account-fund',
+    MONEY_TRANSFER: 'money-transfer',
+    ACCOUNT_GET: 'account-get',
+    ACCOUNT_LIST: 'account-list',
+    TRANSACTION_GET: 'transaction-get',
+    TRANSACTION_LIST: 'transaction-list',
+    REPOSITORY_SAVE_ACCOUNT: 'repository-save-account',
+    REPOSITORY_SAVE_TRANSACTION: 'repository-save-transaction',
+    REPOSITORY_GET_ACCOUNT: 'repository-get-account',
+    REPOSITORY_GET_TRANSACTION: 'repository-get-transaction',
+    ACCOUNT_NUMBER_GENERATE: 'account-number-generate',
+  },
+  INFRASTRUCTURE: {
+    AWS_DYNAMO_OPERATION: 'aws-dynamo-operation',
+    AWS_SECRETS_OPERATION: 'aws-secrets-operation',
+  },
+} as const;
+
+// Metric Units
+export const METRIC_UNITS = {
+  COUNT: 'Count',
+  MILLISECONDS: 'Milliseconds',
+  SECONDS: 'Seconds',
+  BYTES: 'Bytes',
+  PERCENT: 'Percent',
+} as const;

@@ -59,7 +59,7 @@ async function setupTable() {
       if (!tableReady) {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-    } catch (error) {
+    } catch {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
@@ -70,9 +70,8 @@ async function cleanupTable() {
     await dynamoClient.send(
       new DeleteTableCommand({ TableName: TEST_CONFIG.tableName })
     );
-  } catch (error) {
-    // Ignore cleanup errors
-  }
+    // eslint-disable-next-line no-empty
+  } catch {}
 }
 
 describe('DynamoUserRepository Integration', () => {

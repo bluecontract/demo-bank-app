@@ -5,7 +5,12 @@ import {
 import { AuthError } from '../errors';
 import type { UserRepository, JwtService, Logger, Metrics } from '../ports';
 import { AuthResult } from '../dtos';
-import { TimingUtils } from '@demo-blue/shared-observability';
+import {
+  TimingUtils,
+  METRIC_NAMES,
+  OPERATION_NAMES,
+  METRIC_UNITS,
+} from '@demo-blue/shared-observability';
 import { User } from '../../domain/entities/User';
 
 export interface SignInCommand {
@@ -38,7 +43,7 @@ export async function signIn(
   const { userRepository, jwtService, logger, metrics } = dependencies;
 
   const { name } = command;
-  const timing = TimingUtils.startTiming('user-signin');
+  const timing = TimingUtils.startTiming(OPERATION_NAMES.AUTH.SIGN_IN);
 
   logger.info('User sign-in started', {
     userName: name,
@@ -57,10 +62,14 @@ export async function signIn(
         error: 'User not found',
         ...TimingUtils.createTimingMetadata(failedTiming),
       });
-      metrics.addMetric('UserSignInError', 'Count', 1);
       metrics.addMetric(
-        'UserSignInFailureDuration',
-        'Milliseconds',
+        METRIC_NAMES.AUTH.USER_SIGN_IN_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
+      metrics.addMetric(
+        METRIC_NAMES.AUTH.USER_SIGN_IN_FAILURE_DURATION,
+        METRIC_UNITS.MILLISECONDS,
         failedTiming.duration || 0
       );
       throw new UserNotFoundError(name);
@@ -73,11 +82,13 @@ export async function signIn(
 
     const completedTiming = TimingUtils.endTiming(timing);
 
-    const metricName = foundUser.isTest ? 'TestUserSignIn' : 'UserSignIn';
-    metrics.addMetric(metricName, 'Count', 1);
+    const metricName = foundUser.isTest
+      ? METRIC_NAMES.AUTH.TEST_USER_SIGN_IN
+      : METRIC_NAMES.AUTH.USER_SIGN_IN;
+    metrics.addMetric(metricName, METRIC_UNITS.COUNT, 1);
     metrics.addMetric(
-      'UserSignInDuration',
-      'Milliseconds',
+      METRIC_NAMES.AUTH.USER_SIGN_IN_DURATION,
+      METRIC_UNITS.MILLISECONDS,
       completedTiming.duration || 0
     );
 
@@ -103,7 +114,11 @@ export async function signIn(
         error: error.message,
         ...TimingUtils.createTimingMetadata(failedTiming),
       });
-      metrics.addMetric('UserSignInJwtError', 'Count', 1);
+      metrics.addMetric(
+        METRIC_NAMES.AUTH.USER_SIGN_IN_JWT_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
       throw error;
     }
 
@@ -113,7 +128,11 @@ export async function signIn(
       ...TimingUtils.createTimingMetadata(failedTiming),
     });
 
-    metrics.addMetric('UserSignInUnknownError', 'Count', 1);
+    metrics.addMetric(
+      METRIC_NAMES.AUTH.USER_SIGN_IN_UNKNOWN_ERROR,
+      METRIC_UNITS.COUNT,
+      1
+    );
 
     throw new AuthError(
       'Unexpected error during user sign-in',

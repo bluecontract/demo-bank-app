@@ -343,10 +343,11 @@ describe('DynamoUserRepository', () => {
         expect.objectContaining({
           TableName: 'test-table',
           IndexName: 'AUTH_GSI1',
-          KeyConditionExpression: 'AUTH_GSI1PK = :name AND AUTH_GSI1SK = :sk',
+          KeyConditionExpression:
+            'AUTH_GSI1PK = :gsi1pk AND AUTH_GSI1SK = :gsi1sk',
           ExpressionAttributeValues: {
-            ':name': `USERNAME#${user.name}`,
-            ':sk': 'PROFILE',
+            ':gsi1pk': `USERNAME#${user.name}`,
+            ':gsi1sk': 'PROFILE',
           },
         })
       );
@@ -372,10 +373,11 @@ describe('DynamoUserRepository', () => {
         expect.objectContaining({
           TableName: 'test-table',
           IndexName: 'AUTH_GSI1',
-          KeyConditionExpression: 'AUTH_GSI1PK = :name AND AUTH_GSI1SK = :sk',
+          KeyConditionExpression:
+            'AUTH_GSI1PK = :gsi1pk AND AUTH_GSI1SK = :gsi1sk',
           ExpressionAttributeValues: {
-            ':name': `USERNAME#${nonExistentName}`,
-            ':sk': 'PROFILE',
+            ':gsi1pk': `USERNAME#${nonExistentName}`,
+            ':gsi1sk': 'PROFILE',
           },
         })
       );

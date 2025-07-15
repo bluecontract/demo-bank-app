@@ -1,8 +1,13 @@
-import { BankingRepository } from '../ports';
-import { AccountNotFoundError, TransactionNotFoundError } from '../errors';
+import { TransactionNotFoundError, AccountNotFoundError } from '../errors';
+import type { Logger, Metrics } from '../../domain/types';
+import {
+  TimingUtils,
+  METRIC_NAMES,
+  OPERATION_NAMES,
+  METRIC_UNITS,
+} from '@demo-blue/shared-observability';
+import type { BankingRepository } from '../ports';
 import { TransactionResult } from '../dtos';
-import { Transaction } from '../../domain/entities/Transaction';
-import { Posting } from '../../domain/valueObjects/Posting';
 
 export interface GetTransactionQuery {
   userId: string;
@@ -12,49 +17,98 @@ export interface GetTransactionQuery {
 
 export interface GetTransactionDependencies {
   repository: BankingRepository;
-}
-
-function toTransactionResult(transaction: Transaction): TransactionResult {
-  return {
-    id: transaction.id,
-    type: transaction.type,
-    status: transaction.status,
-    postings: transaction.postings.map((posting: Posting) => ({
-      accountId: posting.accountId,
-      amount: posting.amount,
-      side: posting.side,
-      accountNumber: posting.accountNumber,
-      counterpartyAccountNumber: posting.counterpartyAccountNumber,
-    })),
-    description: transaction.description,
-    transactionIdempotencyKey: transaction.transactionIdempotencyKey,
-    createdAt: transaction.createdAt,
-  };
+  logger?: Logger;
+  metrics?: Metrics;
 }
 
 export async function getTransaction(
   query: GetTransactionQuery,
   dependencies: GetTransactionDependencies
 ): Promise<TransactionResult> {
-  const { repository } = dependencies;
+  const { repository, logger, metrics } = dependencies;
+  const { userId, accountId, transactionId } = query;
 
-  const account = await repository.getAccountById(query.accountId);
-  if (!account || !account.isOwnedBy(query.userId)) {
-    throw new AccountNotFoundError(query.accountId);
-  }
-
-  const transaction = await repository.getTransactionById(query.transactionId);
-  if (!transaction) {
-    throw new TransactionNotFoundError(query.transactionId);
-  }
-
-  const transactionInvolvesAccount = transaction.postings.some(
-    posting => posting.accountId === query.accountId
+  const timing = TimingUtils.startTiming(
+    OPERATION_NAMES.BANKING.TRANSACTION_GET
   );
 
-  if (!transactionInvolvesAccount) {
-    throw new TransactionNotFoundError(query.transactionId);
-  }
+  logger?.debug('Transaction retrieval started', {
+    userId,
+    transactionId,
+    ...TimingUtils.createTimingMetadata(timing),
+  });
 
-  return toTransactionResult(transaction);
+  try {
+    const account = await repository.getAccountById(accountId);
+    if (!account || !account.isOwnedBy(userId)) {
+      throw new AccountNotFoundError(accountId);
+    }
+
+    const transaction = await repository.getTransactionById(transactionId);
+    if (!transaction) {
+      throw new TransactionNotFoundError(transactionId);
+    }
+
+    const transactionInvolvesAccount = transaction.postings.some(posting => {
+      return posting.accountId === accountId;
+    });
+
+    if (!transactionInvolvesAccount) {
+      throw new TransactionNotFoundError(transactionId);
+    }
+
+    const completedTiming = TimingUtils.endTiming(timing);
+
+    metrics?.addMetric(
+      METRIC_NAMES.BANKING.TRANSACTION_GET,
+      METRIC_UNITS.COUNT,
+      1
+    );
+    metrics?.addMetric(
+      METRIC_NAMES.BANKING.TRANSACTION_GET_DURATION,
+      METRIC_UNITS.MILLISECONDS,
+      completedTiming.duration || 0
+    );
+
+    logger?.debug('Transaction retrieval completed successfully', {
+      userId,
+      transactionId,
+      type: transaction.type,
+      status: transaction.status,
+      ...TimingUtils.createTimingMetadata(completedTiming),
+    });
+
+    return {
+      id: transaction.id,
+      type: transaction.type,
+      status: transaction.status,
+      postings: transaction.postings.map(posting => ({
+        accountId: posting.accountId,
+        amount: posting.amount,
+        side: posting.side,
+        accountNumber: posting.accountNumber,
+        counterpartyAccountNumber: posting.counterpartyAccountNumber,
+      })),
+      description: transaction.description,
+      transactionIdempotencyKey: transaction.transactionIdempotencyKey,
+      createdAt: transaction.createdAt,
+    };
+  } catch (error: unknown) {
+    const failedTiming = TimingUtils.endTiming(timing);
+
+    logger?.error('Transaction retrieval failed', {
+      userId,
+      transactionId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      ...TimingUtils.createTimingMetadata(failedTiming),
+    });
+
+    metrics?.addMetric(
+      METRIC_NAMES.BANKING.TRANSACTION_GET_ERROR,
+      METRIC_UNITS.COUNT,
+      1
+    );
+
+    throw error;
+  }
 }

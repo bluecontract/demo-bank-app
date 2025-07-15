@@ -14,5 +14,10 @@ export type {
 export { PowertoolsLogger } from './implementations/PowertoolsLogger';
 export { PowertoolsMetrics } from './implementations/PowertoolsMetrics';
 
-// Utils
 export { TimingUtils } from './utils/TimingUtils';
+
+export {
+  METRIC_NAMES,
+  OPERATION_NAMES,
+  METRIC_UNITS,
+} from './constants/monitoring';

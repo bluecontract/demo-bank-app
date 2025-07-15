@@ -61,10 +61,10 @@ describe('fundAccount', () => {
         srcAccountId: FUNDING_SOURCE.ACCOUNT_ID,
         dstAccountNumber: mockAccount.accountNumber,
         amountMinor: new Money(1000),
-        description: 'Funding for account 1234567890',
+        description: `Funding for account ${mockAccount.accountNumber}`,
         ctx: command.ctx,
       },
-      { repository: mockRepository }
+      { repository: mockRepository, logger: undefined, metrics: undefined }
     );
   });
 
@@ -155,10 +155,10 @@ describe('fundAccount', () => {
         srcAccountId: FUNDING_SOURCE.ACCOUNT_ID,
         dstAccountNumber: mockAccount.accountNumber,
         amountMinor: new Money(0),
-        description: 'Funding for account 1234567890',
+        description: `Funding for account ${mockAccount.accountNumber}`,
         ctx: command.ctx,
       },
-      { repository: mockRepository }
+      { repository: mockRepository, logger: undefined, metrics: undefined }
     );
   });
 
@@ -187,10 +187,10 @@ describe('fundAccount', () => {
         srcAccountId: FUNDING_SOURCE.ACCOUNT_ID,
         dstAccountNumber: mockAccount.accountNumber,
         amountMinor: new Money(1000000),
-        description: 'Funding for account 1234567890',
+        description: `Funding for account ${mockAccount.accountNumber}`,
         ctx: command.ctx,
       },
-      { repository: mockRepository }
+      { repository: mockRepository, logger: undefined, metrics: undefined }
     );
   });
 

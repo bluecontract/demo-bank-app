@@ -41,6 +41,18 @@
       "console": "integratedTerminal",
       "autoAttachChildProcesses": true,
       "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Vitest (auth integration)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["nx", "run", "@demo-blue/auth:test:integration:debug"],
+      "cwd": "${workspaceFolder}/libs/auth",
+
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true,
+      "skipFiles": ["<node_internals>/**"]
     }
   ]
 }
