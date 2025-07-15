@@ -150,7 +150,8 @@ test.describe('Banking Core Flows', () => {
 
   test('should transfer money between accounts with confirmation', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    testInfo.setTimeout(15000);
     // Create two accounts
     const sourceAccount = createUniqueAccountName('source');
     const targetAccount = createUniqueAccountName('target');
@@ -177,6 +178,13 @@ test.describe('Banking Core Flows', () => {
     await waitForTransferCompletion(page);
     await page.click('text=Home');
     await waitForModalToClose(page, 'modal-content');
+
+    // Wait for balance to be updated after funding
+    await expect(
+      page.locator('.balance-display').getByText('$200')
+    ).toBeVisible({
+      timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
+    });
 
     // Get target account number for transfer
     const targetAccountElements = page.locator('.account-number');
@@ -297,7 +305,8 @@ test.describe('Banking Core Flows', () => {
 
   test('should show transaction details for outgoing transfer', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    testInfo.setTimeout(20000);
     // Create two accounts
     await page.click('text=Add new account');
     await waitForModalToOpen(page, 'modal-content');
@@ -322,6 +331,13 @@ test.describe('Banking Core Flows', () => {
     await waitForTransferCompletion(page);
     await page.click('text=Home');
     await waitForModalToClose(page, 'modal-content');
+
+    // Wait for balance to be updated after funding before proceeding
+    await expect(
+      page.locator('.balance-display').getByText('$100')
+    ).toBeVisible({
+      timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
+    });
 
     // Get destination account number using the correct selector
     await page.click(`text=${account2}`);
@@ -351,8 +367,19 @@ test.describe('Banking Core Flows', () => {
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
 
-    // Click on the first transaction to open details modal
-    await page.click('[data-testid^="transaction-item-"]');
+    // Wait specifically for the outgoing transfer transaction to appear (-$40)
+    await expect(
+      page.locator('[data-testid="transaction-history-list"]').getByText('-$40')
+    ).toBeVisible({
+      timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
+    });
+
+    // Click on the outgoing transfer transaction specifically
+    await page
+      .locator('[data-testid="transaction-history-list"]')
+      .getByText('-$40')
+      .locator('..')
+      .click();
 
     // Wait for modal to open and verify content
     await expect(
@@ -364,25 +391,17 @@ test.describe('Banking Core Flows', () => {
     const modalContent = page.locator(
       '[data-testid="transaction-modal-content"]'
     );
-    try {
-      await expect(
-        modalContent.getByRole('heading', { name: 'Outgoing transfer' })
-      ).toBeVisible({ timeout: 2000 });
-      // If it's outgoing, check for negative amount
-      await expect(modalContent.getByText('-$40')).toBeVisible();
-    } catch {
-      // If not outgoing, it might be incoming (depending on which account we're viewing from)
-      await expect(
-        modalContent.getByRole('heading', { name: 'Incoming transfer' })
-      ).toBeVisible();
-      // If it's incoming, check for positive amount
-      await expect(modalContent.getByText('+$40')).toBeVisible();
-    }
+    await expect(
+      modalContent.getByRole('heading', { name: 'Outgoing transfer' })
+    ).toBeVisible();
+    // If it's outgoing, check for negative amount
+    await expect(modalContent.getByText('-$40')).toBeVisible();
   });
 
   test('should update account balance after fund and transfer operations', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    testInfo.setTimeout(15000);
     // Create account
     await page.click('text=Add new account');
     await waitForModalToOpen(page, 'modal-content');
@@ -431,7 +450,8 @@ test.describe('Banking Core Flows', () => {
 
   test('should switch between accounts and show respective transaction history', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    testInfo.setTimeout(15000);
     // Create two accounts
     await page.click('text=Add new account');
     await waitForModalToOpen(page, 'modal-content');

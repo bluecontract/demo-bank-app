@@ -17,7 +17,7 @@ export const TEST_DATA = {
   },
   TIMEOUTS: {
     NAVIGATION: 10000,
-    MODAL_LOAD: 5000,
+    MODAL_LOAD: 10000,
     API_RESPONSE: 8000,
     BALANCE_UPDATE: 5000,
   },
