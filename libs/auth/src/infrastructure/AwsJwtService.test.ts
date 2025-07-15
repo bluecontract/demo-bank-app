@@ -5,7 +5,6 @@ import {
   TokenVerificationError,
   TokenExpiredError,
   TokenGenerationError,
-  TokenServiceError,
 } from './errors';
 
 // Mock AWS SDK
@@ -298,10 +297,7 @@ describe('AwsJwtService', () => {
 
       // When & Then
       await expect(service.generateToken(userId)).rejects.toThrow(
-        new TokenServiceError(
-          'Failed to retrieve JWT secret from arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123',
-          secretsError
-        )
+        new TokenGenerationError(userId)
       );
 
       // Verify GetSecretValueCommand was attempted
@@ -316,9 +312,7 @@ describe('AwsJwtService', () => {
 
       // When & Then
       await expect(service.generateToken(userId)).rejects.toThrow(
-        new TokenServiceError(
-          'JWT secret not found: arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
-        )
+        new TokenGenerationError(userId)
       );
 
       // Verify GetSecretValueCommand was attempted
@@ -333,9 +327,7 @@ describe('AwsJwtService', () => {
 
       // When & Then
       await expect(service.generateToken(userId)).rejects.toThrow(
-        new TokenServiceError(
-          'JWT secret key not found in secret: arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
-        )
+        new TokenGenerationError(userId)
       );
 
       // Verify GetSecretValueCommand was attempted

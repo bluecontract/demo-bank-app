@@ -20,7 +20,6 @@
     "lint:all": "nx run-many --target=lint --all",
     "lint:fix": "nx affected --target=lint --fix",
     "typecheck": "nx run-many --target=typecheck --all",
-    "typecheck:bank-web-app": "npx tsc --noEmit --skipLibCheck --project apps/bank-web-app/tsconfig.app.json && npx tsc --noEmit --skipLibCheck --project apps/bank-web-app/tsconfig.spec.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "format:staged": "lint-staged",

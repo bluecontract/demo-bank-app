@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createAccount } from './createAccount.ts';
 import { BankingRepository, AccountNumberGenerator } from '../ports';
 import { Money } from '../../domain/valueObjects/Money';
+import { AccountResult } from '../dtos';
 
 describe('createAccount', () => {
   let mockRepository: BankingRepository;
@@ -41,7 +42,7 @@ describe('createAccount', () => {
     );
 
     // When
-    const result = await createAccount(command, {
+    const result: AccountResult = await createAccount(command, {
       repository: mockRepository,
       accountNumberGenerator: mockAccountNumberGenerator,
     });
@@ -86,7 +87,7 @@ describe('createAccount', () => {
     );
 
     // When
-    const result = await createAccount(command, {
+    const result: AccountResult = await createAccount(command, {
       repository: mockRepository,
       accountNumberGenerator: mockAccountNumberGenerator,
     });
@@ -110,12 +111,12 @@ describe('createAccount', () => {
     );
 
     // When
-    const result1 = await createAccount(command, {
+    const result1: AccountResult = await createAccount(command, {
       repository: mockRepository,
       accountNumberGenerator: mockAccountNumberGenerator,
     });
 
-    const result2 = await createAccount(command, {
+    const result2: AccountResult = await createAccount(command, {
       repository: mockRepository,
       accountNumberGenerator: mockAccountNumberGenerator,
     });
@@ -139,7 +140,7 @@ describe('createAccount', () => {
     );
 
     // When
-    const result = await createAccount(command, {
+    const result: AccountResult = await createAccount(command, {
       repository: mockRepository,
       accountNumberGenerator: mockAccountNumberGenerator,
     });
@@ -164,7 +165,7 @@ describe('createAccount', () => {
     );
 
     // When
-    const result = await createAccount(command, {
+    const result: AccountResult = await createAccount(command, {
       repository: mockRepository,
       accountNumberGenerator: mockAccountNumberGenerator,
     });

@@ -75,6 +75,20 @@
           "^build"
         ]
       },
+      "test:integration:debug": {
+        "executor": "nx:run-commands",
+        "options": {
+          "commands": [
+            "find src -name '*.integration.test.ts' -exec node --inspect ../../node_modules/vitest/vitest.mjs watch --config vitest.config.ts {} +"
+          ],
+          "cwd": "libs/auth",
+          "parallel": false
+        },
+        "dependsOn": [
+          "^build",
+          "localstack:serve"
+        ]
+      },
       "lint": {
         "executor": "@nx/eslint:lint",
         "outputs": [

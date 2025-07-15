@@ -18,8 +18,9 @@ import { AwsJwtService } from './AwsJwtService';
 import {
   TokenVerificationError,
   TokenExpiredError,
-  TokenServiceError,
+  TokenGenerationError,
 } from './errors';
+import { randomUUID } from 'crypto';
 
 const TEST_CONFIG = {
   localstackEndpoint: 'http://localhost:4566',
@@ -44,7 +45,7 @@ async function setupSecret() {
       })
     );
     secretArn = result.ARN!;
-  } catch (error) {
+  } catch {
     // If secret already exists, update it
     await secretsClient.send(
       new PutSecretValueCommand({
@@ -60,11 +61,11 @@ async function cleanupSecret() {
   try {
     await secretsClient.send(
       new DeleteSecretCommand({
-        SecretId: TEST_CONFIG.secretName,
+        SecretId: secretArn,
         ForceDeleteWithoutRecovery: true,
       })
     );
-  } catch (error) {
+  } catch {
     // Ignore cleanup errors
   }
 }
@@ -299,7 +300,7 @@ describe('AwsJwtService Integration', () => {
 
       // When & Then
       await expect(invalidService.generateToken(userId)).rejects.toThrow(
-        TokenServiceError
+        TokenGenerationError
       );
     });
 
@@ -316,20 +317,21 @@ describe('AwsJwtService Integration', () => {
 
       // When & Then
       await expect(invalidService.generateToken(userId)).rejects.toThrow(
-        TokenServiceError
+        TokenGenerationError
       );
     });
 
-    it('should handle malformed secret content gracefully', async () => {
+    it('should throw TokenGenerationError for malformed secret content when generating token', async () => {
       // Given
-      const malformedSecretName = `malformed-${Date.now()}`;
+      const malformedSecretName = `malformed-${Date.now()}-${randomUUID()}`;
       const malformedSecretArn = `arn:aws:secretsmanager:${TEST_CONFIG.region}:000000000000:secret:${malformedSecretName}`;
 
       // Create secret with malformed content
       await secretsClient.send(
         new CreateSecretCommand({
           Name: malformedSecretName,
-          SecretString: '{"wrongKey": "value"}', // Missing 'secret' key
+          SecretString: JSON.stringify({ wrongKey: 'value' }), // Missing 'secret' key
+          Description: 'Test JWT secret for integration tests',
         })
       );
 
@@ -337,19 +339,55 @@ describe('AwsJwtService Integration', () => {
         region: TEST_CONFIG.region,
         jwtSecretArn: malformedSecretArn,
         endpoint: TEST_CONFIG.localstackEndpoint,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
       });
 
       const userId = 'user-123';
 
       // When & Then
       await expect(malformedService.generateToken(userId)).rejects.toThrow(
-        TokenServiceError
+        TokenGenerationError
       );
 
       // Cleanup
       await secretsClient.send(
         new DeleteSecretCommand({
-          SecretId: malformedSecretName,
+          SecretId: malformedSecretArn,
+          ForceDeleteWithoutRecovery: true,
+        })
+      );
+    });
+
+    it('should throw TokenVerificationError for malformed secret content when verifying token', async () => {
+      // Given
+      const token = await jwtService.generateToken('user-123');
+      const malformedSecretName = `malformed-${Date.now()}-${randomUUID()}`;
+      const malformedSecretArn = `arn:aws:secretsmanager:${TEST_CONFIG.region}:000000000000:secret:${malformedSecretName}`;
+
+      // Create secret with malformed content
+      await secretsClient.send(
+        new CreateSecretCommand({
+          Name: malformedSecretName,
+          SecretString: JSON.stringify({ wrongKey: 'value' }), // Missing 'secret' key
+        })
+      );
+
+      const malformedService = new AwsJwtService({
+        region: TEST_CONFIG.region,
+        jwtSecretArn: malformedSecretArn,
+        endpoint: TEST_CONFIG.localstackEndpoint,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+
+      // When & Then
+      await expect(malformedService.verifyToken(token)).rejects.toThrow(
+        TokenVerificationError
+      );
+
+      // Cleanup
+      await secretsClient.send(
+        new DeleteSecretCommand({
+          SecretId: malformedSecretArn,
           ForceDeleteWithoutRecovery: true,
         })
       );

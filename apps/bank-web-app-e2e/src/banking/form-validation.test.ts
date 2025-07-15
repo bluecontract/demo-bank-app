@@ -2,7 +2,6 @@ import { test, expect } from '@playwright/test';
 import {
   URLS,
   TEST_DATA,
-  UI_TEXT,
   createUniqueName,
   createUniqueAccountName,
   waitForModalToClose,
@@ -124,6 +123,13 @@ test.describe('Banking Form Validation', () => {
     await waitForTransferCompletion(page);
     await page.click('text=Home');
     await waitForModalToClose(page, 'modal-content');
+
+    // Wait for balance to be updated after funding before opening transfer modal
+    await expect(
+      page.locator('.balance-display').getByText('$200')
+    ).toBeVisible({
+      timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
+    });
 
     // Open transfer modal
     await page.click('text=New transfer');

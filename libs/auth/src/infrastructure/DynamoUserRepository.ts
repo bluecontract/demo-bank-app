@@ -9,6 +9,13 @@ import type { UserRepository } from '../application/ports';
 import { User } from '../domain/entities/User';
 import { UserAlreadyExistsError, AuthRepositoryError } from './errors';
 import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
+import type { Logger, Metrics } from '@demo-blue/shared-observability';
+import {
+  TimingUtils,
+  METRIC_NAMES,
+  OPERATION_NAMES,
+  METRIC_UNITS,
+} from '@demo-blue/shared-observability';
 
 export interface DynamoUserRepositoryConfig {
   tableName: string;
@@ -16,6 +23,8 @@ export interface DynamoUserRepositoryConfig {
   testUserTtlSeconds: number;
   endpoint?: string; // For LocalStack testing
   credentials?: { accessKeyId: string; secretAccessKey: string };
+  logger?: Logger;
+  metrics?: Metrics;
 }
 
 interface UsernameReservationDbItem {
@@ -56,6 +65,8 @@ export class DynamoUserRepository implements UserRepository {
   private readonly client: DynamoDBDocumentClient;
   private readonly tableName: string;
   private readonly testUserTtlSeconds: number;
+  private readonly logger?: Logger;
+  private readonly metrics?: Metrics;
 
   constructor(config: DynamoUserRepositoryConfig) {
     const resilienceConfig = AwsResilienceConfigBuilder.forDynamoDB();
@@ -69,9 +80,22 @@ export class DynamoUserRepository implements UserRepository {
     this.client = DynamoDBDocumentClient.from(dynamoClient);
     this.tableName = config.tableName;
     this.testUserTtlSeconds = config.testUserTtlSeconds;
+    this.logger = config.logger;
+    this.metrics = config.metrics;
   }
 
   async save(user: User): Promise<User> {
+    const timing = TimingUtils.startTiming(
+      OPERATION_NAMES.AUTH.USER_REPOSITORY_SAVE
+    );
+
+    this.logger?.info('User repository save started', {
+      userId: user.id,
+      userName: user.name,
+      isTest: user.isTest,
+      ...TimingUtils.createTimingMetadata(timing),
+    });
+
     const userProfileItem = this.buildUserProfileItem(user);
     const usernameReservationItem = this.buildUsernameReservationItem(user);
 
@@ -97,8 +121,39 @@ export class DynamoUserRepository implements UserRepository {
         })
       );
 
+      const completedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.AUTH.USER_REPOSITORY_SAVE_SUCCESS,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      this.logger?.info('User repository save completed', {
+        userId: user.id,
+        userName: user.name,
+        isTest: user.isTest,
+        ...TimingUtils.createTimingMetadata(completedTiming),
+      });
+
       return user;
     } catch (error: unknown) {
+      const failedTiming = TimingUtils.endTiming(timing);
+
+      this.logger?.error('User repository save failed', {
+        userId: user.id,
+        userName: user.name,
+        isTest: user.isTest,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.AUTH.USER_REPOSITORY_SAVE_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
       if (
         this.isConditionalCheckFailedException(error) ||
         this.isTransactionCanceledException(error)
@@ -114,6 +169,16 @@ export class DynamoUserRepository implements UserRepository {
   }
 
   async findById(userId: User['id']): Promise<User | null> {
+    const timing = TimingUtils.startTiming(
+      OPERATION_NAMES.AUTH.USER_REPOSITORY_FIND
+    );
+
+    this.logger?.debug('User repository find by id started', {
+      userId: userId,
+      findBy: 'id',
+      ...TimingUtils.createTimingMetadata(timing),
+    });
+
     try {
       const result = await this.client.send(
         new GetCommand({
@@ -126,11 +191,60 @@ export class DynamoUserRepository implements UserRepository {
       );
 
       if (!result.Item) {
+        const completedTiming = TimingUtils.endTiming(timing);
+
+        this.metrics?.addMetric(
+          METRIC_NAMES.AUTH.USER_REPOSITORY_FIND_SUCCESS,
+          METRIC_UNITS.COUNT,
+          1
+        );
+
+        this.logger?.debug('User repository find completed', {
+          userId: userId,
+          findBy: 'id',
+          found: false,
+          ...TimingUtils.createTimingMetadata(completedTiming),
+        });
+
         return null;
       }
 
-      return this.mapToUser(result.Item);
+      const user = this.mapToUser(result.Item);
+
+      const completedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.AUTH.USER_REPOSITORY_FIND_SUCCESS,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      this.logger?.debug('User repository find by id completed', {
+        userId: userId,
+        findBy: 'id',
+        found: true,
+        userName: user.name,
+        isTest: user.isTest,
+        ...TimingUtils.createTimingMetadata(completedTiming),
+      });
+
+      return user;
     } catch (error: unknown) {
+      const failedTiming = TimingUtils.endTiming(timing);
+
+      this.logger?.error('User repository find by id failed', {
+        userId: userId,
+        findBy: 'id',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.AUTH.USER_REPOSITORY_FIND_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
       throw new AuthRepositoryError(
         'find user by id',
         error instanceof Error ? error : undefined
@@ -139,25 +253,85 @@ export class DynamoUserRepository implements UserRepository {
   }
 
   async findByName(userName: User['name']): Promise<User | null> {
+    const timing = TimingUtils.startTiming(
+      OPERATION_NAMES.AUTH.USER_REPOSITORY_FIND
+    );
+
+    this.logger?.debug('User repository find by name started', {
+      userName: userName,
+      findBy: 'name',
+      ...TimingUtils.createTimingMetadata(timing),
+    });
+
     try {
       const result = await this.client.send(
         new QueryCommand({
           TableName: this.tableName,
           IndexName: 'AUTH_GSI1',
-          KeyConditionExpression: 'AUTH_GSI1PK = :name AND AUTH_GSI1SK = :sk',
+          KeyConditionExpression:
+            'AUTH_GSI1PK = :gsi1pk AND AUTH_GSI1SK = :gsi1sk',
           ExpressionAttributeValues: {
-            ':name': `USERNAME#${userName}`,
-            ':sk': 'PROFILE',
+            ':gsi1pk': `USERNAME#${userName}`,
+            ':gsi1sk': 'PROFILE',
           },
         })
       );
 
       if (!result.Items || result.Items.length === 0) {
+        const completedTiming = TimingUtils.endTiming(timing);
+
+        this.metrics?.addMetric(
+          METRIC_NAMES.AUTH.USER_REPOSITORY_FIND_SUCCESS,
+          METRIC_UNITS.COUNT,
+          1
+        );
+
+        this.logger?.debug('User repository find by name completed', {
+          userName: userName,
+          findBy: 'name',
+          found: false,
+          ...TimingUtils.createTimingMetadata(completedTiming),
+        });
+
         return null;
       }
 
-      return this.mapToUser(result.Items[0]);
+      const user = this.mapToUser(result.Items[0]);
+
+      const completedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.AUTH.USER_REPOSITORY_FIND_SUCCESS,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      this.logger?.debug('User repository find by name completed', {
+        userName: userName,
+        findBy: 'name',
+        found: true,
+        userId: user.id,
+        isTest: user.isTest,
+        ...TimingUtils.createTimingMetadata(completedTiming),
+      });
+
+      return user;
     } catch (error: unknown) {
+      const failedTiming = TimingUtils.endTiming(timing);
+
+      this.logger?.error('User repository find by name failed', {
+        userName: userName,
+        findBy: 'name',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.AUTH.USER_REPOSITORY_FIND_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
       throw new AuthRepositoryError(
         'find user by name',
         error instanceof Error ? error : undefined
