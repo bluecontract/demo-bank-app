@@ -13,8 +13,8 @@ Users need to save, manage, and select recipients for transfers, improving UX an
 ```mermaid
 graph TD
   Client --> API
-  API --> Recipients Module
-  Recipients Module --> Recipients DynamoDB
+  API --> RecipientsModule["Recipients Module"]
+  RecipientsModule --> RecipientsDynamoDB["Recipients DynamoDB"]
 ```
 
 ## Component Responsibilities
