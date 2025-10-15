@@ -15,6 +15,17 @@ import {
 
 const c = initContract();
 
+export const PdfTextItemSchema = z.object({
+  str: z.string(),
+  transform: z.array(z.number()).length(6, 'transform must contain 6 numbers'),
+  width: z.number(),
+  height: z.number(),
+  dir: z.string().optional(),
+  fontName: z.string().optional(),
+});
+
+export type PdfTextItem = z.infer<typeof PdfTextItemSchema>;
+
 // ============= Schemas =============
 
 // Health check schema
@@ -165,6 +176,48 @@ export const bankApiContract = c.router(
         }),
         responses: { 200: TransactionDto, 404: ProblemDto },
         summary: 'Get a transaction by ID',
+      },
+
+      validatePayNote: {
+        method: 'POST',
+        path: '/v1/paynotes/validate',
+        body: z.object({
+          yamlContent: z.string(),
+          formData: z.object({
+            fromAccount: z.string().optional(),
+            toAccount: z.string().optional(),
+            recipientName: z.string().optional(),
+            totalAmount: z.string().optional(),
+            title: z.string().optional(),
+            payNoteCode: z.string().optional(),
+          }),
+        }),
+        responses: {
+          200: z.object({
+            validationScore: z.number().min(0).max(10),
+            explanation: z.string(),
+          }),
+          400: ProblemDto,
+        },
+        summary: 'Validate a PayNote for transfer',
+      },
+
+      parsePayNotePdf: {
+        method: 'POST',
+        path: '/v1/paynotes/parse-pdf',
+        body: z.object({
+          items: z
+            .array(PdfTextItemSchema)
+            .min(1, 'At least one PDF text item is required.'),
+        }),
+        responses: {
+          200: z.object({
+            yaml: z.string(),
+          }),
+          400: ProblemDto,
+        },
+        summary:
+          'Reconstruct PayNote YAML content from PDF text extraction items.',
       },
     },
   },

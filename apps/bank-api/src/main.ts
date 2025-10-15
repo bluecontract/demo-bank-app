@@ -18,6 +18,8 @@ import { fundAccountHandler } from './banking/fundAccount';
 import { transferMoneyHandler } from './banking/transferMoney';
 import { listTransactionsHandler } from './banking/listTransactions';
 import { getTransactionHandler } from './banking/getTransaction';
+import { validatePayNoteHandler } from './paynote/validatePayNote';
+import { parsePayNotePdfHandler } from './paynote/parsePayNotePdf';
 
 const metrics = getMetrics();
 const logger = getLogger();
@@ -52,6 +54,8 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       transferMoney: transferMoneyHandler,
       listTransactions: listTransactionsHandler,
       getTransaction: getTransactionHandler,
+      validatePayNote: validatePayNoteHandler,
+      parsePayNotePdf: parsePayNotePdfHandler,
     },
   }),
   {

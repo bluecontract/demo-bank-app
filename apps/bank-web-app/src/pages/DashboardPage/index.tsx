@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { SelectedAccountProvider } from '../../app/providers/SelectedAccountProvider';
 import { DashboardHeader } from '../../features/dashboard/components';
@@ -28,6 +29,7 @@ type Account = {
 export function DashboardPage() {
   const { user } = useAuth();
   const { data: accounts, isLoading, error } = useAccounts();
+  const navigate = useNavigate();
 
   const [accountCreationModal, setAccountCreationModal] = useState({
     isOpen: false,
@@ -58,10 +60,7 @@ export function DashboardPage() {
   };
 
   const handleTransfer = (accountId: string) => {
-    setTransferModal({
-      isOpen: true,
-      defaultAccountId: accountId,
-    });
+    navigate(`/transfer/new?accountId=${accountId}`);
   };
 
   const handleFund = (accountId: string) => {

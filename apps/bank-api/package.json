@@ -27,7 +27,8 @@
     "@ts-rest/core": "^3.52.1",
     "@ts-rest/serverless": "^3.52.1",
     "@types/aws-lambda": "^8.10.150",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "helmet": "^8.1.0"
+    "openai": "^6.3.0"
   }
 }

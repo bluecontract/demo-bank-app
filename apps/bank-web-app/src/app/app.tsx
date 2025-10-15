@@ -4,6 +4,7 @@ import { AuthProvider } from './providers/AuthProvider';
 import { ProtectedRoute } from './providers/ProtectedRoute';
 import { HomePage } from '../pages/HomePage';
 import { DashboardPage } from '../pages/DashboardPage';
+import { NewTransferPage } from '../pages/NewTransferPage';
 import { SignUpPage } from '../features/auth/pages/SignUpPage';
 import { SignInPage } from '../features/auth/pages/SignInPage';
 
@@ -20,6 +21,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/transfer/new"
+            element={
+              <ProtectedRoute>
+                <NewTransferPage />
               </ProtectedRoute>
             }
           />

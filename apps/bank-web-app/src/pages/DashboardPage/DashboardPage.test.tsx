@@ -6,6 +6,18 @@ import { useAuth } from '../../app/providers/AuthProvider';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import { useCreateAccount } from '../../features/accounts/hooks/useCreateAccount';
 
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>(
+    'react-router-dom'
+  );
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 // Mock the hooks and components
 vi.mock('../../app/providers/AuthProvider', () => ({
   useAuth: vi.fn(),
@@ -267,8 +279,9 @@ describe('DashboardPage', () => {
 
     fireEvent.click(screen.getByTestId('transfer-btn'));
 
-    // Check that the transfer modal is opened
-    expect(screen.getByTestId('transfer-modal')).toBeInTheDocument();
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/transfer/new?accountId=test-id'
+    );
   });
 
   it('should handle guest user name', () => {
