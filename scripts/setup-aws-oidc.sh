@@ -1,16 +1,15 @@
 #!/bin/bash
 
 # AWS OIDC Setup Script for GitHub Actions
-# Run this script with AWS CLI configured with kamil-private-aws profile
+# Run this script with AWS CLI configured with demo-bank-app-private-aws profile
 
 set -e
 
-# Configuration
-GITHUB_USERNAME="kgruszka"
-REPO_NAME="demo-blue"
+GITHUB_USERNAME="bluecontract"
+REPO_NAME="demo-bank-app"
 ROLE_NAME="GitHubActionsRole"
 POLICY_NAME="GitHubActionsCICDPolicy"
-AWS_PROFILE="kamil-private-aws"
+AWS_PROFILE="demo-bank-app-private-aws"
 AWS_REGION="eu-central-1"
 
 echo "🔧 Setting up AWS OIDC for GitHub Actions..."
@@ -162,7 +161,7 @@ echo "4. Get API Gateway URLs from lambda deployment outputs"
 echo "5. Update GitHub variables with actual URLs:"
 echo "   - DEV_FRONTEND_URL (CloudFront distribution URL)"
 echo "   - PROD_FRONTEND_URL (CloudFront distribution URL)"
-echo "   - DEV_BACKEND_URL (API Gateway URL)" 
+echo "   - DEV_BACKEND_URL (API Gateway URL)"
 echo "   - PROD_BACKEND_URL (API Gateway URL)"
 echo ""
-echo "🎯 Your CI/CD pipeline is now ready to run!" 
+echo "🎯 Your CI/CD pipeline is now ready to run!"
