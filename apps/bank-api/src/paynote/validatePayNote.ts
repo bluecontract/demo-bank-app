@@ -9,6 +9,11 @@ import {
 import { z } from 'zod';
 import OpenAI from 'openai';
 import { zodTextFormat } from 'openai/helpers/zod';
+import { calculateBlueIdFromYaml } from './blueId';
+import {
+  MIN_PAYNOTE_VERIFICATION_SCORE,
+  TEST_VERIFICATION_TTL_SECONDS,
+} from './constants';
 
 const ValidationResultSchema = z.object({
   validationScore: z.number().min(0).max(10),
@@ -647,8 +652,9 @@ export const validatePayNoteHandler = async (
     request: MaybeAuthenticatedTsRestRequestContext;
   }
 ) => {
-  const { logger, getOpenAiApiKey } = await getDependencies();
-  const { userId } = await extractAuthInfo(context.request);
+  const { logger, getOpenAiApiKey, payNoteVerificationRepository } =
+    await getDependencies();
+  const { userId, isTest } = await extractAuthInfo(context.request);
 
   try {
     const { yamlContent, formData } = request.body;
@@ -676,9 +682,28 @@ export const validatePayNoteHandler = async (
       apiKey
     );
 
+    const blueId = calculateBlueIdFromYaml(yamlContent);
+    const validatedAt = new Date().toISOString();
+    const isSuccessful =
+      validationResult.validationScore >= MIN_PAYNOTE_VERIFICATION_SCORE;
+
+    await payNoteVerificationRepository.saveVerification({
+      userId,
+      blueId,
+      validationScore: validationResult.validationScore,
+      explanation: validationResult.explanation,
+      isSuccessful,
+      validatedAt,
+      ttl: isTest
+        ? Math.floor(Date.now() / 1000) + TEST_VERIFICATION_TTL_SECONDS
+        : undefined,
+    });
+
     logger.info('PayNote validated', {
       userId,
       validationScore: validationResult.validationScore,
+      blueId,
+      isSuccessful,
     });
 
     return {

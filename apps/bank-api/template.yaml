@@ -114,6 +114,8 @@ Resources:
     Properties:
       Name: !Sub '/demo-blue/${Environment}/openai-api-key'
       Description: !Sub 'OpenAI API key for demo-blue ${Environment}'
+      SecretString: |
+        {"openAiApiKey":""}
       Tags:
         - Key: Environment
           Value: !Ref Environment
@@ -121,6 +123,21 @@ Resources:
           Value: demo-blue
         - Key: Component
           Value: openai
+
+  MyOsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '/demo-blue/${Environment}/myos-credentials'
+      Description: !Sub 'MyOS credentials for demo-blue ${Environment}'
+      SecretString: |
+        {"apiKey":"","accountId":""}
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: demo-blue
+        - Key: Component
+          Value: myos
 
   BankApi:
     Type: AWS::Serverless::Api
@@ -143,6 +160,7 @@ Resources:
           BANKING_DYNAMO_TABLE_NAME: !Ref BankTable
           JWT_SECRET_ARN: !Ref JwtSecret
           OPENAI_API_KEY_SECRET_ARN: !Ref OpenAiKeySecret
+          MYOS_SECRET_ARN: !Ref MyOsSecret
           JWT_TTL_SECONDS: 3600
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
           SERVICE_NAME: !Sub 'bank-api-${Environment}'
@@ -162,6 +180,10 @@ Resources:
               Action:
                 - secretsmanager:GetSecretValue
               Resource: !Ref OpenAiKeySecret
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MyOsSecret
             - Effect: Allow
               Action:
                 - cloudwatch:PutMetricData
@@ -304,6 +326,30 @@ Resources:
           Properties:
             RestApiId: !Ref BankApi
             Path: /v1/paynotes/parse-pdf
+            Method: OPTIONS
+        BootstrapPayNoteApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/bootstrap
+            Method: POST
+        BootstrapPayNoteOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/bootstrap
+            Method: OPTIONS
+        PayNoteWebhookApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/webhook
+            Method: POST
+        PayNoteWebhookOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/webhook
             Method: OPTIONS
   # ------------------------------------------------------------------
   # Seed the FUNDING_SOURCE account and its BALANCE row (idempotent)

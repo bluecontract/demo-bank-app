@@ -20,6 +20,8 @@ import { listTransactionsHandler } from './banking/listTransactions';
 import { getTransactionHandler } from './banking/getTransaction';
 import { validatePayNoteHandler } from './paynote/validatePayNote';
 import { parsePayNotePdfHandler } from './paynote/parsePayNotePdf';
+import { bootstrapPayNoteHandler } from './paynote/bootstrapPayNote';
+import { payNoteWebhookHandler } from './paynote/webhook';
 
 const metrics = getMetrics();
 const logger = getLogger();
@@ -55,7 +57,9 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       listTransactions: listTransactionsHandler,
       getTransaction: getTransactionHandler,
       validatePayNote: validatePayNoteHandler,
+      bootstrapPayNote: bootstrapPayNoteHandler,
       parsePayNotePdf: parsePayNotePdfHandler,
+      payNoteWebhook: payNoteWebhookHandler,
     },
   }),
   {
@@ -83,6 +87,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
           { path: /^\/health\/?$/, method: 'GET' },
           { path: '/auth/signup', method: 'POST' },
           { path: '/auth/signin', method: 'POST' },
+          { path: '/v1/paynotes/webhook', method: 'POST' },
         ],
       }),
     ],

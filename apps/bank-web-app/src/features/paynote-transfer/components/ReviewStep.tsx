@@ -34,7 +34,7 @@ interface ReviewStepProps {
   onCancel: () => void;
 }
 
-const MIN_PROCEED_SCORE = 7;
+const MIN_PROCEED_SCORE = 5;
 
 export function ReviewStep({
   formData,
@@ -154,7 +154,7 @@ export function ReviewStep({
 
   return (
     <div className="flex flex-col min-h-screen">
-      <div className="border-b border-slate-200 px-8 py-4 flex items-center justify-center relative">
+      <div className="border-b border-slate-200 px-8 py-4 flex flex-col items-center justify-center text-center relative">
         <button
           onClick={onBack}
           className="absolute left-8 p-2 hover:bg-slate-100 rounded-full transition-all cursor-pointer"
@@ -162,6 +162,9 @@ export function ReviewStep({
           <ChevronLeft className="h-5 w-5" />
         </button>
         <span className="font-bold text-lg">Review Transfer Details</span>
+        <span className="mt-1 text-sm text-gray-600">
+          Validate your entries and we will complete the remaining checks.
+        </span>
       </div>
 
       <div className="flex-1 flex flex-col">

@@ -8,6 +8,7 @@ import {
 import { vi } from 'vitest';
 import { AuthorizationStep } from './AuthorizationStep';
 import type { useTransferMoney as UseTransferMoneyHook } from '../../transfer/hooks/useTransferMoney.ts';
+import { encodeObjectAsPayNoteBase64 } from '../../../lib/paynote';
 
 type UseTransferMoneyOptions = Parameters<UseTransferMoneyHook>[0];
 
@@ -37,6 +38,24 @@ vi.mock('../../transfer/hooks/useTransferMoney.ts', () => ({
   useTransferMoney: hoistedTransfer.useTransferMoneyMock,
 }));
 
+const hoistedApi = vi.hoisted(() => {
+  const bootstrapPayNoteMock = vi.fn();
+  const useApiClientMock = vi.fn(() => ({
+    banking: {
+      bootstrapPayNote: bootstrapPayNoteMock,
+    },
+  }));
+
+  return {
+    bootstrapPayNoteMock,
+    useApiClientMock,
+  };
+});
+
+vi.mock('../../../app/providers/ApiProvider', () => ({
+  useApiClient: hoistedApi.useApiClientMock,
+}));
+
 describe('AuthorizationStep', () => {
   const accounts = [
     {
@@ -64,6 +83,8 @@ describe('AuthorizationStep', () => {
     baseProps.onBack.mockReset();
     baseProps.onCancel.mockReset();
     hoistedTransfer.capturedOptions = undefined;
+    hoistedApi.bootstrapPayNoteMock.mockReset();
+    hoistedApi.useApiClientMock.mockClear();
   });
 
   afterEach(() => {
@@ -174,8 +195,12 @@ describe('AuthorizationStep', () => {
     ).toBeInTheDocument();
   });
 
-  it('follows the PayNote authorization placeholder path', async () => {
-    vi.useFakeTimers();
+  it('bootsraps a PayNote when enabled', async () => {
+    hoistedApi.bootstrapPayNoteMock.mockResolvedValue({
+      status: 200,
+      body: { message: 'Bootstrap accepted' },
+    });
+
     render(
       <AuthorizationStep
         {...baseProps}
@@ -186,6 +211,7 @@ describe('AuthorizationStep', () => {
           recipientName: undefined,
           title: undefined,
           isPayNoteEnabled: true,
+          payNoteCode: encodeObjectAsPayNoteBase64({ name: 'Test PayNote' }),
         }}
       />
     );
@@ -195,11 +221,38 @@ describe('AuthorizationStep', () => {
     expect(screen.getByRole('button', { name: /processing/i })).toBeDisabled();
     expect(hoistedTransfer.mutateMock).not.toHaveBeenCalled();
 
-    await act(async () => {
-      vi.advanceTimersByTime(1500);
+    await waitFor(() => {
+      expect(hoistedApi.bootstrapPayNoteMock).toHaveBeenCalledWith({
+        body: { payNote: { name: 'Test PayNote' } },
+      });
     });
 
     expect(baseProps.onAuthorize).toHaveBeenCalled();
-    vi.useRealTimers();
+  });
+
+  it('surfaces bootstrapping errors', async () => {
+    hoistedApi.bootstrapPayNoteMock.mockResolvedValue({
+      status: 400,
+      body: { error: 'VALIDATION_ERROR', message: 'failed' },
+    });
+
+    render(
+      <AuthorizationStep
+        {...baseProps}
+        formData={{
+          fromAccount: 'account-1',
+          totalAmount: '500.00',
+          isPayNoteEnabled: true,
+          payNoteCode: encodeObjectAsPayNoteBase64({ name: 'Bad PayNote' }),
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /authorize/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/bootstrap request failed/i)).toBeInTheDocument();
+    });
+    expect(baseProps.onAuthorize).not.toHaveBeenCalled();
   });
 });

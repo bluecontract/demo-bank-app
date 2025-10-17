@@ -202,6 +202,21 @@ export const bankApiContract = c.router(
         summary: 'Validate a PayNote for transfer',
       },
 
+      bootstrapPayNote: {
+        method: 'POST',
+        path: '/v1/paynotes/bootstrap',
+        body: z.object({
+          payNote: z.record(z.any()),
+        }),
+        responses: {
+          200: z.object({
+            message: z.literal('Bootstrap accepted'),
+          }),
+          400: ProblemDto,
+        },
+        summary: 'Bootstrap a PayNote in preparation for execution',
+      },
+
       parsePayNotePdf: {
         method: 'POST',
         path: '/v1/paynotes/parse-pdf',
@@ -218,6 +233,16 @@ export const bankApiContract = c.router(
         },
         summary:
           'Reconstruct PayNote YAML content from PDF text extraction items.',
+      },
+
+      payNoteWebhook: {
+        method: 'POST',
+        path: '/v1/paynotes/webhook',
+        body: z.record(z.any()),
+        responses: {
+          200: z.object({ status: z.literal('ok') }),
+        },
+        summary: 'Webhook for PayNote events.',
       },
     },
   },

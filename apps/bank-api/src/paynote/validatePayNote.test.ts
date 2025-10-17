@@ -33,8 +33,16 @@ const hoistedDeps = vi.hoisted(() => ({
   extractAuthInfoMock: vi.fn(),
 }));
 
+const hoistedBlueId = vi.hoisted(() => ({
+  calculateBlueIdFromYamlMock: vi.fn().mockReturnValue('blue-id-xyz'),
+}));
+
 vi.mock('./dependencies', () => ({
   getDependencies: hoistedDeps.getDependenciesMock,
+}));
+
+vi.mock('./blueId', () => ({
+  calculateBlueIdFromYaml: hoistedBlueId.calculateBlueIdFromYamlMock,
 }));
 
 vi.mock('../auth/middleware', () => ({
@@ -47,6 +55,9 @@ describe('validatePayNoteHandler', () => {
     error: vi.fn(),
   };
   const getOpenAiApiKey = vi.fn().mockResolvedValue('api-key');
+  const verificationRepository = {
+    saveVerification: vi.fn(),
+  };
 
   beforeEach(() => {
     hoistedOpenAI.responsesCreateMock.mockReset();
@@ -57,11 +68,17 @@ describe('validatePayNoteHandler', () => {
     hoistedZod.zodTextFormatMock.mockClear();
     hoistedDeps.getDependenciesMock.mockClear();
     hoistedDeps.extractAuthInfoMock.mockClear();
+    verificationRepository.saveVerification.mockReset();
+    hoistedBlueId.calculateBlueIdFromYamlMock.mockReturnValue('blue-id-xyz');
     hoistedDeps.getDependenciesMock.mockResolvedValue({
       logger,
       getOpenAiApiKey,
+      payNoteVerificationRepository: verificationRepository,
     });
-    hoistedDeps.extractAuthInfoMock.mockResolvedValue({ userId: 'user-123' });
+    hoistedDeps.extractAuthInfoMock.mockResolvedValue({
+      userId: 'user-123',
+      isTest: false,
+    });
   });
 
   it('returns a validation error when YAML content is missing', async () => {
@@ -111,6 +128,16 @@ describe('validatePayNoteHandler', () => {
       validationScore: 8,
       explanation: 'Valid PayNote',
     });
+    expect(verificationRepository.saveVerification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-123',
+        blueId: 'blue-id-xyz',
+        validationScore: 8,
+        explanation: 'Valid PayNote',
+        isSuccessful: true,
+        ttl: undefined,
+      })
+    );
   });
 
   it('handles provider failures gracefully', async () => {
@@ -129,5 +156,40 @@ describe('validatePayNoteHandler', () => {
     expect(result.status).toBe(400);
     expect(result.body.error).toBe('VALIDATION_ERROR');
     expect(logger.error).toHaveBeenCalled();
+  });
+
+  it('sets TTL when validation is performed in test mode', async () => {
+    hoistedDeps.extractAuthInfoMock.mockResolvedValue({
+      userId: 'user-123',
+      isTest: true,
+    });
+    hoistedOpenAI.responsesParseMock.mockResolvedValue({
+      output_parsed: { validationScore: 7, explanation: 'Looks okay' },
+    });
+
+    vi.useFakeTimers();
+    const fixedDate = new Date('2024-01-01T00:00:00.000Z');
+    vi.setSystemTime(fixedDate);
+
+    try {
+      await validatePayNoteHandler(
+        {
+          body: {
+            yamlContent: 'name: demo',
+            formData: {},
+          },
+        } as any,
+        { request: {} as any }
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(verificationRepository.saveVerification).toHaveBeenCalled();
+    const payload =
+      verificationRepository.saveVerification.mock.calls[0]?.[0] ?? {};
+    const expectedTtl = Math.floor(fixedDate.getTime() / 1000) + 24 * 60 * 60;
+    expect(payload.ttl).toBe(expectedTtl);
+    expect(payload.isSuccessful).toBe(true);
   });
 });

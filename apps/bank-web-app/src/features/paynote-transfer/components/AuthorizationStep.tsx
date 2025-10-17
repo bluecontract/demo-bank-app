@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
-import { TransferFormData } from '../../../lib/paynote';
+import {
+  decodePayNoteBase64AsObject,
+  TransferFormData,
+} from '../../../lib/paynote';
 import { ChevronLeft, CornerDownLeft, Loader2 } from 'lucide-react';
 import { useTransferMoney } from '../../transfer/hooks/useTransferMoney.ts';
+import { useApiClient } from '../../../app/providers/ApiProvider';
 
 interface Account {
   accountId: string;
@@ -28,6 +32,7 @@ export function AuthorizationStep({
   onBack,
   onCancel,
 }: AuthorizationStepProps) {
+  const apiClient = useApiClient();
   const isPayNoteEnabled = formData.isPayNoteEnabled ?? false;
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,11 +116,36 @@ export function AuthorizationStep({
 
     setIsProcessing(true);
 
-    // TODO: Integrate PayNote-based authorization path
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      if (!formData.payNoteCode) {
+        throw new Error('PayNote is missing or invalid.');
+      }
 
-    setIsProcessing(false);
-    onAuthorize();
+      const payNote = decodePayNoteBase64AsObject(formData.payNoteCode);
+
+      if (!payNote) {
+        throw new Error('PayNote is missing or invalid.');
+      }
+
+      const response = await apiClient.banking.bootstrapPayNote({
+        body: { payNote },
+      });
+
+      if (response.status !== 200) {
+        throw new Error('Bootstrap request failed.');
+      }
+
+      onAuthorize();
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : 'Unable to bootstrap PayNote. Please try again later.';
+
+      setError(errorMessage);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const isSubmitting = isPayNoteEnabled
