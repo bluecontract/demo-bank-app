@@ -1,6 +1,6 @@
-import { listAccounts } from '@demo-blue/banking';
+import { listAccounts } from '@demo-bank-app/banking';
 import { getDependencies } from './dependencies';
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { ServerInferRequest } from '@ts-rest/core';
 import {
   extractAuthInfo,

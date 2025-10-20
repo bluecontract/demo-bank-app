@@ -1,5 +1,5 @@
-import { BaseConfiguration } from '@demo-blue/shared-config';
-import type { BaseConfig } from '@demo-blue/shared-config';
+import { BaseConfiguration } from '@demo-bank-app/shared-config';
+import type { BaseConfig } from '@demo-bank-app/shared-config';
 import type { Configuration } from '../application/ports';
 
 export interface AuthConfiguration extends BaseConfig {

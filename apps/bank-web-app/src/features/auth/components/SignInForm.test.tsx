@@ -21,7 +21,7 @@ vi.mock('../../../api/client', () => ({
 }));
 
 // Mock the API client library
-vi.mock('@demo-blue/shared-bank-api-client', () => ({
+vi.mock('@demo-bank-app/shared-bank-api-client', () => ({
   createApiClient: () => ({
     signIn: mockSignIn,
     health: mockHealth,

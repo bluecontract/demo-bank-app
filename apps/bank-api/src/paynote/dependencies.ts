@@ -1,6 +1,6 @@
 import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
-import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
-import type { PowertoolsLogger } from '@demo-blue/shared-observability';
+import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
+import type { PowertoolsLogger } from '@demo-bank-app/shared-observability';
 import { getLogger } from '../shared/logger';
 import { createOpenAiApiKeyResolver } from '../shared/openAiSecrets';
 import {
@@ -13,7 +13,7 @@ import {
   BankingEnvironmentConfiguration,
   type PayNoteVerificationRepository,
   type BankingRepository,
-} from '@demo-blue/banking';
+} from '@demo-bank-app/banking';
 
 type PaynoteDependencies = {
   logger: PowertoolsLogger;
@@ -27,7 +27,7 @@ let cachedDependencies: PaynoteDependencies | null = null;
 
 const initializeDependencies = (): PaynoteDependencies => {
   const logger = getLogger();
-  const awsRegion = process.env.AWS_REGION || 'eu-central-1';
+  const awsRegion = process.env.AWS_REGION || 'eu-west-1';
   const awsEndpoint = process.env.AWS_ENDPOINT_URL;
   const openAiSecretArn = process.env.OPENAI_API_KEY_SECRET_ARN?.trim();
   const myOsSecretArn = process.env.MYOS_SECRET_ARN?.trim();

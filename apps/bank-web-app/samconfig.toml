@@ -3,8 +3,8 @@ version = 0.1
 # SAM Configuration for Frontend Infrastructure
 
 [default.global.parameters]
-stack_name = "demo-blue-frontend"
-region = "eu-central-1"
+stack_name = "demo-bank-app-frontend"
+region = "eu-west-1"
 
 [default.build.parameters]
 cached = true
@@ -14,26 +14,26 @@ parallel = true
 confirm_changeset = false
 fail_on_empty_changeset = false
 capabilities = "CAPABILITY_IAM"
-region = "eu-central-1"
+region = "eu-west-1"
 
 # Development Environment
 [dev.deploy.parameters]
-stack_name = "demo-blue-frontend-dev"
-s3_bucket = "demo-blue-deployments-dev"
+stack_name = "demo-bank-app-frontend-dev"
+s3_bucket = "demo-bank-app-deployments-dev"
 parameter_overrides = "Environment=dev"
-tags = "Environment=dev Project=demo-blue"
+tags = "Environment=dev Project=demo-bank-app"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
 fail_on_empty_changeset = false
-region = "eu-central-1"
+region = "eu-west-1"
 
-# Production Environment  
+# Production Environment
 [prod.deploy.parameters]
-stack_name = "demo-blue-frontend-prod"
-s3_bucket = "demo-blue-deployments-prod"
+stack_name = "demo-bank-app-frontend-prod"
+s3_bucket = "demo-bank-app-deployments-prod"
 parameter_overrides = "Environment=prod"
-tags = "Environment=prod Project=demo-blue"
+tags = "Environment=prod Project=demo-bank-app"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
 fail_on_empty_changeset = false
-region = "eu-central-1" 
+region = "eu-west-1"

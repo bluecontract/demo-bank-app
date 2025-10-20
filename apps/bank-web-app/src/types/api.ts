@@ -1,4 +1,4 @@
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { ClientInferResponseBody } from '@ts-rest/core';
 
 // Health check types

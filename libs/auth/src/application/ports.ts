@@ -5,7 +5,7 @@ export type {
   Logger,
   Metrics,
   MetricUnit,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 
 export interface JwtPayload {
   sub: User['id'];

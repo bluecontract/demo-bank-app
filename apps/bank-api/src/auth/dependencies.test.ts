@@ -3,10 +3,10 @@ import { getDependencies, resetDependencies } from './dependencies';
 import {
   PowertoolsLogger,
   PowertoolsMetrics,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 
 // Mock the auth module
-vi.mock('@demo-blue/auth', () => ({
+vi.mock('@demo-bank-app/auth', () => ({
   DynamoUserRepository: vi.fn(() => ({ mockRepo: true })),
   AwsJwtService: vi.fn(() => ({ mockJwt: true })),
   PowertoolsLogger: vi.fn(() => ({

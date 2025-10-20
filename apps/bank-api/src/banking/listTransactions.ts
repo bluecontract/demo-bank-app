@@ -1,6 +1,6 @@
-import { AccountNotFoundError, listTransactions } from '@demo-blue/banking';
+import { AccountNotFoundError, listTransactions } from '@demo-bank-app/banking';
 import { ServerInferRequest } from '@ts-rest/core';
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { getDependencies } from './dependencies';
 import {

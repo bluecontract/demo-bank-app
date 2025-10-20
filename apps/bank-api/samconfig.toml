@@ -4,7 +4,7 @@ version = 0.1
 
 [default.global.parameters]
 stack_name = "demo-bank-blue"
-region = "eu-central-1"
+region = "eu-west-1"
 
 [default.build.parameters]
 cached = true
@@ -22,27 +22,27 @@ warm_containers = "eager"
 confirm_changeset = false
 fail_on_empty_changeset = false
 capabilities = "CAPABILITY_IAM"
-region = "eu-central-1"
+region = "eu-west-1"
 resolve_s3 = true
 
 # Development Environment
 [dev.deploy.parameters]
-stack_name = "demo-blue-backend-dev" 
-s3_bucket = "demo-blue-deployments-dev"
-region = "eu-central-1"
+stack_name = "demo-bank-app-backend-dev"
+s3_bucket = "demo-bank-app-deployments-dev"
+region = "eu-west-1"
 parameter_overrides = "Environment=dev"
-tags = "Environment=dev Project=demo-blue"
+tags = "Environment=dev Project=demo-bank-app"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
 fail_on_empty_changeset = false
 
-# Production Environment  
+# Production Environment
 [prod.deploy.parameters]
-stack_name = "demo-blue-backend-prod"
-s3_bucket = "demo-blue-deployments-prod"
-region = "eu-central-1"
+stack_name = "demo-bank-app-backend-prod"
+s3_bucket = "demo-bank-app-deployments-prod"
+region = "eu-west-1"
 parameter_overrides = "Environment=prod"
-tags = "Environment=prod Project=demo-blue"
+tags = "Environment=prod Project=demo-bank-app"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
-fail_on_empty_changeset = false 
+fail_on_empty_changeset = false

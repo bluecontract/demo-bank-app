@@ -20,17 +20,17 @@
     "customConditions": ["development"],
     "baseUrl": ".",
     "paths": {
-      "@demo-blue/auth": ["libs/auth/src/index.ts"],
-      "@demo-blue/banking": ["libs/banking/src/index.ts"],
-      "@demo-blue/shared-bank-api-client": [
+      "@demo-bank-app/auth": ["libs/auth/src/index.ts"],
+      "@demo-bank-app/banking": ["libs/banking/src/index.ts"],
+      "@demo-bank-app/shared-bank-api-client": [
         "libs/shared/bank-api-client/src/index.ts"
       ],
-      "@demo-blue/shared-bank-api-contract": [
+      "@demo-bank-app/shared-bank-api-contract": [
         "libs/shared/bank-api-contract/src/index.ts"
       ],
-      "@demo-blue/shared-config": ["libs/shared/config/src/index.ts"],
-      "@demo-blue/shared-core": ["libs/shared/core/src/index.ts"],
-      "@demo-blue/shared-observability": [
+      "@demo-bank-app/shared-config": ["libs/shared/config/src/index.ts"],
+      "@demo-bank-app/shared-core": ["libs/shared/core/src/index.ts"],
+      "@demo-bank-app/shared-observability": [
         "libs/shared/observability/src/index.ts"
       ]
     }

@@ -25,7 +25,7 @@ import { randomUUID } from 'crypto';
 const TEST_CONFIG = {
   localstackEndpoint: 'http://localhost:4566',
   region: 'us-east-1',
-  secretName: `demo-blue-auth-jwt-service-integration-test-${Date.now()}`,
+  secretName: `demo-bank-app-auth-jwt-service-integration-test-${Date.now()}`,
   testSecret: 'test-jwt-secret-key-for-integration-tests',
 };
 

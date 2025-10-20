@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { signUpHandler, signInHandler } from './handlers';
 import { getDependencies, resetDependencies } from './dependencies';
-import { UserAlreadyExistsError, UserValidationError } from '@demo-blue/auth';
-import { signUp, signIn } from '@demo-blue/auth';
+import {
+  UserAlreadyExistsError,
+  UserValidationError,
+} from '@demo-bank-app/auth';
+import { signUp, signIn } from '@demo-bank-app/auth';
 
 // Mock dependencies for unit tests
 vi.mock('./dependencies', () => ({
@@ -10,7 +13,7 @@ vi.mock('./dependencies', () => ({
   resetDependencies: vi.fn(),
 }));
 
-vi.mock('@demo-blue/auth', () => ({
+vi.mock('@demo-bank-app/auth', () => ({
   signIn: vi.fn(),
   signUp: vi.fn(),
   UserAlreadyExistsError: vi.fn(),

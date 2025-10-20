@@ -174,9 +174,9 @@ jobs:
         run: |
           echo "📋 Service logs for debugging:"
           echo "=== LocalStack logs ==="
-          docker logs $(docker ps -q --filter name=localstack-demo-blue) || echo "No LocalStack container found"
+          docker logs $(docker ps -q --filter name=localstack-demo-bank-app) || echo "No LocalStack container found"
 
           echo "=== Service health checks ==="
           curl -s http://localhost:4566/_localstack/health || echo "LocalStack not responding"
-          curl -s http://localhost:3000/health || echo "Backend API not responding" 
+          curl -s http://localhost:3000/health || echo "Backend API not responding"
           curl -s http://localhost:4200 || echo "Frontend not responding"

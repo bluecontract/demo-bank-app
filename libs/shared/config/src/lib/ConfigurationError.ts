@@ -1,4 +1,4 @@
-import { AppError } from '@demo-blue/shared-core';
+import { AppError } from '@demo-bank-app/shared-core';
 
 export class ConfigurationValidationError extends AppError {
   readonly code = 'CONFIGURATION_VALIDATION_ERROR';

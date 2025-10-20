@@ -1,4 +1,4 @@
-import { ProblemDto } from '@demo-blue/shared-bank-api-contract';
+import { ProblemDto } from '@demo-bank-app/shared-bank-api-contract';
 
 export const ERROR_CODES = {
   UNAUTHORIZED: 'UNAUTHORIZED',

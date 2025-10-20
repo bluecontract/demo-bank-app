@@ -3,7 +3,7 @@ import { apiClient } from '../../api/client';
 import type {
   PdfTextItem,
   ProblemDto,
-} from '@demo-blue/shared-bank-api-contract';
+} from '@demo-bank-app/shared-bank-api-contract';
 
 interface ParseResult<T = unknown> {
   success: boolean;

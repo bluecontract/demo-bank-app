@@ -1,5 +1,5 @@
 import { createLambdaHandler, tsr } from '@ts-rest/serverless/aws';
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { signUpHandler, signInHandler } from './auth/handlers';
 
 import { createErrorHandler } from './errors';

@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -34,7 +34,7 @@ const openApiDocument = generateOpenApi(
         description: 'Local development server',
       },
       {
-        url: 'https://api.demo-blue-bank.com',
+        url: 'https://api.demo-bank-app-bank.com',
         description: 'Production server',
       },
     ],

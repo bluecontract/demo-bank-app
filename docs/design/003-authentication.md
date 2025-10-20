@@ -88,7 +88,7 @@ Based on **NFR-2** (_Design for 100 k users / 1 M events without re-architecture
 - **Log-ins per user / month**: 10 → **10 M authenticated API calls**.
 - **New sign-ups per month**: 5 000 (≈5 % growth).
 
-Pricing reference: eu-central-1, on-demand capacity.
+Pricing reference: eu-west-1, on-demand capacity.
 
 | Resource                   | Quantity / Month                                            | Unit Price   | Cost        |
 | -------------------------- | ----------------------------------------------------------- | ------------ | ----------- |

@@ -12,7 +12,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 
 const TEST_CONFIG = {
-  tableName: `demo-blue-paynote-verification-${Date.now()}`,
+  tableName: `demo-bank-app-paynote-verification-${Date.now()}`,
   region: 'us-east-1',
   localstackEndpoint: 'http://localhost:4566',
 };

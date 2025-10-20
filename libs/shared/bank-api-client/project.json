@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/shared-bank-api-client",
+  "name": "@demo-bank-app/shared-bank-api-client",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
   "sourceRoot": "libs/shared/bank-api-client/src",

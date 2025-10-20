@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { parsePayNoteFile, __testing } from './parsePayNoteFile.ts';
 import { apiClient } from '../../api/client.ts';
-import type { PdfTextItem } from '@demo-blue/shared-bank-api-contract';
+import type { PdfTextItem } from '@demo-bank-app/shared-bank-api-contract';
 
 class MockFile extends File {
   constructor(bits: BlobPart[], name: string, options?: FilePropertyBag) {

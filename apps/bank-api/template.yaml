@@ -86,7 +86,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
         - Key: Application
-          Value: demo-blue
+          Value: demo-bank-app
         - Key: Component
           Value: database
 
@@ -94,8 +94,8 @@ Resources:
   JwtSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub '/demo-blue/${Environment}/auth-jwt-secret'
-      Description: !Sub 'JWT signing secret for demo-blue ${Environment}'
+      Name: !Sub '/demo-bank-app/${Environment}/auth-jwt-secret'
+      Description: !Sub 'JWT signing secret for demo-bank-app ${Environment}'
       GenerateSecretString:
         SecretStringTemplate: '{}'
         GenerateStringKey: 'secret'
@@ -105,37 +105,37 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
         - Key: Application
-          Value: demo-blue
+          Value: demo-bank-app
         - Key: Component
           Value: auth
 
   OpenAiKeySecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub '/demo-blue/${Environment}/openai-api-key'
-      Description: !Sub 'OpenAI API key for demo-blue ${Environment}'
+      Name: !Sub '/demo-bank-app/${Environment}/openai-api-key'
+      Description: !Sub 'OpenAI API key for demo-bank-app ${Environment}'
       SecretString: |
         {"openAiApiKey":""}
       Tags:
         - Key: Environment
           Value: !Ref Environment
         - Key: Application
-          Value: demo-blue
+          Value: demo-bank-app
         - Key: Component
           Value: openai
 
   MyOsSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub '/demo-blue/${Environment}/myos-credentials'
-      Description: !Sub 'MyOS credentials for demo-blue ${Environment}'
+      Name: !Sub '/demo-bank-app/${Environment}/myos-credentials'
+      Description: !Sub 'MyOS credentials for demo-bank-app ${Environment}'
       SecretString: |
         {"apiKey":"","accountId":""}
       Tags:
         - Key: Environment
           Value: !Ref Environment
         - Key: Application
-          Value: demo-blue
+          Value: demo-bank-app
         - Key: Component
           Value: myos
 

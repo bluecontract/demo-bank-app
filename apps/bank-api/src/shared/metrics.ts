@@ -1,4 +1,4 @@
-import { PowertoolsMetrics } from '@demo-blue/shared-observability';
+import { PowertoolsMetrics } from '@demo-bank-app/shared-observability';
 
 let metricsInstance: PowertoolsMetrics | null = null;
 

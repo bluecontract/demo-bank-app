@@ -4,7 +4,7 @@ import {
   GetCommand,
   PutCommand,
 } from '@aws-sdk/lib-dynamodb';
-import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
+import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 
 const ENTITY_TYPE = 'PAYNOTE_VERIFICATION';
 

@@ -9,7 +9,7 @@ const __dirname = dirname(__filename);
 
 export default defineConfig(() => ({
   root: __dirname,
-  cacheDir: '../../node_modules/.vite/apps/demo-blue',
+  cacheDir: '../../node_modules/.vite/apps/demo-bank-app',
   server: {
     port: 4200,
     host: 'localhost',

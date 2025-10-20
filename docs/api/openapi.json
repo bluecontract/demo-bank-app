@@ -144,7 +144,7 @@
       "description": "Local development server"
     },
     {
-      "url": "https://api.demo-blue-bank.com",
+      "url": "https://api.demo-bank-app-bank.com",
       "description": "Production server"
     }
   ],

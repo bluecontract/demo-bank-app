@@ -1,6 +1,9 @@
 import { AccountNumberGenerator } from '../application/ports';
 import type { Logger, Metrics } from '../domain/types';
-import { METRIC_NAMES, METRIC_UNITS } from '@demo-blue/shared-observability';
+import {
+  METRIC_NAMES,
+  METRIC_UNITS,
+} from '@demo-bank-app/shared-observability';
 
 export class SimpleAccountNumberGenerator implements AccountNumberGenerator {
   private counter = 0;

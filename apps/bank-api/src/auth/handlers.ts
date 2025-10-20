@@ -4,9 +4,9 @@ import {
   type AuthResult,
   UserNotFoundError,
   UserAlreadyExistsError,
-} from '@demo-blue/auth';
+} from '@demo-bank-app/auth';
 
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 
 import { getDependencies } from './dependencies';
 import { ServerInferRequest } from '@ts-rest/core';

@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/bank-web-app",
+  "name": "@demo-bank-app/bank-web-app",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "sourceRoot": "apps/bank-web-app/src",
@@ -11,7 +11,7 @@
           "echo '🏗️  Deploying frontend infrastructure with SAM...'",
           "sam deploy --config-env {args.environment} --no-confirm-changeset --no-fail-on-empty-changeset",
           "echo '📦 Syncing frontend assets to S3...'",
-          "aws s3 sync dist s3://demo-blue-frontend-{args.environment} --delete --region eu-central-1",
+          "aws s3 sync dist s3://demo-bank-app-frontend-{args.environment} --delete --region eu-west-1",
           "./scripts/invalidate-cache.sh {args.environment}",
           "echo '✅ Frontend deployment complete!'"
         ],

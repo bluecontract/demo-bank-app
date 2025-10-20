@@ -1,7 +1,7 @@
 import { TsRestResponse } from '@ts-rest/serverless/aws';
-import type { Logger } from '@demo-blue/shared-observability';
+import type { Logger } from '@demo-bank-app/shared-observability';
 import { ERROR_CODES } from './shared/errors';
-import { ValidationError } from '@demo-blue/shared-core';
+import { ValidationError } from '@demo-bank-app/shared-core';
 import { UnauthorizedRequestError } from './auth/errors';
 
 const toValidationError = (error: unknown) => {

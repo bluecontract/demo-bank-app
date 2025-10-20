@@ -8,7 +8,7 @@
       "executor": "nx:run-commands",
       "options": {
         "commands": [
-          "if docker ps --filter 'name=localstack-demo-blue' --format '{{.Names}}' | grep -q localstack-demo-blue; then echo '✅ LocalStack container already running'; else echo '🚀 Starting LocalStack container...'; docker run --name localstack-demo-blue -p 127.0.0.1:4566:4566 -p 127.0.0.1:4510-4559:4510-4559 -v /var/run/docker.sock:/var/run/docker.sock -d localstack/localstack && echo '⏳ Waiting for LocalStack to start...' && sleep 5 && (curl -s http://localhost:4566/_localstack/health > /dev/null && echo '✅ LocalStack health check passed' || echo '⚠️  LocalStack may still be starting'); fi"
+          "if docker ps --filter 'name=localstack-demo-bank-app' --format '{{.Names}}' | grep -q localstack-demo-bank-app; then echo '✅ LocalStack container already running'; else echo '🚀 Starting LocalStack container...'; docker run --name localstack-demo-bank-app -p 127.0.0.1:4566:4566 -p 127.0.0.1:4510-4559:4510-4559 -v /var/run/docker.sock:/var/run/docker.sock -d localstack/localstack && echo '⏳ Waiting for LocalStack to start...' && sleep 5 && (curl -s http://localhost:4566/_localstack/health > /dev/null && echo '✅ LocalStack health check passed' || echo '⚠️  LocalStack may still be starting'); fi"
         ],
         "parallel": false,
         "cwd": "apps/localstack"
@@ -17,7 +17,7 @@
     "stop": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "docker stop localstack-demo-blue || true",
+        "command": "docker stop localstack-demo-bank-app || true",
         "cwd": "apps/localstack"
       }
     },

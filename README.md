@@ -14,7 +14,6 @@ A modern banking application demonstrating Blue Language integration and state-o
 
 #### Install AWS SAM CLI
 
-
 Choose one of the following installation methods:
 
 **Option 1: Using pip (Recommended)**
@@ -127,14 +126,14 @@ npm run serve:all
 
 # Start individual services
 nx serve localstack           # ensures LocalStack is running
-nx serve @demo-blue/bank-api  # Backend API only (starts localstack)
-nx serve @demo-blue/bank-web-app # Frontend only
+nx serve @demo-bank-app/bank-api  # Backend API only (starts localstack)
+nx serve @demo-bank-app/bank-web-app # Frontend only
 
 # Check service status
-docker ps --filter 'name=localstack-demo-blue'
+docker ps --filter 'name=localstack-demo-bank-app'
 
 # Stop services when done
-docker stop localstack-demo-blue
+docker stop localstack-demo-bank-app
 ```
 
 ## 🧪 Testing
@@ -218,7 +217,7 @@ npm run graph  # View dependency graph
 This project follows a **hexagonal architecture** within an **Nx monorepo**.
 
 ```
-demo-blue/
+demo-bank-app/
 ├── apps/                           # Deployable applications
 │   ├── bank-web-app/              # React SPA (Vite + Tailwind)
 │   │   ├── src/                   # Frontend source code

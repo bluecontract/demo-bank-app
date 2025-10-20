@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/banking",
+  "name": "@demo-bank-app/banking",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -95,8 +95,8 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
-    "@demo-blue/shared-config": "*",
-    "@demo-blue/shared-core": "*",
-    "@demo-blue/shared-observability": "*"
+    "@demo-bank-app/shared-config": "*",
+    "@demo-bank-app/shared-core": "*",
+    "@demo-bank-app/shared-observability": "*"
   }
 }

@@ -10,9 +10,9 @@ vi.mock('./dependencies', () => ({
   getDependencies: hoisted.getDependenciesMock,
 }));
 
-vi.mock('@demo-blue/banking', async () => {
-  const actual = await vi.importActual<typeof import('@demo-blue/banking')>(
-    '@demo-blue/banking'
+vi.mock('@demo-bank-app/banking', async () => {
+  const actual = await vi.importActual<typeof import('@demo-bank-app/banking')>(
+    '@demo-bank-app/banking'
   );
   return {
     ...actual,

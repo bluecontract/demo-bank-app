@@ -139,7 +139,7 @@ shared/bank-api-contract/
 **auth.ts**
 
 ```ts
-import { signUp } from '@demo-blue/auth';
+import { signUp } from '@demo-bank-app/auth';
 
 export const signUpHandler = async ({ body }: { body: { name: string } }) => {
   const deps = await initializeDependencies();
@@ -156,8 +156,8 @@ export const signUpHandler = async ({ body }: { body: { name: string } }) => {
 **banking.ts**
 
 ```ts
-import { transferMoney } from '@demo-blue/banking/application/commands/transfer-money';
-import { getTransactionHistory } from '@demo-blue/banking/application/queries/get-transaction-history';
+import { transferMoney } from '@demo-bank-app/banking/application/commands/transfer-money';
+import { getTransactionHistory } from '@demo-bank-app/banking/application/queries/get-transaction-history';
 
 export const transferMoneyHandler = async ({ body }) =>
   transferMoney(body, deps);
@@ -170,7 +170,7 @@ export const getTransactionHistoryHandler = async ({ params, query }) =>
 
 ```ts
 import { createLambdaHandler } from '@ts-rest/serverless/aws';
-import { bankApiContract } from '@demo-blue/shared/bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared/bank-api-contract';
 import { signUpHandler } from './auth';
 import { transferMoneyHandler, getTransactionHistoryHandler } from './banking';
 

@@ -3,7 +3,7 @@ import { getDependencies, resetDependencies } from './dependencies';
 import {
   PowertoolsLogger,
   PowertoolsMetrics,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 
 describe('Banking Dependencies', () => {
   beforeEach(() => {

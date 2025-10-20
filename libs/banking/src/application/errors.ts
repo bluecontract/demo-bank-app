@@ -1,4 +1,4 @@
-import { AppError } from '@demo-blue/shared-core';
+import { AppError } from '@demo-bank-app/shared-core';
 
 export class AccountNotFoundError extends AppError {
   override readonly code = 'ACCOUNT_NOT_FOUND';

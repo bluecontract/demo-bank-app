@@ -2,11 +2,11 @@ import {
   DynamoBankingRepository,
   SimpleAccountNumberGenerator,
   BankingEnvironmentConfiguration,
-} from '@demo-blue/banking';
+} from '@demo-bank-app/banking';
 import type {
   PowertoolsLogger,
   PowertoolsMetrics,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 import { getLogger } from '../shared/logger';
 import { getMetrics } from '../shared/metrics';
 
@@ -20,7 +20,7 @@ const initializeDependencies = async (
 ) => {
   const envConfig = new BankingEnvironmentConfiguration();
 
-  const awsRegion = process.env.AWS_REGION || 'eu-central-1';
+  const awsRegion = process.env.AWS_REGION || 'eu-west-1';
   const awsEndpoint = process.env.AWS_ENDPOINT_URL;
 
   const repository = new DynamoBankingRepository({

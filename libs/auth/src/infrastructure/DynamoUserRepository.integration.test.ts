@@ -11,7 +11,7 @@ import { UserAlreadyExistsError } from './errors';
 import { randomUUID } from 'crypto';
 
 const TEST_CONFIG = {
-  tableName: `demo-blue-auth-dynamo-user-repository-integration-test-${Date.now()}`,
+  tableName: `demo-bank-app-auth-dynamo-user-repository-integration-test-${Date.now()}`,
   localstackEndpoint: 'http://localhost:4566',
   region: 'us-east-1',
   testUserTtlSeconds: 600, // 10 minutes

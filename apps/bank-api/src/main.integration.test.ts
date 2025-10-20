@@ -31,8 +31,8 @@ import {
 
 // Test configuration
 const TEST_CONFIG = {
-  tableName: `demo-blue-bank-api-integration-test-${Date.now()}`,
-  jwtSecretArn: '/demo-blue/integration-test/jwt-secret',
+  tableName: `demo-bank-app-bank-api-integration-test-${Date.now()}`,
+  jwtSecretArn: '/demo-bank-app/integration-test/jwt-secret',
   jwtSecret: 'integration-test-jwt-secret-key-12345',
   localstackEndpoint: 'http://localhost:4566',
   region: 'us-east-1',

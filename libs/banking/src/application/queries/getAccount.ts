@@ -5,7 +5,7 @@ import {
   METRIC_NAMES,
   OPERATION_NAMES,
   METRIC_UNITS,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 import type { BankingRepository } from '../ports';
 import { AccountResult } from '../dtos';
 

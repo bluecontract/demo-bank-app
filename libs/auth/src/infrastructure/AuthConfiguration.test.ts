@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AuthEnvironmentConfiguration } from './AuthConfiguration';
-import { ConfigurationValidationError } from '@demo-blue/shared-config';
+import { ConfigurationValidationError } from '@demo-bank-app/shared-config';
 
 describe('AuthEnvironmentConfiguration', () => {
   let config: AuthEnvironmentConfiguration;

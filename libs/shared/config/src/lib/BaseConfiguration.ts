@@ -104,7 +104,7 @@ export abstract class BaseConfiguration {
 
   protected getAwsConfig(): AwsConfig {
     return {
-      region: this.getStringEnv('AWS_REGION', 'eu-central-1'),
+      region: this.getStringEnv('AWS_REGION', 'eu-west-1'),
       endpoint: process.env.AWS_ENDPOINT_URL,
     };
   }

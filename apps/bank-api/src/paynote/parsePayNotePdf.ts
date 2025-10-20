@@ -3,7 +3,7 @@ import {
   bankApiContract,
   PdfTextItem,
   PdfTextItemSchema,
-} from '@demo-blue/shared-bank-api-contract';
+} from '@demo-bank-app/shared-bank-api-contract';
 import {
   extractAuthInfo,
   MaybeAuthenticatedTsRestRequestContext,

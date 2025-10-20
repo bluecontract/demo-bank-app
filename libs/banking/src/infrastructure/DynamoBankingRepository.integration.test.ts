@@ -31,7 +31,7 @@ const createTestAccount = (
 };
 
 const TEST_CONFIG = {
-  tableName: `demo-blue-banking-dynamo-repository-integration-test-${Date.now()}`,
+  tableName: `demo-bank-app-banking-dynamo-repository-integration-test-${Date.now()}`,
   localstackEndpoint: 'http://localhost:4566',
   region: 'us-east-1',
 };

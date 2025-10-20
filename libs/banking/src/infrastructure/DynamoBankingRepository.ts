@@ -24,14 +24,14 @@ import {
   RepositoryError,
 } from './repositoryErrors';
 import { PostingSide, Posting } from '../domain/valueObjects/Posting';
-import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
+import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 import type { Logger, Metrics } from '../domain/types';
 import {
   TimingUtils,
   METRIC_NAMES,
   OPERATION_NAMES,
   METRIC_UNITS,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 
 export interface DynamoBankingRepositoryConfig {
   tableName: string;

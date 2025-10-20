@@ -2,15 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import jwt from 'jsonwebtoken';
 
 import * as dependencies from './dependencies';
-import * as banking from '@demo-blue/banking';
-import type { DynamoBankingRepository } from '@demo-blue/banking';
+import * as banking from '@demo-bank-app/banking';
+import type { DynamoBankingRepository } from '@demo-bank-app/banking';
 import type {
   PowertoolsLogger,
   PowertoolsMetrics,
-} from '@demo-blue/shared-observability';
-import { Account } from '@demo-blue/banking';
-import { Money } from '@demo-blue/banking';
-import type { SimpleAccountNumberGenerator } from '@demo-blue/banking';
+} from '@demo-bank-app/shared-observability';
+import { Account } from '@demo-bank-app/banking';
+import { Money } from '@demo-bank-app/banking';
+import type { SimpleAccountNumberGenerator } from '@demo-bank-app/banking';
 import { ERROR_CODES } from '../shared/errors';
 import { transferMoneyHandler } from './transferMoney';
 import { MaybeAuthenticatedTsRestRequestContext } from '../auth/middleware';

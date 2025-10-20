@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/shared-config",
+  "name": "@demo-bank-app/shared-config",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -41,6 +41,6 @@
     }
   },
   "dependencies": {
-    "@demo-blue/shared-core": "0.0.1"
+    "@demo-bank-app/shared-core": "0.0.1"
   }
 }

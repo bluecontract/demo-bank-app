@@ -1,4 +1,4 @@
-import { AppError } from '@demo-blue/shared-core';
+import { AppError } from '@demo-bank-app/shared-core';
 
 export class TokenGenerationError extends AppError {
   readonly code = 'TOKEN_GENERATION_ERROR';

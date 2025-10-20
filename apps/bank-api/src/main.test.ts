@@ -7,7 +7,7 @@ import type {
   Callback,
   APIGatewayProxyResult,
 } from 'aws-lambda';
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 
 // Mock the auth handlers module
 vi.mock('./auth/handlers', () => ({

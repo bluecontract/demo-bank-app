@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/bank-web-app",
+  "name": "@demo-bank-app/bank-web-app",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -8,8 +8,8 @@
     "@blue-repository/myos-dev": "^0.27.0",
     "@blue-repository/payment": "^0.5.0",
     "@blue-repository/permission": "^0.5.0",
-    "@demo-blue/shared-bank-api-client": "*",
-    "@demo-blue/shared-bank-api-contract": "*",
+    "@demo-bank-app/shared-bank-api-client": "*",
+    "@demo-bank-app/shared-bank-api-contract": "*",
     "@tanstack/react-query": "^5.17.10",
     "@ts-rest/core": "^3.52.1",
     "lucide-react": "^0.545.0",

@@ -1,6 +1,6 @@
 import { ServerInferRequest } from '@ts-rest/core';
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
-import { Money, transferMoney } from '@demo-blue/banking';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
+import { Money, transferMoney } from '@demo-bank-app/banking';
 import { getDependencies } from './dependencies';
 import { MYOS_EVENTS_URL } from './constants';
 

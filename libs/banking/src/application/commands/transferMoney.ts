@@ -9,7 +9,7 @@ import {
   METRIC_NAMES,
   OPERATION_NAMES,
   METRIC_UNITS,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 
 export interface TransferMoneyCommand {
   srcAccountId: string;

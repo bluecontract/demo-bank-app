@@ -1,10 +1,10 @@
-import { AccountNotFoundError, getAccount } from '@demo-blue/banking';
+import { AccountNotFoundError, getAccount } from '@demo-bank-app/banking';
 import { ServerInferRequest } from '@ts-rest/core';
 import {
   extractAuthInfo,
   MaybeAuthenticatedTsRestRequestContext,
 } from '../auth/middleware';
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { getDependencies } from './dependencies';
 import { ERROR_CODES } from '../shared/errors';
 

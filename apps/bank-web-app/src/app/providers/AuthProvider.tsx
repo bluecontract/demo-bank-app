@@ -31,7 +31,7 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-const AUTH_STORAGE_KEY = 'demo-blue-auth-user';
+const AUTH_STORAGE_KEY = 'demo-bank-app-auth-user';
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const navigate = useNavigate();

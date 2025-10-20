@@ -13,7 +13,7 @@ Resources:
   FrontendBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub 'demo-blue-frontend-${Environment}'
+      BucketName: !Sub 'demo-bank-app-frontend-${Environment}'
       # Keep bucket private - CloudFront will access via OAC
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true

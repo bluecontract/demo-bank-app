@@ -8,14 +8,14 @@ import {
 import type { UserRepository } from '../application/ports';
 import { User } from '../domain/entities/User';
 import { UserAlreadyExistsError, AuthRepositoryError } from './errors';
-import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
-import type { Logger, Metrics } from '@demo-blue/shared-observability';
+import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
+import type { Logger, Metrics } from '@demo-bank-app/shared-observability';
 import {
   TimingUtils,
   METRIC_NAMES,
   OPERATION_NAMES,
   METRIC_UNITS,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 
 export interface DynamoUserRepositoryConfig {
   tableName: string;

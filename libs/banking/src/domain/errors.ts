@@ -1,4 +1,4 @@
-import { AppError, ValidationError } from '@demo-blue/shared-core';
+import { AppError, ValidationError } from '@demo-bank-app/shared-core';
 
 export class InsufficientFundsError extends AppError {
   readonly code = 'INSUFFICIENT_FUNDS';

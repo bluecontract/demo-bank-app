@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/shared-observability",
+  "name": "@demo-bank-app/shared-observability",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",

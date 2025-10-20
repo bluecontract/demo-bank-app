@@ -120,7 +120,7 @@ describe('AuthProvider', () => {
       'User: Stored User (stored-id)'
     );
     expect(localStorageMock.getItem).toHaveBeenCalledWith(
-      'demo-blue-auth-user'
+      'demo-bank-app-auth-user'
     );
   });
 
@@ -147,7 +147,7 @@ describe('AuthProvider', () => {
       'Not Authenticated'
     );
     expect(localStorageMock.removeItem).toHaveBeenCalledWith(
-      'demo-blue-auth-user'
+      'demo-bank-app-auth-user'
     );
     expect(consoleSpy).toHaveBeenCalledWith(
       'Failed to restore auth state:',
@@ -192,7 +192,7 @@ describe('AuthProvider', () => {
     });
 
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'demo-blue-auth-user',
+      'demo-bank-app-auth-user',
       JSON.stringify({ userId: 'test-id', name: 'Test User' })
     );
   });
@@ -236,7 +236,7 @@ describe('AuthProvider', () => {
     });
 
     expect(localStorageMock.removeItem).toHaveBeenCalledWith(
-      'demo-blue-auth-user'
+      'demo-bank-app-auth-user'
     );
   });
 
