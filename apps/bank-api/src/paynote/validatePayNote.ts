@@ -354,54 +354,50 @@ The true power of the \`PayNote\` lies in its flexibility. It can model everythi
 
 **Scenario:** This is a standard, direct payment. Alice wants to send Bob $250.00, and the transfer should happen automatically as soon as the \`PayNote\` is created.
 
-**Implementation:** This "fire-and-forget" payment is achieved with a \`bootstrap\` workflow that, upon initiation, immediately triggers a \`Reserve Funds and Capture Immediately Requested\` event.
+**Implementation:** This "fire-and-forget" payment is achieved with a \`bootstrap\` workflow that, upon initiation, immediately triggers event.
 
 \`\`\`
-name: Payment for Invoice Q3-SERVICES
-type: PayNote
-
-# --- Instance Data ---
-currency: USD
+name: One time payment
+currency:
+  description: The ISO 4217 currency code for the transaction.
+  type: Text
+  value: USD
 amount:
-  total: 25000 # $250.00
-
-payNoteInitialStateDescription:
-  summary: |
-    This is a direct payment of **$250.00 USD** from Alice to Bob, securely processed by Citi Bank. The transfer will be executed automatically once this payment note is created.
-  details: |
-    This document authorizes a single, immediate transfer of funds.
-
-    #### Participants
-    * **Payer**: Alice (the sender)
-    * **Payee**: Bob (the recipient)
-    * **Guarantor**: Citi Bank (the financial institution handling the transfer)
-
-    #### Operations
-    There are no actions for any participant to take. This payment is fully automated.
-
-    #### Scenarios
-    * **Successful Transfer:** Upon creation, Citi Bank will automatically reserve and transfer the full $250.00 to Bob. No further steps are needed. A confirmation (\`Funds Captured\`) will be recorded here once complete.
-    * **Failed Transfer:** If the transfer cannot be completed for any reason (e.g., insufficient funds), Citi Bank will record the failure here (\`Reservation Declined\` or \`Capture Failed\`), providing a clear and verifiable reason.
-
-# --- Participants & Logic ---
+  description: The amounts associated with this PayNote.
+  total:
+    description: The maximum total value of this PayNote.
+    type: Integer
+    value: 25000
+payerAccountNumber:
+  type: Text
+  value: '4038228001'
+  description: Source account for the transfer
+payeeAccountNumber:
+  type: Text
+  value: '6293864001'
+  description: Destination account for the transfer
 contracts:
+  payerChannel:
+    type: MyOS Timeline Channel
+  payeeChannel:
+    type: MyOS Timeline Channel
+  guarantorChannel:
+    type: MyOS Timeline Channel
+  initLifecycleChannel:
+    type: Lifecycle Event Channel
+    event:
+      type: Document Processing Initiated
   bootstrap:
     type: Sequential Workflow
-    event:
-      type: Document Processing Initiated # Triggers on creation
+    channel: initLifecycleChannel
     steps:
-      - name: RequestImmediatePayment
-        type: Trigger Event
-        event:
-          type: Reserve Funds and Capture Immediately Requested
-          # Amount is intentionally omitted to default to the PayNote's total.
-
-  payerChannel:
-    type: MyOS Timeline # Bound to Alice's account
-  payeeChannel:
-    type: MyOS Timeline # Bound to Bob's account
-  guarantorChannel:
-    type: MyOS Timeline # Bound to Citi Bank's account
+    - type: Trigger Event
+      event:
+        type: Transfer Capture Requested
+payNoteInitialStateDescription:
+  summary: |
+    ## You are about to send a one-time payment of $250.00.
+    Once you approve, we'll immediately send $250.00 to the recipient.
 
 \`\`\`
 

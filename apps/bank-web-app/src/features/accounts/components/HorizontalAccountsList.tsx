@@ -141,6 +141,7 @@ export function HorizontalAccountsList({
         ref={scrollContainerRef}
         className="flex gap-4 overflow-x-auto scrollbar-hide px-4 py-4"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        data-testid="accounts-scroll-container"
       >
         {/* Account Cards */}
         {accounts.map(account => (

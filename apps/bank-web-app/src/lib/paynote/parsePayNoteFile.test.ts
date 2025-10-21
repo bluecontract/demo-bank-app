@@ -470,6 +470,7 @@ describe('parsePdfItemsWithLlm', () => {
       body: {
         yaml: 'status: active\ncurrency: USD',
       },
+      headers: new Headers(),
     });
 
     const result = await __testing.parsePdfItemsWithLlm(sampleItems);

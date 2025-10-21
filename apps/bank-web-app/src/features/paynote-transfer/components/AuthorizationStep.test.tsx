@@ -7,10 +7,12 @@ import {
 } from '@testing-library/react';
 import { vi } from 'vitest';
 import { AuthorizationStep } from './AuthorizationStep';
-import type { useTransferMoney as UseTransferMoneyHook } from '../../transfer/hooks/useTransferMoney.ts';
 import { encodeObjectAsPayNoteBase64 } from '../../../lib/paynote';
 
-type UseTransferMoneyOptions = Parameters<UseTransferMoneyHook>[0];
+type UseTransferMoneyOptions = {
+  onSuccess?: (data: unknown) => void;
+  onError?: (error: Error) => void;
+};
 
 const hoistedTransfer = vi.hoisted(() => {
   const state: {

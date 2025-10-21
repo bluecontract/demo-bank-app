@@ -123,7 +123,7 @@ export const bootstrapPayNoteHandler = async (
     return {
       status: 200 as const,
       body: {
-        message: 'Bootstrap accepted',
+        message: 'Bootstrap accepted' as const,
       },
     };
   } catch (error) {

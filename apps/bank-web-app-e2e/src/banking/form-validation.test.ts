@@ -12,6 +12,7 @@ import {
 } from '../constants';
 
 test.describe('Banking Form Validation', () => {
+  test.describe.configure({ timeout: 60000 });
   let testUserName: string;
 
   test.beforeEach(async ({ page }) => {
@@ -131,40 +132,81 @@ test.describe('Banking Form Validation', () => {
       timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
     });
 
-    // Open transfer modal
-    await page.click('text=New transfer');
-    await waitForModalToOpen(page, 'modal-content');
+    const accountNumberElements = page.locator('.account-number');
+    await expect(accountNumberElements).toHaveCount(2, {
+      timeout: TEST_DATA.TIMEOUTS.API_RESPONSE,
+    });
+    const sanitizedAccountNumbers = await accountNumberElements
+      .allTextContents()
+      .then(contents => contents.map(content => content.replace(/\s/g, '')));
+    const [, targetAccountNumberRaw] = sanitizedAccountNumbers;
+    expect(targetAccountNumberRaw).toBeDefined();
+    const cleanTargetNumber = targetAccountNumberRaw!;
 
-    // Try to submit empty form
-    await page.click('button[type="submit"]');
+    await Promise.all([
+      page.waitForURL('**/transfer/new**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      page.click('text=New transfer'),
+    ]);
 
-    // Should show validation errors
-    await expectFormValidationError(
-      page,
-      'input[placeholder="Enter 10-digit account number"]'
-    );
-    await expectFormValidationError(page, 'input[placeholder="$0"]');
+    await expect(page.getByText('Initiate New Transfer')).toBeVisible();
 
-    // Fill valid data and submit
-    const targetAccountElements = page.locator('.account-number');
-    const targetAccountNumber = await targetAccountElements
-      .last()
-      .textContent();
-    const cleanTargetNumber = targetAccountNumber?.replace(/\s/g, '') || '';
+    const nextButton = page.getByRole('button', { name: 'Next' });
+    await expect(nextButton).toBeDisabled();
 
-    await page.fill(
-      'input[placeholder="Enter 10-digit account number"]',
-      cleanTargetNumber
-    );
-    await page.fill('input[placeholder="$0"]', '50.00');
-    await page.click('button[type="submit"]');
+    const amountInput = page.locator('#totalAmount');
+    await amountInput.fill('0');
+    await expect(nextButton).toBeDisabled();
 
-    // Should show success
-    await waitForTransferCompletion(page);
+    await amountInput.fill('150.129');
+    await expect(amountInput).toHaveValue('150.12');
+    await expect(nextButton).toBeDisabled();
 
-    // Close modal
-    await page.click('text=Home');
-    await waitForModalToClose(page, 'modal-content');
+    const fromAccountSelect = page.locator('#fromAccount');
+    const sourceOptionValue = await fromAccountSelect
+      .locator('option')
+      .evaluateAll((options, accountName) => {
+        const matching = options.find(option =>
+          option.textContent?.includes(accountName)
+        );
+        return matching?.value ?? null;
+      }, sourceAccount);
+    expect(sourceOptionValue).toBeTruthy();
+    if (!sourceOptionValue) {
+      throw new Error('Source account option not found');
+    }
+    await fromAccountSelect.selectOption(sourceOptionValue);
+
+    const accountNumberInput = page.locator('#toAccount');
+    await accountNumberInput.fill('abc123');
+    await expect(accountNumberInput).toHaveValue('123');
+    await expect(nextButton).toBeDisabled();
+
+    // Fill valid data
+    await accountNumberInput.fill(cleanTargetNumber);
+    await expect(accountNumberInput).toHaveValue(cleanTargetNumber);
+
+    await page.fill('#recipientName', 'Validation Recipient');
+    await page.fill('#title', 'Validation Transfer');
+
+    await expect(nextButton).toBeEnabled();
+    await nextButton.click();
+
+    await expect(page.getByText('Review Transfer Details')).toBeVisible();
+    const reviewNextButton = page.getByRole('button', { name: 'Next' });
+    await expect(reviewNextButton).toBeEnabled();
+    await reviewNextButton.click();
+
+    await expect(page.getByText('Authorize Transfer')).toBeVisible();
+    const authorizeButton = page.getByRole('button', { name: 'Authorize' });
+    await expect(authorizeButton).toBeEnabled();
+
+    await page.getByRole('button', { name: 'Cancel' }).click();
+
+    await page.waitForURL(URLS.DASHBOARD, {
+      timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+    });
   });
 
   test('should clear validation errors when user corrects input', async ({

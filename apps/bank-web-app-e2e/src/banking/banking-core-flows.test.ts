@@ -10,9 +10,11 @@ import {
   waitForTooltipToAppear,
   DASHBOARD_HEADING_TEXT,
   waitForTransferCompletion,
+  completeStandardTransferViaStepper,
 } from '../constants';
 
 test.describe('Banking Core Flows', () => {
+  test.describe.configure({ timeout: 60000 });
   let testUserName: string;
 
   test.beforeEach(async ({ page }) => {
@@ -150,8 +152,7 @@ test.describe('Banking Core Flows', () => {
 
   test('should transfer money between accounts with confirmation', async ({
     page,
-  }, testInfo) => {
-    testInfo.setTimeout(15000);
+  }) => {
     // Create two accounts
     const sourceAccount = createUniqueAccountName('source');
     const targetAccount = createUniqueAccountName('target');
@@ -194,25 +195,23 @@ test.describe('Banking Core Flows', () => {
     const cleanTargetNumber = targetAccountNumber?.replace(/\s/g, '') || '';
 
     // Initiate transfer
-    await page.click('text=New transfer');
-    await waitForModalToOpen(page, 'modal-content');
+    await Promise.all([
+      page.waitForURL('**/transfer/new**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      page.click('text=New transfer'),
+    ]);
 
-    // Fill transfer form
-    await page.fill(
-      'input[placeholder="Enter 10-digit account number"]',
-      cleanTargetNumber
-    );
-    await page.fill('input[placeholder="$0"]', '75.00');
+    await completeStandardTransferViaStepper(page, {
+      amount: '75.00',
+      destinationAccountNumber: cleanTargetNumber,
+      recipientName: 'E2E Transfer Recipient',
+      title: 'E2E Transfer',
+    });
 
-    // Submit transfer
-    await page.click('button[type="submit"]');
-
-    // Wait for success confirmation
-    await waitForTransferCompletion(page);
-
-    // Close confirmation modal
-    await page.click('text=Home');
-    await waitForModalToClose(page, 'modal-content');
+    await expect(
+      page.getByRole('heading', { name: 'Transaction History' })
+    ).toBeVisible();
 
     // Verify source account balance updated - target the balance display specifically
     await expect(
@@ -305,8 +304,7 @@ test.describe('Banking Core Flows', () => {
 
   test('should show transaction details for outgoing transfer', async ({
     page,
-  }, testInfo) => {
-    testInfo.setTimeout(20000);
+  }) => {
     // Create two accounts
     await page.click('text=Add new account');
     await waitForModalToOpen(page, 'modal-content');
@@ -353,14 +351,23 @@ test.describe('Banking Core Flows', () => {
 
     // Transfer money from first to second account
     await page.click(`text=${account1}`);
-    await page.click('text=New transfer');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#destinationAccountNumber', cleanDestinationNumber);
-    await page.fill('input#amount', '40.00');
-    await page.click('button[type="submit"]');
-    await waitForTransferCompletion(page);
-    await page.click('text=Home');
-    await waitForModalToClose(page, 'modal-content');
+    await Promise.all([
+      page.waitForURL('**/transfer/new**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      page.click('text=New transfer'),
+    ]);
+
+    await completeStandardTransferViaStepper(page, {
+      amount: '40.00',
+      destinationAccountNumber: cleanDestinationNumber,
+      recipientName: 'Outgoing Transfer Recipient',
+      title: 'Outgoing Transfer',
+    });
+
+    await expect(
+      page.getByRole('heading', { name: 'Transaction History' })
+    ).toBeVisible();
 
     // Wait for transaction history to load
     await expect(
@@ -400,8 +407,7 @@ test.describe('Banking Core Flows', () => {
 
   test('should update account balance after fund and transfer operations', async ({
     page,
-  }, testInfo) => {
-    testInfo.setTimeout(15000);
+  }) => {
     // Create account
     await page.click('text=Add new account');
     await waitForModalToOpen(page, 'modal-content');
@@ -450,8 +456,7 @@ test.describe('Banking Core Flows', () => {
 
   test('should switch between accounts and show respective transaction history', async ({
     page,
-  }, testInfo) => {
-    testInfo.setTimeout(15000);
+  }) => {
     // Create two accounts
     await page.click('text=Add new account');
     await waitForModalToOpen(page, 'modal-content');
