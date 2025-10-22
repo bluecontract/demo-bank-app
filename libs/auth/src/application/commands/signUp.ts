@@ -65,10 +65,11 @@ export async function signUp(
 
     savedUser = await userRepository.save(user);
 
-    const token = await jwtService.generateToken(
-      savedUser.id,
-      savedUser.isTest
-    );
+    const token = await jwtService.generateToken({
+      userId: savedUser.id,
+      email: savedUser.email,
+      isTest: savedUser.isTest,
+    });
 
     const completedTiming = TimingUtils.endTiming(timing);
 

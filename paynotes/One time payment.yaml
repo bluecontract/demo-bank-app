@@ -1,0 +1,36 @@
+name: One time payment
+currency:
+  description: The ISO 4217 currency code for the transaction.
+  type: Text
+  value: USD
+amount:
+  description: The amounts associated with this PayNote.
+  total:
+    description: The maximum total value of this PayNote.
+    type: Integer
+    value: 25000 # $250
+
+contracts:
+  payerChannel:
+    type: MyOS Timeline Channel
+  payeeChannel:
+    type: MyOS Timeline Channel
+  guarantorChannel:
+    type: MyOS Timeline Channel
+  initLifecycleChannel:
+    type: Lifecycle Event Channel
+    event:
+      type: Document Processing Initiated
+  bootstrap:
+    type: Sequential Workflow
+    channel: initLifecycleChannel
+    steps:
+      - type: Trigger Event
+        event:
+          type: Reserve Funds and Capture Immediately Requested
+          amount: 12000
+
+payNoteInitialStateDescription:
+  summary: |
+    ## You are about to send a one-time payment of $250.00.
+    Once you approve, we'll immediately send $250.00 to the recipient.

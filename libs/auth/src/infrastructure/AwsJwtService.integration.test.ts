@@ -105,7 +105,10 @@ describe('AwsJwtService Integration', () => {
       const userId = 'user-123';
 
       // When
-      const token = await jwtService.generateToken(userId);
+      const token = await jwtService.generateToken({
+        userId: userId,
+        email: 'user-123@example.com',
+      });
 
       // Then
       expect(token).toBeTruthy();
@@ -118,7 +121,10 @@ describe('AwsJwtService Integration', () => {
       const userId = 'test-user-123';
 
       // When
-      const token = await jwtService.generateToken(userId, true);
+      const token = await jwtService.generateToken({
+        userId: userId,
+        isTest: true,
+      });
 
       // Then
       expect(token).toBeTruthy();
@@ -132,8 +138,8 @@ describe('AwsJwtService Integration', () => {
       const userId2 = 'user-2';
 
       // When
-      const token1 = await jwtService.generateToken(userId1);
-      const token2 = await jwtService.generateToken(userId2);
+      const token1 = await jwtService.generateToken({ userId: userId1 });
+      const token2 = await jwtService.generateToken({ userId: userId2 });
 
       // Then
       expect(token1).not.toBe(token2);
@@ -144,12 +150,12 @@ describe('AwsJwtService Integration', () => {
       const userId = 'user-123';
 
       // When
-      const token1 = await jwtService.generateToken(userId);
+      const token1 = await jwtService.generateToken({ userId: userId });
 
       // Advance time by 1 second
       vi.advanceTimersByTime(1000);
 
-      const token2 = await jwtService.generateToken(userId);
+      const token2 = await jwtService.generateToken({ userId: userId });
 
       // Then
       expect(token1).not.toBe(token2);
@@ -160,7 +166,10 @@ describe('AwsJwtService Integration', () => {
     it('should verify valid token and return correct payload', async () => {
       // Given
       const userId = 'user-123';
-      const token = await jwtService.generateToken(userId);
+      const token = await jwtService.generateToken({
+        userId: userId,
+        email: 'user-123@example.com',
+      });
 
       // When
       const payload = await jwtService.verifyToken(token);
@@ -170,12 +179,17 @@ describe('AwsJwtService Integration', () => {
       expect(payload.iat).toBe(Math.floor(Date.now() / 1000));
       expect(payload.exp).toBe(Math.floor(Date.now() / 1000) + 3600); // 1 hour
       expect(payload.isTest).toBeUndefined();
+      expect(payload.email).toBe('user-123@example.com');
     });
 
     it('should verify valid test user token with isTest flag', async () => {
       // Given
       const userId = 'test-user-123';
-      const token = await jwtService.generateToken(userId, true);
+      const token = await jwtService.generateToken({
+        userId: userId,
+        isTest: true,
+        email: 'test-user-123@example.com',
+      });
 
       // When
       const payload = await jwtService.verifyToken(token);
@@ -185,6 +199,7 @@ describe('AwsJwtService Integration', () => {
       expect(payload.iat).toBe(Math.floor(Date.now() / 1000));
       expect(payload.exp).toBe(Math.floor(Date.now() / 1000) + 600); // 10 minutes
       expect(payload.isTest).toBe(true);
+      expect(payload.email).toBe('test-user-123@example.com');
     });
 
     it('should throw TokenVerificationError for malformed token', async () => {
@@ -200,7 +215,7 @@ describe('AwsJwtService Integration', () => {
     it('should throw TokenVerificationError for token with invalid signature', async () => {
       // Given
       const userId = 'user-123';
-      const token = await jwtService.generateToken(userId);
+      const token = await jwtService.generateToken({ userId: userId });
       const tamperedToken = token.slice(0, -10) + 'tampered123';
 
       // When & Then
@@ -212,7 +227,7 @@ describe('AwsJwtService Integration', () => {
     it('should throw TokenExpiredError for expired token', async () => {
       // Given
       const userId = 'user-123';
-      const token = await jwtService.generateToken(userId);
+      const token = await jwtService.generateToken({ userId: userId });
 
       // When - advance time beyond token expiry (1 hour + 1 second)
       vi.advanceTimersByTime(3601 * 1000);
@@ -226,7 +241,10 @@ describe('AwsJwtService Integration', () => {
     it('should throw TokenExpiredError for expired test user token', async () => {
       // Given
       const userId = 'test-user-123';
-      const token = await jwtService.generateToken(userId, true);
+      const token = await jwtService.generateToken({
+        userId: userId,
+        isTest: true,
+      });
 
       // When - advance time beyond test token expiry (10 minutes + 1 second)
       vi.advanceTimersByTime(601 * 1000);
@@ -244,7 +262,7 @@ describe('AwsJwtService Integration', () => {
       const userId = 'roundtrip-user-123';
 
       // When
-      const token = await jwtService.generateToken(userId);
+      const token = await jwtService.generateToken({ userId: userId });
       const payload = await jwtService.verifyToken(token);
 
       // Then
@@ -257,7 +275,10 @@ describe('AwsJwtService Integration', () => {
       const userId = 'roundtrip-test-user-123';
 
       // When
-      const token = await jwtService.generateToken(userId, true);
+      const token = await jwtService.generateToken({
+        userId: userId,
+        isTest: true,
+      });
       const payload = await jwtService.verifyToken(token);
 
       // Then
@@ -271,7 +292,7 @@ describe('AwsJwtService Integration', () => {
 
       // When
       const tokens = await Promise.all(
-        userIds.map(userId => jwtService.generateToken(userId))
+        userIds.map(userId => jwtService.generateToken({ userId: userId }))
       );
 
       const payloads = await Promise.all(
@@ -299,9 +320,9 @@ describe('AwsJwtService Integration', () => {
       const userId = 'user-123';
 
       // When & Then
-      await expect(invalidService.generateToken(userId)).rejects.toThrow(
-        TokenGenerationError
-      );
+      await expect(
+        invalidService.generateToken({ userId: userId })
+      ).rejects.toThrow(TokenGenerationError);
     });
 
     it('should handle invalid secret ARN gracefully', async () => {
@@ -316,9 +337,9 @@ describe('AwsJwtService Integration', () => {
       const userId = 'user-123';
 
       // When & Then
-      await expect(invalidService.generateToken(userId)).rejects.toThrow(
-        TokenGenerationError
-      );
+      await expect(
+        invalidService.generateToken({ userId: userId })
+      ).rejects.toThrow(TokenGenerationError);
     });
 
     it('should throw TokenGenerationError for malformed secret content when generating token', async () => {
@@ -345,9 +366,9 @@ describe('AwsJwtService Integration', () => {
       const userId = 'user-123';
 
       // When & Then
-      await expect(malformedService.generateToken(userId)).rejects.toThrow(
-        TokenGenerationError
-      );
+      await expect(
+        malformedService.generateToken({ userId: userId })
+      ).rejects.toThrow(TokenGenerationError);
 
       // Cleanup
       await secretsClient.send(
@@ -360,7 +381,7 @@ describe('AwsJwtService Integration', () => {
 
     it('should throw TokenVerificationError for malformed secret content when verifying token', async () => {
       // Given
-      const token = await jwtService.generateToken('user-123');
+      const token = await jwtService.generateToken({ userId: 'user-123' });
       const malformedSecretName = `malformed-${Date.now()}-${randomUUID()}`;
       const malformedSecretArn = `arn:aws:secretsmanager:${TEST_CONFIG.region}:000000000000:secret:${malformedSecretName}`;
 
@@ -401,8 +422,8 @@ describe('AwsJwtService Integration', () => {
       const userId2 = 'user-2';
 
       // When
-      const token1 = await jwtService.generateToken(userId1);
-      const token2 = await jwtService.generateToken(userId2);
+      const token1 = await jwtService.generateToken({ userId: userId1 });
+      const token2 = await jwtService.generateToken({ userId: userId2 });
 
       // Then
       expect(token1).toBeTruthy();
@@ -425,7 +446,7 @@ describe('AwsJwtService Integration', () => {
       const currentTime = Math.floor(Date.now() / 1000);
 
       // When
-      const token = await jwtService.generateToken(userId);
+      const token = await jwtService.generateToken({ userId: userId });
       const payload = await jwtService.verifyToken(token);
 
       // Then
@@ -439,7 +460,10 @@ describe('AwsJwtService Integration', () => {
       const currentTime = Math.floor(Date.now() / 1000);
 
       // When
-      const token = await jwtService.generateToken(userId, true);
+      const token = await jwtService.generateToken({
+        userId: userId,
+        isTest: true,
+      });
       const payload = await jwtService.verifyToken(token);
 
       // Then
@@ -450,7 +474,7 @@ describe('AwsJwtService Integration', () => {
     it('should handle tokens at expiration boundary', async () => {
       // Given
       const userId = 'user-123';
-      const token = await jwtService.generateToken(userId);
+      const token = await jwtService.generateToken({ userId: userId });
 
       // When - advance time to just before expiry
       vi.advanceTimersByTime(3599 * 1000); // 59 minutes 59 seconds

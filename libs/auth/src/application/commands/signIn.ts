@@ -75,10 +75,11 @@ export async function signIn(
       throw new UserNotFoundError(email);
     }
 
-    const token = await jwtService.generateToken(
-      foundUser.id,
-      foundUser.isTest
-    );
+    const token = await jwtService.generateToken({
+      userId: foundUser.id,
+      email: foundUser.email,
+      isTest: foundUser.isTest,
+    });
 
     const completedTiming = TimingUtils.endTiming(timing);
 

@@ -80,10 +80,11 @@ describe('signUp', () => {
         isTest: false,
       })
     );
-    expect(mockJwtService.generateToken).toHaveBeenCalledWith(
-      'user-123',
-      false
-    );
+    expect(mockJwtService.generateToken).toHaveBeenCalledWith({
+      userId: 'user-123',
+      email: 'john.doe@example.com',
+      isTest: false,
+    });
     expect(mockLogger.info).toHaveBeenCalledWith(
       'User sign-up completed successfully',
       expect.objectContaining({
@@ -131,10 +132,11 @@ describe('signUp', () => {
         isTest: true,
       })
     );
-    expect(mockJwtService.generateToken).toHaveBeenCalledWith(
-      'test-user-123',
-      true
-    );
+    expect(mockJwtService.generateToken).toHaveBeenCalledWith({
+      userId: 'test-user-123',
+      email: 'test.user@example.com',
+      isTest: true,
+    });
     expect(mockMetrics.addMetric).toHaveBeenCalledWith(
       'TestUserSignUp',
       'Count',

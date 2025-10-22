@@ -29,6 +29,12 @@ export interface PayNoteContent {
       value?: number;
     };
   };
+  payerAccountNumber: {
+    value: string;
+  };
+  payeeAccountNumber: {
+    value: string;
+  };
   payNoteInitialStateDescription?: {
     summary?: string;
     details?: string;

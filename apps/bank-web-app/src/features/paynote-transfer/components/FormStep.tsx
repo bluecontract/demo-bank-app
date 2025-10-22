@@ -64,6 +64,18 @@ export function FormStep({
           );
           onFormDataChange({ totalAmount: amountFromPayNote });
         }
+        if (payNote?.payerAccountNumber?.value) {
+          const matchedAccount = accounts.find(
+            account =>
+              account.accountNumber === payNote?.payerAccountNumber?.value
+          );
+          if (matchedAccount) {
+            onFormDataChange({ fromAccount: matchedAccount.accountNumber });
+          }
+        }
+        if (payNote?.payeeAccountNumber?.value) {
+          onFormDataChange({ toAccount: payNote?.payeeAccountNumber?.value });
+        }
       } catch (error) {
         // Invalid PayNote, ignore
         console.error('Failed to parse PayNote:', error);

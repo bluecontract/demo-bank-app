@@ -197,7 +197,7 @@ describe('AuthorizationStep', () => {
     ).toBeInTheDocument();
   });
 
-  it('bootsraps a PayNote when enabled', async () => {
+  it('bootstraps a PayNote when enabled', async () => {
     hoistedApi.bootstrapPayNoteMock.mockResolvedValue({
       status: 200,
       body: { message: 'Bootstrap accepted' },
@@ -225,7 +225,18 @@ describe('AuthorizationStep', () => {
 
     await waitFor(() => {
       expect(hoistedApi.bootstrapPayNoteMock).toHaveBeenCalledWith({
-        body: { payNote: { name: 'Test PayNote' } },
+        body: {
+          payNote: { name: 'Test PayNote' },
+          formData: {
+            fromAccount: 'account-1',
+            isPayNoteEnabled: true,
+            payNoteCode: 'bmFtZTogVGVzdCBQYXlOb3RlCg==',
+            recipientName: undefined,
+            title: undefined,
+            toAccount: undefined,
+            totalAmount: '500.00',
+          },
+        },
       });
     });
 

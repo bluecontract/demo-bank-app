@@ -51,6 +51,23 @@ describe('bootstrapPayNoteHandler', () => {
   const verificationRepository = {
     getVerification: vi.fn(),
   };
+  const bankingRepository = {
+    getAccountById: vi.fn(),
+  };
+
+  const createPayNote = () => ({
+    name: 'Test PayNote',
+    payerAccountNumber: {},
+    payeeAccountNumber: {},
+    contracts: {
+      payerChannel: { type: 'MyOS Timeline Channel' },
+      payeeChannel: {
+        type: 'MyOS Timeline Channel',
+        email: 'payee@example.com',
+      },
+      guarantorChannel: { type: 'MyOS Timeline Channel' },
+    },
+  });
 
   beforeEach(() => {
     hoistedDeps.getDependenciesMock.mockReset();
@@ -59,6 +76,7 @@ describe('bootstrapPayNoteHandler', () => {
     logger.error.mockReset();
     fetchMock.mockReset();
     verificationRepository.getVerification.mockReset();
+    bankingRepository.getAccountById.mockReset();
     hoistedBlueId.calculateBlueIdFromObjectMock.mockReturnValue('blue-id-123');
 
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -71,10 +89,12 @@ describe('bootstrapPayNoteHandler', () => {
         baseUrl: 'https://test-api.myos.blue',
       }),
       payNoteVerificationRepository: verificationRepository,
+      bankingRepository,
     });
 
     hoistedDeps.extractAuthInfoMock.mockResolvedValue({
       userId: 'user-123',
+      userEmail: 'john.doe@example.com',
       isTest: false,
     });
 
@@ -85,6 +105,10 @@ describe('bootstrapPayNoteHandler', () => {
       explanation: 'Valid PayNote',
       isSuccessful: true,
       validatedAt: new Date().toISOString(),
+    });
+
+    bankingRepository.getAccountById.mockResolvedValue({
+      accountNumber: '12345678',
     });
 
     fetchMock.mockResolvedValue(
@@ -100,7 +124,8 @@ describe('bootstrapPayNoteHandler', () => {
     const result = await bootstrapPayNoteHandler(
       {
         body: {
-          payNote: { name: 'Test PayNote' },
+          payNote: createPayNote(),
+          formData: { fromAccount: '12345678' },
         },
       } as any,
       { request: {} as any }
@@ -112,7 +137,8 @@ describe('bootstrapPayNoteHandler', () => {
       'Received PayNote bootstrap request',
       expect.objectContaining({
         userId: 'user-123',
-        payNote: { name: 'Test PayNote' },
+        userEmail: 'john.doe@example.com',
+        payNote: expect.objectContaining({ name: 'Test PayNote' }),
       })
     );
     expect(fetchMock).toHaveBeenCalledWith(
@@ -125,12 +151,22 @@ describe('bootstrapPayNoteHandler', () => {
         },
         body: JSON.stringify({
           channelBindings: {
-            payerChannel: { email: 'payer@example.com' },
+            payerChannel: { email: 'john.doe@example.com' },
             payeeChannel: { email: 'payee@example.com' },
             guarantorChannel: { accountId: 'myos-account' },
           },
           document: {
             name: 'Test PayNote',
+            payerAccountNumber: { type: 'Text', value: '12345678' },
+            payeeAccountNumber: {},
+            contracts: {
+              payerChannel: { type: 'MyOS Timeline Channel' },
+              payeeChannel: {
+                type: 'MyOS Timeline Channel',
+                email: 'payee@example.com',
+              },
+              guarantorChannel: { type: 'MyOS Timeline Channel' },
+            },
           },
         }),
       }
@@ -143,6 +179,7 @@ describe('bootstrapPayNoteHandler', () => {
       'MyOS bootstrap response received',
       expect.objectContaining({
         userId: 'user-123',
+        userEmail: 'john.doe@example.com',
         status: 200,
         ok: true,
       })
@@ -155,7 +192,8 @@ describe('bootstrapPayNoteHandler', () => {
     const result = await bootstrapPayNoteHandler(
       {
         body: {
-          payNote: { name: 'Test PayNote' },
+          payNote: createPayNote(),
+          formData: { fromAccount: '12345678' },
         },
       } as any,
       { request: {} as any }
@@ -168,6 +206,7 @@ describe('bootstrapPayNoteHandler', () => {
       'PayNote bootstrap rejected due to missing verification',
       expect.objectContaining({
         userId: 'user-123',
+        userEmail: 'john.doe@example.com',
         hasVerification: false,
       })
     );
@@ -186,7 +225,8 @@ describe('bootstrapPayNoteHandler', () => {
     const result = await bootstrapPayNoteHandler(
       {
         body: {
-          payNote: { name: 'Test PayNote' },
+          payNote: createPayNote(),
+          formData: { fromAccount: '12345678' },
         },
       } as any,
       { request: {} as any }
@@ -202,7 +242,7 @@ describe('bootstrapPayNoteHandler', () => {
 
     const result = await bootstrapPayNoteHandler(
       {
-        body: { payNote: {} },
+        body: { payNote: {}, formData: { fromAccount: '12345678' } },
       } as any,
       { request: {} as any }
     );
@@ -224,7 +264,8 @@ describe('bootstrapPayNoteHandler', () => {
     const result = await bootstrapPayNoteHandler(
       {
         body: {
-          payNote: { name: 'Test PayNote' },
+          payNote: createPayNote(),
+          formData: { fromAccount: '12345678' },
         },
       } as any,
       { request: {} as any }

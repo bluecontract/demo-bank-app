@@ -207,6 +207,14 @@ export const bankApiContract = c.router(
         path: '/v1/paynotes/bootstrap',
         body: z.object({
           payNote: z.record(z.any()),
+          formData: z.object({
+            fromAccount: z.string().optional(),
+            toAccount: z.string().optional(),
+            recipientName: z.string().optional(),
+            totalAmount: z.string().optional(),
+            title: z.string().optional(),
+            payNoteCode: z.string().optional(),
+          }),
         }),
         responses: {
           200: z.object({

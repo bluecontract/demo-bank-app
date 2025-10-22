@@ -70,10 +70,11 @@ describe('signIn', () => {
     expect(mockUserRepository.findByEmail).toHaveBeenCalledWith(
       'john.doe@example.com'
     );
-    expect(mockJwtService.generateToken).toHaveBeenCalledWith(
-      mockUser.id,
-      mockUser.isTest
-    );
+    expect(mockJwtService.generateToken).toHaveBeenCalledWith({
+      userId: mockUser.id,
+      email: 'john.doe@example.com',
+      isTest: mockUser.isTest,
+    });
     expect(mockMetrics.addMetric).toHaveBeenCalledWith(
       'UserSignIn',
       'Count',

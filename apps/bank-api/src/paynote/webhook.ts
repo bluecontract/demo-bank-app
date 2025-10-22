@@ -4,7 +4,10 @@ import { Money, transferMoney } from '@demo-bank-app/banking';
 import type { MyOsCredentials } from '../shared/myOsSecrets';
 import { getDependencies } from './dependencies';
 
-const CAPTURE_EVENT_NAME = 'Transfer Capture Requested';
+// There are several other events you can react to: https://github.com/bluecontract/blue-repository/tree/main/PayNote
+const CAPTURE_EVENT_NAME = 'Capture Funds Requested';
+const CAPTURE_IMMIDIETLY_EVENT_NAME =
+  'Reserve Funds and Capture Immediately Requested';
 
 const returnResponse = (note?: string) => ({
   status: 200 as const,
@@ -69,13 +72,11 @@ export const payNoteWebhookHandler = async (
   const { logger, getMyOsCredentials, bankingRepository } =
     await getDependencies();
 
-  let lastError: string | undefined;
   const logError = (
     message: string,
     context?: Record<string, unknown>
   ): string => {
     logger.error(message, context);
-    lastError = message;
     return message;
   };
 
@@ -125,7 +126,9 @@ export const payNoteWebhookHandler = async (
     .map(item => item?.type?.name)
     .filter(Boolean) as string[];
 
-  const emittedContainsCapture = emittedEventNames.includes(CAPTURE_EVENT_NAME);
+  const emittedContainsCapture =
+    emittedEventNames.includes(CAPTURE_EVENT_NAME) ||
+    emittedEventNames.includes(CAPTURE_IMMIDIETLY_EVENT_NAME);
 
   logger.info('Received PayNote webhook', {
     eventId,
@@ -236,23 +239,27 @@ export const payNoteWebhookHandler = async (
         transferAmountMinor,
       });
     } catch (error) {
-      logError('PayNote capture transfer failed', {
-        eventId,
-        payerAccountId,
-        payerAccountNumber,
-        payeeAccountNumber,
-        transferAmountMinor,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      return returnResponse(
+        logError('PayNote capture transfer failed', {
+          eventId,
+          payerAccountId,
+          payerAccountNumber,
+          payeeAccountNumber,
+          transferAmountMinor,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
     }
   } catch (error) {
-    logError('Unexpected error preparing PayNote capture transfer', {
-      eventId,
-      payerAccountNumber,
-      payeeAccountNumber,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    return returnResponse(
+      logError('Unexpected error preparing PayNote capture transfer', {
+        eventId,
+        payerAccountNumber,
+        payeeAccountNumber,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    );
   }
 
-  return returnResponse(lastError);
+  return returnResponse('');
 };

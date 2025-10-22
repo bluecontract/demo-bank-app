@@ -12,7 +12,14 @@ export interface JwtPayload {
   iat: number;
   exp: number;
   isTest?: boolean;
+  email?: User['email'];
 }
+
+export type GenerateTokenParams = {
+  userId: User['id'];
+  email?: User['email'];
+  isTest?: boolean;
+};
 
 // Repository ports
 export interface UserRepository {
@@ -25,11 +32,12 @@ export interface UserRepository {
 export interface JwtService {
   /**
    * Generate a JWT token for a user
-   * @param userId The user ID to include in the token
-   * @param isTest Whether this is a test user (affects TTL)
+   * @param params.userId The user ID to include in the token
+   * @param params.email The user email to include in the token
+   * @param params.isTest Whether this is a test user (affects TTL)
    * @returns Promise resolving to the JWT token string
    */
-  generateToken(userId: User['id'], isTest?: boolean): Promise<string>;
+  generateToken(params: GenerateTokenParams): Promise<string>;
 
   /**
    * Verify and decode a JWT token

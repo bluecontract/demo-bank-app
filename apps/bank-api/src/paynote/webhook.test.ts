@@ -72,7 +72,7 @@ describe('payNoteWebhookHandler', () => {
         },
         emitted: [
           { type: { name: 'Document Processing Initiated' } },
-          { type: { name: 'Transfer Capture Requested' } },
+          { type: { name: 'Reserve Funds and Capture Immediately Requested' } },
         ],
       },
     };
@@ -113,7 +113,7 @@ describe('payNoteWebhookHandler', () => {
         emittedContainsCapture: true,
         emittedEventNames: [
           'Document Processing Initiated',
-          'Transfer Capture Requested',
+          'Reserve Funds and Capture Immediately Requested',
         ],
         sessionId: 'session-1',
         payerAccountNumber: '9559276001',
@@ -254,7 +254,9 @@ describe('payNoteWebhookHandler', () => {
             total: { value: 0 },
           },
         },
-        emitted: [{ type: { name: 'Transfer Capture Requested' } }],
+        emitted: [
+          { type: { name: 'Reserve Funds and Capture Immediately Requested' } },
+        ],
       },
     };
 

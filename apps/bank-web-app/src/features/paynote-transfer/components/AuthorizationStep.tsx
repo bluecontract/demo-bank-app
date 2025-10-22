@@ -128,7 +128,7 @@ export function AuthorizationStep({
       }
 
       const response = await apiClient.banking.bootstrapPayNote({
-        body: { payNote },
+        body: { payNote, formData },
       });
 
       if (response.status !== 200) {

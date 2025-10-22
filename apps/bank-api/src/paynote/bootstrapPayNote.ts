@@ -17,15 +17,20 @@ export const bootstrapPayNoteHandler = async (
     request: MaybeAuthenticatedTsRestRequestContext;
   }
 ) => {
-  const { logger, getMyOsCredentials, payNoteVerificationRepository } =
-    await getDependencies();
+  const {
+    logger,
+    getMyOsCredentials,
+    payNoteVerificationRepository,
+    bankingRepository,
+  } = await getDependencies();
 
   try {
-    const { userId } = await extractAuthInfo(context.request);
-    const { payNote } = request.body;
+    const { userId, userEmail } = await extractAuthInfo(context.request);
+    const { payNote, formData } = request.body;
 
     logger.info('Received PayNote bootstrap request', {
       userId,
+      userEmail,
       payNote,
     });
 
@@ -45,6 +50,7 @@ export const bootstrapPayNoteHandler = async (
     ) {
       logger.error('PayNote bootstrap rejected due to missing verification', {
         userId,
+        userEmail,
         blueId,
         hasVerification: Boolean(verification),
         verificationScore: verification?.validationScore,
@@ -57,20 +63,73 @@ export const bootstrapPayNoteHandler = async (
       });
     }
 
+    let fromAccountNumber = '';
+    if (formData.fromAccount) {
+      const account = await bankingRepository.getAccountById(
+        formData.fromAccount
+      );
+      if (account?.accountNumber) {
+        fromAccountNumber = account?.accountNumber;
+      }
+      if (!payNote.payerAccountNumber) {
+        payNote.payerAccountNumber = {};
+      }
+      payNote.payerAccountNumber.type = 'Text';
+      payNote.payerAccountNumber.value = fromAccountNumber;
+    } else {
+      return problemResponse({
+        status: 400 as const,
+        code: ERROR_CODES.VALIDATION_ERROR,
+        message: 'From account is empty',
+      });
+    }
+
+    if (formData.toAccount) {
+      if (!payNote.payeeAccountNumber) {
+        payNote.payeeAccountNumber = {};
+      }
+      payNote.payeeAccountNumber.type = 'Text';
+      payNote.payeeAccountNumber.value = formData.toAccount;
+    }
+
     const credentials = await getMyOsCredentials();
 
+    const contracts = (payNote.contracts ?? {}) as Record<
+      string,
+      { type?: string; email?: string; accountId?: string }
+    >;
+
+    const channelBindings: Record<
+      string,
+      { email?: string; accountId?: string }
+    > = {};
+
+    if (contracts.payerChannel) {
+      // set payer to current user by default if payerChannel exists in paynote
+      channelBindings.payerChannel = { email: userEmail };
+    }
+
+    Object.entries(contracts).forEach(([k, v]) => {
+      if (v?.type === 'MyOS Timeline Channel') {
+        if (v?.email) {
+          channelBindings[k] = {
+            email: v.email,
+          };
+        } else if (v?.accountId) {
+          channelBindings[k] = {
+            accountId: v.accountId,
+          };
+        } else if (!channelBindings[k]) {
+          // default all not specified to bank account
+          channelBindings[k] = {
+            accountId: credentials.accountId,
+          };
+        }
+      }
+    });
+
     const payload = {
-      channelBindings: {
-        payerChannel: {
-          email: 'payer@example.com',
-        },
-        payeeChannel: {
-          email: 'payee@example.com',
-        },
-        guarantorChannel: {
-          accountId: credentials.accountId,
-        },
-      },
+      channelBindings,
       document: payNote,
     };
 
@@ -92,6 +151,7 @@ export const bootstrapPayNoteHandler = async (
 
     logger.info('MyOS bootstrap response received', {
       userId,
+      userEmail,
       status: response.status,
       ok: response.ok,
       responseBody,
@@ -100,6 +160,7 @@ export const bootstrapPayNoteHandler = async (
     if (!response.ok) {
       logger.error('MyOS bootstrap request failed', {
         userId,
+        userEmail,
         status: response.status,
         responseBody,
       });
