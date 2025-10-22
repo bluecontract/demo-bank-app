@@ -64,7 +64,7 @@ describe('PowertoolsLogger', () => {
   describe('logging methods', () => {
     it('should log info messages with extra context', () => {
       const message = 'User created successfully';
-      const extra = { userId: 'user-123', userName: 'john' };
+      const extra = { userId: 'user-123', userEmail: 'john@example.com' };
 
       powertoolsLogger.info(message, extra);
 

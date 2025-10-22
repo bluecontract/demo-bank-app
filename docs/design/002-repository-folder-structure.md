@@ -141,13 +141,13 @@ shared/bank-api-contract/
 ```ts
 import { signUp } from '@demo-bank-app/auth';
 
-export const signUpHandler = async ({ body }: { body: { name: string } }) => {
+export const signUpHandler = async ({ body }: { body: { email: string } }) => {
   const deps = await initializeDependencies();
   const result = await signUp(body, deps);
 
   return {
     status: 201 as const,
-    body: { userId: result.user.id, name: result.user.name },
+    body: { userId: result.user.id, email: result.user.email },
     headers: { 'Set-Cookie': `auth=${result.token}; HttpOnly; ...` },
   };
 };

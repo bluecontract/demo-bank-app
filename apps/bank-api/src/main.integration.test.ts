@@ -148,22 +148,22 @@ describe('Bank API Integration Tests', () => {
     it('should successfully sign up a new user with valid JWT cookie', async () => {
       const creds = await signupUniqueTestUser('integration-test-user');
       expect(creds.userId).toBeDefined();
-      expect(creds.userName).toContain('integration-test-user');
+      expect(creds.userEmail).toContain('integration-test-user');
       expect(creds.jwtCookie).toContain('demoAuth=');
     });
 
-    it('should return 409 when signing up with existing username', async () => {
+    it('should return 409 when signing up with existing email', async () => {
       const creds = await signupUniqueTestUser('duplicate-test');
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { name: creds.userName },
+        body: { email: creds.userEmail },
       });
       expect(signUp.statusCode).toBe(409);
       expect(signUp.body).toEqual({
         error: 'USER_ALREADY_EXISTS',
         message:
-          'A user with this name already exists. Please choose a different name.',
+          'A user with this email already exists. Please use a different email.',
       });
     });
 
@@ -171,7 +171,7 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { name: '' },
+        body: { email: '' },
       });
       expect(signUp.statusCode).toBe(400);
       expect(signUp.body).toEqual({
@@ -186,7 +186,7 @@ describe('Bank API Integration Tests', () => {
             inclusive: true,
             message: 'String must contain at least 1 character(s)',
             minimum: 1,
-            path: ['name'],
+            path: ['email'],
             type: 'string',
           },
         ],
@@ -215,17 +215,12 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { name: maliciousAccountName },
+        body: { email: maliciousAccountName },
       });
 
-      if (signUp.statusCode === 201) {
-        // Verify XSS payloads are removed but safe content remains
-        expect(signUp.body.name).toBe(name);
-        expect(signUp.body.name).not.toContain('<img');
-        expect(signUp.body.name).not.toContain('<script>');
-        expect(signUp.body.name).not.toContain('onerror');
-        expect(signUp.body.name).not.toContain('alert');
-      }
+      expect(signUp.statusCode).toBe(400);
+      expect(signUp.body.error).toBe('VALIDATION_ERROR');
+      expect(signUp.body.message).toBe('Request validation failed');
     });
   });
 
@@ -235,12 +230,12 @@ describe('Bank API Integration Tests', () => {
       const signIn = await invokeApi({
         method: 'POST',
         path: '/auth/signin',
-        body: { name: creds.userName },
+        body: { email: creds.userEmail },
       });
       expect(signIn.statusCode).toBe(200);
       expect(signIn.body).toEqual({
         userId: creds.userId,
-        name: creds.userName,
+        email: creds.userEmail,
       });
       const cookieHeader = signIn.headers?.['set-cookie'] as string | undefined;
       expect(cookieHeader).toBeDefined();
@@ -260,19 +255,19 @@ describe('Bank API Integration Tests', () => {
       expect(decoded.exp).toBeDefined();
     });
 
-    it('should return 401 when signing in with non-existing username', async () => {
-      const nonExistentUserName =
+    it('should return 401 when signing in with non-existing email', async () => {
+      const nonExistentUserEmail =
         generateUniqueTestUserName('nonexistent-user');
       const signIn = await invokeApi({
         method: 'POST',
         path: '/auth/signin',
-        body: { name: nonExistentUserName },
+        body: { email: nonExistentUserEmail },
       });
       expect(signIn.statusCode).toBe(401);
       expect(signIn.body).toEqual({
         error: 'UNAUTHORIZED',
         message:
-          'User not found. Please check the name and try again or sign up.',
+          'User not found. Please check the email and try again or sign up.',
       });
     });
 
@@ -280,7 +275,7 @@ describe('Bank API Integration Tests', () => {
       const signIn = await invokeApi({
         method: 'POST',
         path: '/auth/signin',
-        body: { name: '' },
+        body: { email: '' },
       });
       expect(signIn.statusCode).toBe(400);
       const body = signIn.body;
@@ -296,7 +291,7 @@ describe('Bank API Integration Tests', () => {
             inclusive: true,
             message: 'String must contain at least 1 character(s)',
             minimum: 1,
-            path: ['name'],
+            path: ['email'],
             type: 'string',
           },
         ],
@@ -311,12 +306,12 @@ describe('Bank API Integration Tests', () => {
       const signIn = await invokeApi({
         method: 'POST',
         path: '/auth/signin?dev=true',
-        body: { name: creds.userName },
+        body: { email: creds.userEmail },
         queryStringParameters: { dev: 'true' },
       });
       expect(signIn.statusCode).toBe(200);
       expect(signIn.body.userId).toBe(creds.userId);
-      expect(signIn.body.name).toBe(creds.userName);
+      expect(signIn.body.email).toBe(creds.userEmail);
       const cookieHeader = signIn.headers?.['set-cookie'] as string;
       expect(cookieHeader).toContain(`Max-Age=600`);
     });
@@ -373,11 +368,11 @@ describe('Bank API Integration Tests', () => {
         body: { name: maliciousAccountName },
       });
 
-      expect(result.body.name).toBe(name);
-      expect(result.body.name).not.toContain('<img');
-      expect(result.body.name).not.toContain('<script>');
-      expect(result.body.name).not.toContain('onerror');
-      expect(result.body.name).not.toContain('alert');
+      expect(result.body.email).toBe(name);
+      expect(result.body.email).not.toContain('<img');
+      expect(result.body.email).not.toContain('<script>');
+      expect(result.body.email).not.toContain('onerror');
+      expect(result.body.email).not.toContain('alert');
     });
   });
 
@@ -675,8 +670,8 @@ describe('Bank API Integration Tests', () => {
   });
 
   describe('Transfer Money Endpoint', () => {
-    let user1: { userId: string; jwtCookie: string; userName: string };
-    let user2: { userId: string; jwtCookie: string; userName: string };
+    let user1: { userId: string; jwtCookie: string; userEmail: string };
+    let user2: { userId: string; jwtCookie: string; userEmail: string };
     let user1Account: { accountId: string };
     let user2Account: { accountId: string; accountNumber: string };
 
@@ -1584,12 +1579,12 @@ async function invokeApi({
 async function signupUniqueTestUser(
   namePrefix = 'test-user',
   isTest = false
-): Promise<{ userId: string; jwtCookie: string; userName: string }> {
-  const userName = generateUniqueTestUserName(namePrefix);
+): Promise<{ userId: string; jwtCookie: string; userEmail: string }> {
+  const userEmail = generateUniqueTestUserName(namePrefix);
   const signUp = await invokeApi({
     method: 'POST',
     path: isTest ? '/auth/signup?dev=true' : '/auth/signup',
-    body: { name: userName },
+    body: { email: userEmail },
   });
   expect(signUp.statusCode).toBe(201);
   if (!signUp.headers || typeof signUp.headers['set-cookie'] !== 'string') {
@@ -1598,6 +1593,6 @@ async function signupUniqueTestUser(
   return {
     userId: signUp.body.userId,
     jwtCookie: signUp.headers['set-cookie'],
-    userName,
+    userEmail,
   };
 }

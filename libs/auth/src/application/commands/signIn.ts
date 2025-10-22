@@ -14,7 +14,7 @@ import {
 import { User } from '../../domain/entities/User';
 
 export interface SignInCommand {
-  name: string;
+  email: string;
 }
 
 export interface SignInDependencies {
@@ -28,7 +28,7 @@ function toAuthResult(user: User, token: string): AuthResult {
   return {
     user: {
       id: user.id,
-      name: user.name,
+      email: user.email,
       createdAt: user.createdAt.toISOString(),
       isTest: user.isTest,
     },
@@ -42,23 +42,23 @@ export async function signIn(
 ): Promise<AuthResult> {
   const { userRepository, jwtService, logger, metrics } = dependencies;
 
-  const { name } = command;
+  const { email } = command;
   const timing = TimingUtils.startTiming(OPERATION_NAMES.AUTH.SIGN_IN);
 
   logger.info('User sign-in started', {
-    userName: name,
+    userEmail: email,
     ...TimingUtils.createTimingMetadata(timing),
   });
 
-  let foundUser: Awaited<ReturnType<typeof userRepository.findByName>> = null;
+  let foundUser: Awaited<ReturnType<typeof userRepository.findByEmail>> = null;
 
   try {
-    foundUser = await userRepository.findByName(name);
+    foundUser = await userRepository.findByEmail(email);
 
     if (!foundUser) {
       const failedTiming = TimingUtils.endTiming(timing);
       logger.error('User sign-in failed', {
-        userName: name,
+        userEmail: email,
         error: 'User not found',
         ...TimingUtils.createTimingMetadata(failedTiming),
       });
@@ -72,7 +72,7 @@ export async function signIn(
         METRIC_UNITS.MILLISECONDS,
         failedTiming.duration || 0
       );
-      throw new UserNotFoundError(name);
+      throw new UserNotFoundError(email);
     }
 
     const token = await jwtService.generateToken(
@@ -93,7 +93,7 @@ export async function signIn(
     );
 
     logger.info('User sign-in completed successfully', {
-      userName: name,
+      userEmail: email,
       userId: foundUser.id,
       isTest: foundUser.isTest,
       ...TimingUtils.createTimingMetadata(completedTiming),
@@ -109,7 +109,7 @@ export async function signIn(
 
     if (error instanceof TokenGenerationError) {
       logger.error('JWT generation failed during sign-in', {
-        userName: name,
+        userEmail: email,
         userId: foundUser?.id || 'unknown',
         error: error.message,
         ...TimingUtils.createTimingMetadata(failedTiming),
@@ -123,7 +123,7 @@ export async function signIn(
     }
 
     logger.error('Unexpected error during user sign-in', {
-      userName: name,
+      userEmail: email,
       error: error instanceof Error ? error.message : 'Unknown error',
       ...TimingUtils.createTimingMetadata(failedTiming),
     });

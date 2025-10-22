@@ -68,6 +68,7 @@ describe('bootstrapPayNoteHandler', () => {
       getMyOsCredentials: vi.fn().mockResolvedValue({
         apiKey: 'myos-api-key',
         accountId: 'myos-account',
+        baseUrl: 'https://test-api.myos.blue',
       }),
       payNoteVerificationRepository: verificationRepository,
     });
@@ -115,7 +116,7 @@ describe('bootstrapPayNoteHandler', () => {
       })
     );
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.myos.blue/documents/bootstrap',
+      'https://test-api.myos.blue/documents/bootstrap',
       {
         method: 'POST',
         headers: {

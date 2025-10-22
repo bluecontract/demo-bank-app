@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { signIn, SignInCommand, SignInDependencies } from './signIn';
+import { signIn, type SignInCommand, type SignInDependencies } from './signIn';
 import { User } from '../../domain/entities/User';
 import {
   UserNotFoundError,
@@ -10,11 +10,10 @@ import type { UserRepository, JwtService, Logger, Metrics } from '../ports';
 import { AuthResult } from '../dtos';
 import { randomUUID } from 'crypto';
 
-// Mock dependencies
 const mockUserRepository: UserRepository = {
   save: vi.fn(),
   findById: vi.fn(),
-  findByName: vi.fn(),
+  findByEmail: vi.fn(),
 };
 
 const mockJwtService: JwtService = {
@@ -50,238 +49,219 @@ describe('signIn', () => {
     vi.clearAllMocks();
   });
 
-  describe('execute', () => {
-    it('should successfully sign in an existing user', async () => {
-      // Given
-      const command: SignInCommand = {
-        name: 'johndoe',
-      };
+  it('signs in an existing user', async () => {
+    const command: SignInCommand = {
+      email: 'john.doe@example.com',
+    };
 
-      const mockUser = new User({
-        id: randomUUID(),
-        name: 'johndoe',
+    const mockUser = new User({
+      id: randomUUID(),
+      email: 'john.doe@example.com',
+      isTest: false,
+      createdAt: new Date(),
+    });
+    const mockToken = 'jwt-token-123';
+
+    vi.mocked(mockUserRepository.findByEmail).mockResolvedValue(mockUser);
+    vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
+
+    const result = await signIn(command, dependencies);
+
+    expect(mockUserRepository.findByEmail).toHaveBeenCalledWith(
+      'john.doe@example.com'
+    );
+    expect(mockJwtService.generateToken).toHaveBeenCalledWith(
+      mockUser.id,
+      mockUser.isTest
+    );
+    expect(mockMetrics.addMetric).toHaveBeenCalledWith(
+      'UserSignIn',
+      'Count',
+      1
+    );
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      'User sign-in completed successfully',
+      expect.objectContaining({
+        userEmail: 'john.doe@example.com',
+        userId: mockUser.id,
         isTest: false,
-        createdAt: new Date(),
-      });
-      const mockToken = 'jwt-token-123';
+      })
+    );
 
-      vi.mocked(mockUserRepository.findByName).mockResolvedValue(mockUser);
-      vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
-
-      // When
-      const result = await signIn(command, dependencies);
-
-      // Then
-      expect(mockUserRepository.findByName).toHaveBeenCalledWith('johndoe');
-      expect(mockJwtService.generateToken).toHaveBeenCalledWith(
-        mockUser.id,
-        mockUser.isTest
-      );
-      expect(mockMetrics.addMetric).toHaveBeenCalledWith(
-        'UserSignIn',
-        'Count',
-        1
-      );
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'User sign-in completed successfully',
-        expect.objectContaining({
-          userName: 'johndoe',
-          userId: mockUser.id,
-          isTest: false,
-        })
-      );
-
-      const expectedResult: AuthResult = {
-        user: {
-          id: mockUser.id,
-          name: 'johndoe',
-          createdAt: mockUser.createdAt.toISOString(),
-          isTest: false,
-        },
-        token: mockToken,
-      };
-
-      expect(result).toEqual(expectedResult);
-    });
-
-    it('should successfully sign in a test user', async () => {
-      // Given
-      const command: SignInCommand = {
-        name: 'test-user',
-      };
-
-      const mockUser = new User({
-        id: randomUUID(),
-        name: 'test-user',
-        isTest: true,
-        createdAt: new Date(),
-      });
-      const mockToken = 'jwt-token-test';
-
-      vi.mocked(mockUserRepository.findByName).mockResolvedValue(mockUser);
-      vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
-
-      // When
-      const result = await signIn(command, dependencies);
-
-      // Then
-      expect(mockMetrics.addMetric).toHaveBeenCalledWith(
-        'TestUserSignIn',
-        'Count',
-        1
-      );
-      expect(result.user.id).toBe(mockUser.id);
-      expect(result.user.name).toBe('test-user');
-      expect(result.user.createdAt).toBe(mockUser.createdAt.toISOString());
-      expect(result.user.isTest).toBe(true);
-      expect(result.token).toBe(mockToken);
-    });
-
-    it('should throw UserNotFoundError when user does not exist', async () => {
-      // Given
-      const command: SignInCommand = {
-        name: 'nonexistent-user',
-      };
-
-      vi.mocked(mockUserRepository.findByName).mockResolvedValue(null);
-
-      // When & Then
-      await expect(signIn(command, dependencies)).rejects.toThrow(
-        UserNotFoundError
-      );
-      await expect(signIn(command, dependencies)).rejects.toThrow(
-        "User with name 'nonexistent-user' not found"
-      );
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'User sign-in failed',
-        expect.objectContaining({
-          userName: 'nonexistent-user',
-          error: 'User not found',
-        })
-      );
-      expect(mockMetrics.addMetric).toHaveBeenCalledWith(
-        'UserSignInError',
-        'Count',
-        1
-      );
-    });
-
-    it('should handle repository errors gracefully', async () => {
-      // Given
-      const command: SignInCommand = {
-        name: 'johndoe',
-      };
-
-      const repositoryError = new Error('Database connection failed');
-      vi.mocked(mockUserRepository.findByName).mockRejectedValue(
-        repositoryError
-      );
-
-      // When & Then
-      await expect(signIn(command, dependencies)).rejects.toThrow(
-        new AuthError('Unexpected error during user sign-in', repositoryError)
-      );
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Unexpected error during user sign-in',
-        expect.objectContaining({
-          userName: 'johndoe',
-          error: 'Database connection failed',
-        })
-      );
-    });
-
-    it('should handle JWT service errors gracefully', async () => {
-      // Given
-      const command: SignInCommand = {
-        name: 'johndoe',
-      };
-
-      const mockUser = new User({
-        id: randomUUID(),
-        name: 'johndoe',
+    const expectedResult: AuthResult = {
+      user: {
+        id: mockUser.id,
+        email: 'john.doe@example.com',
+        createdAt: mockUser.createdAt.toISOString(),
         isTest: false,
-        createdAt: new Date(),
-      });
-      const jwtError = new TokenGenerationError(mockUser.id);
+      },
+      token: mockToken,
+    };
 
-      vi.mocked(mockUserRepository.findByName).mockResolvedValue(mockUser);
-      vi.mocked(mockJwtService.generateToken).mockRejectedValue(jwtError);
+    expect(result).toEqual(expectedResult);
+  });
 
-      // When & Then
-      await expect(signIn(command, dependencies)).rejects.toThrow(
-        new TokenGenerationError(mockUser.id)
-      );
+  it('signs in a test user', async () => {
+    const command: SignInCommand = {
+      email: 'test.user@example.com',
+    };
 
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'JWT generation failed during sign-in',
-        expect.objectContaining({
-          userName: 'johndoe',
-          userId: mockUser.id,
-          error: `Failed to generate token for user '${mockUser.id}'`,
-        })
-      );
+    const mockUser = new User({
+      id: randomUUID(),
+      email: 'test.user@example.com',
+      isTest: true,
+      createdAt: new Date(),
     });
+    const mockToken = 'jwt-token-test';
 
-    it('should handle unknown errors gracefully', async () => {
-      // Given
-      const command: SignInCommand = {
-        name: 'johndoe',
-      };
+    vi.mocked(mockUserRepository.findByEmail).mockResolvedValue(mockUser);
+    vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
 
-      const unknownError = new Error('Something went wrong');
-      vi.mocked(mockUserRepository.findByName).mockRejectedValue(unknownError);
+    const result = await signIn(command, dependencies);
 
-      // When & Then
-      await expect(signIn(command, dependencies)).rejects.toThrow(
-        new AuthError('Unexpected error during user sign-in', unknownError)
-      );
+    expect(mockMetrics.addMetric).toHaveBeenCalledWith(
+      'TestUserSignIn',
+      'Count',
+      1
+    );
+    expect(result.user.id).toBe(mockUser.id);
+    expect(result.user.email).toBe('test.user@example.com');
+    expect(result.user.createdAt).toBe(mockUser.createdAt.toISOString());
+    expect(result.user.isTest).toBe(true);
+    expect(result.token).toBe(mockToken);
+  });
 
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        'Unexpected error during user sign-in',
-        expect.objectContaining({
-          userName: 'johndoe',
-          error: 'Something went wrong',
-        })
-      );
+  it('throws UserNotFoundError when user does not exist', async () => {
+    const command: SignInCommand = {
+      email: 'missing.user@example.com',
+    };
+
+    vi.mocked(mockUserRepository.findByEmail).mockResolvedValue(null);
+
+    await expect(signIn(command, dependencies)).rejects.toThrow(
+      UserNotFoundError
+    );
+    await expect(signIn(command, dependencies)).rejects.toThrow(
+      "User with email 'missing.user@example.com' not found"
+    );
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'User sign-in failed',
+      expect.objectContaining({
+        userEmail: 'missing.user@example.com',
+        error: 'User not found',
+      })
+    );
+    expect(mockMetrics.addMetric).toHaveBeenCalledWith(
+      'UserSignInError',
+      'Count',
+      1
+    );
+  });
+
+  it('wraps repository errors', async () => {
+    const command: SignInCommand = {
+      email: 'john.doe@example.com',
+    };
+
+    const repositoryError = new Error('Database connection failed');
+    vi.mocked(mockUserRepository.findByEmail).mockRejectedValue(
+      repositoryError
+    );
+
+    await expect(signIn(command, dependencies)).rejects.toThrow(
+      new AuthError('Unexpected error during user sign-in', repositoryError)
+    );
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Unexpected error during user sign-in',
+      expect.objectContaining({
+        userEmail: 'john.doe@example.com',
+        error: 'Database connection failed',
+      })
+    );
+  });
+
+  it('propagates JWT generation errors', async () => {
+    const command: SignInCommand = {
+      email: 'john.doe@example.com',
+    };
+
+    const mockUser = new User({
+      id: randomUUID(),
+      email: 'john.doe@example.com',
+      isTest: false,
+      createdAt: new Date(),
     });
+    const jwtError = new TokenGenerationError(mockUser.id);
 
-    it('should log sign-in start and success', async () => {
-      // Given
-      const command: SignInCommand = {
-        name: 'johndoe',
-      };
+    vi.mocked(mockUserRepository.findByEmail).mockResolvedValue(mockUser);
+    vi.mocked(mockJwtService.generateToken).mockRejectedValue(jwtError);
 
-      const mockUser = new User({
-        id: randomUUID(),
-        name: 'johndoe',
-        isTest: false,
-        createdAt: new Date(),
-      });
-      const mockToken = 'jwt-token-123';
+    await expect(signIn(command, dependencies)).rejects.toThrow(
+      new TokenGenerationError(mockUser.id)
+    );
 
-      vi.mocked(mockUserRepository.findByName).mockResolvedValue(mockUser);
-      vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'JWT generation failed during sign-in',
+      expect.objectContaining({
+        userEmail: 'john.doe@example.com',
+        userId: mockUser.id,
+        error: `Failed to generate token for user '${mockUser.id}'`,
+      })
+    );
+  });
 
-      // When
-      await signIn(command, dependencies);
+  it('handles unknown errors', async () => {
+    const command: SignInCommand = {
+      email: 'john.doe@example.com',
+    };
 
-      // Then
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'User sign-in started',
-        expect.objectContaining({
-          userName: 'johndoe',
-        })
-      );
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        'User sign-in completed successfully',
-        expect.objectContaining({
-          userName: 'johndoe',
-          userId: mockUser.id,
-          isTest: false,
-        })
-      );
+    const unknownError = new Error('Something went wrong');
+    vi.mocked(mockUserRepository.findByEmail).mockRejectedValue(unknownError);
+
+    await expect(signIn(command, dependencies)).rejects.toThrow(
+      new AuthError('Unexpected error during user sign-in', unknownError)
+    );
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Unexpected error during user sign-in',
+      expect.objectContaining({
+        userEmail: 'john.doe@example.com',
+        error: 'Something went wrong',
+      })
+    );
+  });
+
+  it('logs sign-in start and success', async () => {
+    const command: SignInCommand = {
+      email: 'john.doe@example.com',
+    };
+
+    const mockUser = new User({
+      id: randomUUID(),
+      email: 'john.doe@example.com',
+      isTest: false,
+      createdAt: new Date(),
     });
+    const mockToken = 'jwt-token-123';
+
+    vi.mocked(mockUserRepository.findByEmail).mockResolvedValue(mockUser);
+    vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
+
+    await signIn(command, dependencies);
+
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      'User sign-in started',
+      expect.objectContaining({
+        userEmail: 'john.doe@example.com',
+      })
+    );
+    expect(mockLogger.info).toHaveBeenCalledWith(
+      'User sign-in completed successfully',
+      expect.objectContaining({
+        userEmail: 'john.doe@example.com',
+        userId: mockUser.id,
+      })
+    );
   });
 });

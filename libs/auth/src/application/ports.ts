@@ -18,7 +18,7 @@ export interface JwtPayload {
 export interface UserRepository {
   save(user: User): Promise<User>;
   findById(id: User['id']): Promise<User | null>;
-  findByName(name: User['name']): Promise<User | null>;
+  findByEmail(email: User['email']): Promise<User | null>;
 }
 
 // Service ports

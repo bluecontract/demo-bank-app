@@ -3,7 +3,7 @@ import {
   URLS,
   TEST_DATA,
   UI_TEXT,
-  createUniqueName,
+  createUniqueEmail,
   createUniqueAccountName,
   waitForModalToClose,
   waitForModalToOpen,
@@ -15,14 +15,12 @@ import {
 
 test.describe('Banking Core Flows', () => {
   test.describe.configure({ timeout: 60000 });
-  let testUserName: string;
-
   test.beforeEach(async ({ page }) => {
-    testUserName = createUniqueName('banking-user');
+    const testUserEmail = createUniqueEmail('banking-user');
 
     // Sign up and get to dashboard
     await page.goto(URLS.SIGNUP);
-    await page.fill('input[name="name"]', testUserName);
+    await page.fill('input[name="email"]', testUserEmail);
     await page.click('button[type="submit"]');
 
     await page.waitForURL(URLS.DASHBOARD, {

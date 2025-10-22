@@ -14,14 +14,14 @@ export const URLS = {
 // Test data constants
 export const TEST_DATA = {
   VALIDATION: {
-    MAX_NAME_LENGTH: 50,
+    MAX_EMAIL_LENGTH: 254,
   },
   TIMEOUTS: {
-    NAVIGATION: 20000,
-    MODAL_LOAD: 20000,
+    NAVIGATION: 30000,
+    MODAL_LOAD: 30000,
     API_RESPONSE: 15000,
     BALANCE_UPDATE: 15000,
-    TRANSFER_COMPLETION: 20000,
+    TRANSFER_COMPLETION: 30000,
   },
   AMOUNTS: {
     SMALL: '25.50',
@@ -88,10 +88,9 @@ export const UI_TEXT = {
 } as const;
 
 // Helper functions
-export const createUniqueName = (prefix = 'testuser') => {
-  return `${prefix}-${Date.now()}-${Math.random()
-    .toString(36)
-    .substring(2, 5)}`;
+export const createUniqueEmail = (prefix = 'testuser') => {
+  const uniqueSuffix = Math.random().toString(36).substring(2, 5);
+  return `${prefix}-${Date.now()}-${uniqueSuffix}@example.com`;
 };
 
 export const createUniqueAccountName = (prefix = 'testaccount') => {

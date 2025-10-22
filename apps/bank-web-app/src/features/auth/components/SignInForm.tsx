@@ -10,14 +10,14 @@ interface SignInFormProps {
 }
 
 export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
-  const [name, setName] = useState('');
-  const [errors, setErrors] = useState<{ name?: string }>({});
+  const [email, setEmail] = useState('');
+  const [errors, setErrors] = useState<{ email?: string }>({});
   const apiClient = useApiClient();
   const navigate = useNavigate();
   const { signIn } = useAuth();
 
   const signInMutation = useMutation({
-    mutationFn: async (userData: { name: string }) => {
+    mutationFn: async (userData: { email: string }) => {
       const response = await apiClient.signIn({
         body: userData,
       });
@@ -27,7 +27,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
       } else {
         if (response.status === 404) {
           throw new Error(
-            'User not found. Please check the name and try again.'
+            'User not found. Please check the email and try again.'
           );
         }
 
@@ -48,20 +48,25 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
     onError: (error: unknown) => {
       if (error instanceof Error && error.message?.includes('User not found')) {
         setErrors({
-          name: 'User not found. Please check the name and try again.',
+          email: 'User not found. Please check the email and try again.',
         });
       } else {
-        setErrors({ name: 'Sign in failed. Please try again.' });
+        setErrors({ email: 'Sign in failed. Please try again.' });
       }
     },
   });
 
-  const validateName = (nameValue: string): string | undefined => {
-    if (!nameValue.trim()) {
-      return 'Name is required';
+  const validateEmail = (emailValue: string): string | undefined => {
+    const trimmed = emailValue.trim();
+    if (!trimmed) {
+      return 'Email is required';
     }
-    if (nameValue.length > 50) {
-      return 'Name must be 50 characters or less';
+    if (trimmed.length > 254) {
+      return 'Email must be 254 characters or less';
+    }
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(trimmed)) {
+      return 'Enter a valid email address';
     }
     return undefined;
   };
@@ -69,14 +74,14 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const nameError = validateName(name);
-    if (nameError) {
-      setErrors({ name: nameError });
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setErrors({ email: emailError });
       return;
     }
 
     setErrors({});
-    signInMutation.mutate({ name: name.trim() });
+    signInMutation.mutate({ email: email.trim().toLowerCase() });
   };
 
   const clearErrors = () => {
@@ -89,32 +94,32 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
         Sign In
       </h2>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
         <div>
           <label
-            htmlFor="name"
+            htmlFor="email"
             className="block text-sm font-medium text-gray-700 mb-2"
           >
-            Full Name
+            Email
           </label>
           <input
-            id="name"
-            name="name"
-            type="text"
-            value={name}
+            id="email"
+            name="email"
+            type="email"
+            value={email}
             onChange={e => {
-              setName(e.target.value);
+              setEmail(e.target.value);
               clearErrors();
             }}
             className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              errors.name ? 'border-red-500' : 'border-gray-300'
+              errors.email ? 'border-red-500' : 'border-gray-300'
             }`}
-            placeholder="Enter your full name"
+            placeholder="Enter your email address"
             disabled={signInMutation.isPending}
           />
-          {errors.name && (
+          {errors.email && (
             <p className="mt-1 text-sm text-red-600" role="alert">
-              {errors.name}
+              {errors.email}
             </p>
           )}
         </div>

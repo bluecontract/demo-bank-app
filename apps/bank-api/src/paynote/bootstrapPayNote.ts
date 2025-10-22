@@ -7,10 +7,7 @@ import {
 import { getDependencies } from './dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { calculateBlueIdFromObject } from './blueId';
-import {
-  MIN_PAYNOTE_VERIFICATION_SCORE,
-  MYOS_BOOTSTRAP_URL,
-} from './constants';
+import { MIN_PAYNOTE_VERIFICATION_SCORE } from './constants';
 
 export const bootstrapPayNoteHandler = async (
   request: ServerInferRequest<
@@ -77,7 +74,9 @@ export const bootstrapPayNoteHandler = async (
       document: payNote,
     };
 
-    const response = await fetch(MYOS_BOOTSTRAP_URL, {
+    const bootstrapUrl = `${credentials.baseUrl}/documents/bootstrap`;
+
+    const response = await fetch(bootstrapUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

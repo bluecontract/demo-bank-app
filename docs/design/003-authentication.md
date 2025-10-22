@@ -10,7 +10,7 @@ This document refines the authentication flow defined in the requirements
 (`docs/requirements/002-authentication.md`) and supersedes the cookie attribute
 from ADR 003 via ADR 005.
 
-- Users sign up / sign in with a single **Name**. No passwords, no external IdP.
+- Users sign up / sign in with a single **Email address**. No passwords, no external IdP.
 - Session token = 1-hour JWT delivered in `HttpOnly; Secure; SameSite=None` cookie.
 - SPA (CloudFront) and API Gateway reside on different domains ⇒ cross-site cookie required.
 
@@ -25,9 +25,9 @@ sequenceDiagram
     participant L as Bank Lambda
     participant D as DynamoDB.BankTable
 
-    U->>G: POST /auth/signup { name }
+    U->>G: POST /auth/signup { email }
     G->>L: Lambda proxy
-    L->>D: TransactWrite (username + user profile)
+    L->>D: TransactWrite (email reservation + user profile)
     L-->>U: 201 Created + Set-Cookie JWT
     U->>G: GET /accounts (cookie auto-sent)
     G->>L: verify JWT (HS256)
@@ -35,12 +35,12 @@ sequenceDiagram
 
 ## Component Responsibilities
 
-| Component              | Responsibility                                                                                                                                                                                                                                                                                                                             |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **SPA**                | Sign-Up, Sign-In pages, shows UX errors & session-expired toast. No direct JWT access.                                                                                                                                                                                                                                                     |
-| **API Gateway**        | Single REST stage; forwards all paths to Bank Lambda.                                                                                                                                                                                                                                                                                      |
-| **Bank Lambda**        | Validates inputs, checks DynamoDB for user, issues/validates JWT, sets/clears cookie, handles business APIs.                                                                                                                                                                                                                               |
-| **DynamoDB.BankTable** | **Single table design with two item types**: (1) Username reservations: `PK = USERNAME#{name}`, `SK = USERNAME` for uniqueness; (2) User profiles: `PK = USER#{userId}`, `SK = PROFILE` with attributes `name`, `createdAt`. Transaction ensures atomic creation. Designed to accommodate future entities (accounts, transactions, cards). |
+| Component              | Responsibility                                                                                                                                                                                                                                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SPA**                | Sign-Up, Sign-In pages, shows UX errors & session-expired toast. No direct JWT access.                                                                                                                                                                                                                                              |
+| **API Gateway**        | Single REST stage; forwards all paths to Bank Lambda.                                                                                                                                                                                                                                                                               |
+| **Bank Lambda**        | Validates inputs, checks DynamoDB for user, issues/validates JWT, sets/clears cookie, handles business APIs.                                                                                                                                                                                                                        |
+| **DynamoDB.BankTable** | **Single table design with two item types**: (1) Email reservations: `PK = EMAIL#{email}`, `SK = EMAIL` for uniqueness; (2) User profiles: `PK = USER#{userId}`, `SK = PROFILE` with attributes `email`, `createdAt`. Transaction ensures atomic creation. Designed to accommodate future entities (accounts, transactions, cards). |
 
 ## Technology & Frameworks
 
@@ -63,14 +63,14 @@ sequenceDiagram
 
 CI pipelines and local e2e tests will create a **new test user per run**.
 
-1. Test code calls the **Sign-Up** endpoint with a randomly generated `test-<uuid>` Name and adds a query parameter `?dev=true` (or header `X-Demo-Dev: 1`).
+1. Test code calls the **Sign-Up** endpoint with a randomly generated `test-<uuid>@example.com` email and adds a query parameter `?dev=true` (or header `X-Demo-Dev: 1`).
 2. Bank Lambda detects the `dev` flag and marks the user record with `isTest=true` and **sets a DynamoDB TTL** so user data auto-expires after 24 h.
 3. All subsequent API calls proceed normally using the issued cookie.
 
 Safeguards (future/real-world):
 • In a production environment the `dev` flag must be gated (e.g., signed header, stage variable) or disabled entirely to prevent misuse. This protection is **not** implemented in the demo; it is merely documented for completeness.  
 • TTL cleanup means no manual teardown is required; test data is purged automatically.  
-• Parallel CI jobs never collide because Names are random.
+• Parallel CI jobs never collide because emails are random.
 
 ## Risks & Mitigations
 

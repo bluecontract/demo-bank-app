@@ -51,7 +51,7 @@ Resources:
         - AttributeName: SK
           KeyType: RANGE
       GlobalSecondaryIndexes:
-        # AUTH_GSI1 –(PK = USERNAME#name, SK PROFILE)` get user by username.
+        # AUTH_GSI1 –(PK = EMAIL#email, SK PROFILE)` get user by email.
         - IndexName: AUTH_GSI1
           KeySchema:
             - AttributeName: AUTH_GSI1PK

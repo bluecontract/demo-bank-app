@@ -10,14 +10,14 @@ interface SignUpFormProps {
 }
 
 export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
-  const [name, setName] = useState('');
-  const [errors, setErrors] = useState<{ name?: string }>({});
+  const [email, setEmail] = useState('');
+  const [errors, setErrors] = useState<{ email?: string }>({});
   const apiClient = useApiClient();
   const navigate = useNavigate();
   const { signIn } = useAuth();
 
   const signUpMutation = useMutation({
-    mutationFn: async (userData: { name: string }) => {
+    mutationFn: async (userData: { email: string }) => {
       const isE2ETest =
         typeof window !== 'undefined' &&
         (window.location.search.includes('e2e=true') ||
@@ -34,7 +34,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
       } else {
         if (response.status === 409) {
           throw new Error(
-            'A user with this name already exists. Please choose a different name.'
+            'A user with this email already exists. Please use a different email.'
           );
         }
 
@@ -53,22 +53,31 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
       navigate('/dashboard');
     },
     onError: (error: unknown) => {
-      if (error instanceof Error && error.message?.includes('different name')) {
+      if (
+        error instanceof Error &&
+        error.message?.includes('different email')
+      ) {
         setErrors({
-          name: 'A user with this name already exists. Please choose a different name.',
+          email:
+            'A user with this email already exists. Please use a different email.',
         });
       } else {
-        setErrors({ name: 'Sign up failed. Please try again.' });
+        setErrors({ email: 'Sign up failed. Please try again.' });
       }
     },
   });
 
-  const validateName = (nameValue: string): string | undefined => {
-    if (!nameValue.trim()) {
-      return 'Name is required';
+  const validateEmail = (emailValue: string): string | undefined => {
+    const trimmed = emailValue.trim();
+    if (!trimmed) {
+      return 'Email is required';
     }
-    if (nameValue.length > 50) {
-      return 'Name must be 50 characters or less';
+    if (trimmed.length > 254) {
+      return 'Email must be 254 characters or less';
+    }
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(trimmed)) {
+      return 'Enter a valid email address';
     }
     return undefined;
   };
@@ -76,14 +85,14 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const nameError = validateName(name);
-    if (nameError) {
-      setErrors({ name: nameError });
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setErrors({ email: emailError });
       return;
     }
 
     setErrors({});
-    signUpMutation.mutate({ name: name.trim() });
+    signUpMutation.mutate({ email: email.trim().toLowerCase() });
   };
 
   const clearErrors = () => {
@@ -96,32 +105,32 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
         Create Account
       </h2>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
         <div>
           <label
-            htmlFor="name"
+            htmlFor="email"
             className="block text-sm font-medium text-gray-700 mb-2"
           >
-            Full Name
+            Email
           </label>
           <input
-            id="name"
-            name="name"
-            type="text"
-            value={name}
+            id="email"
+            name="email"
+            type="email"
+            value={email}
             onChange={e => {
-              setName(e.target.value);
+              setEmail(e.target.value);
               clearErrors();
             }}
             className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              errors.name ? 'border-red-500' : 'border-gray-300'
+              errors.email ? 'border-red-500' : 'border-gray-300'
             }`}
-            placeholder="Enter your full name"
+            placeholder="Enter your email address"
             disabled={signUpMutation.isPending}
           />
-          {errors.name && (
+          {errors.email && (
             <p className="mt-1 text-sm text-red-600" role="alert">
-              {errors.name}
+              {errors.email}
             </p>
           )}
         </div>

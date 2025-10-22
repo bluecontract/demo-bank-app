@@ -1,6 +1,6 @@
 export interface UserResult {
   id: string;
-  name: string;
+  email: string;
   createdAt: string;
   isTest: boolean;
 }

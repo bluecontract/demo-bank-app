@@ -1,20 +1,21 @@
 import { UserValidationError } from '../errors';
+
 export interface UserProps {
   id: string;
-  name: string;
+  email: string;
   createdAt: Date;
   isTest?: boolean;
 }
 
 const USER_CONSTANTS = {
-  MIN_NAME_LENGTH: 1,
-  MAX_NAME_LENGTH: 50,
-  NAME_PATTERN: /^[a-zA-Z0-9_-]+$/,
+  MIN_EMAIL_LENGTH: 3,
+  MAX_EMAIL_LENGTH: 254,
+  EMAIL_PATTERN: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
 } as const;
 
 export class User {
   readonly id: string;
-  readonly name: string;
+  readonly email: string;
   readonly createdAt: Date;
   readonly isTest: boolean;
 
@@ -23,31 +24,30 @@ export class User {
       throw new UserValidationError('id', 'User ID cannot be empty');
     }
 
-    if (!props.name || props.name.trim() === '') {
+    if (!props.email || props.email.trim() === '') {
+      throw new UserValidationError('email', 'User email must be provided');
+    }
+
+    const normalizedEmail = props.email.trim().toLowerCase();
+
+    if (normalizedEmail.length < USER_CONSTANTS.MIN_EMAIL_LENGTH) {
       throw new UserValidationError(
-        'name',
-        `User name must be at least ${USER_CONSTANTS.MIN_NAME_LENGTH} character(s)`
+        'email',
+        `User email must be at least ${USER_CONSTANTS.MIN_EMAIL_LENGTH} character(s)`
       );
     }
 
-    if (props.name.length < USER_CONSTANTS.MIN_NAME_LENGTH) {
+    if (normalizedEmail.length > USER_CONSTANTS.MAX_EMAIL_LENGTH) {
       throw new UserValidationError(
-        'name',
-        `User name must be at least ${USER_CONSTANTS.MIN_NAME_LENGTH} character(s)`
+        'email',
+        `User email must be no more than ${USER_CONSTANTS.MAX_EMAIL_LENGTH} characters`
       );
     }
 
-    if (props.name.length > USER_CONSTANTS.MAX_NAME_LENGTH) {
+    if (!USER_CONSTANTS.EMAIL_PATTERN.test(normalizedEmail)) {
       throw new UserValidationError(
-        'name',
-        `User name must be no more than ${USER_CONSTANTS.MAX_NAME_LENGTH} characters`
-      );
-    }
-
-    if (!USER_CONSTANTS.NAME_PATTERN.test(props.name)) {
-      throw new UserValidationError(
-        'name',
-        'User name can only contain letters, numbers, hyphens, and underscores'
+        'email',
+        'User email must be a valid email address'
       );
     }
 
@@ -66,7 +66,7 @@ export class User {
     }
 
     this.id = props.id;
-    this.name = props.name;
+    this.email = normalizedEmail;
     this.createdAt = props.createdAt;
     this.isTest = props.isTest ?? false;
   }
@@ -74,7 +74,7 @@ export class User {
   equals(other: User): boolean {
     return (
       this.id === other.id &&
-      this.name === other.name &&
+      this.email === other.email &&
       this.createdAt.getTime() === other.createdAt.getTime() &&
       this.isTest === other.isTest
     );

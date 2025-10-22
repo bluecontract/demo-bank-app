@@ -49,7 +49,7 @@ describe('DynamoUserRepository', () => {
       // Given
       const user = new User({
         id: randomUUID(),
-        name: 'john-doe',
+        email: 'john.doe@example.com',
         isTest: false,
         createdAt: new Date(),
       });
@@ -61,7 +61,7 @@ describe('DynamoUserRepository', () => {
       // Then
       expect(savedUser).toBeDefined();
       expect(savedUser.id).toBe(user.id);
-      expect(savedUser.name).toBe(user.name);
+      expect(savedUser.email).toBe(user.email);
 
       // Verify TransactWriteCommand was created with correct parameters
       expect(mockTransactWriteCommand).toHaveBeenCalledTimes(1);
@@ -72,8 +72,8 @@ describe('DynamoUserRepository', () => {
               Put: {
                 TableName: 'test-table',
                 Item: expect.objectContaining({
-                  PK: `USERNAME#${user.name}`,
-                  SK: 'USERNAME',
+                  PK: `EMAIL#${user.email}`,
+                  SK: 'EMAIL',
                   userId: user.id,
                   createdAt: expect.any(String),
                 }),
@@ -86,10 +86,10 @@ describe('DynamoUserRepository', () => {
                 Item: expect.objectContaining({
                   PK: `USER#${user.id}`,
                   SK: 'PROFILE',
-                  AUTH_GSI1PK: `USERNAME#${user.name}`,
+                  AUTH_GSI1PK: `EMAIL#${user.email}`,
                   AUTH_GSI1SK: 'PROFILE',
                   id: user.id,
-                  name: user.name,
+                  email: user.email,
                   isTest: false,
                 }),
                 ConditionExpression: 'attribute_not_exists(PK)',
@@ -107,7 +107,7 @@ describe('DynamoUserRepository', () => {
       // Given
       const user = new User({
         id: randomUUID(),
-        name: 'john-doe',
+        email: 'john.doe@example.com',
         isTest: false,
         createdAt: new Date(),
       });
@@ -130,7 +130,7 @@ describe('DynamoUserRepository', () => {
       // Given
       const user = new User({
         id: randomUUID(),
-        name: 'john-doe',
+        email: 'john.doe@example.com',
         isTest: false,
         createdAt: new Date(),
       });
@@ -153,7 +153,7 @@ describe('DynamoUserRepository', () => {
       // Given
       const user = new User({
         id: randomUUID(),
-        name: 'john-doe',
+        email: 'john.doe@example.com',
         isTest: false,
         createdAt: new Date(),
       });
@@ -176,7 +176,7 @@ describe('DynamoUserRepository', () => {
       // Given
       const testUser = new User({
         id: randomUUID(),
-        name: 'test-user',
+        email: 'test.user@example.com',
         isTest: true,
         createdAt: new Date(),
       });
@@ -198,8 +198,8 @@ describe('DynamoUserRepository', () => {
               Put: {
                 TableName: 'test-table',
                 Item: expect.objectContaining({
-                  PK: `USERNAME#${testUser.name}`,
-                  SK: 'USERNAME',
+                  PK: `EMAIL#${testUser.email}`,
+                  SK: 'EMAIL',
                   userId: testUser.id,
                   createdAt: expect.any(String),
                   ttl: expect.any(Number),
@@ -213,10 +213,10 @@ describe('DynamoUserRepository', () => {
                 Item: expect.objectContaining({
                   PK: `USER#${testUser.id}`,
                   SK: 'PROFILE',
-                  AUTH_GSI1PK: `USERNAME#${testUser.name}`,
+                  AUTH_GSI1PK: `EMAIL#${testUser.email}`,
                   AUTH_GSI1SK: 'PROFILE',
                   id: testUser.id,
-                  name: testUser.name,
+                  email: testUser.email,
                   isTest: true,
                   ttl: expect.any(Number),
                 }),
@@ -236,7 +236,7 @@ describe('DynamoUserRepository', () => {
       // Given
       const user = new User({
         id: randomUUID(),
-        name: 'john-doe',
+        email: 'john.doe@example.com',
         isTest: false,
         createdAt: new Date(),
       });
@@ -244,10 +244,10 @@ describe('DynamoUserRepository', () => {
         Item: {
           PK: `USER#${user.id}`,
           SK: 'PROFILE',
-          AUTH_GSI1PK: `USERNAME#${user.name}`,
+          AUTH_GSI1PK: `EMAIL#${user.email}`,
           AUTH_GSI1SK: 'PROFILE',
           id: user.id,
-          name: user.name,
+          email: user.email,
           createdAt: user.createdAt.toISOString(),
           isTest: false,
         },
@@ -259,7 +259,7 @@ describe('DynamoUserRepository', () => {
       // Then
       expect(foundUser).toBeDefined();
       expect(foundUser!.id).toBe(user.id);
-      expect(foundUser!.name).toBe(user.name);
+      expect(foundUser!.email).toBe(user.email);
       expect(foundUser!.isTest).toBe(false);
 
       // Verify GetCommand was created with correct parameters
@@ -305,12 +305,12 @@ describe('DynamoUserRepository', () => {
     });
   });
 
-  describe('findByName', () => {
+  describe('findByEmail', () => {
     it('should return user when found by name', async () => {
       // Given
       const user = new User({
         id: randomUUID(),
-        name: 'john-doe',
+        email: 'john.doe@example.com',
         isTest: false,
         createdAt: new Date(),
       });
@@ -319,10 +319,10 @@ describe('DynamoUserRepository', () => {
           {
             PK: `USER#${user.id}`,
             SK: 'PROFILE',
-            AUTH_GSI1PK: `USERNAME#${user.name}`,
+            AUTH_GSI1PK: `EMAIL#${user.email}`,
             AUTH_GSI1SK: 'PROFILE',
             id: user.id,
-            name: user.name,
+            email: user.email,
             createdAt: user.createdAt.toISOString(),
             isTest: false,
           },
@@ -330,12 +330,12 @@ describe('DynamoUserRepository', () => {
       });
 
       // When
-      const foundUser = await repository.findByName(user.name);
+      const foundUser = await repository.findByEmail(user.email);
 
       // Then
       expect(foundUser).toBeDefined();
       expect(foundUser!.id).toBe(user.id);
-      expect(foundUser!.name).toBe(user.name);
+      expect(foundUser!.email).toBe(user.email);
 
       // Verify QueryCommand was created with correct parameters
       expect(mockQueryCommand).toHaveBeenCalledTimes(1);
@@ -346,7 +346,7 @@ describe('DynamoUserRepository', () => {
           KeyConditionExpression:
             'AUTH_GSI1PK = :gsi1pk AND AUTH_GSI1SK = :gsi1sk',
           ExpressionAttributeValues: {
-            ':gsi1pk': `USERNAME#${user.name}`,
+            ':gsi1pk': `EMAIL#${user.email}`,
             ':gsi1sk': 'PROFILE',
           },
         })
@@ -362,7 +362,7 @@ describe('DynamoUserRepository', () => {
       mockSend.mockResolvedValueOnce({ Items: [] });
 
       // When
-      const foundUser = await repository.findByName(nonExistentName);
+      const foundUser = await repository.findByEmail(nonExistentName);
 
       // Then
       expect(foundUser).toBeNull();
@@ -376,7 +376,7 @@ describe('DynamoUserRepository', () => {
           KeyConditionExpression:
             'AUTH_GSI1PK = :gsi1pk AND AUTH_GSI1SK = :gsi1sk',
           ExpressionAttributeValues: {
-            ':gsi1pk': `USERNAME#${nonExistentName}`,
+            ':gsi1pk': `EMAIL#${nonExistentName}`,
             ':gsi1sk': 'PROFILE',
           },
         })

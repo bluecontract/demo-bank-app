@@ -48,7 +48,10 @@ describe('payNoteWebhookHandler', () => {
       bankingRepository,
     });
 
-    getMyOsCredentials.mockResolvedValue({ apiKey: 'api-key' });
+    getMyOsCredentials.mockResolvedValue({
+      apiKey: 'api-key',
+      baseUrl: 'https://test-api.myos.blue',
+    });
 
     global.fetch = fetchMock as unknown as typeof fetch;
   });
@@ -93,7 +96,7 @@ describe('payNoteWebhookHandler', () => {
     } as any);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.myos.blue/myos-events/event-123',
+      'https://test-api.myos.blue/myos-events/event-123',
       {
         method: 'GET',
         headers: {

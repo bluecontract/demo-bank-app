@@ -6,7 +6,10 @@ import {
 export type MyOsCredentials = {
   apiKey: string;
   accountId: string;
+  baseUrl: string;
 };
+
+const normalizeBaseUrl = (value: string): string => value.replace(/\/+$/, '');
 
 export const createMyOsCredentialsResolver = ({
   secretArn,
@@ -46,13 +49,14 @@ export const createMyOsCredentialsResolver = ({
 
     if (!payload || typeof payload !== 'object') {
       throw new Error(
-        'MyOS credentials secret must be a JSON object with `apiKey` and `accountId` strings.'
+        'MyOS credentials secret must be a JSON object with `apiKey`, `accountId`, and `baseUrl` strings.'
       );
     }
 
-    const { apiKey, accountId } = payload as {
+    const { apiKey, accountId, baseUrl } = payload as {
       apiKey?: unknown;
       accountId?: unknown;
+      baseUrl?: unknown;
     };
 
     if (typeof apiKey !== 'string' || apiKey.trim().length === 0) {
@@ -67,9 +71,29 @@ export const createMyOsCredentialsResolver = ({
       );
     }
 
+    if (typeof baseUrl !== 'string' || baseUrl.trim().length === 0) {
+      throw new Error(
+        'MyOS credentials secret must include a non-empty `baseUrl` string.'
+      );
+    }
+
+    const normalizedBaseUrl = normalizeBaseUrl(baseUrl.trim());
+
+    try {
+      // Throws if the URL is invalid; ensures we fail fast on bad configuration.
+      void new URL(normalizedBaseUrl);
+    } catch (error) {
+      throw new Error(
+        `MyOS credentials secret must include a valid \`baseUrl\`: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+
     cachedCredentials = {
       apiKey: apiKey.trim(),
       accountId: accountId.trim(),
+      baseUrl: normalizedBaseUrl,
     };
 
     return cachedCredentials;

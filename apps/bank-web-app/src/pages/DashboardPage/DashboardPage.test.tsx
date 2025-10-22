@@ -58,8 +58,8 @@ vi.mock('../../features/transfer', () => ({
 }));
 
 vi.mock('../../features/dashboard/components', () => ({
-  DashboardHeader: vi.fn(({ userName }) => (
-    <div data-testid="dashboard-header">Dashboard Header - {userName}</div>
+  DashboardHeader: vi.fn(({ userEmail }) => (
+    <div data-testid="dashboard-header">Dashboard Header - {userEmail}</div>
   )),
 }));
 
@@ -148,7 +148,7 @@ describe('DashboardPage', () => {
 
     // Default mock implementations
     mockUseAuth.mockReturnValue({
-      user: { name: 'Alice', userId: 'user-1' },
+      user: { email: 'alice@example.com', userId: 'user-1' },
       signOut: vi.fn(),
     });
 
@@ -216,7 +216,9 @@ describe('DashboardPage', () => {
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
     expect(screen.getByTestId('dashboard-header')).toBeInTheDocument();
-    expect(screen.getByText('Dashboard Header - Alice')).toBeInTheDocument();
+    expect(
+      screen.getByText('Dashboard Header - alice@example.com')
+    ).toBeInTheDocument();
   });
 
   it('should render horizontal accounts list when accounts exist', () => {

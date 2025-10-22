@@ -117,7 +117,7 @@ export function DashboardPage() {
         data-testid="dashboard-main-container"
       >
         <div className="px-4 py-4">
-          <DashboardHeader userName={user?.name || 'Guest'} />
+          <DashboardHeader userEmail={user?.email || 'Guest'} />
 
           <div className="mt-4">
             {/* Accounts Section */}

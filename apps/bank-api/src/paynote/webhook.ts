@@ -1,8 +1,8 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { Money, transferMoney } from '@demo-bank-app/banking';
+import type { MyOsCredentials } from '../shared/myOsSecrets';
 import { getDependencies } from './dependencies';
-import { MYOS_EVENTS_URL } from './constants';
 
 const CAPTURE_EVENT_NAME = 'Transfer Capture Requested';
 
@@ -15,18 +15,23 @@ const returnResponse = (note?: string) => ({
 
 const downloadPayNoteEvent = async (
   eventId: string,
-  getMyOsCredentials: () => Promise<{ apiKey: string }>,
+  getMyOsCredentials: () => Promise<
+    Pick<MyOsCredentials, 'apiKey' | 'baseUrl'>
+  >,
   logError: (message: string, context?: Record<string, unknown>) => string
 ): Promise<{ payload: any | null; note?: string }> => {
   try {
     const credentials = await getMyOsCredentials();
-    const response = await fetch(`${MYOS_EVENTS_URL}/${eventId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: credentials.apiKey,
-      },
-    });
+    const response = await fetch(
+      `${credentials.baseUrl}/myos-events/${eventId}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: credentials.apiKey,
+        },
+      }
+    );
 
     if (!response.ok) {
       const note = logError('Failed to download PayNote event from MyOS', {

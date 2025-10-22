@@ -38,14 +38,14 @@ export const HealthCheckSchema = z.object({
 
 // Auth schemas
 export const SignUpRequestSchema = z.object({
-  name: createSanitizedStringSchema(z.string().min(1).max(50)),
+  email: createSanitizedStringSchema(z.string().email()),
 });
 
 export const SignInRequestSchema = SignUpRequestSchema;
 
 export const AuthSuccessResponseSchema = z.object({
   userId: z.string(),
-  name: z.string(),
+  email: z.string().email(),
 });
 
 export const AuthErrorResponseSchema = z.object({
@@ -82,7 +82,7 @@ export const bankApiContract = c.router(
         401: ProblemDto,
         409: ProblemDto,
       },
-      summary: 'Sign up with a unique name',
+      summary: 'Sign up with a unique email',
     },
 
     signIn: {
@@ -94,7 +94,7 @@ export const bankApiContract = c.router(
         401: ProblemDto,
         404: ProblemDto,
       },
-      summary: 'Sign in with existing name',
+      summary: 'Sign in with existing email',
     },
 
     banking: {
