@@ -77,8 +77,8 @@ jobs:
     uses: ./.github/workflows/deploy-and-test.yml
     needs: [quality-gates, deploy-dev]
     if: |
-      (github.event_name == 'push' || github.event_name == 'pull_request') &&
-      (github.ref == 'refs/heads/main' || github.base_ref == 'main') &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
       needs.deploy-dev.outputs.deployment-success == 'true' &&
       needs.deploy-dev.outputs.e2e-success == 'true'
     with:
