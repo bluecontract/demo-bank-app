@@ -7,6 +7,26 @@ Parameters:
     Type: String
     Default: dev
     AllowedValues: [dev, prod]
+  DomainName:
+    Type: String
+    Default: ''
+    Description: 'Optional: Custom domain name (e.g., api.example.com)'
+  CertificateArn:
+    Type: String
+    Default: ''
+    Description: 'Optional: ACM certificate ARN (must be in the same region as the API) when using a custom domain'
+  HostedZoneId:
+    Type: String
+    Default: ''
+    Description: 'Optional: Route53 hosted zone ID if you want CloudFormation to create an alias record'
+
+Conditions:
+  UseCustomDomain: !And
+    - !Not [!Equals [!Ref DomainName, '']]
+    - !Not [!Equals [!Ref CertificateArn, '']]
+  ManageCustomDomainDns: !And
+    - !Condition UseCustomDomain
+    - !Not [!Equals [!Ref HostedZoneId, '']]
 
 Globals:
   Function:
@@ -146,6 +166,38 @@ Resources:
       StageName: !Ref Environment
       EndpointConfiguration:
         Type: REGIONAL
+
+  ApiCustomDomain:
+    Type: AWS::ApiGateway::DomainName
+    Condition: UseCustomDomain
+    Properties:
+      DomainName: !Ref DomainName
+      EndpointConfiguration:
+        Types: ['REGIONAL']
+      RegionalCertificateArn: !Ref CertificateArn
+      SecurityPolicy: TLS_1_2
+
+  ApiCustomDomainMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    Condition: UseCustomDomain
+    Properties:
+      DomainName: !Ref DomainName
+      RestApiId: !Ref BankApi
+      Stage: !Ref Environment
+    DependsOn: BankApi
+
+  ApiCustomDomainRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: ManageCustomDomainDns
+    Properties:
+      Name: !Ref DomainName
+      Type: A
+      HostedZoneId: !Ref HostedZoneId
+      AliasTarget:
+        DNSName: !GetAtt ApiCustomDomain.RegionalDomainName
+        HostedZoneId: !GetAtt ApiCustomDomain.RegionalHostedZoneId
+        EvaluateTargetHealth: false
+    DependsOn: ApiCustomDomainMapping
 
   BankLambdaFunction:
     Type: AWS::Serverless::Function
@@ -380,6 +432,12 @@ Outputs:
     Value: !Sub 'https://${BankApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
     Export:
       Name: !Sub '${AWS::StackName}-ApiUrl'
+  CustomDomainUrl:
+    Condition: UseCustomDomain
+    Description: 'Custom domain URL for Bank API'
+    Value: !Sub 'https://${DomainName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomDomainUrl'
 
   BankApiId:
     Description: 'API Gateway ID'
