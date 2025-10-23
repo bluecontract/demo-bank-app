@@ -45,7 +45,7 @@ The banking core flows test comprehensively covers:
 
 ### 4. Transfer Money Operations
 
-- ✅ Transfer money between accounts with modal interface
+- ✅ Transfer money between accounts
 - ✅ Form validation (account number format, amount validation)
 - ✅ Transfer confirmation page
 - ✅ Source account balance refresh after transfer
@@ -156,7 +156,6 @@ Tests use appropriate waiting strategies:
 
 - Account creation modal
 - Fund account modal
-- Transfer money modal
 - Transaction details modal
 - Confirmation pages
 
