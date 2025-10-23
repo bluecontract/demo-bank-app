@@ -182,23 +182,19 @@ describe('Bank API Integration Tests', () => {
       expect(JSON.parse(signUp.body.errors)).toMatchObject({
         bodyErrors: [
           {
-            exact: false,
-            inclusive: true,
-            message: 'String must contain at least 1 character(s)',
-            minimum: 1,
+            message: 'Invalid email',
             path: ['email'],
-            type: 'string',
           },
         ],
       });
     });
 
     it('should create test user with shorter TTL when dev=true', async () => {
-      const name = await generateUniqueTestUserName('dev-test-user');
+      const email = await generateUniqueTestUserName('dev-test-user');
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup?dev=true',
-        body: { name },
+        body: { email },
       });
       expect(signUp.statusCode).toBe(201);
       const cookieHeader = signUp.headers?.['set-cookie'] as string;
@@ -287,12 +283,8 @@ describe('Bank API Integration Tests', () => {
       expect(JSON.parse(body.errors)).toMatchObject({
         bodyErrors: [
           {
-            exact: false,
-            inclusive: true,
-            message: 'String must contain at least 1 character(s)',
-            minimum: 1,
+            message: 'Invalid email',
             path: ['email'],
-            type: 'string',
           },
         ],
         pathParameterErrors: null,
@@ -368,11 +360,11 @@ describe('Bank API Integration Tests', () => {
         body: { name: maliciousAccountName },
       });
 
-      expect(result.body.email).toBe(name);
-      expect(result.body.email).not.toContain('<img');
-      expect(result.body.email).not.toContain('<script>');
-      expect(result.body.email).not.toContain('onerror');
-      expect(result.body.email).not.toContain('alert');
+      expect(result.body.name).toBe(name);
+      expect(result.body.name).not.toContain('<img');
+      expect(result.body.name).not.toContain('<script>');
+      expect(result.body.name).not.toContain('onerror');
+      expect(result.body.name).not.toContain('alert');
     });
   });
 
@@ -1296,7 +1288,7 @@ describe('Bank API Integration Tests', () => {
 function generateUniqueTestUserName(prefix = 'test-user'): string {
   const timestamp = Date.now();
   const randomSuffix = Math.random().toString(36).substring(2, 9);
-  return `${prefix}-${timestamp}-${randomSuffix}`;
+  return `${prefix}-${timestamp}-${randomSuffix}@example.com`;
 }
 
 function createTestEvent(

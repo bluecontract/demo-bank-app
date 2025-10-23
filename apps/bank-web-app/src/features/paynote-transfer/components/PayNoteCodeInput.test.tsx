@@ -144,7 +144,7 @@ describe('PayNoteCodeInput', () => {
     fireEvent.change(templateInput, { target: { value: updatedEmail } });
 
     await waitFor(() => {
-      const lastCall = onChange.mock.calls.at(-1);
+      const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1];
       expect(lastCall).toBeTruthy();
       expect(atob(lastCall![0])).toContain(updatedEmail);
     });

@@ -150,13 +150,13 @@ describe('DynamoUserRepository Integration', () => {
       // Given
       const user1 = new User({
         id: randomUUID(),
-        email: 'duplicate-user',
+        email: 'duplicate-user@example.com',
         isTest: false,
         createdAt: new Date(),
       });
       const user2 = new User({
         id: randomUUID(),
-        email: 'duplicate-user',
+        email: 'duplicate-user@example.com',
         isTest: false,
         createdAt: new Date(),
       });
@@ -176,7 +176,7 @@ describe('DynamoUserRepository Integration', () => {
       // Given
       const user = new User({
         id: randomUUID(),
-        email: 'find-by-id-user',
+        email: 'find-by-id-user@example.com',
         isTest: false,
         createdAt: new Date(),
       });
@@ -311,7 +311,7 @@ describe('DynamoUserRepository Integration', () => {
 
       const user = new User({
         id: randomUUID(),
-        email: 'error-test-user',
+        email: 'error-test-user@example.com',
         isTest: false,
         createdAt: new Date(),
       });

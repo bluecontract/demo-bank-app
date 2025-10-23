@@ -164,8 +164,12 @@ test.describe('Banking Form Validation', () => {
     const fromAccountSelect = page.locator('#fromAccount');
     const sourceOptionValue = await fromAccountSelect
       .locator('option')
-      .evaluateAll((options, accountName) => {
-        const matching = options.find(option =>
+      .evaluateAll<string | null, string>((options, accountName) => {
+        const optionElements = options as Array<{
+          textContent?: string | null;
+          value?: string | null;
+        }>;
+        const matching = optionElements.find(option =>
           option.textContent?.includes(accountName)
         );
         return matching?.value ?? null;
