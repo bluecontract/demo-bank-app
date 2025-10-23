@@ -238,7 +238,7 @@ describe('Bank API Integration Tests', () => {
       expect(cookieHeader).toContain('demoAuth=');
       expect(cookieHeader).toContain('HttpOnly');
       expect(cookieHeader).toContain('Secure');
-      expect(cookieHeader).toContain('SameSite=None');
+      expect(cookieHeader).toContain('SameSite=Strict');
       expect(cookieHeader).toContain('Path=/');
       expect(cookieHeader).toContain(`Max-Age=${TEST_CONFIG.jwtTtlSeconds}`);
       if (!cookieHeader) {
