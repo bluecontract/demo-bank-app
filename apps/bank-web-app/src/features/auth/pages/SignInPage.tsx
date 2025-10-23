@@ -17,7 +17,7 @@ export const SignInPage: React.FC = () => {
             Welcome Back
           </h1>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to your Blue Bank account
+            Sign in to your account
           </p>
         </div>
 
@@ -28,7 +28,7 @@ export const SignInPage: React.FC = () => {
             Don't have an account?{' '}
             <button
               onClick={() => navigate('/signup')}
-              className="font-medium text-blue-600 hover:text-blue-500"
+              className="font-medium text-emerald-600 hover:text-emerald-500"
             >
               Sign up here
             </button>

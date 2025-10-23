@@ -3,6 +3,7 @@ import {
   TransferFormData,
   isValidBase64,
   decodePayNoteBase64AsObject,
+  examplePayNotes,
 } from '../../../lib/paynote';
 import { ChevronLeft } from 'lucide-react';
 import { PayNoteCodeInput } from './PayNoteCodeInput.tsx';
@@ -192,6 +193,7 @@ export function FormStep({
               value={payNoteCode}
               onToggle={handlePayNoteToggle}
               onChange={handlePayNoteCodeChange}
+              examples={examplePayNotes}
             />
           </div>
         </div>

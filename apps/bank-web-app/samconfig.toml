@@ -20,7 +20,7 @@ region = "eu-west-1"
 [dev.deploy.parameters]
 stack_name = "demo-bank-app-frontend-dev"
 s3_bucket = "demo-bank-app-deployments-dev"
-parameter_overrides = "Environment=dev"
+parameter_overrides = "Environment=dev DomainName=dev.demo-bank-app.labs.blue CertificateArn=arn:aws:acm:us-east-1:118811228407:certificate/46ecb958-f574-4f13-a472-5215baa7f158"
 tags = "Environment=dev Project=demo-bank-app"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false
@@ -31,7 +31,7 @@ region = "eu-west-1"
 [prod.deploy.parameters]
 stack_name = "demo-bank-app-frontend-prod"
 s3_bucket = "demo-bank-app-deployments-prod"
-parameter_overrides = "Environment=prod"
+parameter_overrides = "Environment=prod DomainName=demo-bank-app.labs.blue CertificateArn=arn:aws:acm:us-east-1:118811228407:certificate/5a5d58f4-ee13-4cd7-a807-4871a1b55ac5"
 tags = "Environment=prod Project=demo-bank-app"
 capabilities = "CAPABILITY_IAM"
 confirm_changeset = false

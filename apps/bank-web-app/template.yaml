@@ -8,6 +8,23 @@ Parameters:
     Default: dev
     AllowedValues: [dev, prod]
 
+  # Optional custom domain (e.g., app.example.com)
+  DomainName:
+    Type: String
+    Default: ''
+    Description: 'Optional: Custom domain name (e.g., app.example.com) for CloudFront'
+
+  # Optional ACM cert ARN in us-east-1 for CloudFront
+  CertificateArn:
+    Type: String
+    Default: ''
+    Description: 'Optional: ACM certificate ARN (must be in us-east-1) when using a custom domain'
+
+Conditions:
+  UseCustomDomain: !And
+    - !Not [!Equals [!Ref DomainName, '']]
+    - !Not [!Equals [!Ref CertificateArn, '']]
+
 Resources:
   # S3 Bucket for static website hosting (kept private)
   FrontendBucket:
@@ -61,6 +78,20 @@ Resources:
             ResponseCode: 200
             ErrorCachingMinTTL: 300
         PriceClass: PriceClass_100
+        # Add alias only when using a custom domain
+        Aliases: !If
+          - UseCustomDomain
+          - [!Ref DomainName]
+          - !Ref AWS::NoValue
+        # Attach ACM cert only when provided
+        ViewerCertificate: !If
+          - UseCustomDomain
+          - {
+              AcmCertificateArn: !Ref CertificateArn,
+              SslSupportMethod: sni-only,
+              MinimumProtocolVersion: TLSv1.2_2021,
+            }
+          - !Ref AWS::NoValue
 
   # Bucket Policy allowing CloudFront OAC access
   BucketPolicy:
@@ -86,6 +117,14 @@ Outputs:
     Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
     Export:
       Name: !Sub '${AWS::StackName}-FrontendUrl'
+
+  # If custom domain is used, expose that too
+  CustomDomainUrl:
+    Condition: UseCustomDomain
+    Description: 'Custom domain URL'
+    Value: !Sub 'https://${DomainName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomDomainUrl'
 
   BucketName:
     Description: 'S3 bucket name for frontend assets'

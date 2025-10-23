@@ -368,14 +368,6 @@ amount:
     description: The maximum total value of this PayNote.
     type: Integer
     value: 25000
-payerAccountNumber:
-  type: Text
-  value: '4038228001'
-  description: Source account for the transfer
-payeeAccountNumber:
-  type: Text
-  value: '6293864001'
-  description: Destination account for the transfer
 contracts:
   payerChannel:
     type: MyOS Timeline Channel
@@ -411,56 +403,47 @@ payNoteInitialStateDescription:
 **Implementation:** This creates a 4-party escrow. The \`bootstrap\` workflow only reserves the funds. A new custom operation, \`shipmentConfirmed\`, is added and restricted to the \`shipmentCompanyChannel\`. Only when DHL calls this operation will the \`PayNote\` then trigger the final \`Capture Funds Requested\`.
 
 \`\`\`
-name: Escrow Payment for Shipment #SH-481516
-type: PayNote
-
-# --- Instance Data ---
-currency: EUR
+name: Escrow Payment for Shipment
+currency:
+  description: The ISO 4217 currency code for the transaction.
+  type: Text
+  value: USD
 amount:
-  total: 12000 # €120.00
+  description: The amounts associated with this PayNote.
+  total:
+    description: The maximum total value of this PayNote.
+    type: Integer
+    value: 12000 # $120
 
-payNoteInitialStateDescription:
-  summary: |
-    This is a protected payment of **€120.00 EUR**. The funds are held securely by your bank and will only be released to the Merchant after **DHL confirms successful delivery**.
-  details: |
-    This PayNote acts as a secure escrow to protect the Payer. The payment is guaranteed, but the final transfer is conditional on a confirmation from the shipping company.
-
-    #### Participants
-    * **Payer**: The Customer (sender of funds)
-    * **Payee**: The Merchant (recipient of funds)
-    * **Guarantor**: The Bank (holds the funds in escrow)
-    * **Shipment Company**: DHL (provides delivery confirmation)
-
-    #### Operations
-    * **\`shipmentConfirmed\`** (Callable by: **Shipment Company - DHL**)
-        * This action is performed by DHL to certify that the delivery is complete. This is the trigger that releases the payment to the Merchant.
-
-    #### Scenarios
-    1.  **Payment and Delivery:**
-        * The Payer initiates the payment, and the Bank immediately reserves (holds) the €120.00.
-        * DHL delivers the package to the Payer.
-        * DHL then calls the \`shipmentConfirmed\` operation on this document.
-        * This automatically authorizes the Bank to transfer the €120.00 to the Merchant. The process is complete.
-    2.  **Shipment Issue:**
-        * If the shipment is never confirmed by DHL, the funds remain reserved. The Payer can then initiate a cancellation to have the funds released back to their account.
-
-# --- Participants & Logic ---
 contracts:
+  payerChannel:
+    type: MyOS Timeline Channel
+  payeeChannel:
+    type: MyOS Timeline Channel
+  guarantorChannel:
+    type: MyOS Timeline Channel
+  shipmentCompanyChannel:
+    type: MyOS Timeline Channel
+    # email: dhl@bluecontract.com
+    email: sylwek@bluecontract.com
+
+  initLifecycleChannel:
+    type: Lifecycle Event Channel
+    event:
+      type: Document Processing Initiated
   bootstrap:
     type: Sequential Workflow
-    event: { type: Document Processing Initiated }
+    channel: initLifecycleChannel
     steps:
-      - name: RequestReservation
-        type: Trigger Event
+      - type: Trigger Event
         event:
           type: Reserve Funds Requested
-          amount: \${document('/amount/total')}
+          amount: 12000
 
   shipmentConfirmed:
     type: Operation
     description: Must be called by the Shipment Company to confirm delivery and trigger payment capture.
-    channel: shipmentCompanyChannel # Only DHL can call this.
-
+    channel: shipmentCompanyChannel
   shipmentConfirmedImpl:
     type: Sequential Workflow Operation
     operation: shipmentConfirmed
@@ -469,98 +452,30 @@ contracts:
         type: Trigger Event
         event:
           type: Capture Funds Requested
-          amount: \${document('/amount/total')}
-
-  # Participants
-  payerChannel:
-    type: MyOS Timeline # Bound to Customer's account
-  payeeChannel:
-    type: MyOS Timeline # Bound to Merchant's account
-  guarantorChannel:
-    type: MyOS Timeline # Bound to the Bank's account
-  shipmentCompanyChannel:
-    type: MyOS Timeline # Bound to DHL's account
-
-\`\`\`
-
-
----
-
-### **Example 3: AI Agent Issuing Child PayNotes**
-
-**Scenario:** Alice wants to give her AI Shopping Agent a pre-approved budget of $1,000.00 to make multiple purchases on her behalf. The agent should be able to create smaller, independent payments for different vendors against this master budget.
-
-**Implementation:** Alice creates a master \`PayNote\` and reserves the full amount. The document includes an \`issueChildPayNote\` operation that only she (or her agent, acting on her behalf) can call. This operation allows the agent to request the issuance of new, self-contained \`Child PayNotes\`.
-
-\`\`\`
-name: AI Shopping Agent Managed Account
-type: PayNote
-
-# --- Instance Data ---
-currency: USD
-amount:
-  total: 100000 # $1,000.00
+          amount: 12000
 
 payNoteInitialStateDescription:
   summary: |
-    This document establishes a secure, pre-approved budget of **$1,000.00 USD** for an authorized AI Agent. The agent has been granted the ability to create and execute smaller, individual payments ("Child PayNotes") against this total budget.
+    This is a protected payment of **$120.00**. The funds are held securely by your bank and will only be released to the Merchant after **DHL confirms successful delivery**.
   details: |
-    This PayNote functions as a master account with a fixed, reserved limit. It does not make payments directly but authorizes the creation of smaller, linked payments.
-
+    This PayNote acts as a secure escrow to protect the Payer. The payment is guaranteed, but the final transfer is conditional on a confirmation from the shipping company.
     #### Participants
-    * **Payer**: Alice (the owner of the funds)
-    * **Guarantor**: Alice's Bank (the institution managing the funds)
-
+    * **Payer**: The Customer (sender of funds)
+    * **Payee**: The Merchant (recipient of funds)
+    * **Guarantor**: The Bank (holds the funds in escrow)
+    * **Shipment Company**: DHL (provides delivery confirmation)
     #### Operations
-    * **\`issueChildPayNote\`** (Callable by: **Payer - Alice / Her Agent**)
-        * This operation allows an authorized agent, acting on Alice's behalf, to request the issuance of a new, independent Child PayNote that draws funds from this master budget. The request must include the full details of the child payment, including its amount and payee.
-
+    * **\`shipmentConfirmed\`** (Callable by: **Shipment Company - DHL**)
+        * This action is performed by DHL to certify that the delivery is complete. This is the trigger that releases the payment to the Merchant.
     #### Scenarios
-    1.  **Budget Setup:**
-        * Alice creates this document, and her Bank immediately reserves the full $1,000.00. This action secures the total budget.
-    2.  **Agent Initiates a Payment:**
-        * The agent calls the \`issueChildPayNote\` operation.
-        * The Bank validates that the requested amount is within the remaining budget.
-        * If valid, the Bank creates the new Child PayNote and records its issuance here. The child payment then runs its own lifecycle (e.g., transferring funds to a vendor).
-        * The available budget on this master document is automatically reduced.
-    3.  **Budget Exceeded:**
-        * If the agent attempts to issue a child payment that exceeds the available budget, the Bank will reject the request. The total spending can never exceed the initial $1,000.00.
+    1.  **Payment and Delivery:**
+        * The Payer initiates the payment, and the Bank immediately reserves (holds) the $120.00.
+        * DHL delivers the package to the Payer.
+        * DHL then calls the \`shipmentConfirmed\` operation on this document.
+        * This automatically authorizes the Bank to transfer the $120.00 to the Merchant. The process is complete.
+    2.  **Shipment Issue:**
+        * If the shipment is never confirmed by DHL, the funds remain reserved. The Payer can then initiate a cancellation to have the funds released back to their account.
 
-# --- Participants & Logic ---
-contracts:
-  bootstrap:
-    type: Sequential Workflow
-    event: { type: Document Processing Initiated }
-    steps:
-      - name: ReserveFullBudget
-        type: Trigger Event
-        event:
-          type: Reserve Funds Requested
-          amount: \${document('/amount/total')}
-
-  issueChildPayNote:
-    type: Operation
-    description: Allows the Payer (or their agent) to issue a new Child PayNote against the reserved funds.
-    channel: payerChannel # Only Alice or her agent can call this.
-    request:
-      type: PayNote # Expects a complete PayNote document as input.
-
-  issueChildPayNoteImpl:
-    type: Sequential Workflow Operation
-    operation: issueChildPayNote
-    steps:
-      - name: RequestChildIssuance
-        type: Trigger Event
-        event:
-          type: Issue Child PayNote Requested
-          childPayNote: \${event.request}
-
-  # Participants
-  payerChannel:
-    type: MyOS Timeline # Bound to Alice's account
-  guarantorChannel:
-    type: MyOS Timeline # Bound to the Bank's account
-  # payeeChannel is left unbound at this master level.
 
 \`\`\`
 

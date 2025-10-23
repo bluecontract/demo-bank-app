@@ -98,4 +98,57 @@ describe('PayNoteCodeInput', () => {
       expect(onChange).toHaveBeenCalledWith('encoded-value');
     });
   });
+
+  it('allows loading predefined PayNotes, customizing template values, and updates the preview', async () => {
+    const template = 'email: {{SHIPMENT_COMPANY_EMAIL}}\n';
+    const defaultEmail = 'dhl@bluecontract.com';
+    const examples = [
+      {
+        id: 'example',
+        name: 'Example PayNote',
+        description: 'Simple example for testing.',
+        yaml: template,
+        templateFields: [
+          {
+            key: 'SHIPMENT_COMPANY_EMAIL',
+            label: 'Schipment Company Email',
+            defaultValue: defaultEmail,
+          },
+        ],
+        encoded: btoa(
+          template.replace('{{SHIPMENT_COMPANY_EMAIL}}', defaultEmail)
+        ),
+      },
+    ];
+    const onChange = vi.fn();
+
+    render(
+      <PayNoteCodeInput
+        enabled={true}
+        value=""
+        onToggle={vi.fn()}
+        onChange={onChange}
+        examples={examples}
+      />
+    );
+
+    fireEvent.click(screen.getByText(/load example paynote/i));
+    fireEvent.click(screen.getByRole('button', { name: /use this paynote/i }));
+
+    const templateInput = await screen.findByLabelText(
+      /schipment company email/i
+    );
+    expect(templateInput).toHaveValue(defaultEmail);
+
+    const updatedEmail = 'support@shipping.test';
+    fireEvent.change(templateInput, { target: { value: updatedEmail } });
+
+    await waitFor(() => {
+      const lastCall = onChange.mock.calls.at(-1);
+      expect(lastCall).toBeTruthy();
+      expect(atob(lastCall![0])).toContain(updatedEmail);
+    });
+
+    expect(screen.getByText(`email: ${updatedEmail}`)).toBeInTheDocument();
+  });
 });

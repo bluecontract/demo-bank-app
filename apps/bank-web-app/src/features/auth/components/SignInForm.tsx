@@ -111,7 +111,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
               setEmail(e.target.value);
               clearErrors();
             }}
-            className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
               errors.email ? 'border-red-500' : 'border-gray-300'
             }`}
             placeholder="Enter your email address"
@@ -127,7 +127,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
         <button
           type="submit"
           disabled={signInMutation.isPending}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-emerald-600 text-white py-2 px-4 rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {signInMutation.isPending ? 'Signing In...' : 'Sign In'}
         </button>
