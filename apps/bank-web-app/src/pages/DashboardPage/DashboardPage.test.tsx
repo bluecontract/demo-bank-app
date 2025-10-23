@@ -32,16 +32,6 @@ vi.mock('../../features/accounts/hooks/useCreateAccount', () => ({
 }));
 
 vi.mock('../../features/transfer', () => ({
-  TransferModal: vi.fn(({ isOpen, onClose, accounts, defaultAccountId }) =>
-    isOpen ? (
-      <div data-testid="transfer-modal">
-        Transfer Modal
-        <button onClick={onClose} data-testid="close-transfer-modal">
-          Close
-        </button>
-      </div>
-    ) : null
-  ),
   FundModal: vi.fn(({ isOpen, onClose, accounts, defaultAccountId }) =>
     isOpen ? (
       <div data-testid="fund-modal">

@@ -7,11 +7,7 @@ import {
   HorizontalAccountsList,
   AccountCreationModal,
 } from '../../features/accounts/components';
-import {
-  TransferModal,
-  FundModal,
-  TransactionHistory,
-} from '../../features/transfer';
+import { FundModal, TransactionHistory } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import { SpinnerWithText } from '../../ui/Spinner';
 
@@ -33,14 +29,6 @@ export function DashboardPage() {
 
   const [accountCreationModal, setAccountCreationModal] = useState({
     isOpen: false,
-  });
-
-  const [transferModal, setTransferModal] = useState<{
-    isOpen: boolean;
-    defaultAccountId: string | undefined;
-  }>({
-    isOpen: false,
-    defaultAccountId: undefined,
   });
 
   const [fundModal, setFundModal] = useState<{
@@ -71,13 +59,6 @@ export function DashboardPage() {
         sourceAccount: account,
       });
     }
-  };
-
-  const closeTransferModal = () => {
-    setTransferModal({
-      isOpen: false,
-      defaultAccountId: undefined,
-    });
   };
 
   const closeFundModal = () => {
@@ -142,16 +123,6 @@ export function DashboardPage() {
         isOpen={accountCreationModal.isOpen}
         onClose={closeAccountCreationModal}
       />
-
-      {/* Transfer Modal */}
-      {accounts && accounts.length > 0 && (
-        <TransferModal
-          isOpen={transferModal.isOpen}
-          onClose={closeTransferModal}
-          accounts={accounts}
-          defaultAccountId={transferModal.defaultAccountId}
-        />
-      )}
 
       {/* Fund Modal */}
       <FundModal

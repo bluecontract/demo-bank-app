@@ -62,7 +62,7 @@ describe('AuthorizationStep', () => {
   const accounts = [
     {
       accountId: 'account-1',
-      accountNumber: '1234567890',
+      accountNumber: '137',
       name: 'Primary Account',
       currency: 'USD',
       ledgerBalanceMinor: 250000,
@@ -98,7 +98,7 @@ describe('AuthorizationStep', () => {
       <AuthorizationStep
         {...baseProps}
         formData={{
-          fromAccount: 'account-1',
+          fromAccount: '137',
           totalAmount: '150.00',
           toAccount: '9876543210',
           recipientName: 'Alice',
@@ -117,7 +117,7 @@ describe('AuthorizationStep', () => {
       <AuthorizationStep
         {...baseProps}
         formData={{
-          fromAccount: 'account-1',
+          fromAccount: '137',
           totalAmount: '150.25',
           toAccount: '9876543210',
           recipientName: 'Alice',
@@ -145,7 +145,7 @@ describe('AuthorizationStep', () => {
       <AuthorizationStep
         {...baseProps}
         formData={{
-          fromAccount: 'account-1',
+          fromAccount: '137',
           totalAmount: '150.25',
           toAccount: '123',
           recipientName: 'Alice',
@@ -172,7 +172,7 @@ describe('AuthorizationStep', () => {
       <AuthorizationStep
         {...baseProps}
         formData={{
-          fromAccount: 'account-1',
+          fromAccount: '137',
           totalAmount: '150.25',
           toAccount: '9876543210',
           recipientName: 'Alice',
@@ -207,7 +207,7 @@ describe('AuthorizationStep', () => {
       <AuthorizationStep
         {...baseProps}
         formData={{
-          fromAccount: 'account-1',
+          fromAccount: '137',
           totalAmount: '500.00',
           toAccount: undefined,
           recipientName: undefined,
@@ -228,7 +228,7 @@ describe('AuthorizationStep', () => {
         body: {
           payNote: { name: 'Test PayNote' },
           formData: {
-            fromAccount: 'account-1',
+            fromAccount: '137',
             isPayNoteEnabled: true,
             payNoteCode: 'bmFtZTogVGVzdCBQYXlOb3RlCg==',
             recipientName: undefined,
@@ -253,7 +253,7 @@ describe('AuthorizationStep', () => {
       <AuthorizationStep
         {...baseProps}
         formData={{
-          fromAccount: 'account-1',
+          fromAccount: '137',
           totalAmount: '500.00',
           isPayNoteEnabled: true,
           payNoteCode: encodeObjectAsPayNoteBase64({ name: 'Bad PayNote' }),

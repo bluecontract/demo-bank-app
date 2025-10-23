@@ -56,7 +56,7 @@ export function TransferPaymentForm({
         >
           <option value="">Select account</option>
           {accounts.map(account => (
-            <option key={account.accountId} value={account.accountId}>
+            <option key={account.accountNumber} value={account.accountNumber}>
               {account.name} - {account.accountNumber} ($
               {(account.availableBalanceMinor / 100).toFixed(2)})
             </option>

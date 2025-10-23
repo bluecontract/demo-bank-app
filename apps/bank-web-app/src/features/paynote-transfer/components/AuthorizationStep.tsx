@@ -55,14 +55,16 @@ export function AuthorizationStep({
   });
 
   const selectedAccount = useMemo(
-    () => accounts.find(acc => acc.accountId === formData.fromAccount),
+    () => accounts.find(acc => acc.accountNumber === formData.fromAccount),
     [accounts, formData.fromAccount]
   );
 
-  const getAccountDisplayName = (accountId?: string) => {
-    if (!accountId) return 'Unknown account';
-    const account = accounts.find(acc => acc.accountId === accountId);
-    return account ? `${account.name} - ${account.accountNumber}` : accountId;
+  const getAccountDisplayName = (accountNumber?: string) => {
+    if (!accountNumber) return 'Unknown account';
+    const account = accounts.find(acc => acc.accountNumber === accountNumber);
+    return account
+      ? `${account.name} - ${account.accountNumber}`
+      : accountNumber;
   };
 
   const handleAuthorize = async () => {

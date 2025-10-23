@@ -21,7 +21,7 @@ describe('TransferPaymentForm', () => {
 
     render(
       <TransferPaymentForm
-        initialValues={{ fromAccount: 'account-1' }}
+        initialValues={{ fromAccount: '137' }}
         accounts={accounts}
         onValuesChange={onValuesChange}
       />
@@ -51,7 +51,7 @@ describe('TransferPaymentForm', () => {
 
     render(
       <TransferPaymentForm
-        initialValues={{ fromAccount: 'account-1' }}
+        initialValues={{ fromAccount: '137' }}
         accounts={accounts}
         onValuesChange={onValuesChange}
       />
@@ -75,7 +75,7 @@ describe('TransferPaymentForm', () => {
 
     const { rerender } = render(
       <TransferPaymentForm
-        initialValues={{ fromAccount: 'account-1', totalAmount: '10.00' }}
+        initialValues={{ fromAccount: '137', totalAmount: '10.00' }}
         accounts={accounts}
         onValuesChange={onValuesChange}
       />
@@ -88,7 +88,7 @@ describe('TransferPaymentForm', () => {
 
     rerender(
       <TransferPaymentForm
-        initialValues={{ fromAccount: 'account-1', totalAmount: '25.50' }}
+        initialValues={{ fromAccount: '137', totalAmount: '25.50' }}
         accounts={accounts}
         onValuesChange={onValuesChange}
       />

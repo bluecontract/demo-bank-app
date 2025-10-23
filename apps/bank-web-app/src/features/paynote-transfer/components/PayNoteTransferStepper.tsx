@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TransferFormData } from '../../../lib/paynote';
 import { FormStep } from './FormStep.tsx';
@@ -28,7 +28,7 @@ export function PayNoteTransferStepper({
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<TransferFormData>({
-    fromAccount: defaultAccountId || accounts[0]?.accountId,
+    fromAccount: '',
     date: new Date().toISOString().split('T')[0],
     isPayNoteEnabled: false,
   });
@@ -52,6 +52,20 @@ export function PayNoteTransferStepper({
   const handleSuccess = () => {
     navigate('/dashboard');
   };
+
+  useEffect(() => {
+    if (accounts?.length) {
+      let fromAccount = '';
+      if (defaultAccountId) {
+        fromAccount =
+          accounts.find(a => a.accountId == defaultAccountId)?.accountNumber ??
+          '';
+      } else {
+        fromAccount = accounts[0].accountNumber;
+      }
+      setFormData(prev => ({ ...prev, fromAccount }));
+    }
+  }, [accounts, defaultAccountId]);
 
   return (
     <div className="min-h-screen bg-white flex flex-col">

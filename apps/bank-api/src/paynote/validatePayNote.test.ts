@@ -107,7 +107,7 @@ describe('validatePayNoteHandler', () => {
         body: {
           yamlContent: 'name: demo',
           formData: {
-            fromAccount: 'account-1',
+            fromAccount: '137',
             totalAmount: '100.00',
           },
         },

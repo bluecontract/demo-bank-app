@@ -24,7 +24,7 @@ const setup = (initialData: TransferFormData = {}) => {
 
   const Wrapper = () => {
     const [formData, setFormData] = useState<TransferFormData>({
-      fromAccount: accounts[0].accountId,
+      fromAccount: accounts[0].accountNumber,
       date: today,
       ...initialData,
     });

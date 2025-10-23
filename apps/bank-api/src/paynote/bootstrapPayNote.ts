@@ -17,12 +17,8 @@ export const bootstrapPayNoteHandler = async (
     request: MaybeAuthenticatedTsRestRequestContext;
   }
 ) => {
-  const {
-    logger,
-    getMyOsCredentials,
-    payNoteVerificationRepository,
-    bankingRepository,
-  } = await getDependencies();
+  const { logger, getMyOsCredentials, payNoteVerificationRepository } =
+    await getDependencies();
 
   try {
     const { userId, userEmail } = await extractAuthInfo(context.request);
@@ -63,19 +59,12 @@ export const bootstrapPayNoteHandler = async (
       });
     }
 
-    let fromAccountNumber = '';
     if (formData.fromAccount) {
-      const account = await bankingRepository.getAccountById(
-        formData.fromAccount
-      );
-      if (account?.accountNumber) {
-        fromAccountNumber = account?.accountNumber;
-      }
       if (!payNote.payerAccountNumber) {
         payNote.payerAccountNumber = {};
       }
       payNote.payerAccountNumber.type = 'Text';
-      payNote.payerAccountNumber.value = fromAccountNumber;
+      payNote.payerAccountNumber.value = formData.fromAccount;
     } else {
       return problemResponse({
         status: 400 as const,

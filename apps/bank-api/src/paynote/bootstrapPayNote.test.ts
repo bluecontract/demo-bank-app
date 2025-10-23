@@ -51,9 +51,6 @@ describe('bootstrapPayNoteHandler', () => {
   const verificationRepository = {
     getVerification: vi.fn(),
   };
-  const bankingRepository = {
-    getAccountById: vi.fn(),
-  };
 
   const createPayNote = () => ({
     name: 'Test PayNote',
@@ -76,7 +73,6 @@ describe('bootstrapPayNoteHandler', () => {
     logger.error.mockReset();
     fetchMock.mockReset();
     verificationRepository.getVerification.mockReset();
-    bankingRepository.getAccountById.mockReset();
     hoistedBlueId.calculateBlueIdFromObjectMock.mockReturnValue('blue-id-123');
 
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -89,7 +85,6 @@ describe('bootstrapPayNoteHandler', () => {
         baseUrl: 'https://test-api.myos.blue',
       }),
       payNoteVerificationRepository: verificationRepository,
-      bankingRepository,
     });
 
     hoistedDeps.extractAuthInfoMock.mockResolvedValue({
@@ -107,10 +102,6 @@ describe('bootstrapPayNoteHandler', () => {
       validatedAt: new Date().toISOString(),
     });
 
-    bankingRepository.getAccountById.mockResolvedValue({
-      accountNumber: '12345678',
-    });
-
     fetchMock.mockResolvedValue(
       createMockResponse({
         status: 200,
@@ -125,7 +116,7 @@ describe('bootstrapPayNoteHandler', () => {
       {
         body: {
           payNote: createPayNote(),
-          formData: { fromAccount: '12345678' },
+          formData: { fromAccount: '137' },
         },
       } as any,
       { request: {} as any }
@@ -157,7 +148,7 @@ describe('bootstrapPayNoteHandler', () => {
           },
           document: {
             name: 'Test PayNote',
-            payerAccountNumber: { type: 'Text', value: '12345678' },
+            payerAccountNumber: { type: 'Text', value: '137' },
             payeeAccountNumber: {},
             contracts: {
               payerChannel: { type: 'MyOS Timeline Channel' },
@@ -193,7 +184,7 @@ describe('bootstrapPayNoteHandler', () => {
       {
         body: {
           payNote: createPayNote(),
-          formData: { fromAccount: '12345678' },
+          formData: { fromAccount: '137' },
         },
       } as any,
       { request: {} as any }
@@ -226,7 +217,7 @@ describe('bootstrapPayNoteHandler', () => {
       {
         body: {
           payNote: createPayNote(),
-          formData: { fromAccount: '12345678' },
+          formData: { fromAccount: '137' },
         },
       } as any,
       { request: {} as any }
@@ -242,7 +233,7 @@ describe('bootstrapPayNoteHandler', () => {
 
     const result = await bootstrapPayNoteHandler(
       {
-        body: { payNote: {}, formData: { fromAccount: '12345678' } },
+        body: { payNote: {}, formData: { fromAccount: '137' } },
       } as any,
       { request: {} as any }
     );
@@ -265,7 +256,7 @@ describe('bootstrapPayNoteHandler', () => {
       {
         body: {
           payNote: createPayNote(),
-          formData: { fromAccount: '12345678' },
+          formData: { fromAccount: '137' },
         },
       } as any,
       { request: {} as any }

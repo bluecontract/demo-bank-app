@@ -188,7 +188,10 @@ export function ReviewStep({
                   className="w-full p-3 border border-slate-300 rounded-lg text-gray-900 flex items-center justify-between"
                 >
                   {accounts.map(account => (
-                    <option key={account.accountId} value={account.accountId}>
+                    <option
+                      key={account.accountNumber}
+                      value={account.accountNumber}
+                    >
                       {account.name} - {account.accountNumber}
                     </option>
                   ))}

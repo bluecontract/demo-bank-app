@@ -106,7 +106,7 @@ export function FormStep({
     }
 
     const selectedAccount = accounts.find(
-      account => account.accountId === formData.fromAccount
+      account => account.accountNumber === formData.fromAccount
     );
 
     if (!selectedAccount) {
