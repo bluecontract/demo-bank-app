@@ -1,6 +1,20 @@
-# Blue Demo Bank
+# Demo Bank App
 
-A modern banking application demonstrating Blue Language integration and state-of-the-art serverless architecture.
+Blue Demo Bank is the end-to-end reference for modelling retail banking flows as Blue PayNotes and driving them through the MyOS processor. The project shows how deposits, balances, and transfers can stay Blue-native while the app layers on a responsive banking UI and a serverless AWS backend.
+
+## 🔷 PayNote + MyOS Integration
+
+- `POST /v1/paynotes/bootstrap` → `apps/bank-api/src/paynote/bootstrapPayNote.ts` validates the uploaded PayNote, hydrates payer/payee accounts, and forwards the document plus channel bindings to MyOS `POST /documents/bootstrap` so processing begins instantly.
+- `POST /v1/paynotes/webhook` → `apps/bank-api/src/paynote/webhook.ts` ingests MyOS callbacks, downloads event detail via `GET /myos-events/{eventId}`, and maps capture events to real ledger transfers.
+- Together these handlers amount to ~500 lines of TypeScript—they cover document ingestion, authentication, MyOS API orchestration, and idempotent money movement, highlighting how lean a PayNote integration can be.
+- Everything else in the repo is conventional Nx + AWS SAM plumbing, so teams can reuse their existing stack and swap in these modules to go Blue-first.
+
+### Flow at a Glance
+
+1. The web app collects the PayNote (YAML or parsed PDF), prompts for source/destination accounts, then calls `POST /v1/paynotes/bootstrap`.
+2. The bootstrap handler verifies the document, binds participants, and hands it to MyOS via `POST /documents/bootstrap`.
+3. MyOS processes the PayNote and calls back into `POST /v1/paynotes/webhook`; the handler retrieves the full payload with `GET /myos-events/{eventId}`.
+4. When capture events (for example `Capture Funds Requested` or `Reserve Funds and Capture Immediately Requested`) appear, the webhook performs the corresponding bank transfer and logs the result.
 
 ## 🚀 Quick Start
 
