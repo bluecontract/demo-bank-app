@@ -8,6 +8,14 @@ export class AccountNotFoundError extends AppError {
   }
 }
 
+export class InvalidActivityCursorError extends AppError {
+  override readonly code = 'INVALID_CURSOR';
+
+  constructor(message = 'Invalid activity cursor') {
+    super(message);
+  }
+}
+
 export class ForbiddenError extends AppError {
   readonly code = 'FORBIDDEN';
 

@@ -1,5 +1,6 @@
 import {
   DynamoBankingRepository,
+  DynamoHoldRepository,
   SimpleAccountNumberGenerator,
   BankingEnvironmentConfiguration,
 } from '@demo-bank-app/banking';
@@ -30,9 +31,17 @@ const initializeDependencies = async (
   });
 
   const accountNumberGenerator = new SimpleAccountNumberGenerator();
+  const holdRepository = new DynamoHoldRepository({
+    tableName: envConfig.dynamoTableName,
+    region: awsRegion,
+    ...(awsEndpoint && { endpoint: awsEndpoint }),
+    logger,
+    metrics,
+  });
 
   return {
     repository,
+    holdRepository,
     accountNumberGenerator,
     logger,
     metrics,

@@ -72,3 +72,30 @@ export const PaginatedDto = <T extends z.ZodTypeAny>(item: T) =>
     items: z.array(item),
     next: z.string().optional(),
   });
+
+export const ActivityPendingHoldDto = z.object({
+  kind: z.literal('PENDING_HOLD'),
+  holdId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  createdAt: z.string().datetime({ offset: true }),
+});
+
+export const ActivityPostedTransactionDto = z.object({
+  kind: z.literal('POSTED_TRANSACTION'),
+  transactionId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  postedAt: z.string().datetime({ offset: true }),
+  originHoldId: z.string().optional(),
+});
+
+export const ActivityItemDto = z.discriminatedUnion('kind', [
+  ActivityPendingHoldDto,
+  ActivityPostedTransactionDto,
+]);
+
+export const ActivityResponseDto = z.object({
+  items: z.array(ActivityItemDto),
+  nextCursor: z.string().optional(),
+});

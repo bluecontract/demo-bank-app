@@ -28,6 +28,7 @@ export interface PostingItem {
   createdAt: TransactionHeaderItem['createdAt'];
   description: TransactionHeaderItem['description'];
   transactionId: TransactionHeaderItem['transactionId'];
+  originHoldId?: string;
 }
 
 export function buildTransactionHeaderPutItem(
@@ -79,6 +80,9 @@ export function buildPostingPutItems(
       type: transaction.type,
       status: transaction.status,
       transactionId: transaction.id,
+      ...(transaction.originHoldId
+        ? { originHoldId: transaction.originHoldId }
+        : {}),
     };
 
     return {

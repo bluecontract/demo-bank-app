@@ -46,4 +46,5 @@ export interface TransactionSummary {
   description: Transaction['description'];
   counterpartyAccountNumber?: Posting['counterpartyAccountNumber'];
   createdAt: Transaction['createdAt'];
+  originHoldId?: Transaction['originHoldId'];
 }

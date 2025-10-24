@@ -11,6 +11,7 @@ import {
   TransferReqDto,
   PaginatedDto,
   TransactionDto,
+  ActivityResponseDto,
 } from './schemas';
 
 const c = initContract();
@@ -165,6 +166,23 @@ export const bankApiContract = c.router(
         }),
         responses: { 200: PaginatedDto(TransactionDto), 404: ProblemDto },
         summary: 'List transactions for a bank account',
+      },
+
+      listActivity: {
+        method: 'GET',
+        path: '/v1/accounts/:accountNumber/activity',
+        pathParams: z.object({ accountNumber: z.string().length(10) }),
+        query: z.object({
+          limit: z.coerce.number().positive().optional(),
+          cursor: z.string().optional(),
+        }),
+        responses: {
+          200: ActivityResponseDto,
+          400: ProblemDto,
+          404: ProblemDto,
+        },
+        summary:
+          'List account activity combining pending holds and posted transactions',
       },
 
       getTransaction: {

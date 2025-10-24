@@ -638,6 +638,7 @@ export class DynamoBankingRepository implements BankingRepository {
         accountNumber: item.accountNumber,
         counterpartyAccountNumber: item.counterpartyAccountNumber,
         createdAt: new Date(item.createdAt),
+        originHoldId: item.originHoldId,
       }));
 
       return {
