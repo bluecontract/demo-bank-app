@@ -66,7 +66,7 @@ describe('payNoteWebhookHandler', () => {
           payerAccountNumber: { value: '9559276001' },
           payeeAccountNumber: { value: '9595234002' },
           amount: {
-            total: 15000,
+            total: { value: 15000 },
           },
           name: 'Invoice Q3',
         },
