@@ -59,6 +59,22 @@ export class Transaction {
   }
 
   static create(postings: Posting[], meta: TransactionMeta): Transaction {
+    return Transaction.createWithId(postings, meta, randomUUID());
+  }
+
+  static createWithId(
+    postings: Posting[],
+    meta: TransactionMeta,
+    id: string
+  ): Transaction {
+    return Transaction.buildTransaction(postings, meta, id);
+  }
+
+  private static buildTransaction(
+    postings: Posting[],
+    meta: TransactionMeta,
+    id: string
+  ): Transaction {
     const sum = postings.reduce((total, posting) => {
       return (
         total +
@@ -77,7 +93,7 @@ export class Transaction {
       : 'TRANSFER';
 
     return new Transaction({
-      id: randomUUID(),
+      id,
       type: transactionType,
       status: 'POSTED',
       postings,

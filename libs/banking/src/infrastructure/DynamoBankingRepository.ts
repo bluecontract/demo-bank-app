@@ -32,6 +32,7 @@ import {
   OPERATION_NAMES,
   METRIC_UNITS,
 } from '@demo-bank-app/shared-observability';
+import { getIdempotencyKeyHash } from './dynamo/idempotency';
 
 export interface DynamoBankingRepositoryConfig {
   tableName: string;
@@ -180,7 +181,7 @@ export class DynamoBankingRepository implements BankingRepository {
     context: TransactionContext,
     transaction: Transaction
   ) {
-    const keyHash = this.getIdempotencyKeyHash(context.idempotencyKey);
+    const keyHash = getIdempotencyKeyHash(context.idempotencyKey);
 
     const idempotencyItem: IdempotencyItem = {
       PK: `${TABLE_PREFIXES.USER}${context.userId}`,
@@ -839,12 +840,6 @@ export class DynamoBankingRepository implements BankingRepository {
     });
   }
 
-  private getIdempotencyKeyHash(idempotencyKey: string): string {
-    return Buffer.from(idempotencyKey)
-      .toString('base64')
-      .replace(/[^a-zA-Z0-9]/g, '');
-  }
-
   private async getTransactionIdByIdempotencyKey(
     userId: string,
     idempotencyKey: string
@@ -853,7 +848,7 @@ export class DynamoBankingRepository implements BankingRepository {
       TableName: this.tableName,
       Key: {
         PK: `${TABLE_PREFIXES.USER}${userId}`,
-        SK: `${TABLE_PREFIXES.IDEMPOTENCY}${this.getIdempotencyKeyHash(
+        SK: `${TABLE_PREFIXES.IDEMPOTENCY}${getIdempotencyKeyHash(
           idempotencyKey
         )}`,
       },
