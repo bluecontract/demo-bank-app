@@ -9,6 +9,7 @@ import {
   PutCommand,
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
+import type { QueryCommandInput } from '@aws-sdk/lib-dynamodb';
 import type {
   HoldRepository,
   ReserveHoldRequest,
@@ -268,24 +269,30 @@ export class DynamoHoldRepository implements HoldRepository {
         ? this.decodePaginationToken(options.nextToken)
         : undefined;
 
-    const query = await this.client.send(
-      new QueryCommand({
-        TableName: this.tableName,
-        IndexName: HOLD_ITEM_CONSTANTS.GSI_NAMES.HOLD_GSI1,
-        KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
-        ExpressionAttributeNames: {
-          '#pk': HOLD_ITEM_CONSTANTS.GSI1_KEYS.PK,
-          '#sk': HOLD_ITEM_CONSTANTS.GSI1_KEYS.SK,
-        },
-        ExpressionAttributeValues: {
-          ':pk': `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.ACCOUNT}${accountNumber}`,
-          ':skPrefix': 'PENDING#',
-        },
-        ScanIndexForward: false,
-        Limit: options.limit,
-        ExclusiveStartKey: exclusiveStartKey,
-      })
-    );
+    const queryInput: QueryCommandInput = {
+      TableName: this.tableName,
+      IndexName: HOLD_ITEM_CONSTANTS.GSI_NAMES.HOLD_GSI1,
+      KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
+      ExpressionAttributeNames: {
+        '#pk': HOLD_ITEM_CONSTANTS.GSI1_KEYS.PK,
+        '#sk': HOLD_ITEM_CONSTANTS.GSI1_KEYS.SK,
+      },
+      ExpressionAttributeValues: {
+        ':pk': `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.ACCOUNT}${accountNumber}`,
+        ':skPrefix': 'PENDING#',
+      },
+      ScanIndexForward: false,
+    };
+
+    if (typeof options.limit === 'number') {
+      queryInput.Limit = options.limit;
+    }
+
+    if (exclusiveStartKey) {
+      queryInput.ExclusiveStartKey = exclusiveStartKey;
+    }
+
+    const query = await this.client.send(new QueryCommand(queryInput));
 
     const holds =
       query.Items?.map(item => mapHoldMetaItemToHold(item as HoldMetaItem)) ??

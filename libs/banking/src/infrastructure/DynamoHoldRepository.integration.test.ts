@@ -1319,4 +1319,106 @@ describe('DynamoHoldRepository integration', () => {
     const holdAfterFailure = await repository.getHold(holdId);
     expect(holdAfterFailure?.status).toBe('PENDING');
   });
+
+  it('lists pending holds by account number in descending order with stable pagination', async () => {
+    const pendingHolds = [
+      {
+        holdId: 'hold-pending-latest',
+        createdAt: '2024-01-08T12:00:00.000Z',
+        amountMinor: 1_000,
+      },
+      {
+        holdId: 'hold-pending-middle',
+        createdAt: '2024-01-07T12:00:00.000Z',
+        amountMinor: 2_000,
+      },
+      {
+        holdId: 'hold-pending-earliest',
+        createdAt: '2024-01-06T12:00:00.000Z',
+        amountMinor: 3_000,
+      },
+    ] as const;
+
+    for (const pending of pendingHolds) {
+      await repository.putHoldMeta({
+        holdId: pending.holdId,
+        payerAccountNumber: ACCOUNT_NUMBER,
+        counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+        amountMinor: pending.amountMinor,
+        currency: 'USD',
+        status: 'PENDING',
+        description: `Pending hold ${pending.holdId}`,
+        createdAt: pending.createdAt,
+      });
+    }
+
+    const nonPendingHolds = [
+      {
+        holdId: 'hold-released',
+        createdAt: '2024-01-05T12:00:00.000Z',
+        status: 'RELEASED' as const,
+        releasedAt: '2024-01-05T13:00:00.000Z',
+        releaseReason: 'Customer request',
+      },
+      {
+        holdId: 'hold-captured',
+        createdAt: '2024-01-04T12:00:00.000Z',
+        status: 'CAPTURED' as const,
+        relatedTransactionId: 'txn-captured',
+      },
+    ];
+
+    for (const hold of nonPendingHolds) {
+      await repository.putHoldMeta({
+        holdId: hold.holdId,
+        payerAccountNumber: ACCOUNT_NUMBER,
+        counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+        amountMinor: 500,
+        currency: 'USD',
+        status: hold.status,
+        description: `Non-pending hold ${hold.holdId}`,
+        createdAt: hold.createdAt,
+        ...(hold.releasedAt ? { releasedAt: hold.releasedAt } : {}),
+        ...(hold.releaseReason ? { releaseReason: hold.releaseReason } : {}),
+        ...(hold.relatedTransactionId
+          ? { relatedTransactionId: hold.relatedTransactionId }
+          : {}),
+      });
+    }
+
+    const firstPage = await repository.listPendingHoldsByAccountNumber(
+      ACCOUNT_NUMBER,
+      { limit: 2 }
+    );
+
+    expect(firstPage.items.map(hold => hold.holdId)).toEqual([
+      pendingHolds[0].holdId,
+      pendingHolds[1].holdId,
+    ]);
+    expect(firstPage.items.every(hold => hold.status === 'PENDING')).toBe(true);
+    expect(firstPage.items[0].createdAt > firstPage.items[1].createdAt).toBe(
+      true
+    );
+    expect(firstPage.hasMore).toBe(true);
+    expect(firstPage.nextToken).toBeDefined();
+
+    const secondPage = await repository.listPendingHoldsByAccountNumber(
+      ACCOUNT_NUMBER,
+      { limit: 2, nextToken: firstPage.nextToken }
+    );
+
+    expect(secondPage.items.map(hold => hold.holdId)).toEqual([
+      pendingHolds[2].holdId,
+    ]);
+    expect(secondPage.hasMore).toBe(false);
+    expect(secondPage.nextToken).toBeUndefined();
+
+    const allReturnedHoldIds = [
+      ...firstPage.items.map(hold => hold.holdId),
+      ...secondPage.items.map(hold => hold.holdId),
+    ];
+    expect(new Set(allReturnedHoldIds).size).toBe(3);
+    expect(allReturnedHoldIds).not.toContain('hold-released');
+    expect(allReturnedHoldIds).not.toContain('hold-captured');
+  });
 });

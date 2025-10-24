@@ -3,6 +3,7 @@ import {
   TransactWriteCommand,
   GetCommand,
   PutCommand,
+  QueryCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import { DynamoHoldRepository } from './DynamoHoldRepository';
@@ -755,5 +756,70 @@ describe('DynamoHoldRepository', () => {
     expect(result.items[0].holdId).toBe('hold-456');
     expect(result.hasMore).toBe(true);
     expect(result.nextToken).toBeDefined();
+  });
+
+  it('queries HOLD_GSI1 with pending prefix and descending order', async () => {
+    const { repository, send } = createRepository();
+    send.mockResolvedValueOnce({ Items: [] });
+
+    await repository.listPendingHoldsByAccountNumber('1234567890', {
+      limit: 5,
+    });
+
+    const command = send.mock.calls[0][0];
+    expect(command).toBeInstanceOf(QueryCommand);
+    const input = (command as QueryCommand).input;
+    expect(input.IndexName).toBe(HOLD_ITEM_CONSTANTS.GSI_NAMES.HOLD_GSI1);
+    expect(input.ExpressionAttributeValues?.[':skPrefix']).toBe('PENDING#');
+    expect(input.ScanIndexForward).toBe(false);
+    expect(input.Limit).toBe(5);
+  });
+
+  it('decodes pagination token and sets ExclusiveStartKey', async () => {
+    const { repository, send } = createRepository();
+    send.mockResolvedValueOnce({ Items: [] });
+    const exclusiveStartKey = {
+      PK: 'HOLD#hold-999',
+      SK: 'META',
+      HOLD_GSI1PK: 'ACCOUNT#1234567890',
+      HOLD_GSI1SK: 'PENDING#2024-01-01T00:00:00.000Z#hold-999',
+    };
+    const token = Buffer.from(
+      JSON.stringify(exclusiveStartKey),
+      'utf8'
+    ).toString('base64');
+
+    await repository.listPendingHoldsByAccountNumber('1234567890', {
+      nextToken: token,
+    });
+
+    const command = send.mock.calls[0][0];
+    expect(command).toBeInstanceOf(QueryCommand);
+    expect((command as QueryCommand).input.ExclusiveStartKey).toEqual(
+      exclusiveStartKey
+    );
+  });
+
+  it('returns empty pagination metadata when DynamoDB indicates no more items', async () => {
+    const { repository, send } = createRepository();
+    send.mockResolvedValueOnce({ Items: [] });
+
+    const result = await repository.listPendingHoldsByAccountNumber(
+      '1234567890'
+    );
+
+    expect(result.items).toHaveLength(0);
+    expect(result.hasMore).toBe(false);
+    expect(result.nextToken).toBeUndefined();
+  });
+
+  it('throws RepositoryError when pagination token cannot be decoded', async () => {
+    const { repository } = createRepository();
+
+    await expect(
+      repository.listPendingHoldsByAccountNumber('1234567890', {
+        nextToken: 'not-base64',
+      })
+    ).rejects.toBeInstanceOf(RepositoryError);
   });
 });
