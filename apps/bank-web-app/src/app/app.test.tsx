@@ -68,10 +68,10 @@ describe('App', () => {
       </TestWrapper>
     );
 
-    expect(screen.getByText('Demo Blue Bank')).toBeInTheDocument();
+    expect(screen.getByText('Demo Bank App')).toBeInTheDocument();
   });
 
-  it('should show the Demo Blue Bank title', () => {
+  it('should show the Demo Bank App title and tagline', () => {
     const TestWrapper = createTestWrapper();
 
     render(
@@ -80,13 +80,15 @@ describe('App', () => {
       </TestWrapper>
     );
 
-    expect(screen.getByText('Demo Blue Bank')).toBeInTheDocument();
+    expect(screen.getByText('Demo Bank App')).toBeInTheDocument();
     expect(
-      screen.getByText('Secure Banking Demo Application')
+      screen.getByText(
+        /The end-to-end reference for modelling banking workflows using/i
+      )
     ).toBeInTheDocument();
   });
 
-  it('should show the system health section', () => {
+  it('should expose the system health control', async () => {
     const TestWrapper = createTestWrapper();
 
     render(
@@ -95,6 +97,8 @@ describe('App', () => {
       </TestWrapper>
     );
 
-    expect(screen.getByText('System Health')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: /System status/i })
+    ).toBeInTheDocument();
   });
 });

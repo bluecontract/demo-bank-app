@@ -1,18 +1,10 @@
 import { Blue } from '@blue-labs/language';
 import { repository as coreRepository } from '@blue-repository/core-dev';
 import { repository as myosRepository } from '@blue-repository/myos-dev';
-import { repository as permissionRepository } from '@blue-repository/permission';
-import { repository as paymentRepository } from '@blue-repository/payment';
 import { repository as payNoteRepository } from '@blue-repository/pay-note';
 
 const blue = new Blue({
-  repositories: [
-    coreRepository,
-    myosRepository,
-    permissionRepository,
-    paymentRepository,
-    payNoteRepository,
-  ],
+  repositories: [coreRepository, myosRepository, payNoteRepository],
 });
 
 export const calculateBlueIdFromYaml = (yamlContent: string): string => {
