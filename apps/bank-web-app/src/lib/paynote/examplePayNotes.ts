@@ -263,7 +263,7 @@ const exampleDefinitions: ExamplePayNoteDefinition[] = [
     templateFields: [
       {
         key: 'SHIPMENT_COMPANY_EMAIL',
-        label: 'Schipment Company Email',
+        label: 'Shipment Company Email',
         description:
           'Email address for the shipment provider receiving PayNote events.',
         placeholder: 'e.g. shipmentcorp@bluecontract.com',

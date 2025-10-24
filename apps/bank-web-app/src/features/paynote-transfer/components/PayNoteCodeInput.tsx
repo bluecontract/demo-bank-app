@@ -106,10 +106,7 @@ export function PayNoteCodeInput({
 }: PayNoteCodeInputProps) {
   const { user } = useAuth();
   const templateContext = useMemo<ExampleTemplateContext>(() => {
-    if (user?.email) {
-      return { CURRENT_USER_EMAIL: user.email };
-    }
-    return {};
+    return { CURRENT_USER_EMAIL: user?.email ?? '' };
   }, [user?.email]);
 
   const [payNoteCode, setPayNoteCode] = useState(value);

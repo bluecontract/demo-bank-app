@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   TransferFormData,
   isValidBase64,
@@ -27,6 +27,22 @@ interface FormStepProps {
   onCancel: () => void;
 }
 
+type AmountStatus =
+  | 'valid'
+  | 'missing'
+  | 'invalid-format'
+  | 'non-positive'
+  | 'insufficient-funds';
+type DestinationAccountStatus = 'valid' | 'missing' | 'invalid' | 'own-account';
+type ModalState =
+  | { type: 'amount'; reason: AmountStatus }
+  | {
+      type: 'destination';
+      context: 'standard' | 'paynote';
+      reason: DestinationAccountStatus;
+    }
+  | null;
+
 export function FormStep({
   formData,
   accounts,
@@ -36,6 +52,8 @@ export function FormStep({
 }: FormStepProps) {
   const isPayNoteEnabled = formData.isPayNoteEnabled ?? false;
   const payNoteCode = formData.payNoteCode ?? '';
+
+  const [activeModal, setActiveModal] = useState<ModalState>(null);
 
   const handlePayNoteCodeChange = (code: string) => {
     onFormDataChange({ payNoteCode: code });
@@ -82,16 +100,11 @@ export function FormStep({
     }
   }, [isPayNoteEnabled, payNoteCode, onFormDataChange]);
 
-  const isFormValid = () => {
-    if (isPayNoteEnabled) {
-      return (
-        Boolean(formData.fromAccount && formData.totalAmount) &&
-        isPayNoteValid()
-      );
-    }
-
-    return isStandardTransferValid();
-  };
+  const selectedAccount = useMemo(() => {
+    return accounts.find(
+      account => account.accountNumber === formData.fromAccount
+    );
+  }, [accounts, formData.fromAccount]);
 
   const isPayNoteValid = () => {
     // If payNoteCode is empty, it's valid (not required)
@@ -99,63 +112,117 @@ export function FormStep({
     return !isPayNoteEnabled || !payNoteCode || isValidBase64(payNoteCode);
   };
 
-  const isStandardTransferValid = () => {
-    if (!formData.fromAccount) {
-      return false;
-    }
-
-    const selectedAccount = accounts.find(
-      account => account.accountNumber === formData.fromAccount
-    );
-
-    if (!selectedAccount) {
-      return false;
+  const getAmountStatus = (): AmountStatus => {
+    if (!formData.fromAccount || !selectedAccount) {
+      return 'invalid-format';
     }
 
     const amount = formData.totalAmount?.trim();
     if (!amount) {
-      return false;
+      return 'missing';
     }
 
     const amountRegex = /^\d+(\.\d{1,2})?$/;
     if (!amountRegex.test(amount)) {
-      return false;
+      return 'invalid-format';
     }
 
     const parsedAmount = parseFloat(amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      return false;
+      return 'non-positive';
     }
 
     if (
       Math.round(parsedAmount * 100) > selectedAccount.availableBalanceMinor
     ) {
+      return 'insufficient-funds';
+    }
+
+    return 'valid';
+  };
+
+  const isStandardTransferCoreValid = () => {
+    if (!formData.fromAccount || !selectedAccount) {
       return false;
     }
 
-    const destinationAccount = (formData.toAccount ?? '').trim();
-    if (!destinationAccount) {
-      return false;
-    }
-
-    const digitsOnly = /^\d{10}$/;
-    if (!digitsOnly.test(destinationAccount)) {
-      return false;
-    }
-
-    if (destinationAccount === selectedAccount.accountNumber) {
+    const amountStatus = getAmountStatus();
+    if (
+      amountStatus === 'invalid-format' ||
+      amountStatus === 'non-positive' ||
+      amountStatus === 'insufficient-funds'
+    ) {
       return false;
     }
 
     return true;
   };
 
-  const canProceed = () => isFormValid() && isPayNoteValid();
+  const getDestinationAccountStatus = (): DestinationAccountStatus => {
+    if (!selectedAccount) {
+      return 'invalid';
+    }
+
+    const destinationAccount = (formData.toAccount ?? '').trim();
+    if (!destinationAccount) {
+      return 'missing';
+    }
+
+    const digitsOnly = /^\d{10}$/;
+    if (!digitsOnly.test(destinationAccount)) {
+      return 'invalid';
+    }
+
+    if (destinationAccount === selectedAccount.accountNumber) {
+      return 'own-account';
+    }
+
+    return 'valid';
+  };
+
+  const isFormValid = () => {
+    if (!formData.fromAccount || !selectedAccount) {
+      return false;
+    }
+
+    const amountStatus = getAmountStatus();
+    const allowedAmountStatuses: AmountStatus[] = ['valid', 'missing'];
+    if (!allowedAmountStatuses.includes(amountStatus)) {
+      return false;
+    }
+
+    if (isPayNoteEnabled) {
+      return isPayNoteValid();
+    }
+
+    return isStandardTransferCoreValid();
+  };
+
+  const canProceed = () => isFormValid();
 
   const handleNext = () => {
-    if (canProceed()) {
-      onNext();
+    if (!canProceed()) {
+      return;
     }
+
+    const amountStatus = getAmountStatus();
+    if (amountStatus === 'missing') {
+      setActiveModal({ type: 'amount', reason: amountStatus });
+      return;
+    }
+
+    const destinationStatus = getDestinationAccountStatus();
+    if (destinationStatus !== 'valid') {
+      const context = isPayNoteEnabled ? 'paynote' : 'standard';
+      setActiveModal({
+        type: 'destination',
+        context,
+        reason: destinationStatus,
+      });
+      return;
+    }
+
+    onNext();
   };
 
   return (
@@ -217,6 +284,113 @@ export function FormStep({
           Next
         </button>
       </div>
+
+      {activeModal?.type === 'amount' && activeModal.reason === 'missing' && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          role="dialog"
+          aria-modal="true"
+          data-testid="amount-required-modal"
+        >
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-6 space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Amount required
+              </h3>
+              <p className="text-sm text-gray-700">
+                Enter the total amount before continuing.
+              </p>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeModal?.type === 'destination' &&
+        activeModal.context === 'standard' && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            role="dialog"
+            aria-modal="true"
+            data-testid="to-account-required-modal"
+          >
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+              <div className="p-6 space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  To account issue
+                </h3>
+                <p className="text-sm text-gray-700">
+                  {activeModal.reason === 'missing'
+                    ? 'To account needs to be set before continuing.'
+                    : activeModal.reason === 'invalid'
+                    ? 'Recipient account must be exactly 10 digits.'
+                    : 'Recipient account must be different from the source account.'}
+                </p>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setActiveModal(null)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {activeModal?.type === 'destination' &&
+        activeModal.context === 'paynote' && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            role="dialog"
+            aria-modal="true"
+            data-testid="paynote-to-account-modal"
+          >
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+              <div className="p-6 space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  To account needs attention
+                </h3>
+                <p className="text-sm text-gray-700">
+                  {activeModal.reason === 'missing'
+                    ? 'Add a recipient account now unless the PayNote logic populates it automatically.'
+                    : activeModal.reason === 'invalid'
+                    ? 'Provide a 10-digit recipient account unless the PayNote logic fills it automatically.'
+                    : 'Ensure the recipient account differs from the source unless the PayNote logic adjusts it automatically.'}
+                </p>
+                <div className="flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setActiveModal(null)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveModal(null);
+                      onNext();
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    Proceed without it
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }

@@ -124,7 +124,7 @@ describe('PayNoteCodeInput', () => {
         templateFields: [
           {
             key: 'SHIPMENT_COMPANY_EMAIL',
-            label: 'Schipment Company Email',
+            label: 'Shipment Company Email',
             defaultValue: defaultEmail,
           },
         ],
@@ -149,7 +149,7 @@ describe('PayNoteCodeInput', () => {
     fireEvent.click(screen.getByRole('button', { name: /use this paynote/i }));
 
     const templateInput = await screen.findByLabelText(
-      /schipment company email/i
+      /shipment company email/i
     );
     expect(templateInput).toHaveValue(defaultEmail);
 

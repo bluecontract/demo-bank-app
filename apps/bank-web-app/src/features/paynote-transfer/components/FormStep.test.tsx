@@ -66,28 +66,122 @@ describe('FormStep', () => {
     mockAuthState.user = { email: 'tester@example.com', userId: 'user-1' };
   });
 
-  it('requires standard transfer details before allowing users to proceed', async () => {
+  it('shows a warning modal when the destination account is missing for standard transfers', async () => {
     const { onNext } = setup();
 
+    const amountInput = screen.getByLabelText(/total amount to be paid/i);
+    fireEvent.change(amountInput, { target: { value: '120.50' } });
+
     const nextButton = screen.getByRole('button', { name: /next/i });
-    expect(nextButton).toBeDisabled();
+    await waitFor(() => expect(nextButton).toBeEnabled());
+
+    fireEvent.click(nextButton);
+
+    const modal = await screen.findByTestId('to-account-required-modal');
+    expect(modal).toBeInTheDocument();
+    expect(
+      screen.getByText(/to account needs to be set before continuing/i)
+    ).toBeInTheDocument();
+    expect(onNext).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /^close$/i }));
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/to account needs to be set before continuing/i)
+      ).not.toBeInTheDocument()
+    );
+  });
+
+  it('proceeds when the destination account is provided for standard transfers', async () => {
+    const { onNext } = setup();
 
     fireEvent.change(screen.getByLabelText(/total amount to be paid/i), {
-      target: { value: '120.50' },
+      target: { value: '150.00' },
     });
 
     fireEvent.change(screen.getByLabelText(/^to account$/i), {
       target: { value: '9876543210' },
     });
 
+    const nextButton = screen.getByRole('button', { name: /next/i });
     await waitFor(() => expect(nextButton).toBeEnabled());
 
     fireEvent.click(nextButton);
-    expect(onNext).toHaveBeenCalled();
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a warning when the destination account is missing for paynote transfers but still allows proceeding', async () => {
+    const { onNext } = setup({
+      isPayNoteEnabled: true,
+      totalAmount: '200.00',
+    });
+
+    const nextButton = screen.getByRole('button', { name: /next/i });
+    await waitFor(() => expect(nextButton).toBeEnabled());
+
+    fireEvent.click(nextButton);
+
+    await screen.findByTestId('paynote-to-account-modal');
+    expect(
+      screen.getByText(
+        /add a recipient account now unless the paynote logic populates it automatically/i
+      )
+    ).toBeInTheDocument();
+    expect(onNext).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /^proceed without it$/i })
+    );
+    expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('provides precise feedback when the destination account format is invalid', async () => {
+    const { onNext } = setup();
+
+    fireEvent.change(screen.getByLabelText(/total amount to be paid/i), {
+      target: { value: '150.00' },
+    });
+
+    fireEvent.change(screen.getByLabelText(/^to account$/i), {
+      target: { value: '12345' },
+    });
+
+    const nextButton = screen.getByRole('button', { name: /next/i });
+    await waitFor(() => expect(nextButton).toBeEnabled());
+
+    fireEvent.click(nextButton);
+
+    await screen.findByTestId('to-account-required-modal');
+    expect(
+      screen.getByText(/recipient account must be exactly 10 digits/i)
+    ).toBeInTheDocument();
+    expect(onNext).not.toHaveBeenCalled();
+  });
+
+  it('shows an amount modal when total amount is missing', async () => {
+    const { onNext } = setup();
+
+    const nextButton = screen.getByRole('button', { name: /next/i });
+    await waitFor(() => expect(nextButton).toBeEnabled());
+
+    fireEvent.click(nextButton);
+
+    await screen.findByTestId('amount-required-modal');
+    expect(
+      screen.getByText(/enter the total amount before continuing/i)
+    ).toBeInTheDocument();
+    expect(onNext).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /^close$/i }));
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/enter the total amount before continuing/i)
+      ).not.toBeInTheDocument()
+    );
   });
 
   it('blocks progression when PayNote code is invalid base64', async () => {
-    setup({ isPayNoteEnabled: true });
+    setup({ isPayNoteEnabled: true, totalAmount: '300.00' });
 
     const payNoteInput = screen.getByPlaceholderText(/enter paynote code/i);
     fireEvent.change(payNoteInput, { target: { value: 'invalid%%%' } });

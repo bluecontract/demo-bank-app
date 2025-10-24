@@ -71,7 +71,7 @@ export function ReviewStep({
   const hasAnyDetails = Boolean(
     formData.recipientName || formData.toAccount || formData.title
   );
-  const isMissingSomeDetails = !formData.recipientName || !formData.toAccount;
+  const isMissingSomeDetails = !formData.toAccount;
 
   useEffect(() => {
     if (!hasValidated.current) {
@@ -259,16 +259,7 @@ export function ReviewStep({
                   <div className="text-xl text-gray-900">
                     Necessary details not yet known:
                   </div>
-
                   <div className="space-y-3">
-                    {!formData.recipientName && (
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-600">
-                          Recipient name:
-                        </span>
-                        <span className="font-medium text-gray-900">-</span>
-                      </div>
-                    )}
                     {!formData.toAccount && (
                       <div className="flex justify-between">
                         <span className="text-sm text-gray-600">

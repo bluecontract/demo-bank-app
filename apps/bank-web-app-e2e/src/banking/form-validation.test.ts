@@ -151,7 +151,13 @@ test.describe('Banking Form Validation', () => {
     await expect(page.getByText('Initiate New Transfer')).toBeVisible();
 
     const nextButton = page.getByRole('button', { name: 'Next' });
-    await expect(nextButton).toBeDisabled();
+    await expect(nextButton).toBeEnabled();
+
+    const amountModal = page.locator('[data-testid="amount-required-modal"]');
+    await nextButton.click();
+    await expect(amountModal).toBeVisible();
+    await amountModal.getByRole('button', { name: 'Close' }).click();
+    await expect(amountModal).toHaveCount(0);
 
     const amountInput = page.locator('#totalAmount');
     await amountInput.fill('0');
@@ -159,7 +165,7 @@ test.describe('Banking Form Validation', () => {
 
     await amountInput.fill('150.129');
     await expect(amountInput).toHaveValue('150.12');
-    await expect(nextButton).toBeDisabled();
+    await expect(nextButton).toBeEnabled();
 
     const fromAccountSelect = page.locator('#fromAccount');
     const sourceOptionValue = await fromAccountSelect
@@ -181,9 +187,30 @@ test.describe('Banking Form Validation', () => {
     await fromAccountSelect.selectOption(sourceOptionValue);
 
     const accountNumberInput = page.locator('#toAccount');
+    const destinationModal = page.locator(
+      '[data-testid="to-account-required-modal"]'
+    );
+
+    await nextButton.click();
+    await expect(destinationModal).toBeVisible();
+    await expect(
+      destinationModal.getByText(
+        'To account needs to be set before continuing.'
+      )
+    ).toBeVisible();
+    await destinationModal.getByRole('button', { name: 'Close' }).click();
+    await expect(destinationModal).toHaveCount(0);
+
     await accountNumberInput.fill('abc123');
     await expect(accountNumberInput).toHaveValue('123');
-    await expect(nextButton).toBeDisabled();
+
+    await nextButton.click();
+    await expect(destinationModal).toBeVisible();
+    await expect(
+      destinationModal.getByText('Recipient account must be exactly 10 digits.')
+    ).toBeVisible();
+    await destinationModal.getByRole('button', { name: 'Close' }).click();
+    await expect(destinationModal).toHaveCount(0);
 
     // Fill valid data
     await accountNumberInput.fill(cleanTargetNumber);

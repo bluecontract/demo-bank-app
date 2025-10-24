@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TransferFormData } from '../../../lib/paynote';
 import { FormStep } from './FormStep.tsx';
@@ -33,9 +33,12 @@ export function PayNoteTransferStepper({
     isPayNoteEnabled: false,
   });
 
-  const handleFormDataChange = (updates: Partial<TransferFormData>) => {
-    setFormData(prev => ({ ...prev, ...updates }));
-  };
+  const handleFormDataChange = useCallback(
+    (updates: Partial<TransferFormData>) => {
+      setFormData(prev => ({ ...prev, ...updates }));
+    },
+    []
+  );
 
   const handleNext = () => {
     setCurrentStep((prev: number) => Math.min(prev + 1, 4));
