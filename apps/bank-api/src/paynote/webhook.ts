@@ -97,7 +97,19 @@ export const payNoteWebhookHandler = async (
     return returnResponse(downloadNote);
   }
 
-  const sessionId = eventPayload?.object?.sessionId as string | undefined;
+  const documentBlueId = eventPayload?.object?.blueId as string | undefined;
+
+  if (!documentBlueId) {
+    return returnResponse(
+      logError(
+        'PayNote capture event missing documentBlueId, transfer skipped',
+        {
+          eventId,
+        }
+      )
+    );
+  }
+
   const document = eventPayload?.object?.document as
     | {
         payerAccountNumber: { value: string };
@@ -134,21 +146,13 @@ export const payNoteWebhookHandler = async (
     eventId,
     emittedContainsCapture,
     emittedEventNames,
-    sessionId,
+    documentBlueId,
     payerAccountNumber,
     payeeAccountNumber,
   });
 
   if (!emittedContainsCapture) {
     return returnResponse();
-  }
-
-  if (!sessionId) {
-    return returnResponse(
-      logError('PayNote capture event missing sessionId, transfer skipped', {
-        eventId,
-      })
-    );
   }
 
   if (!payerAccountNumber || !payeeAccountNumber) {
@@ -222,7 +226,7 @@ export const payNoteWebhookHandler = async (
           description: transferDescription,
           ctx: {
             userId: ownerUserId,
-            idempotencyKey: String(sessionId),
+            idempotencyKey: String(documentBlueId),
           },
         },
         {

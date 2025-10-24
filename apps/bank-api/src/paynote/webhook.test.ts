@@ -61,7 +61,7 @@ describe('payNoteWebhookHandler', () => {
     const eventPayload = {
       id: 'event-123',
       object: {
-        sessionId: 'session-1',
+        blueId: 'a56',
         document: {
           payerAccountNumber: { value: '9559276001' },
           payeeAccountNumber: { value: '9595234002' },
@@ -115,7 +115,7 @@ describe('payNoteWebhookHandler', () => {
           'Document Processing Initiated',
           'Reserve Funds and Capture Immediately Requested',
         ],
-        sessionId: 'session-1',
+        documentBlueId: 'a56',
         payerAccountNumber: '9559276001',
         payeeAccountNumber: '9595234002',
       })
@@ -131,7 +131,7 @@ describe('payNoteWebhookHandler', () => {
         dstAccountNumber: '9595234002',
         ctx: {
           userId: 'user-456',
-          idempotencyKey: 'session-1',
+          idempotencyKey: 'a56',
         },
       }),
       expect.objectContaining({
@@ -163,7 +163,7 @@ describe('payNoteWebhookHandler', () => {
     const eventPayload = {
       id: 'event-456',
       object: {
-        sessionId: 'session-2',
+        blueId: 'a23',
         document: {
           payerAccountNumber: { value: '1111111111' },
           payeeAccountNumber: { value: '2222222222' },
@@ -187,7 +187,7 @@ describe('payNoteWebhookHandler', () => {
         eventId: 'event-456',
         emittedContainsCapture: false,
         emittedEventNames: ['Some Other Event'],
-        sessionId: 'session-2',
+        documentBlueId: 'a23',
         payerAccountNumber: '1111111111',
         payeeAccountNumber: '2222222222',
       })
@@ -246,7 +246,7 @@ describe('payNoteWebhookHandler', () => {
     const eventPayload = {
       id: 'event-321',
       object: {
-        sessionId: 'session-xyz',
+        blueId: 'a34',
         document: {
           payerAccountNumber: { value: '1111111111' },
           payeeAccountNumber: { value: '2222222222' },
