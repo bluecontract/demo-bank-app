@@ -33,6 +33,17 @@ import {
   METRIC_UNITS,
 } from '@demo-bank-app/shared-observability';
 import { getIdempotencyKeyHash } from './dynamo/idempotency';
+import {
+  TABLE_PREFIXES,
+  SORT_KEYS,
+  GSI_NAMES,
+  GSI_PARTITION_KEYS,
+  GSI_SORT_KEYS,
+  CONDITION_EXPRESSIONS,
+  UPDATE_EXPRESSIONS,
+  EXPRESSION_ATTRIBUTE_NAMES,
+  DYNAMO_ERROR_CODES,
+} from './dynamo/constants';
 
 export interface DynamoBankingRepositoryConfig {
   tableName: string;
@@ -107,55 +118,6 @@ export interface AccountBalanceItem {
   availableBalanceMinor: number;
   version: number;
 }
-
-// DynamoDB table constants
-const TABLE_PREFIXES = {
-  ACCOUNT: 'ACCOUNT#',
-  TRANSACTION: 'TXN#',
-  USER: 'USER#',
-  POSTING: 'POST#',
-  ACCOUNT_NUMBER: 'ACCOUNT_NUMBER#',
-  IDEMPOTENCY: 'IDEMPOTENCY#',
-} as const;
-
-const SORT_KEYS = {
-  META: 'META',
-  BALANCE: 'BALANCE',
-  RESERVE: 'RESERVE',
-} as const;
-
-const GSI_NAMES = {
-  BANKING_GSI1: 'BANKING_GSI1',
-  BANKING_GSI2: 'BANKING_GSI2',
-} as const;
-
-const GSI_PARTITION_KEYS = {
-  BANKING_GSI1PK: 'BANKING_GSI1PK',
-  BANKING_GSI2PK: 'BANKING_GSI2PK',
-} as const;
-
-const GSI_SORT_KEYS = {
-  BANKING_GSI1SK: 'BANKING_GSI1SK',
-  BANKING_GSI2SK: 'BANKING_GSI2SK',
-} as const;
-
-const CONDITION_EXPRESSIONS = {
-  ATTRIBUTE_NOT_EXISTS: 'attribute_not_exists(SK)',
-  BALANCE_VERSION_CHECK: '#version = :currentVersion',
-} as const;
-
-const UPDATE_EXPRESSIONS = {
-  UPDATE_BALANCE:
-    'ADD ledgerBalanceMinor :ledger, availableBalanceMinor :available SET #version = #version + :inc',
-} as const;
-
-const EXPRESSION_ATTRIBUTE_NAMES = {
-  VERSION: '#version',
-} as const;
-
-const DYNAMO_ERROR_CODES = {
-  CONDITIONAL_CHECK_FAILED: 'ConditionalCheckFailed',
-} as const;
 
 export class DynamoBankingRepository implements BankingRepository {
   private readonly client: DynamoDBDocumentClient;

@@ -1,6 +1,23 @@
 import type { Hold, HoldEvent } from '../domain/entities/Hold';
 import type { PaginationOptions, PaginatedResult } from '../domain/types';
 
+export interface ReserveHoldRequest {
+  accountId: string;
+  accountBalanceVersion: number;
+  availableBalanceMinor: number;
+  amountMinor: number;
+  hold: Hold;
+  holdEvent: Extract<HoldEvent, { type: 'CREATED' }>;
+  idempotencyKey: string;
+  idempotencyKeyHash: string;
+  userId: string;
+}
+
+export interface ReserveHoldResult {
+  hold: Hold;
+  created: boolean;
+}
+
 /**
  * Repository interface for Hold persistence.
  * Implementations are responsible for storing hold metadata,
@@ -14,4 +31,5 @@ export interface HoldRepository {
     accountNumber: Hold['payerAccountNumber'],
     options?: PaginationOptions
   ): Promise<PaginatedResult<Hold>>;
+  reserveHold(request: ReserveHoldRequest): Promise<ReserveHoldResult>;
 }

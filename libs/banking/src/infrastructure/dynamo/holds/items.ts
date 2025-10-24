@@ -22,6 +22,10 @@ const HOLD_GSI1_KEYS = {
   SK: 'HOLD_GSI1SK',
 } as const;
 
+const HOLD_GSI_NAMES = {
+  HOLD_GSI1: 'HOLD_GSI1',
+} as const;
+
 export interface HoldMetaItem {
   PK: string;
   SK: typeof HOLD_SORT_KEYS.META;
@@ -141,6 +145,7 @@ export const HOLD_ITEM_CONSTANTS = {
     EVENT_PREFIX: HOLD_EVENT_SORT_KEY_PREFIX,
   },
   GSI1_KEYS: HOLD_GSI1_KEYS,
+  GSI_NAMES: HOLD_GSI_NAMES,
 } as const;
 
 function holdEventPayload(
