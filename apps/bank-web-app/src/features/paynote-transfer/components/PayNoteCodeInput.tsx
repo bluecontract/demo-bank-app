@@ -6,9 +6,11 @@ import {
   isValidBase64,
   decodePayNoteBase64AsYaml,
   type ExamplePayNote,
+  type ExampleTemplateContext,
   renderExamplePayNote,
   getDefaultTemplateValues,
 } from '../../../lib/paynote';
+import { useAuth } from '../../../app/providers/AuthProvider.tsx';
 
 interface PayNoteCodeInputProps {
   enabled: boolean;
@@ -21,22 +23,78 @@ interface PayNoteCodeInputProps {
 
 type ExampleState = {
   values: Record<string, string>;
+  defaults: Record<string, string>;
   encoded: string;
 };
 
 const createExampleState = (
   example: ExamplePayNote,
-  values?: Record<string, string>
+  values?: Record<string, string>,
+  context: ExampleTemplateContext = {}
 ): ExampleState => {
-  const defaults = getDefaultTemplateValues(example);
+  const defaults = getDefaultTemplateValues(example, context);
   const mergedValues = values ? { ...defaults, ...values } : defaults;
-  const rendered = renderExamplePayNote(example, mergedValues);
+  const rendered = renderExamplePayNote(example, mergedValues, context);
 
   return {
     values: mergedValues,
+    defaults,
     encoded: rendered.encoded,
   };
 };
+
+const reconcileExampleState = (
+  example: ExamplePayNote,
+  previous: ExampleState | undefined,
+  context: ExampleTemplateContext
+): ExampleState => {
+  if (!previous) {
+    return createExampleState(example, undefined, context);
+  }
+
+  const nextDefaults = getDefaultTemplateValues(example, context);
+  const nextValues: Record<string, string> = { ...nextDefaults };
+
+  Object.entries(previous.values).forEach(([key, value]) => {
+    const prevDefault = previous.defaults[key];
+    const hasPrevDefault = prevDefault !== undefined;
+    if (
+      hasPrevDefault &&
+      value === prevDefault &&
+      nextDefaults[key] !== undefined
+    ) {
+      return;
+    }
+    nextValues[key] = value;
+  });
+
+  const rendered = renderExamplePayNote(example, nextValues, context);
+
+  return {
+    values: nextValues,
+    defaults: nextDefaults,
+    encoded: rendered.encoded,
+  };
+};
+
+const areRecordsEqual = (
+  a: Record<string, string>,
+  b: Record<string, string>
+) => {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+
+  if (keysA.length !== keysB.length) {
+    return false;
+  }
+
+  return keysA.every(key => a[key] === b[key]);
+};
+
+const areExampleStatesEqual = (a: ExampleState, b: ExampleState) =>
+  a.encoded === b.encoded &&
+  areRecordsEqual(a.values, b.values) &&
+  areRecordsEqual(a.defaults, b.defaults);
 
 export function PayNoteCodeInput({
   enabled,
@@ -46,6 +104,14 @@ export function PayNoteCodeInput({
   disabled = false,
   examples = [],
 }: PayNoteCodeInputProps) {
+  const { user } = useAuth();
+  const templateContext = useMemo<ExampleTemplateContext>(() => {
+    if (user?.email) {
+      return { CURRENT_USER_EMAIL: user.email };
+    }
+    return {};
+  }, [user?.email]);
+
   const [payNoteCode, setPayNoteCode] = useState(value);
   const [fileError, setFileError] = useState('');
   const [inputError, setInputError] = useState('');
@@ -93,25 +159,26 @@ export function PayNoteCodeInput({
 
   useEffect(() => {
     setExampleStates(prev => {
-      const next: Record<string, ExampleState> = {};
-      let changed = false;
+      const nextEntries = examples.map(example => [
+        example.id,
+        reconcileExampleState(example, prev[example.id], templateContext),
+      ]);
+      const next = Object.fromEntries(nextEntries);
 
-      examples.forEach(example => {
-        if (prev[example.id]) {
-          next[example.id] = prev[example.id];
-        } else {
-          next[example.id] = createExampleState(example);
-          changed = true;
-        }
-      });
+      const prevKeys = Object.keys(prev);
+      const nextKeys = Object.keys(next);
+      const isSame =
+        prevKeys.length === nextKeys.length &&
+        nextKeys.every(
+          key =>
+            prev[key] &&
+            next[key] &&
+            areExampleStatesEqual(prev[key], next[key])
+        );
 
-      if (!changed && Object.keys(prev).length !== Object.keys(next).length) {
-        changed = true;
-      }
-
-      return changed ? next : prev;
+      return isSame ? prev : (next as Record<string, ExampleState>);
     });
-  }, [examples]);
+  }, [examples, templateContext]);
 
   useEffect(() => {
     if (!enabled) {
@@ -244,7 +311,9 @@ export function PayNoteCodeInput({
       onToggle?.(true);
     }
 
-    const state = exampleStates[example.id] ?? createExampleState(example);
+    const state =
+      exampleStates[example.id] ??
+      createExampleState(example, undefined, templateContext);
     handleCodeChange(state.encoded, { example });
     setExampleStates(prev => ({
       ...prev,
@@ -263,11 +332,16 @@ export function PayNoteCodeInput({
     }
 
     const currentState =
-      exampleStates[example.id] ?? createExampleState(example);
-    const nextState = createExampleState(example, {
-      ...currentState.values,
-      [fieldKey]: fieldValue,
-    });
+      exampleStates[example.id] ??
+      createExampleState(example, undefined, templateContext);
+    const nextState = createExampleState(
+      example,
+      {
+        ...currentState.values,
+        [fieldKey]: fieldValue,
+      },
+      templateContext
+    );
 
     setExampleStates(prev => ({
       ...prev,
@@ -285,8 +359,11 @@ export function PayNoteCodeInput({
   }, [payNoteCode]);
 
   const selectedExampleDefaults = useMemo(
-    () => (selectedExample ? getDefaultTemplateValues(selectedExample) : {}),
-    [selectedExample]
+    () =>
+      selectedExample
+        ? getDefaultTemplateValues(selectedExample, templateContext)
+        : {},
+    [selectedExample, templateContext]
   );
 
   const selectedExampleState = selectedExample

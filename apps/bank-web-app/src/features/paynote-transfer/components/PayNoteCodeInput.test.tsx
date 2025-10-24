@@ -8,6 +8,14 @@ const hoistedPaynote = vi.hoisted(() => {
   return { parsePayNoteFileMock, encodeObjectAsPayNoteBase64Mock };
 });
 
+const mockAuthState = vi.hoisted(() => ({
+  user: { email: 'tester@example.com', userId: 'user-1' },
+  isAuthenticated: true,
+  isLoading: false,
+  signOut: vi.fn(),
+  signIn: vi.fn(),
+}));
+
 vi.mock('../../../lib/paynote', async () => {
   const actual = await vi.importActual<typeof import('../../../lib/paynote')>(
     '../../../lib/paynote'
@@ -20,10 +28,15 @@ vi.mock('../../../lib/paynote', async () => {
   };
 });
 
+vi.mock('../../../app/providers/AuthProvider.tsx', () => ({
+  useAuth: () => mockAuthState,
+}));
+
 describe('PayNoteCodeInput', () => {
   beforeEach(() => {
     hoistedPaynote.parsePayNoteFileMock.mockReset();
     hoistedPaynote.encodeObjectAsPayNoteBase64Mock.mockReset();
+    mockAuthState.user = { email: 'tester@example.com', userId: 'user-1' };
   });
 
   it('notifies parent when the PayNote toggle is changed', () => {
@@ -150,5 +163,43 @@ describe('PayNoteCodeInput', () => {
     });
 
     expect(screen.getByText(`email: ${updatedEmail}`)).toBeInTheDocument();
+  });
+
+  it('prefills template defaults with the current user email when requested', async () => {
+    const template = 'contact: {{CURRENT_USER_EMAIL}}\n';
+    const examples = [
+      {
+        id: 'user-email-example',
+        name: 'Uses user email',
+        description: 'Example that pulls from auth context',
+        yaml: template,
+        templateFields: [
+          {
+            key: 'CURRENT_USER_EMAIL',
+            label: 'Notification Email',
+            defaultValue: '{{CURRENT_USER_EMAIL}}',
+          },
+        ],
+        encoded: btoa(template.replace('{{CURRENT_USER_EMAIL}}', '')),
+      },
+    ];
+    mockAuthState.user = { email: 'agent@example.com', userId: 'agent-123' };
+
+    render(
+      <PayNoteCodeInput
+        enabled={true}
+        value=""
+        onToggle={vi.fn()}
+        onChange={vi.fn()}
+        examples={examples}
+      />
+    );
+
+    fireEvent.click(screen.getByText(/load example paynote/i));
+    fireEvent.click(screen.getByRole('button', { name: /use this paynote/i }));
+
+    const emailInput = await screen.findByLabelText(/notification email/i);
+    expect(emailInput).toHaveValue('agent@example.com');
+    expect(screen.getByText(/contact: agent@example.com/i)).toBeInTheDocument();
   });
 });

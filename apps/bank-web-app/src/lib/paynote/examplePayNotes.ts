@@ -19,12 +19,31 @@ export type ExamplePayNoteDefinition = Omit<ExamplePayNote, 'encoded'>;
 
 const TEMPLATE_TOKEN_REGEX = /{{\s*([A-Z0-9_.-]+)\s*}}/gi;
 
+export type ExampleTemplateContext = Record<string, string>;
+
+const resolveTemplateString = (
+  template: string,
+  context: ExampleTemplateContext
+): string => {
+  if (!template) {
+    return template;
+  }
+
+  return template.replace(TEMPLATE_TOKEN_REGEX, (_, token: string) => {
+    return Object.prototype.hasOwnProperty.call(context, token)
+      ? context[token]
+      : '';
+  });
+};
+
 export function getDefaultTemplateValues(
-  example: ExamplePayNoteDefinition | ExamplePayNote
+  example: ExamplePayNoteDefinition | ExamplePayNote,
+  context: ExampleTemplateContext = {}
 ): Record<string, string> {
   return (example.templateFields ?? []).reduce<Record<string, string>>(
     (acc, field) => {
-      acc[field.key] = field.defaultValue ?? '';
+      const rawValue = field.defaultValue ?? '';
+      acc[field.key] = resolveTemplateString(rawValue, context);
       return acc;
     },
     {}
@@ -33,10 +52,11 @@ export function getDefaultTemplateValues(
 
 export function renderExamplePayNote(
   example: ExamplePayNoteDefinition | ExamplePayNote,
-  overrides: Record<string, string> = {}
+  overrides: Record<string, string> = {},
+  context: ExampleTemplateContext = {}
 ): { yaml: string; encoded: string } {
-  const defaults = getDefaultTemplateValues(example);
-  const values = { ...defaults, ...overrides };
+  const defaults = getDefaultTemplateValues(example, context);
+  const values = { ...context, ...defaults, ...overrides };
   const yaml = example.yaml.replace(TEMPLATE_TOKEN_REGEX, (_, token) => {
     return Object.prototype.hasOwnProperty.call(values, token)
       ? values[token]
@@ -79,6 +99,69 @@ payNoteInitialStateDescription:
   summary: |
     ## You are about to send a one-time payment of $250.00.
     Once you approve, we'll immediately send $250.00 to the recipient.
+`;
+
+const ONE_TIME_PAYMENT_WITH_AUTHORIZATION_YAML = `name: One time payment with authorization
+type: PayNote
+currency: USD
+amount:
+  total: 5000 # $50
+
+contracts:
+  payerChannel:
+    type: MyOS Timeline Channel
+  payeeChannel:
+    type: MyOS Timeline Channel
+  guarantorChannel:
+    type: MyOS Timeline Channel
+  authorizationChannel:
+    type: MyOS Timeline Channel
+    email: '{{AUTHORIZER_EMAIL}}'
+  initLifecycleChannel:
+    type: Lifecycle Event Channel
+    event:
+      type: Document Processing Initiated
+  bootstrap:
+    type: Sequential Workflow
+    channel: initLifecycleChannel
+    steps:
+      - type: Trigger Event
+        event:
+          type: Reserve Funds Requested
+          amount: 5000
+
+  authorizePayment:
+    type: Operation
+    description: Approver must authorize before the funds are released to the payee.
+    channel: authorizationChannel
+  authorizePaymentImpl:
+    type: Sequential Workflow Operation
+    operation: authorizePayment
+    steps:
+      - name: RequestCapture
+        type: Trigger Event
+        event:
+          type: Capture Funds Requested
+          amount: 5000
+
+payNoteInitialStateDescription:
+  summary: |
+    ## Transfer $50.00 after an approval step
+    We'll hold the funds until the designated approver authorizes the payment.
+  details: |
+    This PayNote adds a lightweight authorization step to a one-time transfer.
+
+    #### Participants
+    * **Payer**: Initiates the request and funds the payment.
+    * **Approver**: Reviews and authorizes the disbursement.
+    * **Payee**: Receives payment once approval is granted.
+    * **Guarantor**: Holds and releases the funds.
+
+    #### Workflow
+    1. The PayNote reserves $50.00 when created.
+    2. The approver receives a notification on the authorization channel.
+    3. When the approver runs \`authorizePayment\`, the PayNote captures the funds and pays the recipient.
+    4. If the approver never authorizes, the funds stay reserved for manual follow-up.
 `;
 
 const ESCROW_PAYMENT_YAML = `name: Escrow Payment for Shipment
@@ -154,6 +237,22 @@ const exampleDefinitions: ExamplePayNoteDefinition[] = [
     name: 'One Time Payment',
     description: 'Immediate single payment of $250.00 to a recipient.',
     yaml: ONE_TIME_PAYMENT_YAML,
+  },
+  {
+    id: 'one-time-payment-with-authorization',
+    name: 'One Time Payment with Authorization',
+    description:
+      'Holds $500.00 until an approver authorizes the final disbursement.',
+    yaml: ONE_TIME_PAYMENT_WITH_AUTHORIZATION_YAML,
+    templateFields: [
+      {
+        key: 'AUTHORIZER_EMAIL',
+        label: 'Approver Email',
+        description: 'Notification email for the approver who must authorize.',
+        placeholder: 'e.g. approver@bluecontract.com',
+        defaultValue: '{{CURRENT_USER_EMAIL}}',
+      },
+    ],
   },
   {
     id: 'escrow-payment',

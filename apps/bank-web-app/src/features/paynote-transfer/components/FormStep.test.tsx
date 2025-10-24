@@ -4,6 +4,18 @@ import { vi } from 'vitest';
 import { FormStep } from './FormStep';
 import type { TransferFormData } from '../../../lib/paynote';
 
+const mockAuthState = vi.hoisted(() => ({
+  user: { email: 'tester@example.com', userId: 'user-1' },
+  isAuthenticated: true,
+  isLoading: false,
+  signOut: vi.fn(),
+  signIn: vi.fn(),
+}));
+
+vi.mock('../../../app/providers/AuthProvider.tsx', () => ({
+  useAuth: () => mockAuthState,
+}));
+
 const accounts = [
   {
     accountId: 'account-1',
@@ -50,6 +62,10 @@ const setup = (initialData: TransferFormData = {}) => {
 };
 
 describe('FormStep', () => {
+  beforeEach(() => {
+    mockAuthState.user = { email: 'tester@example.com', userId: 'user-1' };
+  });
+
   it('requires standard transfer details before allowing users to proceed', async () => {
     const { onNext } = setup();
 
