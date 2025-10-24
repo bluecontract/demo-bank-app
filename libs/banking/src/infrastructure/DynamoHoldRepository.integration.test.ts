@@ -14,7 +14,10 @@ import {
   BatchWriteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { DynamoHoldRepository } from './DynamoHoldRepository';
-import type { ReserveHoldRequest } from '../application/HoldRepository';
+import type {
+  ReserveHoldRequest,
+  ReleaseHoldRequest,
+} from '../application/HoldRepository';
 import { hashIdempotencyKey } from '../domain/idempotency';
 import { HOLD_ITEM_CONSTANTS } from './dynamo/holds/items';
 import { HOLD_IDEMPOTENCY_CONSTANTS } from './dynamo/holds/idempotency';
@@ -246,6 +249,55 @@ function buildReserveRequest({
       type: 'CREATED',
       createdByUserId: USER_ID,
       idempotencyKeyHash,
+    },
+    idempotencyKey,
+    idempotencyKeyHash,
+    userId: USER_ID,
+  };
+}
+
+function buildReleaseRequest({
+  holdId,
+  holdCreatedAt,
+  releaseAt,
+  idempotencyKey,
+  amountMinor,
+  accountBalanceVersion,
+  availableBalanceMinor,
+  reason,
+}: {
+  holdId: string;
+  holdCreatedAt: string;
+  releaseAt: string;
+  idempotencyKey: string;
+  amountMinor: number;
+  accountBalanceVersion: number;
+  availableBalanceMinor: number;
+  reason?: string;
+}): ReleaseHoldRequest {
+  const hold = {
+    holdId,
+    payerAccountNumber: ACCOUNT_NUMBER,
+    amountMinor,
+    currency: 'USD' as const,
+    status: 'RELEASED' as const,
+    createdAt: holdCreatedAt,
+    releasedAt: releaseAt,
+    ...(reason ? { releaseReason: reason } : {}),
+  };
+
+  const idempotencyKeyHash = hashIdempotencyKey(idempotencyKey);
+
+  return {
+    accountId: ACCOUNT_ID,
+    accountBalanceVersion,
+    availableBalanceMinor,
+    amountMinor,
+    hold,
+    holdEvent: {
+      at: releaseAt,
+      type: 'RELEASED' as const,
+      ...(reason ? { reason } : {}),
     },
     idempotencyKey,
     idempotencyKeyHash,
@@ -491,5 +543,223 @@ describe('DynamoHoldRepository integration', () => {
 
     const staleHold = await repository.getHold(staleRequest.hold.holdId);
     expect(staleHold).toBeNull();
+  });
+
+  it('releases hold, restores available balance, and appends event', async () => {
+    const reserveRequest = buildReserveRequest({
+      holdId: 'hold-release-1',
+      holdCreatedAt: '2024-01-02T06:00:00.000Z',
+      idempotencyKey: 'release-flow-reserve',
+      amountMinor: 3_000,
+      accountBalanceVersion: 0,
+      availableBalanceMinor: 10_000,
+    });
+
+    await repository.reserveHold(reserveRequest);
+
+    const balanceAfterReserve = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const releaseRequest = buildReleaseRequest({
+      holdId: reserveRequest.hold.holdId,
+      holdCreatedAt: reserveRequest.hold.createdAt,
+      releaseAt: '2024-01-02T07:00:00.000Z',
+      idempotencyKey: 'release-flow',
+      amountMinor: reserveRequest.amountMinor,
+      accountBalanceVersion: balanceAfterReserve.Item!.version,
+      availableBalanceMinor: balanceAfterReserve.Item!.availableBalanceMinor,
+      reason: 'Customer request',
+    });
+
+    const releaseResult = await repository.releaseHold(releaseRequest);
+    expect(releaseResult.created).toBe(true);
+    expect(releaseResult.hold.status).toBe('RELEASED');
+    expect(releaseResult.hold.releaseReason).toBe('Customer request');
+
+    const holdMeta = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.HOLD}${releaseRequest.hold.holdId}`,
+          SK: HOLD_ITEM_CONSTANTS.SORT_KEYS.META,
+        },
+      })
+    );
+
+    expect(holdMeta.Item).toMatchObject({
+      holdId: releaseRequest.hold.holdId,
+      status: 'RELEASED',
+      releasedAt: '2024-01-02T07:00:00.000Z',
+      releaseReason: 'Customer request',
+    });
+
+    const holdEvents = await documentClient.send(
+      new QueryCommand({
+        TableName: TEST_CONFIG.tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+        ExpressionAttributeValues: {
+          ':pk': `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.HOLD}${releaseRequest.hold.holdId}`,
+          ':skPrefix': HOLD_ITEM_CONSTANTS.SORT_KEYS.EVENT_PREFIX,
+        },
+      })
+    );
+
+    expect(holdEvents.Items).toHaveLength(2);
+    const releaseEvent = holdEvents.Items?.find(
+      item => item.type === 'RELEASED'
+    ) as Record<string, unknown> | undefined;
+    expect(releaseEvent).toBeDefined();
+    expect(releaseEvent?.type).toBe('RELEASED');
+    expect(
+      (releaseEvent as { payload?: Record<string, unknown> }).payload
+    ).toMatchObject({ reason: 'Customer request' });
+
+    const idempotencyRecord = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.USER}${USER_ID}`,
+          SK: `${
+            HOLD_IDEMPOTENCY_CONSTANTS.SORT_KEY_PREFIX
+          }${hashIdempotencyKey('release-flow')}`,
+        },
+      })
+    );
+
+    expect(idempotencyRecord.Item).toMatchObject({
+      holdId: releaseRequest.hold.holdId,
+      command: 'RELEASE',
+    });
+
+    const balanceAfterRelease = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    expect(balanceAfterRelease.Item).toMatchObject({
+      availableBalanceMinor: 10_000,
+      ledgerBalanceMinor: 10_000,
+      version: balanceAfterReserve.Item!.version + 1,
+    });
+  });
+
+  it('returns existing hold on release idempotent retry without additional changes', async () => {
+    const reserveRequest = buildReserveRequest({
+      holdId: 'hold-release-2',
+      holdCreatedAt: '2024-01-02T08:00:00.000Z',
+      idempotencyKey: 'release-retry-reserve',
+      amountMinor: 2_500,
+      accountBalanceVersion: 0,
+      availableBalanceMinor: 10_000,
+    });
+    await repository.reserveHold(reserveRequest);
+
+    const balanceAfterReserve = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const releaseRequest = buildReleaseRequest({
+      holdId: reserveRequest.hold.holdId,
+      holdCreatedAt: reserveRequest.hold.createdAt,
+      releaseAt: '2024-01-02T09:00:00.000Z',
+      idempotencyKey: 'release-retry',
+      amountMinor: reserveRequest.amountMinor,
+      accountBalanceVersion: balanceAfterReserve.Item!.version,
+      availableBalanceMinor: balanceAfterReserve.Item!.availableBalanceMinor,
+    });
+
+    const firstRelease = await repository.releaseHold(releaseRequest);
+    expect(firstRelease.created).toBe(true);
+
+    const secondRelease = await repository.releaseHold(releaseRequest);
+    expect(secondRelease.created).toBe(false);
+    expect(secondRelease.hold.status).toBe('RELEASED');
+
+    const holdEvents = await documentClient.send(
+      new QueryCommand({
+        TableName: TEST_CONFIG.tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+        ExpressionAttributeValues: {
+          ':pk': `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.HOLD}${releaseRequest.hold.holdId}`,
+          ':skPrefix': HOLD_ITEM_CONSTANTS.SORT_KEYS.EVENT_PREFIX,
+        },
+      })
+    );
+
+    expect(holdEvents.Items).toHaveLength(2);
+
+    const balanceAfterRetry = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    expect(balanceAfterRetry.Item).toMatchObject({
+      availableBalanceMinor: 10_000,
+      ledgerBalanceMinor: 10_000,
+    });
+  });
+
+  it('throws OptimisticLockError when release uses stale balance version', async () => {
+    const reserveRequest = buildReserveRequest({
+      holdId: 'hold-release-3',
+      holdCreatedAt: '2024-01-02T10:00:00.000Z',
+      idempotencyKey: 'release-stale-reserve',
+      amountMinor: 1_500,
+      accountBalanceVersion: 0,
+      availableBalanceMinor: 10_000,
+    });
+    await repository.reserveHold(reserveRequest);
+
+    const balanceAfterReserve = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const staleRelease = buildReleaseRequest({
+      holdId: reserveRequest.hold.holdId,
+      holdCreatedAt: reserveRequest.hold.createdAt,
+      releaseAt: '2024-01-02T11:00:00.000Z',
+      idempotencyKey: 'release-stale',
+      amountMinor: reserveRequest.amountMinor,
+      accountBalanceVersion: 0,
+      availableBalanceMinor: balanceAfterReserve.Item!.availableBalanceMinor,
+    });
+
+    await expect(repository.releaseHold(staleRelease)).rejects.toBeInstanceOf(
+      OptimisticLockError
+    );
   });
 });

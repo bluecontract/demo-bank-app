@@ -6,7 +6,10 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import { DynamoHoldRepository } from './DynamoHoldRepository';
-import type { ReserveHoldRequest } from '../application/HoldRepository';
+import type {
+  ReserveHoldRequest,
+  ReleaseHoldRequest,
+} from '../application/HoldRepository';
 import { hashIdempotencyKey } from '../domain/idempotency';
 import { buildHoldMetaItem, HOLD_ITEM_CONSTANTS } from './dynamo/holds/items';
 import { InsufficientFundsError } from '../domain/errors';
@@ -38,6 +41,36 @@ const baseRequest = (): ReserveHoldRequest => {
       type: 'CREATED' as const,
       createdByUserId: 'user-1',
       idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
+    },
+    idempotencyKey,
+    idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
+    userId: 'user-1',
+  };
+};
+
+const baseReleaseRequest = (): ReleaseHoldRequest => {
+  const idempotencyKey = 'release-idem-key';
+
+  return {
+    accountId: 'acc-123',
+    accountBalanceVersion: 2,
+    availableBalanceMinor: 5_000,
+    amountMinor: 4_000,
+    hold: {
+      holdId: 'hold-release',
+      payerAccountNumber: '1234567890',
+      amountMinor: 4_000,
+      currency: 'USD',
+      status: 'RELEASED',
+      description: 'Test hold release',
+      createdAt: '2024-01-02T00:00:00.000Z',
+      releasedAt: '2024-01-03T00:00:00.000Z',
+      releaseReason: 'Customer request',
+    },
+    holdEvent: {
+      at: '2024-01-03T00:00:00.000Z',
+      type: 'RELEASED',
+      reason: 'Customer request',
     },
     idempotencyKey,
     idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
@@ -80,6 +113,29 @@ describe('DynamoHoldRepository', () => {
     );
     expect(transactItems[1]?.Put?.Item?.holdId).toBe(request.hold.holdId);
     expect(transactItems[3]?.Put?.Item?.holdId).toBe(request.hold.holdId);
+  });
+
+  it('performs release transact write successfully', async () => {
+    const { repository, send } = createRepository();
+    send.mockResolvedValue({});
+
+    const request = baseReleaseRequest();
+    const result = await repository.releaseHold(request);
+
+    expect(result.created).toBe(true);
+    expect(result.hold).toEqual(request.hold);
+    const command = send.mock.calls[0][0];
+    expect(command).toBeInstanceOf(TransactWriteCommand);
+    const transactItems =
+      (command as TransactWriteCommand).input.TransactItems ?? [];
+    expect(transactItems).toHaveLength(4);
+    expect(transactItems[0]?.Update?.UpdateExpression).toContain(
+      'availableBalanceMinor = availableBalanceMinor + :amount'
+    );
+    expect(transactItems[1]?.Update?.ConditionExpression).toContain(
+      '#status = :pendingStatus'
+    );
+    expect(transactItems[3]?.Put?.Item?.command).toBe('RELEASE');
   });
 
   it('throws InsufficientFundsError when balance check fails', async () => {
@@ -156,6 +212,45 @@ describe('DynamoHoldRepository', () => {
     expect(result.hold).toEqual(request.hold);
   });
 
+  it('returns existing hold when release idempotency record exists', async () => {
+    const { repository, send } = createRepository();
+    const request = baseReleaseRequest();
+    const error = new TransactionCanceledException({
+      message: 'Cancelled',
+      $metadata: {
+        httpStatusCode: 400,
+        requestId: 'req-4',
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    });
+    (error as TransactionCanceledException).CancellationReasons = [
+      { Code: 'None' },
+      { Code: 'None' },
+      { Code: 'None' },
+      { Code: 'ConditionalCheckFailed' },
+    ];
+
+    send.mockImplementation(async command => {
+      if (command instanceof TransactWriteCommand) {
+        throw error;
+      }
+      if (command instanceof GetCommand) {
+        const projection = command.input.ProjectionExpression;
+        if (projection === 'holdId') {
+          return { Item: { holdId: request.hold.holdId } };
+        }
+        return { Item: buildHoldMetaItem(request.hold) };
+      }
+      throw new Error('Unexpected command');
+    });
+
+    const result = await repository.releaseHold(request);
+
+    expect(result.created).toBe(false);
+    expect(result.hold).toEqual(request.hold);
+  });
+
   it('throws OptimisticLockError when balance version mismatches', async () => {
     const { repository, send } = createRepository();
     const error = new TransactionCanceledException({
@@ -188,6 +283,118 @@ describe('DynamoHoldRepository', () => {
     });
 
     await expect(repository.reserveHold(baseRequest())).rejects.toBeInstanceOf(
+      OptimisticLockError
+    );
+  });
+
+  it('throws OptimisticLockError when release account update fails', async () => {
+    const { repository, send } = createRepository();
+    const request = baseReleaseRequest();
+    const error = new TransactionCanceledException({
+      message: 'Cancelled',
+      $metadata: {
+        httpStatusCode: 400,
+        requestId: 'req-5',
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    });
+    (error as TransactionCanceledException).CancellationReasons = [
+      { Code: 'ConditionalCheckFailed' },
+    ];
+
+    send.mockImplementation(async command => {
+      if (command instanceof TransactWriteCommand) {
+        throw error;
+      }
+      if (command instanceof GetCommand) {
+        return {
+          Item: {
+            availableBalanceMinor: 1_000,
+            ledgerBalanceMinor: 5_000,
+            version: 2,
+          },
+        };
+      }
+      throw new Error('Unexpected command');
+    });
+
+    await expect(repository.releaseHold(request)).rejects.toBeInstanceOf(
+      OptimisticLockError
+    );
+  });
+
+  it('throws OptimisticLockError when release account version mismatches', async () => {
+    const { repository, send } = createRepository();
+    const request = baseReleaseRequest();
+    const error = new TransactionCanceledException({
+      message: 'Cancelled',
+      $metadata: {
+        httpStatusCode: 400,
+        requestId: 'req-6',
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    });
+    (error as TransactionCanceledException).CancellationReasons = [
+      { Code: 'ConditionalCheckFailed' },
+    ];
+
+    send.mockImplementation(async command => {
+      if (command instanceof TransactWriteCommand) {
+        throw error;
+      }
+      if (command instanceof GetCommand) {
+        return {
+          Item: {
+            availableBalanceMinor: request.availableBalanceMinor + 1_000,
+            ledgerBalanceMinor: 10_000,
+            version: request.accountBalanceVersion + 1,
+          },
+        };
+      }
+      throw new Error('Unexpected command');
+    });
+
+    await expect(repository.releaseHold(request)).rejects.toBeInstanceOf(
+      OptimisticLockError
+    );
+  });
+
+  it('throws OptimisticLockError when hold status update fails during release', async () => {
+    const { repository, send } = createRepository();
+    const request = baseReleaseRequest();
+    const error = new TransactionCanceledException({
+      message: 'Cancelled',
+      $metadata: {
+        httpStatusCode: 400,
+        requestId: 'req-7',
+        attempts: 1,
+        totalRetryDelay: 0,
+      },
+    });
+    (error as TransactionCanceledException).CancellationReasons = [
+      { Code: 'None' },
+      { Code: 'ConditionalCheckFailed' },
+    ];
+
+    send.mockImplementation(async command => {
+      if (command instanceof TransactWriteCommand) {
+        throw error;
+      }
+      if (command instanceof GetCommand) {
+        return {
+          Item: {
+            availableBalanceMinor: request.availableBalanceMinor,
+            ledgerBalanceMinor: 10_000,
+            version: request.accountBalanceVersion,
+          },
+        };
+      }
+      throw new Error('Unexpected command');
+    });
+
+    await expect(repository.releaseHold(request)).rejects.toBeInstanceOf(
       OptimisticLockError
     );
   });

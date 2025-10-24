@@ -41,6 +41,8 @@ export interface HoldMetaItem {
   createdAt: string;
   expiresAt?: string;
   relatedTransactionId?: string;
+  releasedAt?: string;
+  releaseReason?: string;
 }
 
 export interface HoldEventItem {
@@ -73,6 +75,8 @@ export function buildHoldMetaItem(hold: Hold): HoldMetaItem {
     createdAt: hold.createdAt,
     expiresAt: hold.expiresAt,
     relatedTransactionId: hold.relatedTransactionId,
+    releasedAt: hold.releasedAt,
+    releaseReason: hold.releaseReason,
   };
 }
 
@@ -88,6 +92,8 @@ export function mapHoldMetaItemToHold(item: HoldMetaItem): Hold {
     createdAt: item.createdAt,
     expiresAt: item.expiresAt,
     relatedTransactionId: item.relatedTransactionId,
+    releasedAt: item.releasedAt,
+    releaseReason: item.releaseReason,
   };
 }
 

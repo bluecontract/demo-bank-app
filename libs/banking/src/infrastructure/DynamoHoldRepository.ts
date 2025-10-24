@@ -13,6 +13,8 @@ import type {
   HoldRepository,
   ReserveHoldRequest,
   ReserveHoldResult,
+  ReleaseHoldRequest,
+  ReleaseHoldResult,
 } from '../application/HoldRepository';
 import type { Hold, HoldEvent } from '../domain/entities/Hold';
 import {
@@ -21,6 +23,7 @@ import {
   mapHoldMetaItemToHold,
   HOLD_ITEM_CONSTANTS,
   HoldMetaItem,
+  buildHoldPartitionKey,
 } from './dynamo/holds/items';
 import {
   buildHoldIdempotencyItem,
@@ -291,6 +294,163 @@ export class DynamoHoldRepository implements HoldRepository {
     };
   }
 
+  async releaseHold(request: ReleaseHoldRequest): Promise<ReleaseHoldResult> {
+    const timing = TimingUtils.startTiming(
+      OPERATION_NAMES.BANKING?.RELEASE_HOLD_REPOSITORY ??
+        'ReleaseHoldRepository'
+    );
+
+    const accountKey = {
+      PK: `${TABLE_PREFIXES.ACCOUNT}${request.accountId}`,
+      SK: SORT_KEYS.BALANCE,
+    };
+
+    const holdPartitionKey = buildHoldPartitionKey(request.hold.holdId);
+    const updatedHoldMeta = buildHoldMetaItem(request.hold);
+    const holdUpdateExpressions = [
+      '#status = :releasedStatus',
+      'HOLD_GSI1SK = :gsi1sk',
+      'releasedAt = :releasedAt',
+    ];
+    const expressionAttributeNames: Record<string, string> = {
+      '#status': 'status',
+    };
+    const expressionAttributeValues: Record<string, unknown> = {
+      ':releasedStatus': request.hold.status,
+      ':pendingStatus': 'PENDING',
+      ':gsi1sk': updatedHoldMeta.HOLD_GSI1SK,
+      ':releasedAt': request.hold.releasedAt,
+    };
+
+    const removeExpressions: string[] = [];
+    if (request.hold.releaseReason) {
+      holdUpdateExpressions.push('releaseReason = :releaseReason');
+      expressionAttributeValues[':releaseReason'] = request.hold.releaseReason;
+    } else {
+      removeExpressions.push('releaseReason');
+    }
+
+    const holdUpdateExpression =
+      `SET ${holdUpdateExpressions.join(', ')}` +
+      (removeExpressions.length > 0
+        ? ` REMOVE ${removeExpressions.join(', ')}`
+        : '');
+
+    const holdEventItem = buildHoldEventItem(
+      request.hold.holdId,
+      request.holdEvent
+    );
+    const idempotencyItem = buildHoldIdempotencyItem({
+      userId: request.userId,
+      idempotencyKey: request.idempotencyKey,
+      holdId: request.hold.holdId,
+      command: 'RELEASE',
+      createdAt: request.holdEvent.at,
+    });
+
+    const transactItems = [
+      {
+        Update: {
+          TableName: this.tableName,
+          Key: accountKey,
+          UpdateExpression:
+            'SET availableBalanceMinor = availableBalanceMinor + :amount, #version = #version + :inc',
+          ConditionExpression: `${EXPRESSION_ATTRIBUTE_NAMES.VERSION} = :currentVersion`,
+          ExpressionAttributeNames: {
+            [EXPRESSION_ATTRIBUTE_NAMES.VERSION]: 'version',
+          },
+          ExpressionAttributeValues: {
+            ':amount': request.amountMinor,
+            ':inc': 1,
+            ':currentVersion': request.accountBalanceVersion,
+          },
+        },
+      },
+      {
+        Update: {
+          TableName: this.tableName,
+          Key: {
+            PK: holdPartitionKey,
+            SK: HOLD_ITEM_CONSTANTS.SORT_KEYS.META,
+          },
+          UpdateExpression: holdUpdateExpression,
+          ConditionExpression: '#status = :pendingStatus',
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: {
+            ...expressionAttributeValues,
+          },
+        },
+      },
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: holdEventItem,
+          ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
+        },
+      },
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: idempotencyItem,
+          ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
+        },
+      },
+    ];
+
+    try {
+      await this.client.send(
+        new TransactWriteCommand({
+          TransactItems: transactItems,
+        })
+      );
+
+      const completedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING?.RELEASE_HOLD_REPOSITORY_SUCCESS ??
+          'ReleaseHoldRepositorySuccess',
+        METRIC_UNITS.COUNT,
+        1
+      );
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING?.RELEASE_HOLD_REPOSITORY_DURATION ??
+          'ReleaseHoldRepositoryDuration',
+        METRIC_UNITS.MILLISECONDS,
+        completedTiming.duration ?? 0
+      );
+
+      this.logger?.debug('Hold released successfully in repository', {
+        holdId: request.hold.holdId,
+        accountId: request.accountId,
+        amountMinor: request.amountMinor,
+        userId: request.userId,
+        ...TimingUtils.createTimingMetadata(completedTiming),
+      });
+
+      return { hold: request.hold, created: true };
+    } catch (error) {
+      const failedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING?.RELEASE_HOLD_REPOSITORY_ERROR ??
+          'ReleaseHoldRepositoryError',
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      this.logger?.error('Hold release transaction failed', {
+        holdId: request.hold.holdId,
+        accountId: request.accountId,
+        amountMinor: request.amountMinor,
+        userId: request.userId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+
+      return this.handleReleaseError(error, request);
+    }
+  }
+
   private async handleReserveError(
     error: unknown,
     request: ReserveHoldRequest
@@ -345,6 +505,60 @@ export class DynamoHoldRepository implements HoldRepository {
 
     throw new RepositoryError(
       `hold_reserve_${request.hold.holdId}`,
+      error as Error
+    );
+  }
+
+  private async handleReleaseError(
+    error: unknown,
+    request: ReleaseHoldRequest
+  ): Promise<ReleaseHoldResult> {
+    if (
+      error instanceof TransactionCanceledException &&
+      error.CancellationReasons?.[3]?.Code ===
+        DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED
+    ) {
+      const holdId = await this.getHoldIdByIdempotencyKey(
+        request.userId,
+        request.idempotencyKey
+      );
+      const hold = await this.getHold(holdId);
+      if (!hold) {
+        throw new RepositoryError(
+          `hold_idempotency_lookup_${holdId}`,
+          new Error('Hold not found after idempotency lookup')
+        );
+      }
+      return { hold, created: false };
+    }
+
+    if (
+      error instanceof TransactionCanceledException &&
+      error.CancellationReasons?.[0]?.Code ===
+        DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED
+    ) {
+      throw new OptimisticLockError(`hold_release_${request.hold.holdId}`);
+    }
+
+    if (
+      error instanceof TransactionCanceledException &&
+      error.CancellationReasons?.[1]?.Code ===
+        DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED
+    ) {
+      throw new OptimisticLockError(`hold_release_${request.hold.holdId}`);
+    }
+
+    if (
+      error instanceof TransactionCanceledException &&
+      error.CancellationReasons?.some(
+        reason => reason.Code === DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED
+      )
+    ) {
+      throw new OptimisticLockError(`hold_release_${request.hold.holdId}`);
+    }
+
+    throw new RepositoryError(
+      `hold_release_${request.hold.holdId}`,
       error as Error
     );
   }

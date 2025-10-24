@@ -20,6 +20,8 @@ describe('Hold Dynamo item mappers', () => {
     createdAt: '2024-01-01T00:00:00.000Z',
     expiresAt: '2024-02-01T00:00:00.000Z',
     relatedTransactionId: 'txn-789',
+    releasedAt: '2024-01-05T00:00:00.000Z',
+    releaseReason: 'Cancelled',
   };
 
   it('should round-trip hold meta items', () => {
@@ -39,6 +41,8 @@ describe('Hold Dynamo item mappers', () => {
       createdAt: '2024-01-01T00:00:00.000Z',
       expiresAt: '2024-02-01T00:00:00.000Z',
       relatedTransactionId: 'txn-789',
+      releasedAt: '2024-01-05T00:00:00.000Z',
+      releaseReason: 'Cancelled',
     });
 
     const mappedHold = mapHoldMetaItemToHold(item);

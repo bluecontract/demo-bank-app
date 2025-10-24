@@ -22,6 +22,8 @@ export interface Hold {
   createdAt: string;
   expiresAt?: string;
   relatedTransactionId?: string;
+  releasedAt?: string;
+  releaseReason?: string;
 }
 
 export type HoldEvent =

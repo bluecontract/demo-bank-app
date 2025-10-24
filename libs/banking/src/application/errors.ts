@@ -23,3 +23,19 @@ export class TransactionNotFoundError extends AppError {
     super(`Transaction ${transactionId} not found`);
   }
 }
+
+export class HoldNotFoundError extends AppError {
+  readonly code = 'HOLD_NOT_FOUND';
+
+  constructor(holdId: string) {
+    super(`Hold ${holdId} not found`);
+  }
+}
+
+export class HoldNotPendingError extends AppError {
+  readonly code = 'HOLD_NOT_PENDING';
+
+  constructor(holdId: string, status: string) {
+    super(`Hold ${holdId} is not pending (status: ${status})`);
+  }
+}
