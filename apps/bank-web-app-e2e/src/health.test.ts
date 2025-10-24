@@ -8,19 +8,25 @@ test.describe('Health Check', () => {
     // Verify the page title
     await expect(page).toHaveTitle(/DemoBlue/);
 
-    // Check for the System Health heading
-    await expect(page.locator('h3:has-text("System Health")')).toBeVisible({
-      timeout: 10000,
+    // Wait for the compact status control
+    const statusButton = page.getByRole('button', {
+      name: /System status: healthy/i,
     });
+    await expect(statusButton).toBeVisible({ timeout: 15000 });
 
-    // Wait for health status to load and verify it shows healthy status
-    await expect(page.locator('text=✅ Status: healthy')).toBeVisible({
-      timeout: 15000,
-    });
+    // Hover to reveal the detailed tooltip and verify its contents
+    await statusButton.hover();
+    const tooltip = page.locator(
+      '[role="tooltip"], div:has(h3:has-text("System Health"))'
+    );
 
-    // Verify other health information is present
-    await expect(page.locator('text=Version:')).toBeVisible();
-    await expect(page.locator('text=Environment:')).toBeVisible();
-    await expect(page.locator('text=Last checked:')).toBeVisible();
+    await expect(
+      tooltip.getByRole('heading', { name: 'System Health' })
+    ).toBeVisible({ timeout: 10000 });
+
+    await expect(tooltip.locator('text=Status: healthy')).toBeVisible();
+    await expect(tooltip.locator('text=Version:')).toBeVisible();
+    await expect(tooltip.locator('text=Environment:')).toBeVisible();
+    await expect(tooltip.locator('text=Last checked:')).toBeVisible();
   });
 });
