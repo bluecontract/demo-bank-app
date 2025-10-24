@@ -15,7 +15,7 @@ import { toUserAlreadyExistsError } from './errors';
 
 const COOKIE_CONFIG = {
   NAME: 'demoAuth',
-  ATTRIBUTES: 'HttpOnly; Secure; SameSite=None; Path=/',
+  ATTRIBUTES: 'HttpOnly; Secure; SameSite=Strict; Path=/',
 } as const;
 
 const createAuthCookie = (token: string, ttlSeconds: number): string => {

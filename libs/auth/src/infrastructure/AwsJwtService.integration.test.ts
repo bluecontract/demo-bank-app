@@ -96,6 +96,7 @@ describe('AwsJwtService Integration', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -310,36 +311,51 @@ describe('AwsJwtService Integration', () => {
   describe('error scenarios', () => {
     it('should handle SecretsManager connection errors gracefully', async () => {
       // Given
-      const invalidService = new AwsJwtService({
-        region: 'invalid-region',
-        jwtSecretArn:
-          'arn:aws:secretsmanager:invalid-region:000000000000:secret:invalid-secret',
-        endpoint: 'http://invalid-endpoint:9999',
+      const service = new AwsJwtService({
+        region: TEST_CONFIG.region,
+        jwtSecretArn: secretArn,
+        endpoint: TEST_CONFIG.localstackEndpoint,
       });
+      const networkingError = Object.assign(new Error('connect ECONNREFUSED'), {
+        name: 'NetworkingError',
+      });
+      vi.spyOn(
+        (service as unknown as { secretsClient: SecretsManagerClient })
+          .secretsClient,
+        'send'
+      ).mockRejectedValueOnce(networkingError);
 
       const userId = 'user-123';
 
       // When & Then
-      await expect(
-        invalidService.generateToken({ userId: userId })
-      ).rejects.toThrow(TokenGenerationError);
+      await expect(service.generateToken({ userId })).rejects.toThrow(
+        TokenGenerationError
+      );
     });
 
     it('should handle invalid secret ARN gracefully', async () => {
       // Given
-      const invalidService = new AwsJwtService({
+      const service = new AwsJwtService({
         region: TEST_CONFIG.region,
         jwtSecretArn:
-          'arn:aws:secretsmanager:us-east-1:000000000000:secret:non-existent-secret',
+          'arn:aws:secretsmanager:us-east-1:000000000000:secret:missing',
         endpoint: TEST_CONFIG.localstackEndpoint,
       });
+      const secretNotFoundError = Object.assign(new Error('Secret not found'), {
+        name: 'ResourceNotFoundException',
+      });
+      vi.spyOn(
+        (service as unknown as { secretsClient: SecretsManagerClient })
+          .secretsClient,
+        'send'
+      ).mockRejectedValueOnce(secretNotFoundError);
 
       const userId = 'user-123';
 
       // When & Then
-      await expect(
-        invalidService.generateToken({ userId: userId })
-      ).rejects.toThrow(TokenGenerationError);
+      await expect(service.generateToken({ userId })).rejects.toThrow(
+        TokenGenerationError
+      );
     });
 
     it('should throw TokenGenerationError for malformed secret content when generating token', async () => {
