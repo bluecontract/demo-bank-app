@@ -60,8 +60,8 @@ export function ReviewStep({
       ? decodePayNoteBase64AsObject(formData.payNoteCode)
       : null;
 
-  const amount = payNote?.amount?.total?.value
-    ? (payNote.amount.total.value / 100).toFixed(2)
+  const amount = payNote?.amount?.total
+    ? (payNote.amount.total / 100).toFixed(2)
     : formData.totalAmount
     ? Number(formData.totalAmount).toFixed(2)
     : '0.00';

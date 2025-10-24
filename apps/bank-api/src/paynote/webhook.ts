@@ -102,7 +102,7 @@ export const payNoteWebhookHandler = async (
     | {
         payerAccountNumber: { value: string };
         payeeAccountNumber: { value: string };
-        amount: { total: { value: number } };
+        amount: { total: number };
         name?: string;
       }
     | undefined;
@@ -115,7 +115,7 @@ export const payNoteWebhookHandler = async (
 
   const payerAccountNumber = document.payerAccountNumber?.value;
   const payeeAccountNumber = document.payeeAccountNumber?.value;
-  const transferAmountMinor = document.amount?.total?.value;
+  const transferAmountMinor = document.amount?.total;
   const transferDescription = document.name || 'PayNote transfer';
 
   const events =

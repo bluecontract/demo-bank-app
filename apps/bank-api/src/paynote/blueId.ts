@@ -3,6 +3,7 @@ import { repository as coreRepository } from '@blue-repository/core-dev';
 import { repository as myosRepository } from '@blue-repository/myos-dev';
 import { repository as permissionRepository } from '@blue-repository/permission';
 import { repository as paymentRepository } from '@blue-repository/payment';
+import { repository as payNoteRepository } from '@blue-repository/pay-note';
 
 const blue = new Blue({
   repositories: [
@@ -10,6 +11,7 @@ const blue = new Blue({
     myosRepository,
     permissionRepository,
     paymentRepository,
+    payNoteRepository,
   ],
 });
 

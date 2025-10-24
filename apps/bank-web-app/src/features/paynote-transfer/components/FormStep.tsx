@@ -59,10 +59,8 @@ export function FormStep({
     if (isPayNoteEnabled && payNoteCode && isValidBase64(payNoteCode)) {
       try {
         const payNote = decodePayNoteBase64AsObject(payNoteCode);
-        if (payNote?.amount?.total?.value) {
-          const amountFromPayNote = (payNote.amount.total.value / 100).toFixed(
-            2
-          );
+        if (payNote?.amount?.total) {
+          const amountFromPayNote = (payNote.amount.total / 100).toFixed(2);
           onFormDataChange({ totalAmount: amountFromPayNote });
         }
         if (payNote?.payerAccountNumber?.value) {

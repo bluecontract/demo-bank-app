@@ -358,16 +358,10 @@ The true power of the \`PayNote\` lies in its flexibility. It can model everythi
 
 \`\`\`
 name: One time payment
-currency:
-  description: The ISO 4217 currency code for the transaction.
-  type: Text
-  value: USD
+currency: USD
 amount:
-  description: The amounts associated with this PayNote.
-  total:
-    description: The maximum total value of this PayNote.
-    type: Integer
-    value: 25000
+  total: 25000 # $250
+
 contracts:
   payerChannel:
     type: MyOS Timeline Channel
@@ -383,9 +377,11 @@ contracts:
     type: Sequential Workflow
     channel: initLifecycleChannel
     steps:
-    - type: Trigger Event
-      event:
-        type: Reserve Funds and Capture Immediately Requested
+      - type: Trigger Event
+        event:
+          type: Reserve Funds and Capture Immediately Requested
+          amount: 25000
+
 payNoteInitialStateDescription:
   summary: |
     ## You are about to send a one-time payment of $250.00.
@@ -404,16 +400,9 @@ payNoteInitialStateDescription:
 
 \`\`\`
 name: Escrow Payment for Shipment
-currency:
-  description: The ISO 4217 currency code for the transaction.
-  type: Text
-  value: USD
+currency: USD
 amount:
-  description: The amounts associated with this PayNote.
-  total:
-    description: The maximum total value of this PayNote.
-    type: Integer
-    value: 12000 # $120
+  total: 12000 # $120
 
 contracts:
   payerChannel:
@@ -424,8 +413,7 @@ contracts:
     type: MyOS Timeline Channel
   shipmentCompanyChannel:
     type: MyOS Timeline Channel
-    # email: dhl@bluecontract.com
-    email: sylwek@bluecontract.com
+    email: '{{SHIPMENT_COMPANY_EMAIL}}'
 
   initLifecycleChannel:
     type: Lifecycle Event Channel
@@ -456,31 +444,30 @@ contracts:
 
 payNoteInitialStateDescription:
   summary: |
-    This is a protected payment of **$120.00**. The funds are held securely by your bank and will only be released to the Merchant after **DHL confirms successful delivery**.
+    This is a protected payment of **$120.00**. The funds are held securely by your bank and will only be released to the Merchant after **Shipment Company confirms successful delivery**.
   details: |
     This PayNote acts as a secure escrow to protect the Payer. The payment is guaranteed, but the final transfer is conditional on a confirmation from the shipping company.
     #### Participants
     * **Payer**: The Customer (sender of funds)
     * **Payee**: The Merchant (recipient of funds)
     * **Guarantor**: The Bank (holds the funds in escrow)
-    * **Shipment Company**: DHL (provides delivery confirmation)
+    * **Shipment Company**: The Shipment Company (provides delivery confirmation)
     #### Operations
-    * **\`shipmentConfirmed\`** (Callable by: **Shipment Company - DHL**)
+    * **\`shipmentConfirmed\`** (Callable by: **Shipment Company**)
         * This action is performed by DHL to certify that the delivery is complete. This is the trigger that releases the payment to the Merchant.
     #### Scenarios
     1.  **Payment and Delivery:**
         * The Payer initiates the payment, and the Bank immediately reserves (holds) the $120.00.
-        * DHL delivers the package to the Payer.
-        * DHL then calls the \`shipmentConfirmed\` operation on this document.
+        * Shipment Company delivers the package to the Payer.
+        * Shipment Company then calls the \`shipmentConfirmed\` operation on this document.
         * This automatically authorizes the Bank to transfer the $120.00 to the Merchant. The process is complete.
     2.  **Shipment Issue:**
-        * If the shipment is never confirmed by DHL, the funds remain reserved. The Payer can then initiate a cancellation to have the funds released back to their account.
-
+        * If the shipment is never confirmed by Shipment Company, the funds remain reserved. The Payer can then initiate a cancellation to have the funds released back to their account.
 
 \`\`\`
 
 Additional notes:
-- The amount value and simillar in <yaml></yaml> fields are always in 1/100 of the currency unit. For example, if the currency is USD, the amount.total.value is in cents.
+- The amount value and simillar in <yaml></yaml> fields are always in 1/100 of the currency unit. For example, if the currency is USD, the amount.total is in cents.
 - The amount value in <transaction></transaction> is always in the main currency unit. For example, if the currency is USD, the 100.00 represents $100.00.
 - Your output 'validationScore' should be a single number between 0 and 10, representing your validation score.
 - Your output 'explanation' should be short (max 100 characters) if 'validationScore' is high (>7), or longer (max 1000 characters) if 'validationScore' is low (<7).
@@ -586,6 +573,8 @@ export const validatePayNoteHandler = async (
       });
     }
 
+    const blueId = calculateBlueIdFromYaml(yamlContent);
+
     const apiKey = await getOpenAiApiKey();
 
     const validationResult = await callValidationProvider(
@@ -594,7 +583,6 @@ export const validatePayNoteHandler = async (
       apiKey
     );
 
-    const blueId = calculateBlueIdFromYaml(yamlContent);
     const validatedAt = new Date().toISOString();
     const isSuccessful =
       validationResult.validationScore >= MIN_PAYNOTE_VERIFICATION_SCORE;

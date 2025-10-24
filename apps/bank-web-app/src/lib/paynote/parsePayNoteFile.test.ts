@@ -417,8 +417,7 @@ value: 42
 status: pending
 currency: USD
 amount:
-  total:
-    value: 10000
+  total: 10000
 participants:
   - name: Alice
     role: payer
@@ -432,7 +431,7 @@ participants:
       expect(result.success).toBe(true);
       expect(result.data).toHaveProperty('status', 'pending');
       expect(result.data).toHaveProperty('currency', 'USD');
-      expect((result.data as any).amount.total.value).toBe(10000);
+      expect((result.data as any).amount.total).toBe(10000);
       expect((result.data as any).participants).toHaveLength(2);
     });
 
@@ -440,7 +439,7 @@ participants:
       const payNoteData = {
         status: 'active',
         currency: 'EUR',
-        amount: { total: { value: 5000 } },
+        amount: { total: 5000 },
       };
       const base64PayNote = btoa(JSON.stringify(payNoteData));
       const file = createTestFile(base64PayNote, 'paynote.txt');

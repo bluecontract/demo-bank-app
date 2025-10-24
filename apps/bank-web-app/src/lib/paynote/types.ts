@@ -13,21 +13,9 @@ export interface PayNoteContent {
   };
   amount?: {
     description?: string;
-    total?: {
-      description?: string;
-      type?: string;
-      value?: number;
-    };
-    reserved?: {
-      description?: string;
-      type?: string;
-      value?: number;
-    };
-    captured?: {
-      description?: string;
-      type?: string;
-      value?: number;
-    };
+    total?: number;
+    reserved?: number;
+    captured?: number;
   };
   payerAccountNumber: {
     value: string;

@@ -50,16 +50,9 @@ export function renderExamplePayNote(
 }
 
 const ONE_TIME_PAYMENT_YAML = `name: One time payment
-currency:
-  description: The ISO 4217 currency code for the transaction.
-  type: Text
-  value: USD
+currency: USD
 amount:
-  description: The amounts associated with this PayNote.
-  total:
-    description: The maximum total value of this PayNote.
-    type: Integer
-    value: 25000 # $250
+  total: 25000 # $250
 
 contracts:
   payerChannel:
@@ -79,7 +72,7 @@ contracts:
       - type: Trigger Event
         event:
           type: Reserve Funds and Capture Immediately Requested
-          amount: 12000
+          amount: 25000
 
 payNoteInitialStateDescription:
   summary: |
@@ -88,16 +81,9 @@ payNoteInitialStateDescription:
 `;
 
 const ESCROW_PAYMENT_YAML = `name: Escrow Payment for Shipment
-currency:
-  description: The ISO 4217 currency code for the transaction.
-  type: Text
-  value: USD
+currency: USD
 amount:
-  description: The amounts associated with this PayNote.
-  total:
-    description: The maximum total value of this PayNote.
-    type: Integer
-    value: 12000 # $120
+  total: 12000 # $120
 
 contracts:
   payerChannel:

@@ -100,7 +100,7 @@ describe('ReviewStep', () => {
       isPayNoteEnabled: true,
       payNoteCode: Buffer.from(
         JSON.stringify({
-          amount: { total: { value: 12345 } },
+          amount: { total: 12345 },
         }),
         'utf-8'
       ).toString('base64'),
