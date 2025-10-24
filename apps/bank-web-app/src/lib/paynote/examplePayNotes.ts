@@ -50,6 +50,7 @@ export function renderExamplePayNote(
 }
 
 const ONE_TIME_PAYMENT_YAML = `name: One time payment
+type: PayNote
 currency: USD
 amount:
   total: 25000 # $250
@@ -81,6 +82,7 @@ payNoteInitialStateDescription:
 `;
 
 const ESCROW_PAYMENT_YAML = `name: Escrow Payment for Shipment
+type: PayNote
 currency: USD
 amount:
   total: 12000 # $120

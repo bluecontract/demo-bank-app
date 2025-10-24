@@ -32,7 +32,7 @@ export function HomePage() {
 
           <div className="mt-8 p-6 bg-white rounded-lg shadow-sm border">
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-              Welcome to Demo Blue Bank
+              Welcome
             </h2>
             <p className="text-gray-600 mb-6">
               Experience modern banking with our secure demo application. Create

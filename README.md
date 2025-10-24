@@ -1,13 +1,16 @@
 # Demo Bank App
 
-Blue Demo Bank is the end-to-end reference for modelling retail banking flows as Blue PayNotes and driving them through the MyOS processor. The project shows how deposits, balances, and transfers can stay Blue-native while the app layers on a responsive banking UI and a serverless AWS backend.
+Demo Bank App is the end-to-end reference for modelling banking workflows using **PayNotes** and driving them through the MyOS.
 
-## 🔷 PayNote + MyOS Integration
+A **PayNote** is a programmable payment agreement shared by a payer, payee, and guarantor.
+It captures the commercial promise, the evidence required to fulfill it, and the automated actions that release or refund funds.
+Everyone sees the same terms and same timeline.
+
+## PayNote + MyOS Integration (only ~500 lines of code)
 
 - `POST /v1/paynotes/bootstrap` → `apps/bank-api/src/paynote/bootstrapPayNote.ts` validates the uploaded PayNote, hydrates payer/payee accounts, and forwards the document plus channel bindings to MyOS `POST /documents/bootstrap` so processing begins instantly.
 - `POST /v1/paynotes/webhook` → `apps/bank-api/src/paynote/webhook.ts` ingests MyOS callbacks, downloads event detail via `GET /myos-events/{eventId}`, and maps capture events to real ledger transfers.
-- Together these handlers amount to ~500 lines of TypeScript—they cover document ingestion, authentication, MyOS API orchestration, and idempotent money movement, highlighting how lean a PayNote integration can be.
-- Everything else in the repo is conventional Nx + AWS SAM plumbing, so teams can reuse their existing stack and swap in these modules to go Blue-first.
+- Together these handlers amount to **~500 lines of code** illustrating how little code is required to wrap a PayNote flow with bank-grade system.
 
 ### Flow at a Glance
 
