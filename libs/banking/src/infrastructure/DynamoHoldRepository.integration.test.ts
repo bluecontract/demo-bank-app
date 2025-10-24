@@ -17,12 +17,16 @@ import { DynamoHoldRepository } from './DynamoHoldRepository';
 import type {
   ReserveHoldRequest,
   ReleaseHoldRequest,
+  CaptureHoldRequest,
 } from '../application/HoldRepository';
 import { hashIdempotencyKey } from '../domain/idempotency';
 import { HOLD_ITEM_CONSTANTS } from './dynamo/holds/items';
 import { HOLD_IDEMPOTENCY_CONSTANTS } from './dynamo/holds/idempotency';
 import { TABLE_PREFIXES, SORT_KEYS } from './dynamo/constants';
 import { OptimisticLockError } from './repositoryErrors';
+import { Transaction } from '../domain/entities/Transaction';
+import { Posting } from '../domain/valueObjects/Posting';
+import { Money } from '../domain/valueObjects/Money';
 
 const TEST_CONFIG = {
   tableName: `demo-bank-app-holds-integration-test-${Date.now()}`,
@@ -33,6 +37,9 @@ const TEST_CONFIG = {
 const ACCOUNT_ID = 'acc-123';
 const ACCOUNT_NUMBER = '1234567890';
 const USER_ID = 'user-1';
+const COUNTERPARTY_ACCOUNT_ID = 'acc-456';
+const COUNTERPARTY_ACCOUNT_NUMBER = '5555555555';
+const COUNTERPARTY_USER_ID = 'user-2';
 
 let dynamoClient: DynamoDBClient;
 let documentClient: DynamoDBDocumentClient;
@@ -211,6 +218,50 @@ async function seedAccount({
   );
 }
 
+async function seedCounterpartyAccount({
+  availableBalanceMinor = 15_000,
+  ledgerBalanceMinor = 15_000,
+  version = 0,
+}: {
+  availableBalanceMinor?: number;
+  ledgerBalanceMinor?: number;
+  version?: number;
+} = {}) {
+  const now = new Date('2024-01-01T00:00:00.000Z').toISOString();
+  await documentClient.send(
+    new PutCommand({
+      TableName: TEST_CONFIG.tableName,
+      Item: {
+        PK: `${TABLE_PREFIXES.ACCOUNT}${COUNTERPARTY_ACCOUNT_ID}`,
+        SK: SORT_KEYS.META,
+        BANKING_GSI1PK: `${TABLE_PREFIXES.USER}${COUNTERPARTY_USER_ID}`,
+        BANKING_GSI1SK: now,
+        BANKING_GSI2PK: `${TABLE_PREFIXES.ACCOUNT}${COUNTERPARTY_ACCOUNT_NUMBER}`,
+        BANKING_GSI2SK: now,
+        accountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+        name: 'Counterparty Account',
+        ownerUserId: COUNTERPARTY_USER_ID,
+        status: 'ACTIVE',
+        currency: 'USD',
+        createdAt: now,
+      },
+    })
+  );
+
+  await documentClient.send(
+    new PutCommand({
+      TableName: TEST_CONFIG.tableName,
+      Item: {
+        PK: `${TABLE_PREFIXES.ACCOUNT}${COUNTERPARTY_ACCOUNT_ID}`,
+        SK: SORT_KEYS.BALANCE,
+        ledgerBalanceMinor,
+        availableBalanceMinor,
+        version,
+      },
+    })
+  );
+}
+
 function buildReserveRequest({
   holdId,
   holdCreatedAt,
@@ -218,6 +269,7 @@ function buildReserveRequest({
   amountMinor,
   accountBalanceVersion,
   availableBalanceMinor,
+  counterpartyAccountNumber = COUNTERPARTY_ACCOUNT_NUMBER,
 }: {
   holdId: string;
   holdCreatedAt: string;
@@ -225,10 +277,12 @@ function buildReserveRequest({
   amountMinor: number;
   accountBalanceVersion: number;
   availableBalanceMinor: number;
+  counterpartyAccountNumber?: string;
 }): ReserveHoldRequest {
   const hold = {
     holdId,
     payerAccountNumber: ACCOUNT_NUMBER,
+    counterpartyAccountNumber,
     amountMinor,
     currency: 'USD' as const,
     status: 'PENDING' as const,
@@ -305,6 +359,83 @@ function buildReleaseRequest({
   };
 }
 
+function buildCaptureRequest({
+  holdId,
+  holdCreatedAt,
+  captureAt,
+  idempotencyKey,
+  amountMinor,
+  payerAccountVersion,
+  counterpartyAccountVersion,
+}: {
+  holdId: string;
+  holdCreatedAt: string;
+  captureAt: string;
+  idempotencyKey: string;
+  amountMinor: number;
+  payerAccountVersion: number;
+  counterpartyAccountVersion: number;
+}): CaptureHoldRequest {
+  const debit = new Posting({
+    accountId: ACCOUNT_ID,
+    amount: new Money(amountMinor),
+    side: 'DEBIT',
+    accountNumber: ACCOUNT_NUMBER,
+    counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+  });
+
+  const credit = new Posting({
+    accountId: COUNTERPARTY_ACCOUNT_ID,
+    amount: new Money(amountMinor),
+    side: 'CREDIT',
+    accountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+    counterpartyAccountNumber: ACCOUNT_NUMBER,
+  });
+
+  const transactionId = `txn-${holdId}`;
+  const transaction = Transaction.createWithId(
+    [debit, credit],
+    {
+      idempotencyKey,
+      description: `Capture hold ${holdId}`,
+      originHoldId: holdId,
+    },
+    transactionId
+  );
+
+  const hold = {
+    holdId,
+    payerAccountNumber: ACCOUNT_NUMBER,
+    counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+    amountMinor,
+    currency: 'USD' as const,
+    status: 'CAPTURED' as const,
+    description: 'Integration hold capture',
+    createdAt: holdCreatedAt,
+    relatedTransactionId: transaction.id,
+  };
+
+  const idempotencyKeyHash = hashIdempotencyKey(idempotencyKey);
+
+  return {
+    payerAccountId: ACCOUNT_ID,
+    payerAccountBalanceVersion: payerAccountVersion,
+    counterpartyAccountId: COUNTERPARTY_ACCOUNT_ID,
+    counterpartyAccountBalanceVersion: counterpartyAccountVersion,
+    hold,
+    holdEvent: {
+      at: captureAt,
+      type: 'CAPTURED' as const,
+      transactionId: transaction.id,
+      counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+    },
+    transaction,
+    idempotencyKey,
+    idempotencyKeyHash,
+    userId: USER_ID,
+  };
+}
+
 describe('DynamoHoldRepository integration', () => {
   beforeAll(async () => {
     dynamoClient = new DynamoDBClient({
@@ -326,6 +457,7 @@ describe('DynamoHoldRepository integration', () => {
   beforeEach(async () => {
     await clearTableContents().catch(() => undefined);
     await seedAccount();
+    await seedCounterpartyAccount();
   });
 
   afterAll(async () => {
@@ -761,5 +893,430 @@ describe('DynamoHoldRepository integration', () => {
     await expect(repository.releaseHold(staleRelease)).rejects.toBeInstanceOf(
       OptimisticLockError
     );
+  });
+
+  it('captures hold, posts transaction, and links hold to transaction', async () => {
+    const amountMinor = 4_000;
+    const holdId = 'hold-capture-integration';
+    const reserveRequest = buildReserveRequest({
+      holdId,
+      holdCreatedAt: '2024-01-03T00:00:00.000Z',
+      idempotencyKey: 'reserve-for-capture',
+      amountMinor,
+      accountBalanceVersion: 0,
+      availableBalanceMinor: 10_000,
+    });
+
+    await repository.reserveHold(reserveRequest);
+
+    const payerBalanceAfterReserve = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const counterpartyBalanceBeforeCapture = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${COUNTERPARTY_ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const captureRequest = buildCaptureRequest({
+      holdId,
+      holdCreatedAt: reserveRequest.hold.createdAt,
+      captureAt: '2024-01-04T00:00:00.000Z',
+      idempotencyKey: 'capture-hold',
+      amountMinor,
+      payerAccountVersion: payerBalanceAfterReserve.Item!.version,
+      counterpartyAccountVersion:
+        counterpartyBalanceBeforeCapture.Item!.version,
+    });
+
+    const captureResult = await repository.captureHold(captureRequest);
+
+    expect(captureResult.created).toBe(true);
+    expect(captureResult.transactionId).toBe(captureRequest.transaction.id);
+
+    const holdMeta = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.HOLD}${holdId}`,
+          SK: HOLD_ITEM_CONSTANTS.SORT_KEYS.META,
+        },
+      })
+    );
+
+    expect(holdMeta.Item).toMatchObject({
+      holdId,
+      status: 'CAPTURED',
+      relatedTransactionId: captureRequest.transaction.id,
+    });
+
+    const holdEvents = await documentClient.send(
+      new QueryCommand({
+        TableName: TEST_CONFIG.tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+        ExpressionAttributeValues: {
+          ':pk': `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.HOLD}${holdId}`,
+          ':skPrefix': HOLD_ITEM_CONSTANTS.SORT_KEYS.EVENT_PREFIX,
+        },
+      })
+    );
+
+    expect(holdEvents.Items).toHaveLength(2);
+    const captureEvent = holdEvents.Items?.find(
+      item => item.type === 'CAPTURED'
+    ) as Record<string, unknown> | undefined;
+    expect(captureEvent).toBeDefined();
+    expect(captureEvent?.payload).toMatchObject({
+      transactionId: captureRequest.transaction.id,
+      counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+    });
+
+    const transactionHeader = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.TRANSACTION}${captureRequest.transaction.id}`,
+          SK: SORT_KEYS.META,
+        },
+      })
+    );
+
+    expect(transactionHeader.Item).toMatchObject({
+      transactionId: captureRequest.transaction.id,
+      originHoldId: holdId,
+    });
+
+    const postings = await documentClient.send(
+      new QueryCommand({
+        TableName: TEST_CONFIG.tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+        ExpressionAttributeValues: {
+          ':pk': `${TABLE_PREFIXES.TRANSACTION}${captureRequest.transaction.id}`,
+          ':skPrefix': TABLE_PREFIXES.POSTING,
+        },
+      })
+    );
+
+    expect(postings.Items).toHaveLength(2);
+    const debitPosting = postings.Items?.find(
+      item => item.accountId === ACCOUNT_ID
+    ) as Record<string, unknown> | undefined;
+    const creditPosting = postings.Items?.find(
+      item => item.accountId === COUNTERPARTY_ACCOUNT_ID
+    ) as Record<string, unknown> | undefined;
+    expect(debitPosting?.amount).toBe(amountMinor);
+    expect(creditPosting?.amount).toBe(amountMinor);
+
+    const idempotencyRecord = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.USER}${USER_ID}`,
+          SK: `${
+            HOLD_IDEMPOTENCY_CONSTANTS.SORT_KEY_PREFIX
+          }${hashIdempotencyKey('capture-hold')}`,
+        },
+      })
+    );
+
+    expect(idempotencyRecord.Item).toMatchObject({
+      holdId,
+      command: 'CAPTURE',
+      transactionId: captureRequest.transaction.id,
+    });
+
+    const payerBalanceAfterCapture = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    expect(payerBalanceAfterCapture.Item).toMatchObject({
+      ledgerBalanceMinor: 10_000 - amountMinor,
+      availableBalanceMinor: 10_000 - amountMinor,
+      version: payerBalanceAfterReserve.Item!.version + 1,
+    });
+
+    const counterpartyBalanceAfterCapture = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${COUNTERPARTY_ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    expect(counterpartyBalanceAfterCapture.Item).toMatchObject({
+      ledgerBalanceMinor:
+        counterpartyBalanceBeforeCapture.Item!.ledgerBalanceMinor + amountMinor,
+      availableBalanceMinor:
+        counterpartyBalanceBeforeCapture.Item!.availableBalanceMinor +
+        amountMinor,
+      version: counterpartyBalanceBeforeCapture.Item!.version + 1,
+    });
+  });
+
+  it('retries capture idempotently returning existing transaction information', async () => {
+    const amountMinor = 5_000;
+    const holdId = 'hold-capture-retry';
+    const reserveRequest = buildReserveRequest({
+      holdId,
+      holdCreatedAt: '2024-01-05T00:00:00.000Z',
+      idempotencyKey: 'reserve-for-capture-retry',
+      amountMinor,
+      accountBalanceVersion: 0,
+      availableBalanceMinor: 10_000,
+    });
+
+    await repository.reserveHold(reserveRequest);
+
+    const payerBalanceAfterReserve = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const counterpartyBalanceBeforeCapture = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${COUNTERPARTY_ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const captureRequest = buildCaptureRequest({
+      holdId,
+      holdCreatedAt: reserveRequest.hold.createdAt,
+      captureAt: '2024-01-05T01:00:00.000Z',
+      idempotencyKey: 'capture-retry',
+      amountMinor,
+      payerAccountVersion: payerBalanceAfterReserve.Item!.version,
+      counterpartyAccountVersion:
+        counterpartyBalanceBeforeCapture.Item!.version,
+    });
+
+    const firstCapture = await repository.captureHold(captureRequest);
+    expect(firstCapture.created).toBe(true);
+
+    const payerBalanceAfterCapture = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const counterpartyBalanceAfterCapture = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${COUNTERPARTY_ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const retryRequest: CaptureHoldRequest = {
+      ...captureRequest,
+      payerAccountBalanceVersion: payerBalanceAfterCapture.Item!.version,
+      counterpartyAccountBalanceVersion:
+        counterpartyBalanceAfterCapture.Item!.version,
+    };
+
+    const retryCapture = await repository.captureHold(retryRequest);
+
+    expect(retryCapture.created).toBe(false);
+    expect(retryCapture.transactionId).toBe(captureRequest.transaction.id);
+
+    const postings = await documentClient.send(
+      new QueryCommand({
+        TableName: TEST_CONFIG.tableName,
+        KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
+        ExpressionAttributeValues: {
+          ':pk': `${TABLE_PREFIXES.TRANSACTION}${captureRequest.transaction.id}`,
+          ':skPrefix': TABLE_PREFIXES.POSTING,
+        },
+      })
+    );
+
+    expect(postings.Items).toHaveLength(2);
+  });
+
+  it('only allows capture or release to succeed when executed concurrently', async () => {
+    const amountMinor = 3_500;
+    const holdId = 'hold-capture-release-race';
+    const reserveRequest = buildReserveRequest({
+      holdId,
+      holdCreatedAt: '2024-01-06T00:00:00.000Z',
+      idempotencyKey: 'race-reserve',
+      amountMinor,
+      accountBalanceVersion: 0,
+      availableBalanceMinor: 10_000,
+    });
+
+    await repository.reserveHold(reserveRequest);
+
+    const payerBalanceAfterReserve = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const counterpartyBalanceBeforeCapture = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${COUNTERPARTY_ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const captureRequest = buildCaptureRequest({
+      holdId,
+      holdCreatedAt: reserveRequest.hold.createdAt,
+      captureAt: '2024-01-06T01:00:00.000Z',
+      idempotencyKey: 'race-capture',
+      amountMinor,
+      payerAccountVersion: payerBalanceAfterReserve.Item!.version,
+      counterpartyAccountVersion:
+        counterpartyBalanceBeforeCapture.Item!.version,
+    });
+
+    const releaseRequest = buildReleaseRequest({
+      holdId,
+      holdCreatedAt: reserveRequest.hold.createdAt,
+      releaseAt: '2024-01-06T01:00:00.000Z',
+      idempotencyKey: 'race-release',
+      amountMinor,
+      accountBalanceVersion: payerBalanceAfterReserve.Item!.version,
+      availableBalanceMinor:
+        payerBalanceAfterReserve.Item!.availableBalanceMinor,
+    });
+
+    const [captureOutcome, releaseOutcome] = await Promise.allSettled([
+      repository.captureHold(captureRequest),
+      repository.releaseHold(releaseRequest),
+    ]);
+
+    const successes = [captureOutcome, releaseOutcome].filter(
+      outcome => outcome.status === 'fulfilled'
+    );
+
+    expect(successes).toHaveLength(1);
+
+    const hold = await repository.getHold(holdId);
+    expect(hold?.status === 'CAPTURED' || hold?.status === 'RELEASED').toBe(
+      true
+    );
+
+    const failures = [captureOutcome, releaseOutcome].filter(
+      outcome => outcome.status === 'rejected'
+    ) as PromiseRejectedResult[];
+    if (failures.length > 0) {
+      expect(failures[0].reason).toBeInstanceOf(OptimisticLockError);
+    }
+  });
+
+  it('fails capture when counterparty does not match existing hold counterparty', async () => {
+    const amountMinor = 2_000;
+    const holdId = 'hold-capture-mismatch';
+    const reserveRequest = buildReserveRequest({
+      holdId,
+      holdCreatedAt: '2024-01-07T00:00:00.000Z',
+      idempotencyKey: 'reserve-mismatch',
+      amountMinor,
+      accountBalanceVersion: 0,
+      availableBalanceMinor: 10_000,
+    });
+
+    await repository.reserveHold(reserveRequest);
+
+    const payerBalanceAfterReserve = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const counterpartyBalanceBeforeCapture = await documentClient.send(
+      new GetCommand({
+        TableName: TEST_CONFIG.tableName,
+        Key: {
+          PK: `${TABLE_PREFIXES.ACCOUNT}${COUNTERPARTY_ACCOUNT_ID}`,
+          SK: SORT_KEYS.BALANCE,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const captureRequest = buildCaptureRequest({
+      holdId,
+      holdCreatedAt: reserveRequest.hold.createdAt,
+      captureAt: '2024-01-07T01:00:00.000Z',
+      idempotencyKey: 'capture-mismatch',
+      amountMinor,
+      payerAccountVersion: payerBalanceAfterReserve.Item!.version,
+      counterpartyAccountVersion:
+        counterpartyBalanceBeforeCapture.Item!.version,
+    });
+
+    captureRequest.hold = {
+      ...captureRequest.hold,
+      counterpartyAccountNumber: '9999999999',
+    };
+    captureRequest.holdEvent = {
+      ...captureRequest.holdEvent,
+      counterpartyAccountNumber: '9999999999',
+    };
+
+    await expect(repository.captureHold(captureRequest)).rejects.toBeInstanceOf(
+      OptimisticLockError
+    );
+
+    const holdAfterFailure = await repository.getHold(holdId);
+    expect(holdAfterFailure?.status).toBe('PENDING');
   });
 });

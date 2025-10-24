@@ -9,11 +9,15 @@ import { DynamoHoldRepository } from './DynamoHoldRepository';
 import type {
   ReserveHoldRequest,
   ReleaseHoldRequest,
+  CaptureHoldRequest,
 } from '../application/HoldRepository';
 import { hashIdempotencyKey } from '../domain/idempotency';
 import { buildHoldMetaItem, HOLD_ITEM_CONSTANTS } from './dynamo/holds/items';
 import { InsufficientFundsError } from '../domain/errors';
 import { OptimisticLockError, RepositoryError } from './repositoryErrors';
+import { Transaction } from '../domain/entities/Transaction';
+import { Posting } from '../domain/valueObjects/Posting';
+import { Money } from '../domain/valueObjects/Money';
 
 const TABLE_NAME = 'test-table';
 
@@ -72,6 +76,67 @@ const baseReleaseRequest = (): ReleaseHoldRequest => {
       type: 'RELEASED',
       reason: 'Customer request',
     },
+    idempotencyKey,
+    idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
+    userId: 'user-1',
+  };
+};
+
+const baseCaptureRequest = (): CaptureHoldRequest => {
+  const idempotencyKey = 'capture-idem-key';
+  const amountMinor = 4_000;
+  const holdId = 'hold-capture';
+  const payerAccountId = 'acc-123';
+  const counterpartyAccountId = 'acc-456';
+  const debitPosting = new Posting({
+    accountId: payerAccountId,
+    amount: new Money(amountMinor),
+    side: 'DEBIT',
+    accountNumber: '1234567890',
+    counterpartyAccountNumber: '5555555555',
+  });
+  const creditPosting = new Posting({
+    accountId: counterpartyAccountId,
+    amount: new Money(amountMinor),
+    side: 'CREDIT',
+    accountNumber: '5555555555',
+    counterpartyAccountNumber: '1234567890',
+  });
+  const transaction = Transaction.createWithId(
+    [debitPosting, creditPosting],
+    {
+      idempotencyKey,
+      description: 'Capture funds',
+      originHoldId: holdId,
+    },
+    'txn-capture'
+  );
+
+  const hold = {
+    holdId,
+    payerAccountNumber: debitPosting.accountNumber,
+    counterpartyAccountNumber: creditPosting.accountNumber,
+    amountMinor,
+    currency: 'USD' as const,
+    status: 'CAPTURED' as const,
+    description: 'Captured hold',
+    createdAt: '2024-01-02T00:00:00.000Z',
+    relatedTransactionId: transaction.id,
+  };
+
+  return {
+    payerAccountId,
+    payerAccountBalanceVersion: 3,
+    counterpartyAccountId,
+    counterpartyAccountBalanceVersion: 5,
+    hold,
+    holdEvent: {
+      at: '2024-01-05T00:00:00.000Z',
+      type: 'CAPTURED' as const,
+      transactionId: transaction.id,
+      counterpartyAccountNumber: hold.counterpartyAccountNumber!,
+    },
+    transaction,
     idempotencyKey,
     idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
     userId: 'user-1',
@@ -198,7 +263,7 @@ describe('DynamoHoldRepository', () => {
       }
       if (command instanceof GetCommand) {
         const projection = command.input.ProjectionExpression;
-        if (projection === 'holdId') {
+        if (projection && projection.includes('holdId')) {
           return { Item: { holdId: request.hold.holdId } };
         }
         return { Item: buildHoldMetaItem(request.hold) };
@@ -237,7 +302,7 @@ describe('DynamoHoldRepository', () => {
       }
       if (command instanceof GetCommand) {
         const projection = command.input.ProjectionExpression;
-        if (projection === 'holdId') {
+        if (projection && projection.includes('holdId')) {
           return { Item: { holdId: request.hold.holdId } };
         }
         return { Item: buildHoldMetaItem(request.hold) };
@@ -397,6 +462,232 @@ describe('DynamoHoldRepository', () => {
     await expect(repository.releaseHold(request)).rejects.toBeInstanceOf(
       OptimisticLockError
     );
+  });
+
+  describe('captureHold', () => {
+    it('performs capture transact write successfully', async () => {
+      const { repository, send } = createRepository();
+      send.mockResolvedValue({});
+
+      const request = baseCaptureRequest();
+      const result = await repository.captureHold(request);
+
+      expect(result.created).toBe(true);
+      expect(result.hold).toEqual(request.hold);
+      expect(result.transactionId).toBe(request.transaction.id);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      const command = send.mock.calls[0][0];
+      expect(command).toBeInstanceOf(TransactWriteCommand);
+      const items = (command as TransactWriteCommand).input.TransactItems ?? [];
+      expect(items).toHaveLength(8);
+      expect(items[0]?.Update?.UpdateExpression).toContain(
+        'availableBalanceMinor = availableBalanceMinor + :payerAvailableDelta'
+      );
+      expect(items[1]?.Update?.UpdateExpression).toContain(
+        'availableBalanceMinor = availableBalanceMinor + :counterpartyAvailableDelta'
+      );
+      expect(items[2]?.Update?.ConditionExpression).toContain(
+        '#status = :pendingStatus'
+      );
+      expect(items[2]?.Update?.ConditionExpression).toContain(
+        'attribute_not_exists(counterpartyAccountNumber)'
+      );
+      const transactionHeader = items
+        .map(item => item.Put?.Item)
+        .find(putItem => putItem?.SK === 'META');
+      expect(transactionHeader?.transactionId).toBe(request.transaction.id);
+      expect(transactionHeader?.originHoldId).toBe(request.hold.holdId);
+
+      const idempotencyPut = items[items.length - 1]?.Put?.Item;
+      expect(idempotencyPut?.command).toBe('CAPTURE');
+      expect(idempotencyPut?.transactionId).toBe(request.transaction.id);
+    });
+
+    it('returns existing hold when capture idempotency record exists', async () => {
+      const { repository, send } = createRepository();
+      const request = baseCaptureRequest();
+      const error = new TransactionCanceledException({
+        message: 'Cancelled',
+        $metadata: {
+          httpStatusCode: 400,
+          requestId: 'req-8',
+          attempts: 1,
+          totalRetryDelay: 0,
+        },
+      });
+      (error as TransactionCanceledException).CancellationReasons = [
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'ConditionalCheckFailed' },
+      ];
+
+      send.mockImplementation(async command => {
+        if (command instanceof TransactWriteCommand) {
+          throw error;
+        }
+        if (command instanceof GetCommand) {
+          const projection = command.input.ProjectionExpression;
+          if (projection && projection.includes('holdId')) {
+            return {
+              Item: {
+                holdId: request.hold.holdId,
+                transactionId: request.transaction.id,
+              },
+            };
+          }
+          return { Item: buildHoldMetaItem(request.hold) };
+        }
+        throw new Error('Unexpected command');
+      });
+
+      const result = await repository.captureHold(request);
+
+      expect(result.created).toBe(false);
+      expect(result.hold).toEqual(request.hold);
+      expect(result.transactionId).toBe(request.transaction.id);
+    });
+
+    it('throws InsufficientFundsError when capture payer account balance is too low', async () => {
+      const { repository, send } = createRepository();
+      const request = baseCaptureRequest();
+      const error = new TransactionCanceledException({
+        message: 'Cancelled',
+        $metadata: {
+          httpStatusCode: 400,
+          requestId: 'req-9',
+          attempts: 1,
+          totalRetryDelay: 0,
+        },
+      });
+      (error as TransactionCanceledException).CancellationReasons = [
+        { Code: 'ConditionalCheckFailed' },
+      ];
+
+      send.mockImplementation(async command => {
+        if (command instanceof TransactWriteCommand) {
+          throw error;
+        }
+        if (command instanceof GetCommand) {
+          return {
+            Item: {
+              availableBalanceMinor: request.hold.amountMinor - 500,
+              ledgerBalanceMinor: 10_000,
+              version: request.payerAccountBalanceVersion,
+            },
+          };
+        }
+        throw new Error('Unexpected command');
+      });
+
+      await expect(repository.captureHold(request)).rejects.toBeInstanceOf(
+        InsufficientFundsError
+      );
+    });
+
+    it('throws OptimisticLockError when capture counterparty update fails', async () => {
+      const { repository, send } = createRepository();
+      const request = baseCaptureRequest();
+      const error = new TransactionCanceledException({
+        message: 'Cancelled',
+        $metadata: {
+          httpStatusCode: 400,
+          requestId: 'req-10',
+          attempts: 1,
+          totalRetryDelay: 0,
+        },
+      });
+      (error as TransactionCanceledException).CancellationReasons = [
+        { Code: 'None' },
+        { Code: 'ConditionalCheckFailed' },
+      ];
+
+      send.mockImplementation(async command => {
+        if (command instanceof TransactWriteCommand) {
+          throw error;
+        }
+        throw new Error('Unexpected command');
+      });
+
+      await expect(repository.captureHold(request)).rejects.toBeInstanceOf(
+        OptimisticLockError
+      );
+    });
+
+    it('throws OptimisticLockError when capture hold status update fails', async () => {
+      const { repository, send } = createRepository();
+      const request = baseCaptureRequest();
+      const error = new TransactionCanceledException({
+        message: 'Cancelled',
+        $metadata: {
+          httpStatusCode: 400,
+          requestId: 'req-11',
+          attempts: 1,
+          totalRetryDelay: 0,
+        },
+      });
+      (error as TransactionCanceledException).CancellationReasons = [
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'ConditionalCheckFailed' },
+      ];
+
+      send.mockImplementation(async command => {
+        if (command instanceof TransactWriteCommand) {
+          throw error;
+        }
+        if (command instanceof GetCommand) {
+          return {
+            Item: buildHoldMetaItem({ ...request.hold, status: 'PENDING' }),
+          };
+        }
+        throw new Error('Unexpected command');
+      });
+
+      await expect(repository.captureHold(request)).rejects.toBeInstanceOf(
+        OptimisticLockError
+      );
+    });
+
+    it('throws OptimisticLockError when capture posting write fails', async () => {
+      const { repository, send } = createRepository();
+      const request = baseCaptureRequest();
+      const error = new TransactionCanceledException({
+        message: 'Cancelled',
+        $metadata: {
+          httpStatusCode: 400,
+          requestId: 'req-12',
+          attempts: 1,
+          totalRetryDelay: 0,
+        },
+      });
+      (error as TransactionCanceledException).CancellationReasons = [
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'ConditionalCheckFailed' },
+        { Code: 'None' },
+        { Code: 'None' },
+      ];
+
+      send.mockImplementation(async command => {
+        if (command instanceof TransactWriteCommand) {
+          throw error;
+        }
+        throw new Error('Unexpected command');
+      });
+
+      await expect(repository.captureHold(request)).rejects.toBeInstanceOf(
+        OptimisticLockError
+      );
+    });
   });
 
   it('throws RepositoryError on unexpected failures', async () => {

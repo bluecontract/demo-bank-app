@@ -1564,6 +1564,7 @@ describe('DynamoBankingRepository', () => {
         transactionId: 'txn-123',
         transactionIdempotencyKey: 'idempotency-key',
         createdAt: '2024-01-01T00:00:00.000Z',
+        originHoldId: 'hold-abc',
       };
 
       const posting1Data: PostingItem = {
@@ -1613,6 +1614,7 @@ describe('DynamoBankingRepository', () => {
       expect(transaction!.status).toBe('COMPLETED');
       expect(transaction!.description).toBe('Test transfer');
       expect(transaction!.transactionIdempotencyKey).toBe('idempotency-key');
+      expect(transaction!.originHoldId).toBe('hold-abc');
       expect(transaction!.postings).toHaveLength(2);
       expect(transaction!.postings[0].accountId).toBe('acc-123');
       expect(transaction!.postings[0].amount.toCents()).toBe(1000);

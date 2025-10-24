@@ -39,3 +39,23 @@ export class HoldNotPendingError extends AppError {
     super(`Hold ${holdId} is not pending (status: ${status})`);
   }
 }
+
+export class HoldCounterpartyMismatchError extends AppError {
+  readonly code = 'HOLD_COUNTERPARTY_MISMATCH';
+
+  constructor(holdId: string, expected: string, received: string | undefined) {
+    super(
+      `Hold ${holdId} counterparty mismatch (expected ${expected}, received ${
+        received ?? 'undefined'
+      })`
+    );
+  }
+}
+
+export class HoldCounterpartyRequiredError extends AppError {
+  readonly code = 'HOLD_COUNTERPARTY_REQUIRED';
+
+  constructor(holdId: string) {
+    super(`Hold ${holdId} capture requires a counterparty account number`);
+  }
+}

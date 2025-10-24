@@ -122,6 +122,73 @@ describe('DynamoBankingRepository Integration', () => {
     await cleanupTable();
   });
 
+  it('should persist and retrieve originHoldId on transactions', async () => {
+    const timestamp = Date.now().toString();
+    const originHoldId = `hold-${timestamp}`;
+    const baseNumber = timestamp.slice(-8).padStart(8, '0');
+    const source = createTestAccount({
+      id: `acc-origin-src-${timestamp}`,
+      accountNumber: `70${baseNumber}`,
+      ownerUserId: 'user-origin-src',
+      ledgerBalanceMinor: new Money(5000),
+      availableBalanceMinor: new Money(5000),
+    });
+    const destination = createTestAccount({
+      id: `acc-origin-dst-${timestamp}`,
+      accountNumber: `80${baseNumber}`,
+      ownerUserId: 'user-origin-dst',
+      ledgerBalanceMinor: new Money(1000),
+      availableBalanceMinor: new Money(1000),
+    });
+
+    await repository.saveAccount(source);
+    await repository.saveAccount(destination);
+
+    const amount = new Money(1000);
+    const debitPosting = new Posting({
+      accountId: source.id,
+      amount,
+      side: 'DEBIT',
+      accountNumber: source.accountNumber,
+      counterpartyAccountNumber: destination.accountNumber,
+    });
+    const creditPosting = new Posting({
+      accountId: destination.id,
+      amount,
+      side: 'CREDIT',
+      accountNumber: destination.accountNumber,
+      counterpartyAccountNumber: source.accountNumber,
+    });
+
+    source.applyPosting(debitPosting);
+    destination.applyPosting(creditPosting);
+
+    const transactionId = `txn-origin-${timestamp}`;
+    const transaction = Transaction.createWithId(
+      [debitPosting, creditPosting],
+      {
+        description: 'Captured hold transfer',
+        idempotencyKey: `origin-key-${timestamp}`,
+        originHoldId,
+      },
+      transactionId
+    );
+
+    await repository.saveTransactionWithAccounts(
+      transaction,
+      [source, destination],
+      {
+        userId: 'user-origin-src',
+        idempotencyKey: `origin-key-${timestamp}`,
+      }
+    );
+
+    const savedTransaction = await repository.getTransactionById(transactionId);
+
+    expect(savedTransaction).toBeDefined();
+    expect(savedTransaction!.originHoldId).toBe(originHoldId);
+  });
+
   it('should save and retrieve an account', async () => {
     const account = createTestAccount({
       id: 'acc-1',

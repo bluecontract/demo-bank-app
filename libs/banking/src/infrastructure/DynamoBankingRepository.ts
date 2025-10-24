@@ -44,6 +44,17 @@ import {
   EXPRESSION_ATTRIBUTE_NAMES,
   DYNAMO_ERROR_CODES,
 } from './dynamo/constants';
+import {
+  buildPostingPutItems,
+  buildTransactionHeaderPutItem,
+  TransactionHeaderItem,
+  PostingItem,
+} from './dynamo/transactions/items';
+
+export type {
+  TransactionHeaderItem,
+  PostingItem,
+} from './dynamo/transactions/items';
 
 export interface DynamoBankingRepositoryConfig {
   tableName: string;
@@ -61,34 +72,6 @@ export interface IdempotencyItem {
   transactionId: string;
   createdAt: string;
   ttl: number;
-}
-
-export interface TransactionHeaderItem {
-  PK: string; // TXN#txnId
-  SK: 'META';
-  type: string;
-  status: string;
-  createdAt: string;
-  description: string;
-  transactionId: string;
-  transactionIdempotencyKey?: string;
-}
-
-export interface PostingItem {
-  PK: string; // TXN#txnId
-  SK: string; // POST#n
-  BANKING_GSI2PK: string;
-  BANKING_GSI2SK: string;
-  accountId: string;
-  amount: number;
-  side: string;
-  accountNumber: string;
-  counterpartyAccountNumber: string;
-  type: TransactionHeaderItem['type'];
-  status: TransactionHeaderItem['status'];
-  createdAt: TransactionHeaderItem['createdAt'];
-  description: TransactionHeaderItem['description'];
-  transactionId: TransactionHeaderItem['transactionId'];
 }
 
 export interface AccountMetaItem {
@@ -160,58 +143,6 @@ export class DynamoBankingRepository implements BankingRepository {
         ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
       },
     };
-  }
-
-  private buildTransactionHeaderItem(transaction: Transaction) {
-    const transactionHeaderItem: TransactionHeaderItem = {
-      PK: `${TABLE_PREFIXES.TRANSACTION}${transaction.id}`,
-      SK: SORT_KEYS.META,
-      type: transaction.type,
-      status: transaction.status,
-      createdAt: transaction.createdAt.toISOString(),
-      description: transaction.description,
-      transactionId: transaction.id,
-      transactionIdempotencyKey: transaction.transactionIdempotencyKey,
-    };
-
-    return {
-      Put: {
-        TableName: this.tableName,
-        Item: transactionHeaderItem,
-        ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
-      },
-    };
-  }
-
-  private buildPostingItems(transaction: Transaction) {
-    return transaction.postings.map((posting, index) => {
-      const postingItem: PostingItem = {
-        PK: `${TABLE_PREFIXES.TRANSACTION}${transaction.id}`,
-        SK: `${TABLE_PREFIXES.POSTING}${index}`,
-        BANKING_GSI2PK: `${TABLE_PREFIXES.ACCOUNT}${posting.accountId}`,
-        BANKING_GSI2SK: `${
-          TABLE_PREFIXES.POSTING
-        }${transaction.createdAt.toISOString()}`,
-        accountId: posting.accountId,
-        amount: posting.amount.toCents(),
-        side: posting.side,
-        accountNumber: posting.accountNumber,
-        counterpartyAccountNumber: posting.counterpartyAccountNumber,
-        description: transaction.description,
-        createdAt: transaction.createdAt.toISOString(),
-        type: transaction.type,
-        status: transaction.status,
-        transactionId: transaction.id,
-      };
-
-      return {
-        Put: {
-          TableName: this.tableName,
-          Item: postingItem,
-          ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
-        },
-      };
-    });
   }
 
   private buildAccountBalanceUpdates(accounts: Account[]) {
@@ -383,9 +314,11 @@ export class DynamoBankingRepository implements BankingRepository {
         transactItems.push(this.buildIdempotencyItem(context, transaction));
       }
 
-      transactItems.push(this.buildTransactionHeaderItem(transaction));
+      transactItems.push(
+        buildTransactionHeaderPutItem(this.tableName, transaction)
+      );
 
-      transactItems.push(...this.buildPostingItems(transaction));
+      transactItems.push(...buildPostingPutItems(this.tableName, transaction));
 
       transactItems.push(...this.buildAccountBalanceUpdates(accounts));
 
@@ -772,6 +705,7 @@ export class DynamoBankingRepository implements BankingRepository {
         description: headerItem.description,
         transactionIdempotencyKey: headerItem.transactionIdempotencyKey,
         createdAt: new Date(headerItem.createdAt),
+        originHoldId: headerItem.originHoldId,
       });
     } catch (error: unknown) {
       throw new RepositoryError(
