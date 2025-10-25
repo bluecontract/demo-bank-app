@@ -22,7 +22,7 @@ Parameters:
 
   IntroVideoObjectKey:
     Type: String
-    Default: intro-demo.mp4
+    Default: paynote.mp4
     Description: 'Object key within the marketing video bucket that contains the intro video file'
 
   PaynoteDemoVideoObjectKey:
