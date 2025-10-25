@@ -134,33 +134,44 @@ describe('bootstrapPayNoteHandler', () => {
     );
     expect(fetchMock).toHaveBeenCalledWith(
       'https://test-api.myos.blue/documents/bootstrap',
-      {
+      expect.objectContaining({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: 'myos-api-key',
         },
-        body: JSON.stringify({
-          channelBindings: {
-            payerChannel: { email: 'john.doe@example.com' },
-            payeeChannel: { email: 'payee@example.com' },
-            guarantorChannel: { accountId: 'myos-account' },
+        body: expect.any(String),
+      })
+    );
+    const [, fetchOptions] = fetchMock.mock.calls[0] as [
+      string,
+      { body: string }
+    ];
+    const requestBody = JSON.parse(fetchOptions.body);
+
+    expect(requestBody.channelBindings).toEqual({
+      payerChannel: { email: 'john.doe@example.com' },
+      payeeChannel: { email: 'payee@example.com' },
+      guarantorChannel: { accountId: 'myos-account' },
+    });
+    expect(requestBody.document).toEqual(
+      expect.objectContaining({
+        name: 'Test PayNote',
+        payerAccountNumber: { type: 'Text', value: '137' },
+        payeeAccountNumber: {},
+        contracts: {
+          payerChannel: { type: 'MyOS Timeline Channel' },
+          payeeChannel: {
+            type: 'MyOS Timeline Channel',
+            email: 'payee@example.com',
           },
-          document: {
-            name: 'Test PayNote',
-            payerAccountNumber: { type: 'Text', value: '137' },
-            payeeAccountNumber: {},
-            contracts: {
-              payerChannel: { type: 'MyOS Timeline Channel' },
-              payeeChannel: {
-                type: 'MyOS Timeline Channel',
-                email: 'payee@example.com',
-              },
-              guarantorChannel: { type: 'MyOS Timeline Channel' },
-            },
-          },
+          guarantorChannel: { type: 'MyOS Timeline Channel' },
+        },
+        payNoteBankId: expect.objectContaining({
+          type: 'Text',
+          value: expect.any(String),
         }),
-      }
+      })
     );
     expect(verificationRepository.getVerification).toHaveBeenCalledWith({
       userId: 'user-123',

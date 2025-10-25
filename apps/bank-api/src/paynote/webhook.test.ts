@@ -66,13 +66,17 @@ describe('payNoteWebhookHandler', () => {
           payerAccountNumber: { value: '9559276001' },
           payeeAccountNumber: { value: '9595234002' },
           amount: {
-            total: { value: 15000 },
+            total: { value: 16000 },
           },
           name: 'Invoice Q3',
+          payNoteBankId: { value: 'bank-note-789' },
         },
         emitted: [
           { type: { name: 'Document Processing Initiated' } },
-          { type: { name: 'Reserve Funds and Capture Immediately Requested' } },
+          {
+            type: { name: 'Reserve Funds and Capture Immediately Requested' },
+            amount: { value: 15000 },
+          },
         ],
       },
     };
@@ -106,17 +110,37 @@ describe('payNoteWebhookHandler', () => {
       }
     );
 
-    expect(logger.info).toHaveBeenCalledWith(
-      'Received PayNote webhook',
+    const receivedLog = logger.info.mock.calls.find(
+      ([message]) => message === 'Received PayNote webhook'
+    );
+    expect(receivedLog).toBeTruthy();
+    expect(receivedLog?.[1]).toEqual(
       expect.objectContaining({
         eventId: 'event-123',
         events: [
           { type: { name: 'Document Processing Initiated' } },
-          { type: { name: 'Reserve Funds and Capture Immediately Requested' } },
+          {
+            type: { name: 'Reserve Funds and Capture Immediately Requested' },
+            amount: { value: 15000 },
+          },
         ],
-        documentBlueId: 'a56',
+        payNoteBankId: 'bank-note-789',
         payerAccountNumber: '9559276001',
         payeeAccountNumber: '9595234002',
+      })
+    );
+
+    const ignoredLog = logger.info.mock.calls.find(
+      ([message]) => message === 'PayNote webhook event ignored'
+    );
+    expect(ignoredLog).toBeTruthy();
+    expect(ignoredLog?.[1]).toEqual(
+      expect.objectContaining({
+        eventId: 'event-123',
+        eventType: 'Document Processing Initiated',
+        payerAccountNumber: '9559276001',
+        payeeAccountNumber: '9595234002',
+        transferAmountMinor: 0,
       })
     );
 
@@ -130,7 +154,7 @@ describe('payNoteWebhookHandler', () => {
         dstAccountNumber: '9595234002',
         ctx: {
           userId: 'user-456',
-          idempotencyKey: 'a56',
+          idempotencyKey: 'bank-note-789',
         },
       }),
       expect.objectContaining({
@@ -142,11 +166,14 @@ describe('payNoteWebhookHandler', () => {
     };
     expect(moneyArg.toCents()).toBe(15000);
 
-    expect(logger.info).toHaveBeenCalledWith(
-      'PayNote capture transfer executed',
+    const transferLog = logger.info.mock.calls.find(
+      ([message]) => message === 'PayNote transfer triggered'
+    );
+    expect(transferLog).toBeTruthy();
+    expect(transferLog?.[1]).toEqual(
       expect.objectContaining({
         eventId: 'event-123',
-        txnId: 'txn-789',
+        payerAccountId: 'acct-123',
         payerAccountNumber: '9559276001',
         payeeAccountNumber: '9595234002',
         transferAmountMinor: 15000,
@@ -167,6 +194,7 @@ describe('payNoteWebhookHandler', () => {
           payerAccountNumber: { value: '1111111111' },
           payeeAccountNumber: { value: '2222222222' },
           amount: { total: { value: 1 } },
+          payNoteBankId: { value: 'bank-note-456' },
         },
         emitted: [{ type: { name: 'Some Other Event' } }],
       },
@@ -187,12 +215,27 @@ describe('payNoteWebhookHandler', () => {
 
     await payNoteWebhookHandler({ body: payload } as any);
 
-    expect(logger.info).toHaveBeenCalledWith(
-      'Received PayNote webhook',
+    const receivedLog = logger.info.mock.calls.find(
+      ([message]) => message === 'Received PayNote webhook'
+    );
+    expect(receivedLog).toBeTruthy();
+    expect(receivedLog?.[1]).toEqual(
       expect.objectContaining({
         eventId: 'event-456',
         events: [{ type: { name: 'Some Other Event' } }],
-        documentBlueId: 'a23',
+        payNoteBankId: 'bank-note-456',
+        payerAccountNumber: '1111111111',
+        payeeAccountNumber: '2222222222',
+      })
+    );
+    const ignoredLog = logger.info.mock.calls.find(
+      ([message]) => message === 'PayNote webhook event ignored'
+    );
+    expect(ignoredLog).toBeTruthy();
+    expect(ignoredLog?.[1]).toEqual(
+      expect.objectContaining({
+        eventId: 'event-456',
+        eventType: 'Some Other Event',
         payerAccountNumber: '1111111111',
         payeeAccountNumber: '2222222222',
       })
@@ -243,40 +286,5 @@ describe('payNoteWebhookHandler', () => {
       status: 'ok',
       note: 'Failed to download PayNote event from MyOS',
     });
-  });
-
-  it('returns note when capture event lacks amount', async () => {
-    const payload = { id: 'event-321' };
-    const eventPayload = {
-      id: 'event-321',
-      object: {
-        blueId: 'a34',
-        document: {
-          payerAccountNumber: { value: '1111111111' },
-          payeeAccountNumber: { value: '2222222222' },
-          amount: {
-            total: 0,
-          },
-        },
-        emitted: [
-          { type: { name: 'Reserve Funds and Capture Immediately Requested' } },
-        ],
-      },
-    };
-
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: vi.fn().mockResolvedValue(eventPayload),
-    });
-
-    const response = await payNoteWebhookHandler({ body: payload } as any);
-
-    expect(response.body).toEqual({
-      status: 'ok',
-      note: 'PayNote capture event missing amount, transfer skipped',
-    });
-    expect(hoisted.transferMoneyMock).not.toHaveBeenCalled();
   });
 });

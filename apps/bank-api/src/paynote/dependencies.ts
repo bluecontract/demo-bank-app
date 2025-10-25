@@ -13,6 +13,8 @@ import {
   BankingEnvironmentConfiguration,
   type PayNoteVerificationRepository,
   type BankingRepository,
+  DynamoHoldRepository,
+  HoldRepository,
 } from '@demo-bank-app/banking';
 
 type PaynoteDependencies = {
@@ -21,6 +23,7 @@ type PaynoteDependencies = {
   getMyOsCredentials: () => Promise<MyOsCredentials>;
   payNoteVerificationRepository: PayNoteVerificationRepository;
   bankingRepository: BankingRepository;
+  holdRepository: HoldRepository;
 };
 
 let cachedDependencies: PaynoteDependencies | null = null;
@@ -33,7 +36,7 @@ const initializeDependencies = (): PaynoteDependencies => {
   const myOsSecretArn = process.env.MYOS_SECRET_ARN?.trim();
   const bankingConfig = new BankingEnvironmentConfiguration();
 
-  const payNoteTableName =
+  const tableName =
     process.env.BANKING_DYNAMO_TABLE_NAME?.trim() ||
     process.env.AUTH_DYNAMO_TABLE_NAME?.trim() ||
     bankingConfig.dynamoTableName;
@@ -56,7 +59,7 @@ const initializeDependencies = (): PaynoteDependencies => {
     secretsClient,
   });
 
-  if (!payNoteTableName) {
+  if (!tableName) {
     throw new Error(
       'BANKING_DYNAMO_TABLE_NAME environment variable is required for PayNote verification storage.'
     );
@@ -64,14 +67,20 @@ const initializeDependencies = (): PaynoteDependencies => {
 
   const payNoteVerificationRepository = new DynamoPayNoteVerificationRepository(
     {
-      tableName: payNoteTableName,
+      tableName,
       region: awsRegion,
       endpoint: awsEndpoint,
     }
   );
 
   const bankingRepository = new DynamoBankingRepository({
-    tableName: payNoteTableName,
+    tableName,
+    region: awsRegion,
+    ...(awsEndpoint && { endpoint: awsEndpoint }),
+  });
+
+  const holdRepository = new DynamoHoldRepository({
+    tableName,
     region: awsRegion,
     ...(awsEndpoint && { endpoint: awsEndpoint }),
   });
@@ -82,6 +91,7 @@ const initializeDependencies = (): PaynoteDependencies => {
     getMyOsCredentials,
     payNoteVerificationRepository,
     bankingRepository,
+    holdRepository,
   };
 };
 

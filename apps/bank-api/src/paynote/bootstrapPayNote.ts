@@ -8,6 +8,7 @@ import { getDependencies } from './dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { calculateBlueIdFromObject } from './blueId';
 import { MIN_PAYNOTE_VERIFICATION_SCORE } from './constants';
+import { randomUUID } from 'crypto';
 
 export const bootstrapPayNoteHandler = async (
   request: ServerInferRequest<
@@ -58,6 +59,11 @@ export const bootstrapPayNoteHandler = async (
         message: 'PayNote must be successfully validated before authorization.',
       });
     }
+
+    payNote.payNoteBankId = {
+      type: 'Text',
+      value: randomUUID(),
+    };
 
     if (formData.fromAccount) {
       if (!payNote.payerAccountNumber) {

@@ -1,6 +1,11 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
-import { Money, transferMoney } from '@demo-bank-app/banking';
+import {
+  Money,
+  transferMoney,
+  captureHold,
+  reserveFunds,
+} from '@demo-bank-app/banking';
 import type { MyOsCredentials } from '../shared/myOsSecrets';
 import { getDependencies } from './dependencies';
 
@@ -70,7 +75,7 @@ export const payNoteWebhookHandler = async (
     (typeof bankApiContract)['banking']['payNoteWebhook']
   >
 ) => {
-  const { logger, getMyOsCredentials, bankingRepository } =
+  const { logger, getMyOsCredentials, bankingRepository, holdRepository } =
     await getDependencies();
 
   const logError = (
@@ -98,21 +103,9 @@ export const payNoteWebhookHandler = async (
     return returnResponse(downloadNote);
   }
 
-  const documentBlueId = eventPayload?.object?.blueId as string | undefined;
-
-  if (!documentBlueId) {
-    return returnResponse(
-      logError(
-        'PayNote capture event missing documentBlueId, transfer skipped',
-        {
-          eventId,
-        }
-      )
-    );
-  }
-
   const document = eventPayload?.object?.document as
     | {
+        payNoteBankId: { value: string };
         payerAccountNumber: { value: string };
         payeeAccountNumber: { value: string };
         amount: { total: { value: number } };
@@ -126,31 +119,26 @@ export const payNoteWebhookHandler = async (
     );
   }
 
+  const payNoteBankId = document.payNoteBankId?.value;
   const payerAccountNumber = document.payerAccountNumber?.value;
   const payeeAccountNumber = document.payeeAccountNumber?.value;
-  const transferAmountMinor = document.amount?.total?.value;
   const transferDescription = document.name || 'PayNote transfer';
 
-  if (!payerAccountNumber || !payeeAccountNumber) {
+  if (!payNoteBankId) {
     return returnResponse(
-      logError(
-        'PayNote capture event missing account numbers, transfer skipped',
-        {
-          eventId,
-          payerAccountNumber,
-          payeeAccountNumber,
-        }
-      )
+      logError('PayNote event missing payNoteBankId', {
+        eventId,
+        payNoteBankId,
+      })
     );
   }
 
-  if (!transferAmountMinor || transferAmountMinor <= 0) {
+  if (!payerAccountNumber || !payeeAccountNumber) {
     return returnResponse(
-      logError('PayNote capture event missing amount, transfer skipped', {
+      logError('PayNote event missing account numbers', {
         eventId,
         payerAccountNumber,
         payeeAccountNumber,
-        transferAmountMinor,
       })
     );
   }
@@ -194,61 +182,101 @@ export const payNoteWebhookHandler = async (
     }
 
     const events =
-      (eventPayload?.object?.emitted as Array<
-        { type?: { name?: string } } | undefined
-      >) ?? [];
+      (eventPayload?.object?.emitted as Array<{
+        type?: { name?: string };
+        amount?: { value: number };
+      }>) ?? [];
 
     logger.info('Received PayNote webhook', {
       eventId,
       events,
-      documentBlueId,
+      payNoteBankId,
       payerAccountNumber,
       payeeAccountNumber,
     });
 
     for (const event of events) {
-      if (event?.type?.name === CAPTURE_IMMEDIATELY_EVENT_NAME) {
-        try {
-          const txnId = await transferMoney(
-            {
-              srcAccountId: payerAccountId,
-              dstAccountNumber: String(payeeAccountNumber),
-              amountMinor: new Money(transferAmountMinor),
-              description: transferDescription,
-              ctx: {
-                userId: ownerUserId,
-                idempotencyKey: String(documentBlueId),
-              },
-            },
-            {
-              repository: bankingRepository,
-            }
-          );
+      const transferAmountMinor: number = event.amount?.value ?? 0;
 
-          logger.info('PayNote capture transfer executed', {
-            eventId,
-            txnId,
-            payerAccountId,
-            payerAccountNumber,
-            payeeAccountNumber,
-            transferAmountMinor,
-          });
-        } catch (error) {
-          return returnResponse(
-            logError('PayNote capture transfer failed', {
-              eventId,
-              payerAccountId,
-              payerAccountNumber,
-              payeeAccountNumber,
-              transferAmountMinor,
-              error: error instanceof Error ? error.message : String(error),
-            })
-          );
-        }
+      if (event?.type?.name === CAPTURE_IMMEDIATELY_EVENT_NAME) {
+        logger.info('PayNote transfer triggered', {
+          eventId,
+          payerAccountId,
+          payerAccountNumber,
+          payeeAccountNumber,
+          transferAmountMinor,
+        });
+
+        await transferMoney(
+          {
+            srcAccountId: payerAccountId,
+            dstAccountNumber: payeeAccountNumber,
+            amountMinor: new Money(transferAmountMinor),
+            description: transferDescription,
+            ctx: {
+              userId: ownerUserId,
+              idempotencyKey: payNoteBankId,
+            },
+          },
+          {
+            repository: bankingRepository,
+            logger,
+          }
+        );
       } else if (event?.type?.name === CAPTURE_FUNDS_EVENT_NAME) {
-        // TODO: release reserved hold
+        logger.info('PayNote capture hold triggered', {
+          eventId,
+          payerAccountId,
+          payerAccountNumber,
+          payeeAccountNumber,
+          transferAmountMinor,
+        });
+
+        await captureHold(
+          {
+            holdId: payNoteBankId,
+            userId: ownerUserId,
+            idempotencyKey: payNoteBankId,
+            counterpartyAccountNumber: payeeAccountNumber,
+          },
+          {
+            bankingRepository,
+            holdRepository,
+            logger,
+          }
+        );
       } else if (event?.type?.name === RESERVE_FUNDS_EVENT_NAME) {
-        // TODO: release hold
+        logger.info('PayNote reserve funds triggered', {
+          eventId,
+          payerAccountId,
+          payerAccountNumber,
+          payeeAccountNumber,
+          transferAmountMinor,
+        });
+
+        await reserveFunds(
+          {
+            holdId: payNoteBankId,
+            userId: ownerUserId,
+            idempotencyKey: payNoteBankId,
+            payerAccountNumber: payerAccountNumber,
+            amountMinor: transferAmountMinor,
+            counterpartyAccountNumber: payeeAccountNumber,
+          },
+          {
+            bankingRepository,
+            holdRepository,
+            logger,
+          }
+        );
+      } else {
+        logger.info('PayNote webhook event ignored', {
+          eventId,
+          eventType: event?.type?.name,
+          payerAccountNumber,
+          payeeAccountNumber,
+          transferAmountMinor,
+        });
       }
     }
   } catch (error) {
