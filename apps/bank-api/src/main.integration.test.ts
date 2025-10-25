@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createHash } from 'crypto';
 import { handler } from './main';
 import type {
   APIGatewayProxyEventV2,
@@ -18,7 +19,14 @@ import {
   DeleteTableCommand,
   DescribeTableCommand,
 } from '@aws-sdk/client-dynamodb';
-import { DynamoHoldRepository } from '@demo-bank-app/banking';
+import {
+  DynamoHoldRepository,
+  Money,
+  Posting,
+  Transaction,
+  type Hold,
+} from '@demo-bank-app/banking';
+import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import {
   assertAllSecurityHeaders,
@@ -43,6 +51,7 @@ const TEST_CONFIG = {
 
 // AWS clients configured for LocalStack
 let dynamoClient: DynamoDBClient;
+let documentClient: DynamoDBDocumentClient;
 let secretsManagerClient: SecretsManagerClient;
 
 describe('Bank API Integration Tests', () => {
@@ -55,6 +64,7 @@ describe('Bank API Integration Tests', () => {
         secretAccessKey: 'test',
       },
     });
+    documentClient = DynamoDBDocumentClient.from(dynamoClient);
 
     secretsManagerClient = new SecretsManagerClient({
       endpoint: TEST_CONFIG.localstackEndpoint,
@@ -1085,6 +1095,313 @@ describe('Bank API Integration Tests', () => {
         error: 'VALIDATION_ERROR',
         message: expect.any(String),
       });
+    });
+  });
+
+  describe('Hold Lifecycle Balance Effects', () => {
+    let holdRepository: DynamoHoldRepository;
+    let holdUser: { userId: string; jwtCookie: string; userEmail: string };
+    let payerAccountId: string;
+    let payerAccountNumber: string;
+    let counterpartyAccountId: string;
+    let counterpartyAccountNumber: string;
+
+    beforeAll(async () => {
+      holdUser = await signupUniqueTestUser('hold-balance-user');
+      holdRepository = new DynamoHoldRepository({
+        tableName: TEST_CONFIG.tableName,
+        region: TEST_CONFIG.region,
+        endpoint: TEST_CONFIG.localstackEndpoint,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+
+      const payerAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: holdUser.jwtCookie,
+        body: { name: 'Hold Balance Payer Account' },
+      });
+      expect(payerAccount.statusCode).toBe(201);
+      payerAccountId = payerAccount.body.accountId;
+      payerAccountNumber = payerAccount.body.accountNumber;
+
+      const counterpartyAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: holdUser.jwtCookie,
+        body: { name: 'Hold Balance Counterparty Account' },
+      });
+      expect(counterpartyAccount.statusCode).toBe(201);
+      counterpartyAccountId = counterpartyAccount.body.accountId;
+      counterpartyAccountNumber = counterpartyAccount.body.accountNumber;
+
+      const fundingResponse = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${payerAccountId}/funding`,
+        jwtCookie: holdUser.jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 2_000 },
+      });
+      expect(fundingResponse.statusCode).toBe(201);
+    });
+
+    const hashIdempotencyKey = (key: string) =>
+      createHash('sha256').update(key).digest('hex');
+
+    const getAccountBalanceItem = async (
+      accountId: string
+    ): Promise<{
+      availableBalanceMinor: number;
+      ledgerBalanceMinor: number;
+      version: number;
+    }> => {
+      const result = await documentClient.send(
+        new GetCommand({
+          TableName: TEST_CONFIG.tableName,
+          Key: {
+            PK: `ACCOUNT#${accountId}`,
+            SK: 'BALANCE',
+          },
+          ConsistentRead: true,
+        })
+      );
+      if (!result.Item) {
+        throw new Error(`Balance item not found for account ${accountId}`);
+      }
+      return result.Item as {
+        availableBalanceMinor: number;
+        ledgerBalanceMinor: number;
+        version: number;
+      };
+    };
+
+    it('restores available balance after releasing a hold', async () => {
+      const releaseHoldId = `hold-release-${crypto.randomUUID()}`;
+      const holdAmount = 200;
+      const createdAt = new Date().toISOString();
+
+      const initialAccount = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${payerAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(initialAccount.statusCode).toBe(200);
+      const initialLedger = initialAccount.body.ledgerBalanceMinor;
+      const initialAvailable = initialAccount.body.availableBalanceMinor;
+
+      const balanceBeforeReserve = await getAccountBalanceItem(payerAccountId);
+      const reserveIdempotencyKey = `reserve-${releaseHoldId}`;
+      const pendingHold: Hold = {
+        holdId: releaseHoldId,
+        payerAccountNumber,
+        counterpartyAccountNumber,
+        amountMinor: holdAmount,
+        currency: 'USD',
+        status: 'PENDING',
+        description: 'Release balance verification hold',
+        createdAt,
+      };
+
+      await holdRepository.reserveHold({
+        accountId: payerAccountId,
+        accountBalanceVersion: balanceBeforeReserve.version,
+        amountMinor: holdAmount,
+        availableBalanceMinor: balanceBeforeReserve.availableBalanceMinor,
+        hold: pendingHold,
+        holdEvent: {
+          at: createdAt,
+          type: 'CREATED',
+          createdByUserId: holdUser.userId,
+          idempotencyKeyHash: hashIdempotencyKey(reserveIdempotencyKey),
+        },
+        userId: holdUser.userId,
+        idempotencyKey: reserveIdempotencyKey,
+        idempotencyKeyHash: hashIdempotencyKey(reserveIdempotencyKey),
+      });
+
+      const balanceAfterReserve = await getAccountBalanceItem(payerAccountId);
+      expect(balanceAfterReserve.availableBalanceMinor).toBe(
+        balanceBeforeReserve.availableBalanceMinor - holdAmount
+      );
+
+      const releaseAt = new Date(Date.now() + 1_000).toISOString();
+      const releaseIdempotencyKey = `release-${releaseHoldId}`;
+
+      await holdRepository.releaseHold({
+        accountId: payerAccountId,
+        accountBalanceVersion: balanceAfterReserve.version,
+        amountMinor: holdAmount,
+        availableBalanceMinor: balanceAfterReserve.availableBalanceMinor,
+        hold: {
+          ...pendingHold,
+          status: 'RELEASED',
+          releasedAt: releaseAt,
+          releaseReason: 'Integration release',
+        },
+        holdEvent: {
+          at: releaseAt,
+          type: 'RELEASED',
+          reason: 'Integration release',
+        },
+        userId: holdUser.userId,
+        idempotencyKey: releaseIdempotencyKey,
+        idempotencyKeyHash: hashIdempotencyKey(releaseIdempotencyKey),
+      });
+
+      const accountAfterRelease = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${payerAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(accountAfterRelease.statusCode).toBe(200);
+      expect(accountAfterRelease.body.ledgerBalanceMinor).toBe(initialLedger);
+      expect(accountAfterRelease.body.availableBalanceMinor).toBe(
+        initialAvailable
+      );
+    });
+
+    it('applies capture balances to payer and counterparty accounts', async () => {
+      const captureHoldId = `hold-capture-${crypto.randomUUID()}`;
+      const captureAmount = 300;
+      const createdAt = new Date().toISOString();
+
+      const payerInitial = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${payerAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(payerInitial.statusCode).toBe(200);
+
+      const counterpartyInitial = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${counterpartyAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(counterpartyInitial.statusCode).toBe(200);
+
+      const balanceBeforeReserve = await getAccountBalanceItem(payerAccountId);
+      const reserveIdempotencyKey = `reserve-${captureHoldId}`;
+      const pendingHold: Hold = {
+        holdId: captureHoldId,
+        payerAccountNumber,
+        counterpartyAccountNumber,
+        amountMinor: captureAmount,
+        currency: 'USD',
+        status: 'PENDING',
+        description: 'Capture balance verification hold',
+        createdAt,
+      };
+
+      await holdRepository.reserveHold({
+        accountId: payerAccountId,
+        accountBalanceVersion: balanceBeforeReserve.version,
+        amountMinor: captureAmount,
+        availableBalanceMinor: balanceBeforeReserve.availableBalanceMinor,
+        hold: pendingHold,
+        holdEvent: {
+          at: createdAt,
+          type: 'CREATED',
+          createdByUserId: holdUser.userId,
+          idempotencyKeyHash: hashIdempotencyKey(reserveIdempotencyKey),
+        },
+        userId: holdUser.userId,
+        idempotencyKey: reserveIdempotencyKey,
+        idempotencyKeyHash: hashIdempotencyKey(reserveIdempotencyKey),
+      });
+
+      const payerBalanceAfterReserve = await getAccountBalanceItem(
+        payerAccountId
+      );
+      expect(payerBalanceAfterReserve.availableBalanceMinor).toBe(
+        balanceBeforeReserve.availableBalanceMinor - captureAmount
+      );
+
+      const counterpartyBalanceBeforeCapture = await getAccountBalanceItem(
+        counterpartyAccountId
+      );
+
+      const captureIdempotencyKey = `capture-${captureHoldId}`;
+      const captureAt = new Date(Date.now() + 2_000).toISOString();
+      const transactionId = `txn-${captureHoldId}`;
+      const postingAmount = new Money(captureAmount);
+
+      const debitPosting = new Posting({
+        accountId: payerAccountId,
+        amount: postingAmount,
+        side: 'DEBIT',
+        accountNumber: payerAccountNumber,
+        counterpartyAccountNumber,
+      });
+
+      const creditPosting = new Posting({
+        accountId: counterpartyAccountId,
+        amount: postingAmount,
+        side: 'CREDIT',
+        accountNumber: counterpartyAccountNumber,
+        counterpartyAccountNumber: payerAccountNumber,
+      });
+
+      const captureTransaction = Transaction.createWithId(
+        [debitPosting, creditPosting],
+        {
+          description: 'Capture balance verification transaction',
+          originHoldId: captureHoldId,
+          idempotencyKey: captureIdempotencyKey,
+        },
+        transactionId
+      );
+
+      await holdRepository.captureHold({
+        payerAccountId,
+        payerAccountBalanceVersion: payerBalanceAfterReserve.version,
+        counterpartyAccountId,
+        counterpartyAccountBalanceVersion:
+          counterpartyBalanceBeforeCapture.version,
+        hold: {
+          ...pendingHold,
+          status: 'CAPTURED',
+          relatedTransactionId: transactionId,
+        },
+        holdEvent: {
+          at: captureAt,
+          type: 'CAPTURED',
+          transactionId,
+          counterpartyAccountNumber,
+        },
+        transaction: captureTransaction,
+        userId: holdUser.userId,
+        idempotencyKey: captureIdempotencyKey,
+        idempotencyKeyHash: hashIdempotencyKey(captureIdempotencyKey),
+      });
+
+      const payerAfterCapture = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${payerAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(payerAfterCapture.statusCode).toBe(200);
+      expect(payerAfterCapture.body.ledgerBalanceMinor).toBe(
+        payerInitial.body.ledgerBalanceMinor - captureAmount
+      );
+      expect(payerAfterCapture.body.availableBalanceMinor).toBe(
+        payerInitial.body.availableBalanceMinor - captureAmount
+      );
+
+      const counterpartyAfterCapture = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${counterpartyAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(counterpartyAfterCapture.statusCode).toBe(200);
+      expect(counterpartyAfterCapture.body.ledgerBalanceMinor).toBe(
+        counterpartyInitial.body.ledgerBalanceMinor + captureAmount
+      );
+      expect(counterpartyAfterCapture.body.availableBalanceMinor).toBe(
+        counterpartyInitial.body.availableBalanceMinor + captureAmount
+      );
     });
   });
 

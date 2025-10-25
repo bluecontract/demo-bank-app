@@ -20,8 +20,8 @@ import type {
   CaptureHoldRequest,
 } from '../application/HoldRepository';
 import { hashIdempotencyKey } from '../domain/idempotency';
+import { buildHoldIdempotencySortKey } from './dynamo/holds/idempotency';
 import { HOLD_ITEM_CONSTANTS } from './dynamo/holds/items';
-import { HOLD_IDEMPOTENCY_CONSTANTS } from './dynamo/holds/idempotency';
 import { TABLE_PREFIXES, SORT_KEYS } from './dynamo/constants';
 import { OptimisticLockError } from './repositoryErrors';
 import { Transaction } from '../domain/entities/Transaction';
@@ -544,9 +544,7 @@ describe('DynamoHoldRepository integration', () => {
         TableName: TEST_CONFIG.tableName,
         Key: {
           PK: `${TABLE_PREFIXES.USER}${USER_ID}`,
-          SK: `${
-            HOLD_IDEMPOTENCY_CONSTANTS.SORT_KEY_PREFIX
-          }${hashIdempotencyKey(idempotencyKey)}`,
+          SK: buildHoldIdempotencySortKey('RESERVE', idempotencyKey),
         },
       })
     );
@@ -781,9 +779,7 @@ describe('DynamoHoldRepository integration', () => {
         TableName: TEST_CONFIG.tableName,
         Key: {
           PK: `${TABLE_PREFIXES.USER}${USER_ID}`,
-          SK: `${
-            HOLD_IDEMPOTENCY_CONSTANTS.SORT_KEY_PREFIX
-          }${hashIdempotencyKey('release-flow')}`,
+          SK: buildHoldIdempotencySortKey('RELEASE', 'release-flow'),
         },
       })
     );
@@ -1047,9 +1043,7 @@ describe('DynamoHoldRepository integration', () => {
         TableName: TEST_CONFIG.tableName,
         Key: {
           PK: `${TABLE_PREFIXES.USER}${USER_ID}`,
-          SK: `${
-            HOLD_IDEMPOTENCY_CONSTANTS.SORT_KEY_PREFIX
-          }${hashIdempotencyKey('capture-hold')}`,
+          SK: buildHoldIdempotencySortKey('CAPTURE', 'capture-hold'),
         },
       })
     );
