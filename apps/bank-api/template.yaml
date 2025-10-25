@@ -293,6 +293,18 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /v1/activity/{accountNumber}
             Method: OPTIONS
+        GetActivityDetailApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountNumber}/activity/{activityId}
+            Method: GET
+        GetActivityDetailOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountNumber}/activity/{activityId}
+            Method: OPTIONS
         FundAccountApi:
           Type: Api
           Properties:
@@ -352,6 +364,18 @@ Resources:
           Properties:
             RestApiId: !Ref BankApi
             Path: /v1/paynotes/parse-pdf
+            Method: OPTIONS
+        GetPayNoteDetailsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountNumber}/paynotes/{myosEventId}
+            Method: GET
+        GetPayNoteDetailsOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountNumber}/paynotes/{myosEventId}
             Method: OPTIONS
         BootstrapPayNoteApi:
           Type: Api

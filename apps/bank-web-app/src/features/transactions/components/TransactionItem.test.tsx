@@ -6,6 +6,7 @@ import { ActivityItem } from '../hooks/useActivity';
 
 const postedTransaction: ActivityItem = {
   kind: 'POSTED_TRANSACTION',
+  activityId: 'TXN#txn-123',
   transactionId: 'txn-123',
   amountMinor: 100000,
   description: 'Deposit from employer',
@@ -19,6 +20,7 @@ const postedTransaction: ActivityItem = {
 
 const debitTransaction: ActivityItem = {
   kind: 'POSTED_TRANSACTION',
+  activityId: 'TXN#txn-456',
   transactionId: 'txn-456',
   amountMinor: 50000,
   description: 'Bill payment',
@@ -32,6 +34,7 @@ const debitTransaction: ActivityItem = {
 
 const holdCreated: ActivityItem = {
   kind: 'HOLD_CREATED',
+  activityId: 'HOLD#hold-1',
   holdId: 'hold-1',
   amountMinor: 45000,
   description: 'Coffee shop authorization',
@@ -43,6 +46,7 @@ const holdCreated: ActivityItem = {
 
 const holdCaptured: ActivityItem = {
   kind: 'HOLD_CAPTURED',
+  activityId: 'HOLD#hold-2',
   holdId: 'hold-2',
   amountMinor: 9500,
   description: 'Fuel purchase',
@@ -53,6 +57,7 @@ const holdCaptured: ActivityItem = {
 
 const holdFailed: ActivityItem = {
   kind: 'HOLD_FAILED',
+  activityId: 'HOLD#hold-3',
   holdId: 'hold-3',
   amountMinor: 2500,
   description: 'Online order',

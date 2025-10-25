@@ -34,6 +34,7 @@ const createWrapper = () => {
 const mockActivity = [
   {
     kind: 'POSTED_TRANSACTION' as const,
+    activityId: 'TXN#txn-123',
     transactionId: 'txn-123',
     amountMinor: 100_000,
     description: 'Test deposit',
@@ -46,6 +47,7 @@ const mockActivity = [
   },
   {
     kind: 'HOLD_CREATED' as const,
+    activityId: 'HOLD#hold-1',
     holdId: 'hold-1',
     amountMinor: 50_000,
     description: 'Pending purchase',

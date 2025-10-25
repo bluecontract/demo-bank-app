@@ -51,6 +51,7 @@ vi.mock('./TransactionDetailsModal', () => ({
 
 const postedTransaction: ActivityItem = {
   kind: 'POSTED_TRANSACTION',
+  activityId: 'TXN#txn-123',
   transactionId: 'txn-123',
   amountMinor: 100000,
   description: 'Deposit',
@@ -64,6 +65,7 @@ const postedTransaction: ActivityItem = {
 
 const holdCreated: ActivityItem = {
   kind: 'HOLD_CREATED',
+  activityId: 'HOLD#hold-1',
   holdId: 'hold-1',
   amountMinor: 50000,
   description: 'Pending purchase',

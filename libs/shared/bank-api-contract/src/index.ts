@@ -1,2 +1,7 @@
 export * from './lib/bank-api-contract';
-export { ProblemDto } from './lib/schemas';
+export {
+  ProblemDto,
+  ActivityDetailDto,
+  PayNoteDetailsDto,
+  NotImplementedResponseDto,
+} from './lib/schemas';
