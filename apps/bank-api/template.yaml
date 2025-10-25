@@ -187,7 +187,7 @@ Resources:
           JWT_SECRET_ARN: !Ref JwtSecret
           OPENAI_API_KEY_SECRET_ARN: !Ref OpenAiKeySecret
           MYOS_SECRET_ARN: !Ref MyOsSecret
-          JWT_TTL_SECONDS: 3600
+          JWT_TTL_SECONDS: 604800
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
           SERVICE_NAME: !Sub 'bank-api-${Environment}'
           LOG_LEVEL: INFO

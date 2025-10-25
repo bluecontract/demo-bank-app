@@ -23,7 +23,7 @@ vi.mock('@demo-bank-app/auth', () => ({
     getAuthConfig: vi.fn().mockResolvedValue({
       dynamoTableName: 'test-table',
       jwtSecretArn: 'test-secret-arn',
-      jwtTtlSeconds: 3600,
+      jwtTtlSeconds: 604800,
       testUserTtlSeconds: 600,
       environment: 'test',
       serviceName: 'test-service',
@@ -52,7 +52,7 @@ describe('Dependencies Module', () => {
       expect(deps.logger).toBeInstanceOf(PowertoolsLogger);
       expect(deps.metrics).toBeInstanceOf(PowertoolsMetrics);
       expect(deps.config).toBeDefined();
-      expect(deps.config.jwtTtlSeconds).toBe(3600);
+      expect(deps.config.jwtTtlSeconds).toBe(604800);
       expect(deps.config.testUserTtlSeconds).toBe(600);
     });
 

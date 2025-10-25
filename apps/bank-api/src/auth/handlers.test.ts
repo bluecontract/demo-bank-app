@@ -47,7 +47,7 @@ describe('Auth Handlers', () => {
     it('should return 201 and set cookie for successful sign-up', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockResolvedValue({
@@ -83,7 +83,7 @@ describe('Auth Handlers', () => {
     it('should return 409 for UserAlreadyExistsError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockRejectedValue(
@@ -113,7 +113,7 @@ describe('Auth Handlers', () => {
     it('should return 400 for UserValidationError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockRejectedValue(
@@ -133,7 +133,7 @@ describe('Auth Handlers', () => {
     it('should propagate RequestValidationError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = {
@@ -159,7 +159,7 @@ describe('Auth Handlers', () => {
     it('should propagate unknown errors', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = new Error('Database connection failed');
@@ -183,7 +183,7 @@ describe('Auth Handlers', () => {
     it('should return 200 and set cookie for successful sign-in', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignIn.mockResolvedValue({
@@ -215,7 +215,7 @@ describe('Auth Handlers', () => {
     it('should return 404 for UserNotFoundError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       class UserNotFoundError extends Error {
@@ -238,7 +238,7 @@ describe('Auth Handlers', () => {
     it('should return 400 for UserValidationError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignIn.mockRejectedValue(
@@ -253,7 +253,7 @@ describe('Auth Handlers', () => {
     it('should propagate RequestValidationError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = {
@@ -274,7 +274,7 @@ describe('Auth Handlers', () => {
     it('should propagate unknown errors', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = new Error('Database connection failed');
