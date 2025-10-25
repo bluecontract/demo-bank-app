@@ -41,13 +41,20 @@ type VisualState = {
   iconClasses: string;
   title: string;
   timestamp: string;
-  subtitle?: string;
+  subtitleLines: string[];
   description?: string;
   amountText: string;
   amountClass: string;
   clickable: boolean;
   linkTransactionId?: string;
 };
+
+const formatCounterpartyLine = (
+  directionLabel: 'From' | 'To',
+  accountNumber: string
+) => `${directionLabel}: ${formatAccountNumber(accountNumber)}`;
+
+const getHoldDirectionLabel = (): 'From' | 'To' => 'To';
 
 const buildVisualState = (item: ActivityItem): VisualState => {
   if (item.kind === 'POSTED_TRANSACTION') {
@@ -72,11 +79,14 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         : 'bg-red-100 text-red-600',
       title: getTransactionTypeDisplay(item.type, item.side),
       timestamp: item.postedAt,
-      subtitle: item.counterpartyAccountNumber
-        ? `${isCredit ? 'From' : 'To'}: ${formatAccountNumber(
-            item.counterpartyAccountNumber
-          )}`
-        : undefined,
+      subtitleLines: item.counterpartyAccountNumber
+        ? [
+            formatCounterpartyLine(
+              isCredit ? 'From' : 'To',
+              item.counterpartyAccountNumber
+            ),
+          ]
+        : [],
       description: item.description,
       amountText: `${isCredit ? '+' : '-'}${amount}`,
       amountClass: isCredit ? 'text-green-600' : 'text-red-600',
@@ -91,9 +101,14 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       : undefined;
 
   const base = {
-    subtitle: counterpartyAccountNumber
-      ? `Counterparty: ${formatAccountNumber(counterpartyAccountNumber)}`
-      : undefined,
+    subtitleLines: counterpartyAccountNumber
+      ? [
+          formatCounterpartyLine(
+            getHoldDirectionLabel(),
+            counterpartyAccountNumber
+          ),
+        ]
+      : [],
     description: item.description,
     amountText: formatCurrency(item.amountMinor),
   };
@@ -120,9 +135,9 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         iconClasses: 'bg-green-50 text-green-700',
         title: 'Hold Captured',
         timestamp: item.capturedAt,
-        subtitle: item.transactionId
-          ? `Captured txn: ${item.transactionId}`
-          : base.subtitle,
+        subtitleLines: item.transactionId
+          ? [...base.subtitleLines, `Captured txn: ${item.transactionId}`]
+          : base.subtitleLines,
         amountClass: 'text-green-700',
         clickable: false,
       };
@@ -135,9 +150,9 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         iconClasses: 'bg-blue-50 text-blue-700',
         title: 'Hold Released',
         timestamp: item.releasedAt,
-        subtitle: item.releaseReason
-          ? `Reason: ${item.releaseReason}`
-          : base.subtitle,
+        subtitleLines: item.releaseReason
+          ? [...base.subtitleLines, `Reason: ${item.releaseReason}`]
+          : base.subtitleLines,
         amountClass: 'text-blue-700',
         clickable: false,
       };
@@ -150,7 +165,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         iconClasses: 'bg-red-50 text-red-700',
         title: 'Hold Failed',
         timestamp: item.failedAt,
-        subtitle: `Failure: ${item.failureCode}`,
+        subtitleLines: [`Failure: ${item.failureCode}`],
         description: item.failureMessage ?? base.description,
         amountClass: 'text-red-700',
         clickable: false,
@@ -197,11 +212,14 @@ export function TransactionItem({
           <div className="text-xs text-gray-500 whitespace-nowrap">
             {formatDate(visualState.timestamp)}
           </div>
-          {visualState.subtitle && (
-            <div className="text-xs text-gray-500 whitespace-nowrap">
-              {visualState.subtitle}
+          {visualState.subtitleLines.map((line, index) => (
+            <div
+              key={`${line}-${index}`}
+              className="text-xs text-gray-500 whitespace-nowrap"
+            >
+              {line}
             </div>
-          )}
+          ))}
         </div>
       </div>
 

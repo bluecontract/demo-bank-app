@@ -87,7 +87,7 @@ test.describe('Sign In Flow', () => {
 
     // Should show error message
     await expect(
-      page.getByText('User not found. Please check the email and try again.')
+      page.getByText('Sign in failed. Please try again.')
     ).toBeVisible();
 
     // Should stay on sign-in page

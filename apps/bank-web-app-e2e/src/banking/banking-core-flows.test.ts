@@ -279,7 +279,7 @@ test.describe('Banking Core Flows', () => {
     ).toBeVisible();
 
     // Click on the first transaction to open details modal
-    await page.click('[data-testid^="transaction-item-"]');
+    await page.click('[data-testid^="activity-item-"]');
 
     // Wait for modal to open and verify content
     await expect(
@@ -484,9 +484,7 @@ test.describe('Banking Core Flows', () => {
     await expect(
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
-    await expect(
-      page.locator('[data-testid^="transaction-item-"]')
-    ).toBeVisible();
+    await expect(page.locator('[data-testid^="activity-item-"]')).toBeVisible();
 
     // Switch to second account
     await page.click(`text=${account2}`);
@@ -502,7 +500,7 @@ test.describe('Banking Core Flows', () => {
     // Check if there are no transaction items for the second account
     // If the account switching is not working properly, just check that we have less transactions
     const transactionCount = await page
-      .locator('[data-testid^="transaction-item-"]')
+      .locator('[data-testid^="activity-item-"]')
       .count();
     expect(transactionCount).toBeLessThanOrEqual(1);
 
@@ -513,8 +511,6 @@ test.describe('Banking Core Flows', () => {
     await expect(
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
-    await expect(
-      page.locator('[data-testid^="transaction-item-"]')
-    ).toBeVisible();
+    await expect(page.locator('[data-testid^="activity-item-"]')).toBeVisible();
   });
 });

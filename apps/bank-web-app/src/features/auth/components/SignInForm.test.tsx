@@ -136,9 +136,7 @@ describe('SignInForm', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(
-          'User not found. Please check the email and try again.'
-        )
+        screen.getByText('Sign in failed. Please try again.')
       ).toBeInTheDocument();
     });
   });

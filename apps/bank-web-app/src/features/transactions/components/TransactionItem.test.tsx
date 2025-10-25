@@ -109,7 +109,7 @@ describe('TransactionItem', () => {
     expect(screen.getByText('Hold Created')).toBeInTheDocument();
     expect(screen.getByText('HOLD PLACED')).toBeInTheDocument();
     expect(screen.getByText('$450')).toBeInTheDocument();
-    expect(screen.getByText('Counterparty: 111 111 1222')).toBeInTheDocument();
+    expect(screen.getByText('To: 111 111 1222')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('hold-created'));
     expect(onClick).not.toHaveBeenCalled();
@@ -122,6 +122,7 @@ describe('TransactionItem', () => {
 
     expect(screen.getByText('Hold Captured')).toBeInTheDocument();
     expect(screen.getByText('HOLD CAPTURED')).toBeInTheDocument();
+    expect(screen.getByText('To: 222 233 3344')).toBeInTheDocument();
     expect(screen.getByText('Captured txn: txn-789')).toBeInTheDocument();
     expect(screen.getByText('$95')).toBeInTheDocument();
   });
