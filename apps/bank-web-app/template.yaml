@@ -75,7 +75,7 @@ Resources:
       CorsConfiguration:
         CorsRules:
           - AllowedHeaders: ['*']
-            AllowedMethods: [GET, HEAD, OPTIONS]
+            AllowedMethods: [GET, HEAD]
             AllowedOrigins: ['*']
             MaxAge: 3600
 
