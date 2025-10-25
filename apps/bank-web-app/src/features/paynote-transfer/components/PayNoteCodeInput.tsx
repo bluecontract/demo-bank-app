@@ -419,14 +419,6 @@ export function PayNoteCodeInput({
     });
   };
 
-  const payNotePreview = useMemo(() => {
-    if (!payNoteCode || !isValidBase64(payNoteCode)) {
-      return '';
-    }
-
-    return decodePayNoteBase64AsYaml(payNoteCode);
-  }, [payNoteCode]);
-
   const selectedExampleDefaults = useMemo(
     () =>
       selectedExample

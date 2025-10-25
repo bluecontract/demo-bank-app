@@ -162,9 +162,7 @@ describe('PayNoteCodeInput', () => {
       expect(atob(lastCall![0])).toContain(updatedEmail);
     });
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /preview/i, exact: false })
-    );
+    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
 
     expect(
       await screen.findByText(`email: ${updatedEmail}`)
@@ -208,9 +206,7 @@ describe('PayNoteCodeInput', () => {
 
     const emailInput = await screen.findByLabelText(/notification email/i);
     expect(emailInput).toHaveValue('agent@example.com');
-    fireEvent.click(
-      screen.getByRole('button', { name: /preview/i, exact: false })
-    );
+    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
 
     expect(
       await screen.findByText(/contact: agent@example.com/i)
