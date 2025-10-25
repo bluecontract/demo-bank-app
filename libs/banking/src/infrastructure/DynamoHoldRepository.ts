@@ -33,7 +33,9 @@ import {
 } from './dynamo/holds/items';
 import {
   buildHoldIdempotencyItem,
-  HOLD_IDEMPOTENCY_CONSTANTS,
+  buildHoldIdempotencySortKey,
+  buildLegacyHoldIdempotencySortKey,
+  type HoldIdempotencyCommand,
 } from './dynamo/holds/idempotency';
 import {
   TABLE_PREFIXES,
@@ -46,7 +48,6 @@ import {
   buildPostingPutItems,
   buildTransactionHeaderPutItem,
 } from './dynamo/transactions/items';
-import { hashIdempotencyKey } from '../domain/idempotency';
 import type {
   Logger,
   Metrics,
@@ -694,7 +695,8 @@ export class DynamoHoldRepository implements HoldRepository {
     ) {
       const record = await this.getHoldIdempotencyRecord(
         request.userId,
-        request.idempotencyKey
+        request.idempotencyKey,
+        'RESERVE'
       );
       const hold = await this.getHold(record.holdId);
       if (!hold) {
@@ -752,7 +754,8 @@ export class DynamoHoldRepository implements HoldRepository {
     ) {
       const record = await this.getHoldIdempotencyRecord(
         request.userId,
-        request.idempotencyKey
+        request.idempotencyKey,
+        'RELEASE'
       );
       const hold = await this.getHold(record.holdId);
       if (!hold) {
@@ -877,7 +880,8 @@ export class DynamoHoldRepository implements HoldRepository {
   ): Promise<CaptureHoldResult> {
     const record = await this.getHoldIdempotencyRecord(
       request.userId,
-      request.idempotencyKey
+      request.idempotencyKey,
+      'CAPTURE'
     );
     const hold =
       cachedHold ?? (await this.getHold(record.holdId ?? request.hold.holdId));
@@ -928,33 +932,54 @@ export class DynamoHoldRepository implements HoldRepository {
 
   private async getHoldIdempotencyRecord(
     userId: string,
-    idempotencyKey: string
+    idempotencyKey: string,
+    command: HoldIdempotencyCommand
   ): Promise<{ holdId: string; transactionId?: string }> {
-    const result = await this.client.send(
-      new GetCommand({
-        TableName: this.tableName,
-        Key: {
-          PK: `${TABLE_PREFIXES.USER}${userId}`,
-          SK: `${
-            HOLD_IDEMPOTENCY_CONSTANTS.SORT_KEY_PREFIX
-          }${hashIdempotencyKey(idempotencyKey)}`,
-        },
-        ProjectionExpression: 'holdId, transactionId',
-        ConsistentRead: true,
-      })
-    );
+    const partitionKey = `${TABLE_PREFIXES.USER}${userId}`;
+    const keysToTry = [
+      buildHoldIdempotencySortKey(command, idempotencyKey),
+      buildLegacyHoldIdempotencySortKey(idempotencyKey),
+    ];
 
-    if (!result.Item || !result.Item.holdId) {
-      throw new RepositoryError(
-        `hold_idempotency_lookup_${userId}_${idempotencyKey}`,
-        new Error('Hold idempotency record missing holdId')
+    for (const sortKey of keysToTry) {
+      const result = await this.client.send(
+        new GetCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: partitionKey,
+            SK: sortKey,
+          },
+          ProjectionExpression: 'holdId, transactionId, command',
+          ConsistentRead: true,
+        })
       );
+
+      const record = result.Item as
+        | {
+            holdId?: string;
+            transactionId?: string;
+            command?: HoldIdempotencyCommand;
+          }
+        | undefined;
+
+      if (!record?.holdId) {
+        continue;
+      }
+
+      if (record.command && record.command !== command) {
+        continue;
+      }
+
+      return {
+        holdId: record.holdId,
+        transactionId: record.transactionId,
+      };
     }
 
-    return {
-      holdId: result.Item.holdId as string,
-      transactionId: result.Item.transactionId as string | undefined,
-    };
+    throw new RepositoryError(
+      `hold_idempotency_lookup_${userId}_${idempotencyKey}`,
+      new Error('Hold idempotency record missing holdId')
+    );
   }
 
   private encodePaginationToken(key: Record<string, unknown>): string {

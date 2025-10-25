@@ -16,7 +16,7 @@ describe('Hold idempotency item builder', () => {
 
     expect(item).toEqual({
       PK: 'USER#user-123',
-      SK: `IDEMPOTENCY#HOLD#${getIdempotencyKeyHash('reserve-key')}`,
+      SK: `IDEMPOTENCY#HOLD#RESERVE#${getIdempotencyKeyHash('reserve-key')}`,
       holdId: 'hold-456',
       command: 'RESERVE',
       createdAt: '2024-01-01T00:00:00.000Z',
