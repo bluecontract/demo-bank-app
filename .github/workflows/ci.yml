@@ -2,8 +2,7 @@ name: CI/CD Pipeline
 
 on:
   push:
-    # branches: [main]
-    branches: [feature/paynotes]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -57,11 +56,11 @@ jobs:
     name: Deploy & Test (Dev)
     uses: ./.github/workflows/deploy-and-test.yml
     needs: [quality-gates, integration-tests]
-    # if: |
-    #   needs.quality-gates.outputs.has-affected-apps == 'true' && (
-    #     (github.event_name == 'pull_request' && github.base_ref == 'main') ||
-    #     (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    #   )
+    if: |
+      needs.quality-gates.outputs.has-affected-apps == 'true' && (
+        (github.event_name == 'pull_request' && github.base_ref == 'main') ||
+        (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      )
     with:
       environment: 'dev'
       affected-apps: ${{ needs.quality-gates.outputs.affected-apps }}
@@ -79,11 +78,11 @@ jobs:
     name: Deploy & Test (Production)
     uses: ./.github/workflows/deploy-and-test.yml
     needs: [quality-gates, deploy-dev]
-    # if: |
-    #   github.event_name == 'push' &&
-    #   github.ref == 'refs/heads/main' &&
-    #   needs.deploy-dev.outputs.deployment-success == 'true' &&
-    #   needs.deploy-dev.outputs.e2e-success == 'true'
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.deploy-dev.outputs.deployment-success == 'true' &&
+      needs.deploy-dev.outputs.e2e-success == 'true'
     with:
       environment: 'prod'
       affected-apps: ${{ needs.quality-gates.outputs.affected-apps }}
