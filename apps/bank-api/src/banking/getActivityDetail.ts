@@ -116,12 +116,20 @@ export const getActivityDetailHandler = async (
   const { repository, holdRepository, logger } = await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
 
-  const { accountNumber, activityId } = request.params;
+  const { accountNumber, activityId: rawActivityId } = request.params;
+  const activityId = (() => {
+    try {
+      return decodeURIComponent(rawActivityId);
+    } catch {
+      return rawActivityId;
+    }
+  })();
 
   logger.info('Fetching activity detail', {
     userId,
     accountNumber,
     activityId,
+    rawActivityId,
   });
 
   try {
@@ -211,6 +219,7 @@ export const getActivityDetailHandler = async (
       userId,
       accountNumber,
       activityId,
+      rawActivityId,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
 

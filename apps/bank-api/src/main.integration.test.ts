@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { createHash } from 'crypto';
 import { handler } from './main';
 import type {
@@ -32,6 +32,7 @@ import {
   assertAllSecurityHeaders,
   DEFAULT_TEST_ORIGIN,
 } from './test-helpers/security-assertions';
+import { ERROR_CODES } from './shared/errors';
 
 /**
  * Integration Tests - Test against LocalStack AWS services
@@ -42,6 +43,8 @@ import {
 const TEST_CONFIG = {
   tableName: `demo-bank-app-bank-api-integration-test-${Date.now()}`,
   jwtSecretArn: '/demo-bank-app/integration-test/jwt-secret',
+  myOsSecretArn: '/demo-bank-app/integration-test/myos-credentials',
+  openAiSecretArn: '/demo-bank-app/integration-test/openai-api-key',
   jwtSecret: 'integration-test-jwt-secret-key-12345',
   localstackEndpoint: 'http://localhost:4566',
   region: 'us-east-1',
@@ -82,6 +85,8 @@ describe('Bank API Integration Tests', () => {
     process.env.JWT_TTL_SECONDS = TEST_CONFIG.jwtTtlSeconds.toString();
     process.env.TEST_USER_TTL_SECONDS =
       TEST_CONFIG.testUserTtlSeconds.toString();
+    process.env.MYOS_SECRET_ARN = TEST_CONFIG.myOsSecretArn;
+    process.env.OPENAI_API_KEY_SECRET_ARN = TEST_CONFIG.openAiSecretArn;
     process.env.SERVICE_NAME = 'bank-api-integration-test';
     process.env.LOG_LEVEL = 'INFO';
     process.env.METRICS_NAMESPACE = 'IntegrationTest';
@@ -103,6 +108,8 @@ describe('Bank API Integration Tests', () => {
     delete process.env.JWT_SECRET_ARN;
     delete process.env.JWT_TTL_SECONDS;
     delete process.env.TEST_USER_TTL_SECONDS;
+    delete process.env.MYOS_SECRET_ARN;
+    delete process.env.OPENAI_API_KEY_SECRET_ARN;
     delete process.env.SERVICE_NAME;
     delete process.env.LOG_LEVEL;
     delete process.env.METRICS_NAMESPACE;
@@ -1682,16 +1689,28 @@ describe('Bank API Integration Tests', () => {
       expect(response.statusCode).toBe(200);
       const simplified = response.body.items.map((item: any) => {
         if (item.kind === 'POSTED_TRANSACTION') {
-          return { kind: item.kind, transactionId: item.transactionId };
+          return {
+            kind: item.kind,
+            transactionId: item.transactionId,
+          };
         }
         return { kind: item.kind, holdId: item.holdId };
       });
       expect(simplified).toEqual(expectedOrder);
       expect(response.body.nextCursor).toBeUndefined();
 
+      response.body.items.forEach((item: any) => {
+        const expectedActivityId =
+          item.kind === 'POSTED_TRANSACTION'
+            ? `TXN#${item.transactionId}`
+            : `HOLD#${item.holdId}`;
+        expect(item.activityId).toBe(expectedActivityId);
+      });
+
       const newestHoldEvent = response.body.items[0];
       expect(newestHoldEvent).toMatchObject({
         kind: 'HOLD_CREATED',
+        activityId: `HOLD#${holdEntries[0].holdId}`,
         holdId: holdEntries[0].holdId,
         amountMinor: holdEntries[0].amountMinor,
         createdByUserId: 'system-test',
@@ -1868,6 +1887,259 @@ describe('Bank API Integration Tests', () => {
         error: 'UNAUTHORIZED',
         message: 'Unauthorized',
       });
+    });
+
+    it('should return transaction activity detail for owned account', async () => {
+      const listResponse = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}`,
+        jwtCookie,
+      });
+
+      expect(listResponse.statusCode).toBe(200);
+      const postedItems = listResponse.body.items.filter(
+        (item: any) => item.kind === 'POSTED_TRANSACTION'
+      );
+      expect(postedItems.length).toBeGreaterThan(0);
+
+      let successful: any;
+      for (const txnItem of postedItems) {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const response = await invokeApi({
+            method: 'GET',
+            path: `/v1/accounts/${accountNumber}/activity/${encodeURIComponent(
+              txnItem.activityId
+            )}`,
+            jwtCookie,
+          });
+
+          if (response.statusCode === 200) {
+            successful = response;
+            break;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        if (successful) {
+          break;
+        }
+      }
+
+      expect(successful).toBeDefined();
+      expect(successful?.body).toMatchObject({
+        kind: 'POSTED_TRANSACTION',
+        activityId: expect.any(String),
+        transactionId: expect.any(String),
+        status: 'POSTED',
+      });
+      expect(successful?.body.amountMinor).toBeGreaterThan(0);
+      expect(typeof successful?.body.side).toBe('string');
+      expect(successful?.body.payNote).toBeUndefined();
+    });
+
+    it('should return hold activity detail with timeline', async () => {
+      const listResponse = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}`,
+        jwtCookie,
+      });
+
+      expect(listResponse.statusCode).toBe(200);
+      const holdItems = listResponse.body.items.filter((item: any) =>
+        item.kind.startsWith('HOLD_')
+      );
+      expect(holdItems.length).toBeGreaterThan(0);
+
+      let successfulHold: any;
+      for (const holdItem of holdItems) {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const response = await invokeApi({
+            method: 'GET',
+            path: `/v1/accounts/${accountNumber}/activity/${encodeURIComponent(
+              holdItem.activityId
+            )}`,
+            jwtCookie,
+          });
+
+          if (response.statusCode === 200) {
+            successfulHold = response;
+            break;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        if (successfulHold) {
+          break;
+        }
+      }
+
+      expect(successfulHold).toBeDefined();
+      expect(successfulHold?.body).toMatchObject({
+        kind: 'HOLD',
+        activityId: expect.any(String),
+        holdId: expect.any(String),
+        amountMinor: expect.any(Number),
+      });
+      expect(Array.isArray(successfulHold?.body.timeline)).toBe(true);
+      expect(successfulHold?.body.timeline[0]).toMatchObject({
+        type: 'CREATED',
+        createdByUserId: 'system-test',
+      });
+    });
+
+    it('should return 404 for unknown activity detail', async () => {
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountNumber}/activity/${encodeURIComponent(
+          'TXN#missing'
+        )}`,
+        jwtCookie,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toMatchObject({
+        error: 'ACTIVITY_NOT_FOUND',
+      });
+    });
+  });
+
+  describe('PayNote Detail Endpoint', () => {
+    let userJwtCookie: string;
+    let userAccountNumber: string;
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('paynote-detail-user');
+      userJwtCookie = creds.jwtCookie;
+
+      const account = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: userJwtCookie,
+        body: { name: 'PayNote Primary Account' },
+      });
+      expect(account.statusCode).toBe(201);
+      userAccountNumber = account.body.accountNumber;
+    });
+
+    it('returns PayNote details when MyOS responds successfully', async () => {
+      const eventId = 'event-success-123';
+      const originalFetch = global.fetch;
+      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          id: eventId,
+          object: {
+            document: {
+              payerAccountNumber: { value: userAccountNumber },
+            },
+            documentYaml: '---\npaynote: test',
+            emitted: [{ type: { name: 'Reserve Funds Requested' } }],
+            triggeredBy: { actor: 'payerChannel' },
+          },
+        }),
+      } as unknown as Response);
+
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${userAccountNumber}/paynotes/${eventId}`,
+        jwtCookie: userJwtCookie,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toMatchObject({
+        myosEventId: eventId,
+        documentYaml: '---\npaynote: test',
+        fetchedAt: expect.any(String),
+      });
+      expect(response.body.transactionRequest).toEqual([
+        { type: { name: 'Reserve Funds Requested' } },
+      ]);
+      expect(response.body.triggerEvent).toEqual({ actor: 'payerChannel' });
+
+      fetchSpy.mockRestore();
+      global.fetch = originalFetch;
+    });
+
+    it('returns 404 when MyOS event is missing', async () => {
+      const eventId = 'event-missing-404';
+      const originalFetch = global.fetch;
+      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: vi.fn().mockResolvedValue('not found'),
+      } as unknown as Response);
+
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${userAccountNumber}/paynotes/${eventId}`,
+        jwtCookie: userJwtCookie,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toMatchObject({
+        error: ERROR_CODES.PAYNOTE_NOT_FOUND,
+      });
+      fetchSpy.mockRestore();
+      global.fetch = originalFetch;
+    });
+
+    it('returns 404 when MyOS event document does not match account', async () => {
+      const eventId = 'event-wrong-account';
+      const originalFetch = global.fetch;
+      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          id: eventId,
+          object: {
+            document: {
+              payerAccountNumber: { value: '9999999999' },
+            },
+            emitted: [],
+          },
+        }),
+      } as unknown as Response);
+
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${userAccountNumber}/paynotes/${eventId}`,
+        jwtCookie: userJwtCookie,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toMatchObject({
+        error: ERROR_CODES.PAYNOTE_NOT_FOUND,
+      });
+      fetchSpy.mockRestore();
+      global.fetch = originalFetch;
+    });
+
+    it('returns 500 when MyOS call fails with server error', async () => {
+      const eventId = 'event-server-error';
+      const originalFetch = global.fetch;
+      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: vi.fn().mockResolvedValue('server failure'),
+      } as unknown as Response);
+
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${userAccountNumber}/paynotes/${eventId}`,
+        jwtCookie: userJwtCookie,
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.body).toMatchObject({
+        error: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        detail: 'server failure',
+      });
+      fetchSpy.mockRestore();
+      global.fetch = originalFetch;
     });
   });
 });
@@ -2087,7 +2359,7 @@ async function setupLocalStackResources(): Promise<void> {
       throw new Error('DynamoDB table failed to become active');
     }
 
-    // Create Secrets Manager secret
+    // Create Secrets Manager secrets
     try {
       await secretsManagerClient.send(
         new CreateSecretCommand({
@@ -2099,6 +2371,42 @@ async function setupLocalStackResources(): Promise<void> {
     } catch (error) {
       if (error instanceof ResourceExistsException) {
         console.info('Secrets Manager secret already exists:', error);
+      }
+    }
+
+    const openAiSecretString = JSON.stringify({
+      openAiApiKey: 'integration-openai-key',
+    });
+    try {
+      await secretsManagerClient.send(
+        new CreateSecretCommand({
+          Name: TEST_CONFIG.openAiSecretArn,
+          SecretString: openAiSecretString,
+          Description: 'OpenAI API key for integration tests',
+        })
+      );
+    } catch (error) {
+      if (error instanceof ResourceExistsException) {
+        console.info('OpenAI secret already exists:', error);
+      }
+    }
+
+    const myOsSecretString = JSON.stringify({
+      apiKey: 'integration-myos-api-key',
+      accountId: 'integration-myos-account-id',
+      baseUrl: 'https://integration.myos.local',
+    });
+    try {
+      await secretsManagerClient.send(
+        new CreateSecretCommand({
+          Name: TEST_CONFIG.myOsSecretArn,
+          SecretString: myOsSecretString,
+          Description: 'MyOS credentials for integration tests',
+        })
+      );
+    } catch (error) {
+      if (error instanceof ResourceExistsException) {
+        console.info('MyOS secret already exists:', error);
       }
     }
   } catch (error) {
@@ -2131,6 +2439,34 @@ async function cleanupLocalStackResources(): Promise<void> {
       .then(() => void 0)
       .catch(error => {
         console.warn('Failed to cleanup Secrets Manager secret:', error);
+      })
+  );
+
+  cleanupPromises.push(
+    secretsManagerClient
+      .send(
+        new DeleteSecretCommand({
+          SecretId: TEST_CONFIG.openAiSecretArn,
+          ForceDeleteWithoutRecovery: true,
+        })
+      )
+      .then(() => void 0)
+      .catch(error => {
+        console.warn('Failed to cleanup OpenAI secret:', error);
+      })
+  );
+
+  cleanupPromises.push(
+    secretsManagerClient
+      .send(
+        new DeleteSecretCommand({
+          SecretId: TEST_CONFIG.myOsSecretArn,
+          ForceDeleteWithoutRecovery: true,
+        })
+      )
+      .then(() => void 0)
+      .catch(error => {
+        console.warn('Failed to cleanup MyOS secret:', error);
       })
   );
 
