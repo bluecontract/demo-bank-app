@@ -51,7 +51,8 @@ describe('DynamoUserRepository', () => {
         id: randomUUID(),
         email: 'john.doe@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
       mockSend.mockResolvedValueOnce({});
 
@@ -91,6 +92,7 @@ describe('DynamoUserRepository', () => {
                   id: user.id,
                   email: user.email,
                   isTest: false,
+                  marketingEmailsOptIn: true,
                 }),
                 ConditionExpression: 'attribute_not_exists(PK)',
               },
@@ -109,7 +111,8 @@ describe('DynamoUserRepository', () => {
         id: randomUUID(),
         email: 'john.doe@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
 
       const conditionalError = new Error('The conditional request failed');
@@ -132,7 +135,8 @@ describe('DynamoUserRepository', () => {
         id: randomUUID(),
         email: 'john.doe@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
 
       const transactionError = new Error('Transaction cancelled');
@@ -155,7 +159,8 @@ describe('DynamoUserRepository', () => {
         id: randomUUID(),
         email: 'john.doe@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
 
       const dynamoError = new Error('Service unavailable');
@@ -178,7 +183,8 @@ describe('DynamoUserRepository', () => {
         id: randomUUID(),
         email: 'test.user@example.com',
         isTest: true,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
       mockSend.mockResolvedValueOnce({});
 
@@ -218,6 +224,7 @@ describe('DynamoUserRepository', () => {
                   id: testUser.id,
                   email: testUser.email,
                   isTest: true,
+                  marketingEmailsOptIn: true,
                   ttl: expect.any(Number),
                 }),
                 ConditionExpression: 'attribute_not_exists(PK)',
@@ -238,7 +245,8 @@ describe('DynamoUserRepository', () => {
         id: randomUUID(),
         email: 'john.doe@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
       mockSend.mockResolvedValueOnce({
         Item: {
@@ -250,6 +258,7 @@ describe('DynamoUserRepository', () => {
           email: user.email,
           createdAt: user.createdAt.toISOString(),
           isTest: false,
+          marketingEmailsOptIn: true,
         },
       });
 
@@ -312,7 +321,8 @@ describe('DynamoUserRepository', () => {
         id: randomUUID(),
         email: 'john.doe@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
       mockSend.mockResolvedValueOnce({
         Items: [
@@ -325,6 +335,7 @@ describe('DynamoUserRepository', () => {
             email: user.email,
             createdAt: user.createdAt.toISOString(),
             isTest: false,
+            marketingEmailsOptIn: true,
           },
         ],
       });

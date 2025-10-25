@@ -44,6 +44,7 @@ interface UserProfileDbItem {
   email: User['email'];
   createdAt: string;
   isTest: boolean;
+  marketingEmailsOptIn: boolean;
   ttl?: number; // Optional TTL for test users
 }
 
@@ -57,6 +58,7 @@ interface UnknownDbItem {
   email?: string;
   createdAt?: string;
   isTest?: boolean;
+  marketingEmailsOptIn?: boolean;
   ttl?: number;
   [key: string]: unknown; // Allow additional properties
 }
@@ -365,6 +367,7 @@ export class DynamoUserRepository implements UserRepository {
       email: user.email,
       createdAt: user.createdAt.toISOString(),
       isTest: user.isTest,
+      marketingEmailsOptIn: user.marketingEmailsOptIn,
     };
 
     // Add TTL for test users
@@ -406,11 +409,23 @@ export class DynamoUserRepository implements UserRepository {
       }
       const isTest = (isTestValue as boolean) ?? false;
 
+      const marketingOptInValue = item.marketingEmailsOptIn;
+      if (
+        marketingOptInValue !== undefined &&
+        typeof marketingOptInValue !== 'boolean'
+      ) {
+        throw new Error(
+          'Invalid user item: marketingEmailsOptIn must be boolean'
+        );
+      }
+      const marketingEmailsOptIn = marketingOptInValue ?? false;
+
       return new User({
         id: item.id,
         email: item.email,
         createdAt,
         isTest,
+        marketingEmailsOptIn,
       });
     } catch (error: unknown) {
       throw new AuthRepositoryError(

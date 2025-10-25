@@ -95,7 +95,7 @@ describe('SignInForm', () => {
 
     mockSignIn.mockResolvedValue({
       status: 200,
-      body: { userId: '123', email: validEmail },
+      body: { userId: '123', email: validEmail, marketingEmailsOptIn: true },
     });
 
     render(
@@ -112,6 +112,7 @@ describe('SignInForm', () => {
       expect(onSuccess).toHaveBeenCalledWith({
         userId: '123',
         email: validEmail,
+        marketingEmailsOptIn: true,
       });
     });
   });

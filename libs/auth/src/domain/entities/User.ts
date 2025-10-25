@@ -5,6 +5,7 @@ export interface UserProps {
   email: string;
   createdAt: Date;
   isTest?: boolean;
+  marketingEmailsOptIn: boolean;
 }
 
 const USER_CONSTANTS = {
@@ -18,6 +19,7 @@ export class User {
   readonly email: string;
   readonly createdAt: Date;
   readonly isTest: boolean;
+  readonly marketingEmailsOptIn: boolean;
 
   constructor(props: UserProps) {
     if (!props.id || props.id.trim() === '') {
@@ -65,10 +67,18 @@ export class User {
       );
     }
 
+    if (typeof props.marketingEmailsOptIn !== 'boolean') {
+      throw new UserValidationError(
+        'marketingEmailsOptIn',
+        'Marketing emails opt-in flag must be a boolean'
+      );
+    }
+
     this.id = props.id;
     this.email = normalizedEmail;
     this.createdAt = props.createdAt;
     this.isTest = props.isTest ?? false;
+    this.marketingEmailsOptIn = props.marketingEmailsOptIn;
   }
 
   equals(other: User): boolean {
@@ -76,7 +86,8 @@ export class User {
       this.id === other.id &&
       this.email === other.email &&
       this.createdAt.getTime() === other.createdAt.getTime() &&
-      this.isTest === other.isTest
+      this.isTest === other.isTest &&
+      this.marketingEmailsOptIn === other.marketingEmailsOptIn
     );
   }
 }

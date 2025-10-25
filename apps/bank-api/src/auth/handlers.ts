@@ -42,6 +42,7 @@ const toAuthResponse = (
     body: {
       userId: user.id,
       email: user.email,
+      marketingEmailsOptIn: user.marketingEmailsOptIn,
     },
   };
 };
@@ -58,6 +59,7 @@ export const signUpHandler = async (
       {
         email: body.email,
         isTest: query?.dev === 'true',
+        marketingEmailsOptIn: body.marketingEmailsOptIn,
       },
       deps
     );

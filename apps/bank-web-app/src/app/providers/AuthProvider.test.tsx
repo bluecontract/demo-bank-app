@@ -44,7 +44,11 @@ const TestComponent = () => {
       </div>
       <button
         onClick={() =>
-          signIn({ userId: 'test-id', email: 'test.user@example.com' })
+          signIn({
+            userId: 'test-id',
+            email: 'test.user@example.com',
+            marketingEmailsOptIn: true,
+          })
         }
       >
         Sign In
@@ -200,7 +204,11 @@ describe('AuthProvider', () => {
 
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
       'demo-bank-app-auth-user',
-      JSON.stringify({ userId: 'test-id', email: 'test.user@example.com' })
+      JSON.stringify({
+        userId: 'test-id',
+        email: 'test.user@example.com',
+        marketingEmailsOptIn: true,
+      })
     );
   });
 

@@ -19,10 +19,15 @@ test.describe('Sign Up Flow', () => {
     // Should be on signup page
     await expect(page).toHaveURL(URLS.SIGNUP);
     await expect(
-      page.getByRole('heading', { name: 'Join Blue Bank' })
+      page.getByRole('heading', { name: 'Join Demo Bank' })
     ).toBeVisible();
     await expect(
       page.getByRole('heading', { name: 'Create Account' })
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        'I agree to the collection of my email address by Blue Language Labs Inc. and its use for future marketing communications.'
+      )
     ).toBeVisible();
   });
 
@@ -33,6 +38,12 @@ test.describe('Sign Up Flow', () => {
     // Fill in the form with unique test email
     const uniqueEmail = createUniqueEmail();
     await page.fill('input[name="email"]', uniqueEmail);
+
+    // Marketing consent checked by default
+    const marketingCheckbox = page.getByLabel(
+      'I agree to the collection of my email address by Blue Language Labs Inc. and its use for future marketing communications.'
+    );
+    await expect(marketingCheckbox).toBeChecked();
 
     // Submit the form
     await page.click('button[type="submit"]');

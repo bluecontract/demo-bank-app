@@ -17,6 +17,7 @@ import { randomUUID } from 'crypto';
 export interface SignUpCommand {
   email: string;
   isTest?: boolean;
+  marketingEmailsOptIn: boolean;
 }
 
 export interface SignUpDependencies {
@@ -33,6 +34,7 @@ function toAuthResult(user: User, token: string): AuthResult {
       email: user.email,
       createdAt: user.createdAt.toISOString(),
       isTest: user.isTest,
+      marketingEmailsOptIn: user.marketingEmailsOptIn,
     },
     token,
   };
@@ -44,7 +46,7 @@ export async function signUp(
 ): Promise<AuthResult> {
   const { userRepository, jwtService, logger, metrics } = dependencies;
 
-  const { email, isTest = false } = command;
+  const { email, isTest = false, marketingEmailsOptIn } = command;
   const timing = TimingUtils.startTiming(OPERATION_NAMES.AUTH.SIGN_UP);
 
   logger.info('User sign-up started', {
@@ -61,6 +63,7 @@ export async function signUp(
       email,
       createdAt: new Date(),
       isTest,
+      marketingEmailsOptIn,
     });
 
     savedUser = await userRepository.save(user);

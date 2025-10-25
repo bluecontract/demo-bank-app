@@ -40,13 +40,17 @@ export const HealthCheckSchema = z.object({
 // Auth schemas
 export const SignUpRequestSchema = z.object({
   email: createSanitizedStringSchema(z.string().email()),
+  marketingEmailsOptIn: z.boolean(),
 });
 
-export const SignInRequestSchema = SignUpRequestSchema;
+export const SignInRequestSchema = SignUpRequestSchema.pick({
+  email: true,
+});
 
 export const AuthSuccessResponseSchema = z.object({
   userId: z.string(),
   email: z.string().email(),
+  marketingEmailsOptIn: z.boolean(),
 });
 
 export const AuthErrorResponseSchema = z.object({

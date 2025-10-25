@@ -3,7 +3,7 @@ import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { vi } from 'vitest';
-import { SignUpForm } from './SignUpForm';
+import { SignUpForm, MARKETING_CONSENT_COPY } from './SignUpForm';
 import { ApiProvider } from '../../../app/providers/ApiProvider';
 import { AuthProvider } from '../../../app/providers/AuthProvider';
 
@@ -68,6 +68,7 @@ describe('SignUpForm', () => {
     expect(
       screen.getByRole('button', { name: 'Create Account' })
     ).toBeInTheDocument();
+    expect(screen.getByLabelText(MARKETING_CONSENT_COPY)).toBeChecked();
   });
 
   it('shows validation errors for empty and malformed email', async () => {
@@ -122,7 +123,7 @@ describe('SignUpForm', () => {
 
     let resolvePromise: (value: {
       status: number;
-      body: { userId: string; email: string };
+      body: { userId: string; email: string; marketingEmailsOptIn: boolean };
     }) => void = vi.fn();
     const signUpPromise = new Promise<typeof mockSignUp.arguments>(resolve => {
       resolvePromise = resolve as unknown as typeof resolvePromise;
@@ -142,7 +143,10 @@ describe('SignUpForm', () => {
 
     expect(screen.getByText('Creating Account...')).toBeInTheDocument();
 
-    resolvePromise({ status: 201, body: { userId: '123', email: validEmail } });
+    resolvePromise({
+      status: 201,
+      body: { userId: '123', email: validEmail, marketingEmailsOptIn: true },
+    });
     await waitFor(() => {
       expect(
         screen.getByRole('button', { name: 'Create Account' })
@@ -156,7 +160,7 @@ describe('SignUpForm', () => {
 
     mockSignUp.mockResolvedValue({
       status: 201,
-      body: { userId: '123', email: validEmail },
+      body: { userId: '123', email: validEmail, marketingEmailsOptIn: true },
     });
 
     render(
@@ -173,7 +177,16 @@ describe('SignUpForm', () => {
       expect(onSuccess).toHaveBeenCalledWith({
         userId: '123',
         email: validEmail,
+        marketingEmailsOptIn: true,
       });
+      expect(mockSignUp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: {
+            email: validEmail,
+            marketingEmailsOptIn: true,
+          },
+        })
+      );
     });
   });
 

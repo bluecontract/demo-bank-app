@@ -56,18 +56,26 @@ describe('Auth Handlers', () => {
           email: 'testuser@example.com',
           isTest: false,
           createdAt: '2021-01-01',
+          marketingEmailsOptIn: true,
         },
         token: 'jwt-token',
       });
       const responseHeaders = createMockHeaders();
       const result = await signUpHandler(
-        { body: { email: 'testuser@example.com' }, query: {} },
+        {
+          body: {
+            email: 'testuser@example.com',
+            marketingEmailsOptIn: true,
+          },
+          query: {},
+        },
         { responseHeaders } as any
       );
       expect(result.status).toBe(201);
       expect(result.body).toEqual({
         userId: 'test-user-id',
         email: 'testuser@example.com',
+        marketingEmailsOptIn: true,
       });
       expect(responseHeaders.get('Set-Cookie')).toContain('demoAuth=jwt-token');
     });
@@ -83,7 +91,13 @@ describe('Auth Handlers', () => {
       );
       const responseHeaders = createMockHeaders();
       const result = await signUpHandler(
-        { body: { email: 'existinguser@example.com' }, query: {} },
+        {
+          body: {
+            email: 'existinguser@example.com',
+            marketingEmailsOptIn: true,
+          },
+          query: {},
+        },
         {
           responseHeaders,
         } as any
@@ -107,9 +121,12 @@ describe('Auth Handlers', () => {
       );
       const responseHeaders = createMockHeaders();
       await expect(
-        signUpHandler({ body: { email: '' }, query: {} }, {
-          responseHeaders,
-        } as any)
+        signUpHandler(
+          { body: { email: '', marketingEmailsOptIn: true }, query: {} },
+          {
+            responseHeaders,
+          } as any
+        )
       ).rejects.toThrow(UserValidationError);
     });
 
@@ -130,9 +147,12 @@ describe('Auth Handlers', () => {
       mockSignUp.mockRejectedValue(error);
       const responseHeaders = createMockHeaders();
       await expect(
-        signUpHandler({ body: { email: '' }, query: {} }, {
-          responseHeaders,
-        } as any)
+        signUpHandler(
+          { body: { email: '', marketingEmailsOptIn: true }, query: {} },
+          {
+            responseHeaders,
+          } as any
+        )
       ).rejects.toEqual(error);
     });
 
@@ -146,9 +166,15 @@ describe('Auth Handlers', () => {
       mockSignUp.mockRejectedValue(error);
       const responseHeaders = createMockHeaders();
       await expect(
-        signUpHandler({ body: { email: 'testuser@example.com' }, query: {} }, {
-          responseHeaders,
-        } as any)
+        signUpHandler(
+          {
+            body: { email: 'testuser@example.com', marketingEmailsOptIn: true },
+            query: {},
+          },
+          {
+            responseHeaders,
+          } as any
+        )
       ).rejects.toThrow('Database connection failed');
     });
   });
@@ -166,6 +192,7 @@ describe('Auth Handlers', () => {
           email: 'testuser@example.com',
           isTest: false,
           createdAt: '2021-01-01',
+          marketingEmailsOptIn: true,
         },
         token: 'jwt-token',
       });
@@ -180,6 +207,7 @@ describe('Auth Handlers', () => {
       expect(result.body).toEqual({
         userId: 'test-user-id',
         email: 'testuser@example.com',
+        marketingEmailsOptIn: true,
       });
       expect(responseHeaders.get('Set-Cookie')).toContain('demoAuth=jwt-token');
     });

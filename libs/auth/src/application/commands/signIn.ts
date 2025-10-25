@@ -31,6 +31,7 @@ function toAuthResult(user: User, token: string): AuthResult {
       email: user.email,
       createdAt: user.createdAt.toISOString(),
       isTest: user.isTest,
+      marketingEmailsOptIn: user.marketingEmailsOptIn,
     },
     token,
   };

@@ -3,6 +3,7 @@ export interface UserResult {
   email: string;
   createdAt: string;
   isTest: boolean;
+  marketingEmailsOptIn: boolean;
 }
 
 export interface AuthResult {

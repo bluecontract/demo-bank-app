@@ -102,7 +102,8 @@ describe('DynamoUserRepository Integration', () => {
         id: randomUUID(),
         email: 'john.doe@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
 
       // When
@@ -112,6 +113,7 @@ describe('DynamoUserRepository Integration', () => {
       expect(savedUser.id).toBe(user.id);
       expect(savedUser.email).toBe(user.email);
       expect(savedUser.isTest).toBe(false);
+      expect(savedUser.marketingEmailsOptIn).toBe(true);
 
       // Verify by retrieving
       const retrievedUser = await repository.findById(user.id);
@@ -119,6 +121,7 @@ describe('DynamoUserRepository Integration', () => {
       expect(retrievedUser!.id).toBe(user.id);
       expect(retrievedUser!.email).toBe(user.email);
       expect(retrievedUser!.isTest).toBe(false);
+      expect(retrievedUser!.marketingEmailsOptIn).toBe(true);
     });
 
     it('should save and retrieve a test user with TTL', async () => {
@@ -127,7 +130,8 @@ describe('DynamoUserRepository Integration', () => {
         id: randomUUID(),
         email: 'test.user@example.com',
         isTest: true,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: false,
       });
 
       // When
@@ -137,6 +141,7 @@ describe('DynamoUserRepository Integration', () => {
       expect(savedUser.id).toBe(testUser.id);
       expect(savedUser.email).toBe(testUser.email);
       expect(savedUser.isTest).toBe(true);
+      expect(savedUser.marketingEmailsOptIn).toBe(false);
 
       // Verify by retrieving
       const retrievedUser = await repository.findById(testUser.id);
@@ -144,6 +149,7 @@ describe('DynamoUserRepository Integration', () => {
       expect(retrievedUser!.id).toBe(testUser.id);
       expect(retrievedUser!.email).toBe(testUser.email);
       expect(retrievedUser!.isTest).toBe(true);
+      expect(retrievedUser!.marketingEmailsOptIn).toBe(false);
     });
 
     it('should throw UserAlreadyExistsError when saving user with duplicate name', async () => {
@@ -152,13 +158,15 @@ describe('DynamoUserRepository Integration', () => {
         id: randomUUID(),
         email: 'duplicate-user@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
       const user2 = new User({
         id: randomUUID(),
         email: 'duplicate-user@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
 
       // When
@@ -178,7 +186,8 @@ describe('DynamoUserRepository Integration', () => {
         id: randomUUID(),
         email: 'find-by-id-user@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
       await repository.save(user);
 
@@ -190,6 +199,7 @@ describe('DynamoUserRepository Integration', () => {
       expect(foundUser!.id).toBe(user.id);
       expect(foundUser!.email).toBe(user.email);
       expect(foundUser!.isTest).toBe(false);
+      expect(foundUser!.marketingEmailsOptIn).toBe(true);
     });
 
     it('should return null when user not found', async () => {
@@ -211,7 +221,8 @@ describe('DynamoUserRepository Integration', () => {
         id: randomUUID(),
         email: 'find-by-email-user@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
       await repository.save(user);
 
@@ -244,7 +255,8 @@ describe('DynamoUserRepository Integration', () => {
         id: randomUUID(),
         email: 'integrity-test-user@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
 
       // When
@@ -260,6 +272,9 @@ describe('DynamoUserRepository Integration', () => {
       expect(userById!.email).toBe(userByEmail!.email);
       expect(userById!.createdAt).toEqual(userByEmail!.createdAt);
       expect(userById!.isTest).toBe(userByEmail!.isTest);
+      expect(userById!.marketingEmailsOptIn).toBe(
+        userByEmail!.marketingEmailsOptIn
+      );
     });
 
     it('should handle concurrent user creation attempts gracefully', async () => {
@@ -269,13 +284,15 @@ describe('DynamoUserRepository Integration', () => {
         id: randomUUID(),
         email: emailAddress,
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
       const user2 = new User({
         id: randomUUID(),
         email: emailAddress,
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
       });
 
       // When
@@ -313,7 +330,7 @@ describe('DynamoUserRepository Integration', () => {
         id: randomUUID(),
         email: 'error-test-user@example.com',
         isTest: false,
-        createdAt: new Date(),
+        createdAt: new Date('2024-01-01T00:00:00Z'),
       });
 
       // When & Then

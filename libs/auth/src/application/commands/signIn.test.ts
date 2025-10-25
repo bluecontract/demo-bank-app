@@ -59,6 +59,7 @@ describe('signIn', () => {
       email: 'john.doe@example.com',
       isTest: false,
       createdAt: new Date(),
+      marketingEmailsOptIn: true,
     });
     const mockToken = 'jwt-token-123';
 
@@ -95,6 +96,7 @@ describe('signIn', () => {
         email: 'john.doe@example.com',
         createdAt: mockUser.createdAt.toISOString(),
         isTest: false,
+        marketingEmailsOptIn: true,
       },
       token: mockToken,
     };
@@ -112,6 +114,7 @@ describe('signIn', () => {
       email: 'test.user@example.com',
       isTest: true,
       createdAt: new Date(),
+      marketingEmailsOptIn: false,
     });
     const mockToken = 'jwt-token-test';
 
@@ -129,6 +132,7 @@ describe('signIn', () => {
     expect(result.user.email).toBe('test.user@example.com');
     expect(result.user.createdAt).toBe(mockUser.createdAt.toISOString());
     expect(result.user.isTest).toBe(true);
+    expect(result.user.marketingEmailsOptIn).toBe(false);
     expect(result.token).toBe(mockToken);
   });
 
@@ -192,6 +196,7 @@ describe('signIn', () => {
       email: 'john.doe@example.com',
       isTest: false,
       createdAt: new Date(),
+      marketingEmailsOptIn: true,
     });
     const jwtError = new TokenGenerationError(mockUser.id);
 
@@ -243,6 +248,7 @@ describe('signIn', () => {
       email: 'john.doe@example.com',
       isTest: false,
       createdAt: new Date(),
+      marketingEmailsOptIn: true,
     });
     const mockToken = 'jwt-token-123';
 

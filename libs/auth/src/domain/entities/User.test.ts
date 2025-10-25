@@ -7,6 +7,7 @@ describe('User', () => {
     email: 'test.user@example.com',
     createdAt: new Date('2024-01-01T00:00:00Z'),
     isTest: false,
+    marketingEmailsOptIn: true,
   };
 
   describe('constructor', () => {
@@ -17,6 +18,7 @@ describe('User', () => {
       expect(user.email).toBe(validProps.email.toLowerCase());
       expect(user.createdAt).toEqual(validProps.createdAt);
       expect(user.isTest).toBe(false);
+      expect(user.marketingEmailsOptIn).toBe(true);
     });
 
     it('defaults isTest to false when not provided', () => {
@@ -26,6 +28,7 @@ describe('User', () => {
       const user = new User(props);
 
       expect(user.isTest).toBe(false);
+      expect(user.marketingEmailsOptIn).toBe(true);
     });
 
     it('accepts isTest as true', () => {
@@ -165,6 +168,27 @@ describe('User', () => {
         expect(() => new User(props)).not.toThrow();
       });
     });
+
+    describe('marketingEmailsOptIn validation', () => {
+      it('throws when marketingEmailsOptIn is not a boolean', () => {
+        const props = {
+          ...validProps,
+          marketingEmailsOptIn: 'yes' as unknown as boolean,
+        };
+
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow(
+          'Marketing emails opt-in flag must be a boolean'
+        );
+      });
+
+      it('accepts false as a value', () => {
+        const props = { ...validProps, marketingEmailsOptIn: false };
+
+        expect(() => new User(props)).not.toThrow();
+        expect(new User(props).marketingEmailsOptIn).toBe(false);
+      });
+    });
   });
 
   describe('equals', () => {
@@ -205,6 +229,16 @@ describe('User', () => {
     it('returns false for users with different isTest values', () => {
       const user1 = new User(validProps);
       const user2 = new User({ ...validProps, isTest: true });
+
+      expect(user1.equals(user2)).toBe(false);
+    });
+
+    it('returns false for users with different marketingEmailsOptIn values', () => {
+      const user1 = new User(validProps);
+      const user2 = new User({
+        ...validProps,
+        marketingEmailsOptIn: false,
+      });
 
       expect(user1.equals(user2)).toBe(false);
     });

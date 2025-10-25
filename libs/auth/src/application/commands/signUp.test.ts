@@ -53,6 +53,7 @@ describe('signUp', () => {
     const command: SignUpCommand = {
       email: 'john.doe@example.com',
       isTest: false,
+      marketingEmailsOptIn: true,
     };
 
     const mockUser = new User({
@@ -60,6 +61,7 @@ describe('signUp', () => {
       email: 'john.doe@example.com',
       createdAt: new Date(),
       isTest: false,
+      marketingEmailsOptIn: true,
     });
     const mockToken = 'jwt-token-123';
 
@@ -73,11 +75,13 @@ describe('signUp', () => {
     expect(result.user.id).toBe('user-123');
     expect(result.user.email).toBe('john.doe@example.com');
     expect(result.user.isTest).toBe(false);
+    expect(result.user.marketingEmailsOptIn).toBe(true);
     expect(result.token).toBe(mockToken);
     expect(mockUserRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'john.doe@example.com',
         isTest: false,
+        marketingEmailsOptIn: true,
       })
     );
     expect(mockJwtService.generateToken).toHaveBeenCalledWith({
@@ -105,6 +109,7 @@ describe('signUp', () => {
     const command: SignUpCommand = {
       email: 'test.user@example.com',
       isTest: true,
+      marketingEmailsOptIn: true,
     };
 
     const mockUser = new User({
@@ -112,6 +117,7 @@ describe('signUp', () => {
       email: 'test.user@example.com',
       createdAt: new Date(),
       isTest: true,
+      marketingEmailsOptIn: true,
     });
     const mockToken = 'jwt-token-test';
 
@@ -130,6 +136,7 @@ describe('signUp', () => {
       expect.objectContaining({
         email: 'test.user@example.com',
         isTest: true,
+        marketingEmailsOptIn: true,
       })
     );
     expect(mockJwtService.generateToken).toHaveBeenCalledWith({
@@ -146,7 +153,10 @@ describe('signUp', () => {
 
   it('should throw UserAlreadyExistsError when user already exists', async () => {
     // Given
-    const command: SignUpCommand = { email: 'existing.user@example.com' };
+    const command: SignUpCommand = {
+      email: 'existing.user@example.com',
+      marketingEmailsOptIn: true,
+    };
 
     const userAlreadyExistsError = new UserAlreadyExistsError(
       'existing.user@example.com'
@@ -175,13 +185,17 @@ describe('signUp', () => {
 
   it('should rethrow error when JWT generation fails', async () => {
     // Given
-    const command: SignUpCommand = { email: 'test.user@example.com' };
+    const command: SignUpCommand = {
+      email: 'test.user@example.com',
+      marketingEmailsOptIn: true,
+    };
 
     const mockUser = new User({
       id: 'user-123',
       email: 'test.user@example.com',
       createdAt: new Date(),
       isTest: false,
+      marketingEmailsOptIn: true,
     });
     const jwtError = new TokenGenerationError('user-123');
 
@@ -209,13 +223,17 @@ describe('signUp', () => {
 
   it('should throw AuthError when unexpected error occurs', async () => {
     // Given
-    const command: SignUpCommand = { email: 'test.user@example.com' };
+    const command: SignUpCommand = {
+      email: 'test.user@example.com',
+      marketingEmailsOptIn: true,
+    };
 
     const mockUser = new User({
       id: 'user-123',
       email: 'test.user@example.com',
       createdAt: new Date(),
       isTest: false,
+      marketingEmailsOptIn: true,
     });
     const unexpectedError = new Error('Unexpected error');
 

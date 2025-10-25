@@ -168,7 +168,7 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { email: creds.userEmail },
+        body: { email: creds.userEmail, marketingEmailsOptIn: true },
       });
       expect(signUp.statusCode).toBe(409);
       expect(signUp.body).toEqual({
@@ -182,7 +182,7 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { email: '' },
+        body: { email: '', marketingEmailsOptIn: true },
       });
       expect(signUp.statusCode).toBe(400);
       expect(signUp.body).toEqual({
@@ -205,7 +205,7 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup?dev=true',
-        body: { email },
+        body: { email, marketingEmailsOptIn: true },
       });
       expect(signUp.statusCode).toBe(201);
       const cookieHeader = signUp.headers?.['set-cookie'] as string;
@@ -2342,13 +2342,19 @@ async function invokeApi({
 // DRY helper for signing up a unique test user and extracting credentials
 async function signupUniqueTestUser(
   namePrefix = 'test-user',
-  isTest = false
-): Promise<{ userId: string; jwtCookie: string; userEmail: string }> {
+  isTest = false,
+  marketingOptIn = true
+): Promise<{
+  userId: string;
+  jwtCookie: string;
+  userEmail: string;
+  marketingEmailsOptIn: boolean;
+}> {
   const userEmail = generateUniqueTestUserName(namePrefix);
   const signUp = await invokeApi({
     method: 'POST',
     path: isTest ? '/auth/signup?dev=true' : '/auth/signup',
-    body: { email: userEmail },
+    body: { email: userEmail, marketingEmailsOptIn: marketingOptIn },
   });
   expect(signUp.statusCode).toBe(201);
   if (!signUp.headers || typeof signUp.headers['set-cookie'] !== 'string') {
@@ -2358,5 +2364,6 @@ async function signupUniqueTestUser(
     userId: signUp.body.userId,
     jwtCookie: signUp.headers['set-cookie'],
     userEmail,
+    marketingEmailsOptIn: signUp.body.marketingEmailsOptIn,
   };
 }

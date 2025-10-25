@@ -9,15 +9,22 @@ interface SignUpFormProps {
   onSuccess?: (user: User) => void;
 }
 
+export const MARKETING_CONSENT_COPY =
+  'I agree to the collection of my email address by Blue Language Labs Inc. and its use for future marketing communications.';
+
 export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
   const [email, setEmail] = useState('');
+  const [marketingOptIn, setMarketingOptIn] = useState(true);
   const [errors, setErrors] = useState<{ email?: string }>({});
   const apiClient = useApiClient();
   const navigate = useNavigate();
   const { signIn } = useAuth();
 
   const signUpMutation = useMutation({
-    mutationFn: async (userData: { email: string }) => {
+    mutationFn: async (userData: {
+      email: string;
+      marketingEmailsOptIn: boolean;
+    }) => {
       const isE2ETest =
         typeof window !== 'undefined' &&
         (window.location.search.includes('e2e=true') ||
@@ -92,7 +99,10 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
     }
 
     setErrors({});
-    signUpMutation.mutate({ email: email.trim().toLowerCase() });
+    signUpMutation.mutate({
+      email: email.trim().toLowerCase(),
+      marketingEmailsOptIn: marketingOptIn,
+    });
   };
 
   const clearErrors = () => {
@@ -134,6 +144,18 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
             </p>
           )}
         </div>
+
+        <label className="flex items-start gap-3 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            name="marketingOptIn"
+            checked={marketingOptIn}
+            onChange={event => setMarketingOptIn(event.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            disabled={signUpMutation.isPending}
+          />
+          <span className="leading-5">{MARKETING_CONSENT_COPY}</span>
+        </label>
 
         <button
           type="submit"

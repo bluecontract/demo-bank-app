@@ -45,7 +45,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const storedUser = localStorage.getItem(AUTH_STORAGE_KEY);
       if (storedUser) {
         const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
+        setUser({
+          ...parsedUser,
+          marketingEmailsOptIn: !!parsedUser.marketingEmailsOptIn,
+        });
       }
     } catch (error) {
       console.error('Failed to restore auth state:', error);
@@ -58,9 +61,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const isAuthenticated = user !== null;
 
   const signIn = (userData: User) => {
-    setUser(userData);
+    const sanitizedUser: User = {
+      ...userData,
+      marketingEmailsOptIn: !!userData.marketingEmailsOptIn,
+    };
+    setUser(sanitizedUser);
     try {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(userData));
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sanitizedUser));
     } catch (error) {
       console.error('Failed to persist auth state:', error);
     }
