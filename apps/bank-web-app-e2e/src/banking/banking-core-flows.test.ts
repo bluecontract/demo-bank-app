@@ -484,7 +484,12 @@ test.describe('Banking Core Flows', () => {
     await expect(modal).toBeVisible();
     await expect(modal.getByText('Hold Details')).toBeVisible();
     await expect(modal.getByText('Hold overview')).toBeVisible();
-    await expect(modal.getByText('Hold ID: hold-123')).toBeVisible();
+    await expect(
+      modal
+        .locator('[data-testid="modal-hold-details"]')
+        .locator('text=Hold ID: hold-123')
+        .first()
+    ).toBeVisible();
     await expect(
       modal
         .getByTestId('modal-hold-details')
@@ -494,7 +499,7 @@ test.describe('Banking Core Flows', () => {
     await expect(
       modal.getByText('Pending hold for vendor authorization')
     ).toBeVisible();
-    await expect(modal.getByText('Hold created')).toBeVisible();
+    await expect(modal.getByText('Hold placed')).toBeVisible();
 
     await page.unroute('**/v1/activity/**');
     await page.unroute('**/v1/accounts/**/activity/**');

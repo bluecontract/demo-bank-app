@@ -165,7 +165,9 @@ describe('TransactionDetailsModal', () => {
     expect(screen.getByText('Hold Details')).toBeInTheDocument();
     expect(screen.getByText('Hold overview')).toBeInTheDocument();
     expect(screen.getByText('hold-1')).toBeInTheDocument();
-    expect(screen.getByText('Hold created')).toBeInTheDocument();
+    expect(screen.getByText('From account')).toBeInTheDocument();
+    expect(screen.getByText('To account')).toBeInTheDocument();
+    expect(screen.getByText('Hold placed')).toBeInTheDocument();
   });
 
   it('displays loading state while fetching activity detail', () => {

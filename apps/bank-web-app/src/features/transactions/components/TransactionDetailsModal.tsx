@@ -211,6 +211,8 @@ export function TransactionDetailsModal({
           {holdDetail && (
             <HoldDetails
               hold={holdDetail}
+              accountId={accountId}
+              currentAccountNumber={currentAccountNumber || accountNumber}
               isLoadingAccounts={isLoadingAccounts}
               accounts={accounts || []}
               data-testid="modal-hold-details"

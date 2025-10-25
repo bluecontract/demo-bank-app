@@ -17,6 +17,8 @@ type Account = {
 interface HoldDetailsProps {
   hold: Extract<ActivityDetail, { kind: 'HOLD' }>;
   accounts: Account[];
+  accountId: string;
+  currentAccountNumber?: string;
   isLoadingAccounts?: boolean;
   'data-testid'?: string;
 }
@@ -63,6 +65,17 @@ const findAccountName = (accounts: Account[], accountNumber?: string) => {
     ?.name;
 };
 
+const formatAccountWithName = (
+  accountNumber?: string,
+  accountName?: string
+): string => {
+  if (!accountNumber) {
+    return '—';
+  }
+  const formattedNumber = formatAccountNumber(accountNumber);
+  return accountName ? `${formattedNumber} (${accountName})` : formattedNumber;
+};
+
 const buildCounterpartyDisplay = (
   accounts: Account[],
   accountNumber?: string,
@@ -81,9 +94,31 @@ const buildCounterpartyDisplay = (
   return accountName ? `${formattedNumber} (${accountName})` : formattedNumber;
 };
 
+type HoldStatus = Extract<ActivityDetail, { kind: 'HOLD' }>['status'];
+
+const deriveStatus = (
+  hold: Extract<ActivityDetail, { kind: 'HOLD' }>
+): HoldStatus => {
+  if (hold.failedAt || hold.status === 'FAILED') {
+    return 'FAILED';
+  }
+  if (hold.releasedAt || hold.status === 'RELEASED') {
+    return 'RELEASED';
+  }
+  if (hold.capturedAt || hold.status === 'CAPTURED') {
+    return 'CAPTURED';
+  }
+  if (hold.status === 'EXPIRED') {
+    return 'EXPIRED';
+  }
+  return 'PENDING';
+};
+
 export function HoldDetails({
   hold,
   accounts,
+  accountId,
+  currentAccountNumber,
   isLoadingAccounts,
   'data-testid': testId,
 }: HoldDetailsProps) {
@@ -92,44 +127,80 @@ export function HoldDetails({
     (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
   );
 
+  const currentAccount =
+    accounts.find(account => account.accountId === accountId) ??
+    accounts.find(account => account.accountNumber === currentAccountNumber);
+
+  const currentAccountDisplay = formatAccountWithName(
+    currentAccountNumber ?? currentAccount?.accountNumber,
+    currentAccount?.name
+  );
+
+  const counterpartyDisplay = buildCounterpartyDisplay(
+    accounts,
+    hold.counterpartyAccountNumber,
+    isLoadingAccounts
+  );
+
+  const displayStatus = deriveStatus(hold);
+
   const detailRows: Array<{ label: string; value: string }> = [
+    { label: 'From account', value: currentAccountDisplay },
+    { label: 'To account', value: counterpartyDisplay },
     { label: 'Amount', value: formattedAmount },
-    {
-      label: 'Counterparty',
-      value: buildCounterpartyDisplay(
-        accounts,
-        hold.counterpartyAccountNumber,
-        isLoadingAccounts
-      ),
-    },
-    { label: 'Created', value: formatDateTime(hold.createdAt) },
-    { label: 'Expires', value: formatDateTime(hold.expiresAt) },
-    {
-      label: 'Captured',
-      value:
-        hold.capturedAt && hold.captureTransactionId
-          ? `${formatDateTime(hold.capturedAt)} • Txn: ${
-              hold.captureTransactionId
-            }`
-          : formatDateTime(hold.capturedAt),
-    },
-    {
-      label: 'Released',
-      value: hold.releasedAt
-        ? `${formatDateTime(hold.releasedAt)}${
-            hold.releaseReason ? ` • Reason: ${hold.releaseReason}` : ''
-          }`
-        : '—',
-    },
-    {
-      label: 'Failed',
-      value: hold.failedAt
-        ? `${formatDateTime(hold.failedAt)}${
-            hold.failureCode ? ` • ${hold.failureCode}` : ''
-          }${hold.failureMessage ? ` — ${hold.failureMessage}` : ''}`
-        : '—',
-    },
+    { label: 'Hold created', value: formatDateTime(hold.createdAt) },
   ];
+
+  if (hold.expiresAt) {
+    detailRows.push({
+      label: 'Expires',
+      value: formatDateTime(hold.expiresAt),
+    });
+  }
+
+  if (hold.capturedAt) {
+    detailRows.push({
+      label: 'Captured at',
+      value: formatDateTime(hold.capturedAt),
+    });
+  }
+
+  if (hold.captureTransactionId) {
+    detailRows.push({
+      label: 'Captured by transaction',
+      value: hold.captureTransactionId,
+    });
+  }
+
+  if (hold.releasedAt) {
+    detailRows.push({
+      label: 'Released at',
+      value: formatDateTime(hold.releasedAt),
+    });
+  }
+
+  if (hold.releaseReason) {
+    detailRows.push({
+      label: 'Release reason',
+      value: hold.releaseReason,
+    });
+  }
+
+  if (hold.failedAt) {
+    detailRows.push({
+      label: 'Failed at',
+      value: formatDateTime(hold.failedAt),
+    });
+  }
+
+  if (hold.failureCode || hold.failureMessage) {
+    detailRows.push({
+      label: 'Failure details',
+      value: [hold.failureCode, hold.failureMessage]
+        .filter(Boolean)
+        .join(' — '),
+    });
+  }
 
   return (
     <div className="max-w-2xl mx-auto" data-testid={testId}>
@@ -145,11 +216,9 @@ export function HoldDetails({
               </p>
             </div>
             <span
-              className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                statusStyles[hold.status]
-              }`}
+              className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusStyles[displayStatus]}`}
             >
-              {hold.status}
+              {displayStatus.charAt(0) + displayStatus.slice(1).toLowerCase()}
             </span>
           </div>
         </div>
@@ -200,7 +269,7 @@ export function HoldDetails({
                 </div>
                 <div>
                   <div className="text-sm font-medium text-gray-900">
-                    {event.type === 'CREATED' && 'Hold created'}
+                    {event.type === 'CREATED' && 'Hold placed'}
                     {event.type === 'CAPTURED' && 'Hold captured'}
                     {event.type === 'RELEASED' && 'Hold released'}
                     {event.type === 'FAILED' && 'Hold failed'}
@@ -211,20 +280,21 @@ export function HoldDetails({
                   <div className="text-sm text-gray-600 mt-1 space-y-1">
                     {event.type === 'CREATED' && (
                       <>
-                        {event.createdByUserId && (
-                          <div>Created by: {event.createdByUserId}</div>
-                        )}
-                        {event.idempotencyKeyHash && (
-                          <div>Idempotency: {event.idempotencyKeyHash}</div>
-                        )}
+                        <div>From: {currentAccountDisplay}</div>
+                        <div>To: {counterpartyDisplay}</div>
+                        <div>Hold ID: {hold.holdId}</div>
                       </>
                     )}
                     {event.type === 'CAPTURED' && (
                       <>
-                        <div>Transaction ID: {event.transactionId}</div>
+                        <div>Captured hold: {hold.holdId}</div>
+                        <div>
+                          Transaction ID:{' '}
+                          {event.transactionId ?? 'Not provided'}
+                        </div>
                         {event.counterpartyAccountNumber && (
                           <div>
-                            Counterparty:{' '}
+                            To account:{' '}
                             {buildCounterpartyDisplay(
                               accounts,
                               event.counterpartyAccountNumber,
@@ -234,8 +304,13 @@ export function HoldDetails({
                         )}
                       </>
                     )}
-                    {event.type === 'RELEASED' && event.reason && (
-                      <div>Reason: {event.reason}</div>
+                    {event.type === 'RELEASED' && (
+                      <>
+                        <div>Hold ID: {hold.holdId}</div>
+                        <div>
+                          Reason: {event.reason ? event.reason : 'Not provided'}
+                        </div>
+                      </>
                     )}
                     {event.type === 'FAILED' && (
                       <>
