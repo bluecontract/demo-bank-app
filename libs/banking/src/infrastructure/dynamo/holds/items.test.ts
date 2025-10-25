@@ -58,15 +58,21 @@ describe('Hold Dynamo item mappers', () => {
     };
     const eventId = 'event-abc';
 
-    const item = buildHoldEventItem(hold.holdId, event, { eventId });
+    const item = buildHoldEventItem(hold, event, { eventId });
 
     expect(item).toMatchObject({
       PK: 'HOLD#hold-123',
       SK: `EVENT#${event.at}#${eventId}`,
+      HOLD_EVENT_GSI1PK: 'ACCOUNT#ACC-100',
+      HOLD_EVENT_GSI1SK: `EVENT#${event.at}#${hold.holdId}#${eventId}`,
       holdId: hold.holdId,
       eventId,
       at: event.at,
       type: event.type,
+      amountMinor: hold.amountMinor,
+      description: hold.description,
+      payerAccountNumber: hold.payerAccountNumber,
+      counterpartyAccountNumber: hold.counterpartyAccountNumber,
       payload: {
         transactionId: 'txn-123',
         counterpartyAccountNumber: 'ACC-200',
@@ -89,7 +95,7 @@ describe('Hold Dynamo item mappers', () => {
       createdByUserId: 'user-999',
       idempotencyKeyHash: 'hash-123',
     };
-    const item = buildHoldEventItem(hold.holdId, event, {
+    const item = buildHoldEventItem(hold, event, {
       eventId: 'event-def',
     });
 
@@ -108,7 +114,7 @@ describe('Hold Dynamo item mappers', () => {
       message: 'Invalid amount',
     };
 
-    const item = buildHoldEventItem(hold.holdId, event, {
+    const item = buildHoldEventItem(hold, event, {
       eventId: 'event-ghi',
     });
 

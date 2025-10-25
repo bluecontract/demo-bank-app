@@ -61,16 +61,23 @@ describe('listAccountActivityHandler', () => {
     vi.spyOn(banking, 'listAccountActivity').mockResolvedValue({
       items: [
         {
-          kind: 'PENDING_HOLD' as const,
+          kind: 'HOLD_CREATED' as const,
           holdId: 'hold-123',
           amountMinor: 5_000,
           createdAt: '2024-01-02T00:00:00.000Z',
         },
         {
+          kind: 'HOLD_RELEASED' as const,
+          holdId: 'hold-123',
+          amountMinor: 5_000,
+          releasedAt: '2024-01-02T02:00:00.000Z',
+          releaseReason: 'Customer request',
+        },
+        {
           kind: 'POSTED_TRANSACTION' as const,
           transactionId: 'txn-123',
           amountMinor: 5_000,
-          postedAt: '2024-01-02T01:00:00.000Z',
+          postedAt: '2024-01-02T03:00:00.000Z',
           originHoldId: 'hold-123',
         },
       ],
@@ -102,18 +109,29 @@ describe('listAccountActivityHandler', () => {
     expect(result.body).toEqual({
       items: [
         {
-          kind: 'PENDING_HOLD',
+          kind: 'HOLD_CREATED',
           holdId: 'hold-123',
           amountMinor: 5_000,
           description: undefined,
           createdAt: '2024-01-02T00:00:00.000Z',
+          counterpartyAccountNumber: undefined,
+          createdByUserId: undefined,
+          idempotencyKeyHash: undefined,
+        },
+        {
+          kind: 'HOLD_RELEASED',
+          holdId: 'hold-123',
+          amountMinor: 5_000,
+          description: undefined,
+          releasedAt: '2024-01-02T02:00:00.000Z',
+          releaseReason: 'Customer request',
         },
         {
           kind: 'POSTED_TRANSACTION',
           transactionId: 'txn-123',
           amountMinor: 5_000,
           description: undefined,
-          postedAt: '2024-01-02T01:00:00.000Z',
+          postedAt: '2024-01-02T03:00:00.000Z',
           originHoldId: 'hold-123',
         },
       ],

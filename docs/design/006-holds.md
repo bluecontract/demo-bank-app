@@ -178,12 +178,12 @@ GET /v1/accounts/{accountNumber}/activity?limit=20&cursor=...
 ### Semantics
 
 - Returns a merged list of the **latest** items from:
-  - **Pending holds** for the account (`HOLD_GSI1` with `status=PENDING`)
+  - **Hold lifecycle events** for the account (`HOLD_EVENT_GSI1` keyed by `ACCOUNT#...`)
   - **Posted transactions** for the account (existing repository query)
 - **Ordering**: descending by event time
-  - Holds: `createdAt`
+  - Hold events: `event.at`
   - Transactions: `postedAt` (or your canonical)
-  - Tiebreaker A: `kind` (`POSTED_TRANSACTION` before `PENDING_HOLD`)
+  - Tiebreaker A: `kind` (`POSTED_TRANSACTION` before hold events)
   - Tiebreaker B: `id` lexicographic
 - **Pagination**: composite cursor that carries per‑source `LastEvaluatedKey` plus the last emitted item’s `(time, kind, id)` watermark.
 
@@ -192,11 +192,44 @@ GET /v1/accounts/{accountNumber}/activity?limit=20&cursor=...
 ```ts
 type ActivityItem =
   | {
-      kind: 'PENDING_HOLD';
+      kind: 'HOLD_CREATED';
       holdId: string;
       amountMinor: number;
       description?: string;
       createdAt: string;
+      counterpartyAccountNumber?: string;
+      createdByUserId?: string;
+      idempotencyKeyHash?: string;
+    }
+  | {
+      kind: 'HOLD_RELEASED';
+      holdId: string;
+      amountMinor: number;
+      description?: string;
+      releasedAt: string;
+      releaseReason?: string;
+    }
+  | {
+      kind: 'HOLD_CAPTURED';
+      holdId: string;
+      amountMinor: number;
+      description?: string;
+      capturedAt: string;
+      transactionId: string;
+      counterpartyAccountNumber: string;
+    }
+  | {
+      kind: 'HOLD_FAILED';
+      holdId: string;
+      amountMinor: number;
+      description?: string;
+      failedAt: string;
+      failureCode:
+        | 'INSUFFICIENT_FUNDS'
+        | 'STATE_MISMATCH'
+        | 'VALIDATION'
+        | 'INTERNAL';
+      failureMessage?: string;
     }
   | {
       kind: 'POSTED_TRANSACTION';

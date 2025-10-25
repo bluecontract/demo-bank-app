@@ -13,7 +13,11 @@ import type {
   CaptureHoldRequest,
 } from '../application/HoldRepository';
 import { hashIdempotencyKey } from '../domain/idempotency';
-import { buildHoldMetaItem, HOLD_ITEM_CONSTANTS } from './dynamo/holds/items';
+import {
+  buildHoldMetaItem,
+  buildHoldEventItem,
+  HOLD_ITEM_CONSTANTS,
+} from './dynamo/holds/items';
 import { InsufficientFundsError } from '../domain/errors';
 import { OptimisticLockError, RepositoryError } from './repositoryErrors';
 import { Transaction } from '../domain/entities/Transaction';
@@ -731,65 +735,87 @@ describe('DynamoHoldRepository', () => {
     expect(hold).toBeNull();
   });
 
-  it('lists pending holds ordered by createdAt desc', async () => {
+  it('lists hold activity events via HOLD_EVENT_GSI1', async () => {
     const { repository, send } = createRepository();
     const request = baseRequest();
-    const second = {
-      ...request.hold,
-      holdId: 'hold-456',
-      createdAt: '2024-01-03T00:00:00.000Z',
+    const hold = request.hold;
+    const createdEvent = buildHoldEventItem(hold, request.holdEvent, {
+      eventId: 'event-created',
+    });
+    const releasedHold = {
+      ...hold,
+      status: 'RELEASED' as const,
+      releasedAt: '2024-01-03T00:00:00.000Z',
+      releaseReason: 'Customer request',
     };
-    send.mockResolvedValueOnce({
-      Items: [buildHoldMetaItem(second), buildHoldMetaItem(request.hold)],
-      LastEvaluatedKey: {
-        PK: `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.ACCOUNT}${request.hold.payerAccountNumber}`,
-        SK: HOLD_ITEM_CONSTANTS.SORT_KEYS.META,
+    const releasedEvent = buildHoldEventItem(
+      releasedHold,
+      {
+        at: '2024-01-03T00:00:00.000Z',
+        type: 'RELEASED',
+        reason: 'Customer request',
       },
+      { eventId: 'event-released' }
+    );
+
+    send.mockResolvedValueOnce({
+      Items: [releasedEvent, createdEvent],
     });
 
-    const result = await repository.listPendingHoldsByAccountNumber(
-      request.hold.payerAccountNumber,
+    const result = await repository.listHoldActivityByAccountNumber(
+      hold.payerAccountNumber,
       { limit: 10 }
     );
 
     expect(result.items).toHaveLength(2);
-    expect(result.items[0].holdId).toBe('hold-456');
-    expect(result.hasMore).toBe(true);
-    expect(result.nextToken).toBeDefined();
+    expect(result.items[0]).toMatchObject({
+      holdId: hold.holdId,
+      eventId: 'event-released',
+      event: { type: 'RELEASED', reason: 'Customer request' },
+    });
+    expect(result.items[1]).toMatchObject({
+      holdId: hold.holdId,
+      eventId: 'event-created',
+      event: { type: 'CREATED' },
+    });
+    expect(result.hasMore).toBe(false);
+    expect(result.nextToken).toBeUndefined();
   });
 
-  it('queries HOLD_GSI1 with pending prefix and descending order', async () => {
+  it('queries hold event history index with descending order', async () => {
     const { repository, send } = createRepository();
     send.mockResolvedValueOnce({ Items: [] });
 
-    await repository.listPendingHoldsByAccountNumber('1234567890', {
+    await repository.listHoldActivityByAccountNumber('1234567890', {
       limit: 5,
     });
 
     const command = send.mock.calls[0][0];
     expect(command).toBeInstanceOf(QueryCommand);
     const input = (command as QueryCommand).input;
-    expect(input.IndexName).toBe(HOLD_ITEM_CONSTANTS.GSI_NAMES.HOLD_GSI1);
-    expect(input.ExpressionAttributeValues?.[':skPrefix']).toBe('PENDING#');
+    expect(input.IndexName).toBe(HOLD_ITEM_CONSTANTS.GSI_NAMES.HOLD_EVENT_GSI1);
+    expect(input.ExpressionAttributeValues?.[':pk']).toBe(
+      `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.ACCOUNT}1234567890`
+    );
     expect(input.ScanIndexForward).toBe(false);
-    expect(input.Limit).toBe(5);
+    expect(input.Limit).toBe(6);
   });
 
-  it('decodes pagination token and sets ExclusiveStartKey', async () => {
+  it('decodes hold event pagination token and sets ExclusiveStartKey', async () => {
     const { repository, send } = createRepository();
     send.mockResolvedValueOnce({ Items: [] });
     const exclusiveStartKey = {
       PK: 'HOLD#hold-999',
-      SK: 'META',
-      HOLD_GSI1PK: 'ACCOUNT#1234567890',
-      HOLD_GSI1SK: 'PENDING#2024-01-01T00:00:00.000Z#hold-999',
+      SK: 'EVENT#2024-01-01T00:00:00.000Z#event-abc',
+      HOLD_EVENT_GSI1PK: 'ACCOUNT#1234567890',
+      HOLD_EVENT_GSI1SK: 'EVENT#2024-01-01T00:00:00.000Z#hold-999#event-abc',
     };
     const token = Buffer.from(
       JSON.stringify(exclusiveStartKey),
       'utf8'
     ).toString('base64');
 
-    await repository.listPendingHoldsByAccountNumber('1234567890', {
+    await repository.listHoldActivityByAccountNumber('1234567890', {
       nextToken: token,
     });
 
@@ -800,26 +826,95 @@ describe('DynamoHoldRepository', () => {
     );
   });
 
-  it('returns empty pagination metadata when DynamoDB indicates no more items', async () => {
+  it('returns only requested number of events and sets hasMore when extra fetched', async () => {
     const { repository, send } = createRepository();
-    send.mockResolvedValueOnce({ Items: [] });
+    const request = baseRequest();
+    const hold = request.hold;
+    const events = [
+      buildHoldEventItem(hold, {
+        at: '2024-01-03T03:00:00.000Z',
+        type: 'CREATED',
+      }),
+      buildHoldEventItem(hold, {
+        at: '2024-01-03T02:00:00.000Z',
+        type: 'CREATED',
+        createdByUserId: 'other',
+      }),
+      buildHoldEventItem(hold, {
+        at: '2024-01-03T01:00:00.000Z',
+        type: 'CREATED',
+        idempotencyKeyHash: 'hash',
+      }),
+    ];
 
-    const result = await repository.listPendingHoldsByAccountNumber(
-      '1234567890'
+    send.mockResolvedValueOnce({
+      Items: events,
+      LastEvaluatedKey: {
+        PK: events[2].PK,
+        SK: events[2].SK,
+        [HOLD_ITEM_CONSTANTS.HOLD_EVENT_GSI1_KEYS.PK]:
+          events[2].HOLD_EVENT_GSI1PK,
+        [HOLD_ITEM_CONSTANTS.HOLD_EVENT_GSI1_KEYS.SK]:
+          events[2].HOLD_EVENT_GSI1SK,
+      },
+    });
+
+    const result = await repository.listHoldActivityByAccountNumber(
+      hold.payerAccountNumber,
+      { limit: 2 }
     );
 
-    expect(result.items).toHaveLength(0);
-    expect(result.hasMore).toBe(false);
-    expect(result.nextToken).toBeUndefined();
+    expect(result.items).toHaveLength(2);
+    expect(result.hasMore).toBe(true);
+    expect(result.nextToken).toBeDefined();
   });
 
-  it('throws RepositoryError when pagination token cannot be decoded', async () => {
+  it('throws RepositoryError when hold event cursor cannot be decoded', async () => {
     const { repository } = createRepository();
 
     await expect(
-      repository.listPendingHoldsByAccountNumber('1234567890', {
-        nextToken: 'not-base64',
+      repository.listHoldActivityByAccountNumber('1234567890', {
+        nextToken: 'invalid-base64',
       })
     ).rejects.toBeInstanceOf(RepositoryError);
+  });
+
+  it('throws RepositoryError when hold metadata is missing while appending event', async () => {
+    const { repository, send } = createRepository();
+    send.mockResolvedValueOnce({ Item: undefined });
+
+    await expect(
+      repository.appendHoldEvent('missing-hold', {
+        at: '2024-01-02T00:00:00.000Z',
+        type: 'FAILED',
+        code: 'INTERNAL',
+      })
+    ).rejects.toBeInstanceOf(RepositoryError);
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0]).toBeInstanceOf(GetCommand);
+  });
+
+  it('appends hold event with indexed attributes from hold metadata', async () => {
+    const { repository, send } = createRepository();
+    const request = baseRequest();
+    const holdMeta = buildHoldMetaItem(request.hold);
+    send.mockResolvedValueOnce({ Item: holdMeta }).mockResolvedValueOnce({});
+
+    await repository.appendHoldEvent(request.hold.holdId, {
+      at: '2024-01-02T01:00:00.000Z',
+      type: 'FAILED',
+      code: 'INTERNAL',
+      message: 'something broke',
+    });
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[0][0]).toBeInstanceOf(GetCommand);
+    expect(send.mock.calls[1][0]).toBeInstanceOf(PutCommand);
+    const eventItem = (send.mock.calls[1][0] as PutCommand).input.Item as any;
+    expect(eventItem).toMatchObject({
+      HOLD_EVENT_GSI1PK: `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.ACCOUNT}${request.hold.payerAccountNumber}`,
+      HOLD_EVENT_GSI1SK: expect.stringContaining(`#${request.hold.holdId}#`),
+    });
   });
 });

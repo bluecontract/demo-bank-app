@@ -27,7 +27,7 @@
      - idempotent.
 
 4. **Activity Feed (Read)**
-   - **Single endpoint** returning latest account activity as a merged list of `PENDING_HOLD` and `POSTED_TRANSACTION` items in **descending time** order.
+   - **Single endpoint** returning latest account activity as a merged list of hold lifecycle events (`HOLD_CREATED`/`HOLD_RELEASED`/`HOLD_CAPTURED`/`HOLD_FAILED`) and `POSTED_TRANSACTION` items in **descending time** order.
    - Cursor‑based pagination that is **stable** across pages and merges two data sources without gaps/duplicates.
    - Limit parameter controls total items (regardless of type).
 

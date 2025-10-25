@@ -18,6 +18,7 @@ import type {
   ReleaseHoldResult,
   CaptureHoldRequest,
   CaptureHoldResult,
+  HoldActivityRecord,
 } from '../application/HoldRepository';
 import type { Hold, HoldEvent } from '../domain/entities/Hold';
 import {
@@ -27,6 +28,8 @@ import {
   HOLD_ITEM_CONSTANTS,
   HoldMetaItem,
   buildHoldPartitionKey,
+  mapHoldEventItemToHoldEvent,
+  type HoldEventItem,
 } from './dynamo/holds/items';
 import {
   buildHoldIdempotencyItem,
@@ -107,10 +110,7 @@ export class DynamoHoldRepository implements HoldRepository {
     );
 
     const holdMetaItem = buildHoldMetaItem(request.hold);
-    const holdEventItem = buildHoldEventItem(
-      request.hold.holdId,
-      request.holdEvent
-    );
+    const holdEventItem = buildHoldEventItem(request.hold, request.holdEvent);
     const idempotencyItem = buildHoldIdempotencyItem({
       userId: request.userId,
       idempotencyKey: request.idempotencyKey,
@@ -233,7 +233,14 @@ export class DynamoHoldRepository implements HoldRepository {
     holdId: Hold['holdId'],
     event: HoldEvent
   ): Promise<void> {
-    const holdEventItem = buildHoldEventItem(holdId, event);
+    const hold = await this.getHold(holdId);
+    if (!hold) {
+      throw new RepositoryError(
+        `hold_append_event_${holdId}`,
+        new Error('Hold not found while appending event')
+      );
+    }
+    const holdEventItem = buildHoldEventItem(hold, event);
     await this.client.send(
       new PutCommand({
         TableName: this.tableName,
@@ -260,10 +267,15 @@ export class DynamoHoldRepository implements HoldRepository {
     return mapHoldMetaItemToHold(result.Item as HoldMetaItem);
   }
 
-  async listPendingHoldsByAccountNumber(
+  async listHoldActivityByAccountNumber(
     accountNumber: Hold['payerAccountNumber'],
     options: PaginationOptions = {}
-  ): Promise<PaginatedResult<Hold>> {
+  ): Promise<PaginatedResult<HoldActivityRecord>> {
+    const pageLimit =
+      typeof options.limit === 'number' && options.limit > 0
+        ? Math.floor(options.limit)
+        : undefined;
+
     const exclusiveStartKey =
       options.nextToken && options.nextToken.length > 0
         ? this.decodePaginationToken(options.nextToken)
@@ -271,21 +283,19 @@ export class DynamoHoldRepository implements HoldRepository {
 
     const queryInput: QueryCommandInput = {
       TableName: this.tableName,
-      IndexName: HOLD_ITEM_CONSTANTS.GSI_NAMES.HOLD_GSI1,
-      KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
+      IndexName: HOLD_ITEM_CONSTANTS.GSI_NAMES.HOLD_EVENT_GSI1,
+      KeyConditionExpression: '#pk = :pk',
       ExpressionAttributeNames: {
-        '#pk': HOLD_ITEM_CONSTANTS.GSI1_KEYS.PK,
-        '#sk': HOLD_ITEM_CONSTANTS.GSI1_KEYS.SK,
+        '#pk': HOLD_ITEM_CONSTANTS.HOLD_EVENT_GSI1_KEYS.PK,
       },
       ExpressionAttributeValues: {
         ':pk': `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.ACCOUNT}${accountNumber}`,
-        ':skPrefix': 'PENDING#',
       },
       ScanIndexForward: false,
     };
 
-    if (typeof options.limit === 'number') {
-      queryInput.Limit = options.limit;
+    if (pageLimit) {
+      queryInput.Limit = pageLimit + 1;
     }
 
     if (exclusiveStartKey) {
@@ -294,16 +304,42 @@ export class DynamoHoldRepository implements HoldRepository {
 
     const query = await this.client.send(new QueryCommand(queryInput));
 
-    const holds =
-      query.Items?.map(item => mapHoldMetaItemToHold(item as HoldMetaItem)) ??
-      [];
+    const events = (query.Items ?? []) as HoldEventItem[];
+    const hasExtra = Boolean(pageLimit && events.length > pageLimit);
+    const trimmedEvents =
+      hasExtra && pageLimit ? events.slice(0, pageLimit) : events;
+
+    const items: HoldActivityRecord[] = trimmedEvents.map(item => ({
+      holdId: item.holdId,
+      payerAccountNumber: item.payerAccountNumber,
+      amountMinor: item.amountMinor,
+      currency: item.currency,
+      description: item.description,
+      counterpartyAccountNumber: item.counterpartyAccountNumber,
+      eventId: item.eventId,
+      event: mapHoldEventItemToHoldEvent(item),
+    }));
+
+    const nextKeySource =
+      hasExtra && pageLimit
+        ? {
+            PK: trimmedEvents[trimmedEvents.length - 1].PK,
+            SK: trimmedEvents[trimmedEvents.length - 1].SK,
+            [HOLD_ITEM_CONSTANTS.HOLD_EVENT_GSI1_KEYS.PK]:
+              trimmedEvents[trimmedEvents.length - 1].HOLD_EVENT_GSI1PK,
+            [HOLD_ITEM_CONSTANTS.HOLD_EVENT_GSI1_KEYS.SK]:
+              trimmedEvents[trimmedEvents.length - 1].HOLD_EVENT_GSI1SK,
+          }
+        : query.LastEvaluatedKey;
+
+    const nextToken = nextKeySource
+      ? this.encodePaginationToken(nextKeySource)
+      : undefined;
 
     return {
-      items: holds,
-      nextToken: query.LastEvaluatedKey
-        ? this.encodePaginationToken(query.LastEvaluatedKey)
-        : undefined,
-      hasMore: Boolean(query.LastEvaluatedKey),
+      items,
+      nextToken,
+      hasMore: Boolean(nextToken),
     };
   }
 
@@ -349,10 +385,7 @@ export class DynamoHoldRepository implements HoldRepository {
         ? ` REMOVE ${removeExpressions.join(', ')}`
         : '');
 
-    const holdEventItem = buildHoldEventItem(
-      request.hold.holdId,
-      request.holdEvent
-    );
+    const holdEventItem = buildHoldEventItem(request.hold, request.holdEvent);
     const idempotencyItem = buildHoldIdempotencyItem({
       userId: request.userId,
       idempotencyKey: request.idempotencyKey,
@@ -509,10 +542,7 @@ export class DynamoHoldRepository implements HoldRepository {
         ? ` REMOVE ${removeExpressions.join(', ')}`
         : '');
 
-    const holdEventItem = buildHoldEventItem(
-      request.hold.holdId,
-      request.holdEvent
-    );
+    const holdEventItem = buildHoldEventItem(request.hold, request.holdEvent);
     const idempotencyItem = buildHoldIdempotencyItem({
       userId: request.userId,
       idempotencyKey: request.idempotencyKey,

@@ -22,8 +22,14 @@ const HOLD_GSI1_KEYS = {
   SK: 'HOLD_GSI1SK',
 } as const;
 
+const HOLD_EVENT_GSI1_KEYS = {
+  PK: 'HOLD_EVENT_GSI1PK',
+  SK: 'HOLD_EVENT_GSI1SK',
+} as const;
+
 const HOLD_GSI_NAMES = {
   HOLD_GSI1: 'HOLD_GSI1',
+  HOLD_EVENT_GSI1: 'HOLD_EVENT_GSI1',
 } as const;
 
 export interface HoldMetaItem {
@@ -48,10 +54,17 @@ export interface HoldMetaItem {
 export interface HoldEventItem {
   PK: string;
   SK: string;
+  HOLD_EVENT_GSI1PK: string;
+  HOLD_EVENT_GSI1SK: string;
   holdId: string;
   eventId: string;
   at: string;
   type: HoldEvent['type'];
+  amountMinor: number;
+  currency: Hold['currency'];
+  description?: string;
+  payerAccountNumber: string;
+  counterpartyAccountNumber?: string;
   payload?: Record<string, unknown>;
 }
 
@@ -105,19 +118,35 @@ export function buildHoldEventSortKey(at: string, eventId: string): string {
   return `${HOLD_EVENT_SORT_KEY_PREFIX}${at}#${eventId}`;
 }
 
-export function buildHoldEventItem(
+export function buildHoldEventGsiSortKey(
+  at: string,
   holdId: Hold['holdId'],
+  eventId: string
+): string {
+  return `${HOLD_EVENT_SORT_KEY_PREFIX}${at}#${holdId}#${eventId}`;
+}
+
+export function buildHoldEventItem(
+  hold: Hold,
   event: HoldEvent,
   options?: { eventId?: string }
 ): HoldEventItem {
   const eventId = options?.eventId ?? randomUUID();
+  const holdId = hold.holdId;
   return {
     PK: buildHoldPartitionKey(holdId),
     SK: buildHoldEventSortKey(event.at, eventId),
+    HOLD_EVENT_GSI1PK: `${HOLD_TABLE_PREFIXES.ACCOUNT}${hold.payerAccountNumber}`,
+    HOLD_EVENT_GSI1SK: buildHoldEventGsiSortKey(event.at, holdId, eventId),
     holdId,
     eventId,
     at: event.at,
     type: event.type,
+    amountMinor: hold.amountMinor,
+    currency: hold.currency,
+    description: hold.description,
+    payerAccountNumber: hold.payerAccountNumber,
+    counterpartyAccountNumber: hold.counterpartyAccountNumber,
     payload: holdEventPayload(event),
   };
 }
@@ -150,6 +179,7 @@ export const HOLD_ITEM_CONSTANTS = {
     META: HOLD_SORT_KEYS.META,
     EVENT_PREFIX: HOLD_EVENT_SORT_KEY_PREFIX,
   },
+  HOLD_EVENT_GSI1_KEYS: HOLD_EVENT_GSI1_KEYS,
   GSI1_KEYS: HOLD_GSI1_KEYS,
   GSI_NAMES: HOLD_GSI_NAMES,
 } as const;

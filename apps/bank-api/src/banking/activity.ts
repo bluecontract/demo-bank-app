@@ -14,24 +14,61 @@ import {
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 
 const toResponseItem = (item: ActivityItem) => {
-  if (item.kind === 'PENDING_HOLD') {
-    return {
-      kind: item.kind,
-      holdId: item.holdId,
-      amountMinor: item.amountMinor,
-      description: item.description,
-      createdAt: item.createdAt,
-    } as const;
+  switch (item.kind) {
+    case 'POSTED_TRANSACTION':
+      return {
+        kind: item.kind,
+        transactionId: item.transactionId,
+        amountMinor: item.amountMinor,
+        description: item.description,
+        postedAt: item.postedAt,
+        originHoldId: item.originHoldId,
+      } as const;
+    case 'HOLD_CREATED':
+      return {
+        kind: item.kind,
+        holdId: item.holdId,
+        amountMinor: item.amountMinor,
+        description: item.description,
+        createdAt: item.createdAt,
+        counterpartyAccountNumber: item.counterpartyAccountNumber,
+        createdByUserId: item.createdByUserId,
+        idempotencyKeyHash: item.idempotencyKeyHash,
+      } as const;
+    case 'HOLD_RELEASED':
+      return {
+        kind: item.kind,
+        holdId: item.holdId,
+        amountMinor: item.amountMinor,
+        description: item.description,
+        releasedAt: item.releasedAt,
+        releaseReason: item.releaseReason,
+      } as const;
+    case 'HOLD_CAPTURED':
+      return {
+        kind: item.kind,
+        holdId: item.holdId,
+        amountMinor: item.amountMinor,
+        description: item.description,
+        capturedAt: item.capturedAt,
+        transactionId: item.transactionId,
+        counterpartyAccountNumber: item.counterpartyAccountNumber,
+      } as const;
+    case 'HOLD_FAILED':
+      return {
+        kind: item.kind,
+        holdId: item.holdId,
+        amountMinor: item.amountMinor,
+        description: item.description,
+        failedAt: item.failedAt,
+        failureCode: item.failureCode,
+        failureMessage: item.failureMessage,
+      } as const;
+    default: {
+      const exhaustive: never = item;
+      return exhaustive;
+    }
   }
-
-  return {
-    kind: item.kind,
-    transactionId: item.transactionId,
-    amountMinor: item.amountMinor,
-    description: item.description,
-    postedAt: item.postedAt,
-    originHoldId: item.originHoldId,
-  } as const;
 };
 
 export const listAccountActivityHandler = async (

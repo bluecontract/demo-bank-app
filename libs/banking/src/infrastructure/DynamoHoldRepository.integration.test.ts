@@ -59,6 +59,14 @@ async function setupTable() {
         { AttributeName: 'BANKING_GSI2SK', AttributeType: 'S' },
         { AttributeName: HOLD_ITEM_CONSTANTS.GSI1_KEYS.PK, AttributeType: 'S' },
         { AttributeName: HOLD_ITEM_CONSTANTS.GSI1_KEYS.SK, AttributeType: 'S' },
+        {
+          AttributeName: HOLD_ITEM_CONSTANTS.HOLD_EVENT_GSI1_KEYS.PK,
+          AttributeType: 'S',
+        },
+        {
+          AttributeName: HOLD_ITEM_CONSTANTS.HOLD_EVENT_GSI1_KEYS.SK,
+          AttributeType: 'S',
+        },
       ],
       KeySchema: [
         { AttributeName: 'PK', KeyType: 'HASH' },
@@ -90,6 +98,20 @@ async function setupTable() {
             },
             {
               AttributeName: HOLD_ITEM_CONSTANTS.GSI1_KEYS.SK,
+              KeyType: 'RANGE',
+            },
+          ],
+          Projection: { ProjectionType: 'ALL' },
+        },
+        {
+          IndexName: HOLD_ITEM_CONSTANTS.GSI_NAMES.HOLD_EVENT_GSI1,
+          KeySchema: [
+            {
+              AttributeName: HOLD_ITEM_CONSTANTS.HOLD_EVENT_GSI1_KEYS.PK,
+              KeyType: 'HASH',
+            },
+            {
+              AttributeName: HOLD_ITEM_CONSTANTS.HOLD_EVENT_GSI1_KEYS.SK,
               KeyType: 'RANGE',
             },
           ],
@@ -1320,105 +1342,109 @@ describe('DynamoHoldRepository integration', () => {
     expect(holdAfterFailure?.status).toBe('PENDING');
   });
 
-  it('lists pending holds by account number in descending order with stable pagination', async () => {
-    const pendingHolds = [
+  it('lists hold activity history in descending order with pagination', async () => {
+    const holdEvents = [
       {
-        holdId: 'hold-pending-latest',
-        createdAt: '2024-01-08T12:00:00.000Z',
+        holdId: 'hold-created',
+        status: 'PENDING' as const,
         amountMinor: 1_000,
+        createdAt: '2024-01-08T12:00:00.000Z',
+        event: {
+          at: '2024-01-08T12:00:00.000Z',
+          type: 'CREATED' as const,
+          createdByUserId: 'user-1',
+          idempotencyKeyHash: 'hash-created',
+        },
       },
-      {
-        holdId: 'hold-pending-middle',
-        createdAt: '2024-01-07T12:00:00.000Z',
-        amountMinor: 2_000,
-      },
-      {
-        holdId: 'hold-pending-earliest',
-        createdAt: '2024-01-06T12:00:00.000Z',
-        amountMinor: 3_000,
-      },
-    ] as const;
-
-    for (const pending of pendingHolds) {
-      await repository.putHoldMeta({
-        holdId: pending.holdId,
-        payerAccountNumber: ACCOUNT_NUMBER,
-        counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
-        amountMinor: pending.amountMinor,
-        currency: 'USD',
-        status: 'PENDING',
-        description: `Pending hold ${pending.holdId}`,
-        createdAt: pending.createdAt,
-      });
-    }
-
-    const nonPendingHolds = [
       {
         holdId: 'hold-released',
-        createdAt: '2024-01-05T12:00:00.000Z',
         status: 'RELEASED' as const,
-        releasedAt: '2024-01-05T13:00:00.000Z',
+        amountMinor: 2_000,
+        createdAt: '2024-01-07T12:00:00.000Z',
+        releasedAt: '2024-01-07T14:00:00.000Z',
         releaseReason: 'Customer request',
+        event: {
+          at: '2024-01-07T14:00:00.000Z',
+          type: 'RELEASED' as const,
+          reason: 'Customer request',
+        },
       },
       {
         holdId: 'hold-captured',
-        createdAt: '2024-01-04T12:00:00.000Z',
         status: 'CAPTURED' as const,
+        amountMinor: 3_000,
+        createdAt: '2024-01-06T12:00:00.000Z',
         relatedTransactionId: 'txn-captured',
+        counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+        event: {
+          at: '2024-01-06T13:00:00.000Z',
+          type: 'CAPTURED' as const,
+          transactionId: 'txn-captured',
+          counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+        },
+      },
+      {
+        holdId: 'hold-failed',
+        status: 'FAILED' as const,
+        amountMinor: 4_000,
+        createdAt: '2024-01-05T12:00:00.000Z',
+        event: {
+          at: '2024-01-05T12:30:00.000Z',
+          type: 'FAILED' as const,
+          code: 'INTERNAL' as const,
+          message: 'validation failure',
+        },
       },
     ];
 
-    for (const hold of nonPendingHolds) {
+    for (const hold of holdEvents) {
       await repository.putHoldMeta({
         holdId: hold.holdId,
         payerAccountNumber: ACCOUNT_NUMBER,
-        counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
-        amountMinor: 500,
+        counterpartyAccountNumber: hold.counterpartyAccountNumber,
+        amountMinor: hold.amountMinor,
         currency: 'USD',
         status: hold.status,
-        description: `Non-pending hold ${hold.holdId}`,
+        description: `Hold ${hold.holdId}`,
         createdAt: hold.createdAt,
-        ...(hold.releasedAt ? { releasedAt: hold.releasedAt } : {}),
-        ...(hold.releaseReason ? { releaseReason: hold.releaseReason } : {}),
-        ...(hold.relatedTransactionId
-          ? { relatedTransactionId: hold.relatedTransactionId }
-          : {}),
+        releasedAt: hold.releasedAt,
+        releaseReason: hold.releaseReason,
+        relatedTransactionId: hold.relatedTransactionId,
       });
+      await repository.appendHoldEvent(hold.holdId, hold.event);
     }
 
-    const firstPage = await repository.listPendingHoldsByAccountNumber(
+    const firstPage = await repository.listHoldActivityByAccountNumber(
       ACCOUNT_NUMBER,
       { limit: 2 }
     );
 
-    expect(firstPage.items.map(hold => hold.holdId)).toEqual([
-      pendingHolds[0].holdId,
-      pendingHolds[1].holdId,
+    expect(firstPage.items.map(item => item.event.type)).toEqual([
+      'CREATED',
+      'RELEASED',
     ]);
-    expect(firstPage.items.every(hold => hold.status === 'PENDING')).toBe(true);
-    expect(firstPage.items[0].createdAt > firstPage.items[1].createdAt).toBe(
-      true
-    );
     expect(firstPage.hasMore).toBe(true);
-    expect(firstPage.nextToken).toBeDefined();
+    expect(firstPage.nextToken).toBeTruthy();
 
-    const secondPage = await repository.listPendingHoldsByAccountNumber(
+    const secondPage = await repository.listHoldActivityByAccountNumber(
       ACCOUNT_NUMBER,
       { limit: 2, nextToken: firstPage.nextToken }
     );
 
-    expect(secondPage.items.map(hold => hold.holdId)).toEqual([
-      pendingHolds[2].holdId,
+    expect(secondPage.items.map(item => item.event.type)).toEqual([
+      'CAPTURED',
+      'FAILED',
     ]);
     expect(secondPage.hasMore).toBe(false);
     expect(secondPage.nextToken).toBeUndefined();
 
-    const allReturnedHoldIds = [
-      ...firstPage.items.map(hold => hold.holdId),
-      ...secondPage.items.map(hold => hold.holdId),
-    ];
-    expect(new Set(allReturnedHoldIds).size).toBe(3);
-    expect(allReturnedHoldIds).not.toContain('hold-released');
-    expect(allReturnedHoldIds).not.toContain('hold-captured');
+    const captured = secondPage.items.find(
+      item => item.event.type === 'CAPTURED'
+    );
+    expect(captured).toBeDefined();
+    expect(captured?.event).toMatchObject({
+      transactionId: 'txn-captured',
+      counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+    });
   });
 });

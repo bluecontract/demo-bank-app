@@ -53,6 +53,8 @@ async function setupTable() {
         { AttributeName: 'BANKING_GSI2SK', AttributeType: 'S' },
         { AttributeName: 'HOLD_GSI1PK', AttributeType: 'S' },
         { AttributeName: 'HOLD_GSI1SK', AttributeType: 'S' },
+        { AttributeName: 'HOLD_EVENT_GSI1PK', AttributeType: 'S' },
+        { AttributeName: 'HOLD_EVENT_GSI1SK', AttributeType: 'S' },
       ],
       KeySchema: [
         { AttributeName: 'PK', KeyType: 'HASH' },
@@ -81,6 +83,14 @@ async function setupTable() {
           KeySchema: [
             { AttributeName: 'HOLD_GSI1PK', KeyType: 'HASH' },
             { AttributeName: 'HOLD_GSI1SK', KeyType: 'RANGE' },
+          ],
+          Projection: { ProjectionType: 'ALL' },
+        },
+        {
+          IndexName: 'HOLD_EVENT_GSI1',
+          KeySchema: [
+            { AttributeName: 'HOLD_EVENT_GSI1PK', KeyType: 'HASH' },
+            { AttributeName: 'HOLD_EVENT_GSI1SK', KeyType: 'RANGE' },
           ],
           Projection: { ProjectionType: 'ALL' },
         },

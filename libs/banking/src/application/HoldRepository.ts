@@ -60,14 +60,25 @@ export interface CaptureHoldResult {
  * Implementations are responsible for storing hold metadata,
  * appending hold lifecycle events, and querying relevant records.
  */
+export interface HoldActivityRecord {
+  holdId: Hold['holdId'];
+  payerAccountNumber: Hold['payerAccountNumber'];
+  amountMinor: number;
+  currency: Hold['currency'];
+  description?: string;
+  counterpartyAccountNumber?: string;
+  eventId: string;
+  event: HoldEvent;
+}
+
 export interface HoldRepository {
   putHoldMeta(hold: Hold): Promise<void>;
   appendHoldEvent(holdId: Hold['holdId'], event: HoldEvent): Promise<void>;
   getHold(holdId: Hold['holdId']): Promise<Hold | null>;
-  listPendingHoldsByAccountNumber(
+  listHoldActivityByAccountNumber(
     accountNumber: Hold['payerAccountNumber'],
     options?: PaginationOptions
-  ): Promise<PaginatedResult<Hold>>;
+  ): Promise<PaginatedResult<HoldActivityRecord>>;
   reserveHold(request: ReserveHoldRequest): Promise<ReserveHoldResult>;
   releaseHold(request: ReleaseHoldRequest): Promise<ReleaseHoldResult>;
   captureHold(request: CaptureHoldRequest): Promise<CaptureHoldResult>;

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { AccountNotFoundError, InvalidActivityCursorError } from '../errors';
 import type { BankingRepository } from '../ports';
-import type { HoldRepository } from '../HoldRepository';
+import type { HoldRepository, HoldActivityRecord } from '../HoldRepository';
 import type { Logger, Metrics, PaginatedResult } from '../../domain/types';
 import {
   METRIC_NAMES,
@@ -9,33 +9,68 @@ import {
   OPERATION_NAMES,
   TimingUtils,
 } from '@demo-bank-app/shared-observability';
+import type { HoldFailedCode } from '../../domain/entities/Hold';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
-type ActivityKind = 'PENDING_HOLD' | 'POSTED_TRANSACTION';
+type ActivityKind = 'HOLD_EVENT' | 'POSTED_TRANSACTION';
 
 const KIND_PRIORITY: Record<ActivityKind, number> = {
   POSTED_TRANSACTION: 0,
-  PENDING_HOLD: 1,
+  HOLD_EVENT: 1,
 };
 
-export type ActivityItem =
+type HoldEventActivityItem =
   | {
-      kind: 'PENDING_HOLD';
+      kind: 'HOLD_CREATED';
       holdId: string;
       amountMinor: number;
       description?: string;
       createdAt: string;
+      counterpartyAccountNumber?: string;
+      createdByUserId?: string;
+      idempotencyKeyHash?: string;
     }
   | {
-      kind: 'POSTED_TRANSACTION';
-      transactionId: string;
+      kind: 'HOLD_RELEASED';
+      holdId: string;
       amountMinor: number;
       description?: string;
-      postedAt: string;
-      originHoldId?: string;
+      releasedAt: string;
+      releaseReason?: string;
+    }
+  | {
+      kind: 'HOLD_CAPTURED';
+      holdId: string;
+      amountMinor: number;
+      description?: string;
+      capturedAt: string;
+      transactionId: string;
+      counterpartyAccountNumber: string;
+    }
+  | {
+      kind: 'HOLD_FAILED';
+      holdId: string;
+      amountMinor: number;
+      description?: string;
+      failedAt: string;
+      failureCode: HoldFailedCode;
+      failureMessage?: string;
     };
+
+type PostedTransactionActivityItem = {
+  kind: 'POSTED_TRANSACTION';
+  transactionId: string;
+  amountMinor: number;
+  description?: string;
+  postedAt: string;
+  originHoldId?: string;
+};
+
+export type ActivityItem =
+  | HoldEventActivityItem
+  | PostedTransactionActivityItem;
 
 export interface ListAccountActivityQuery {
   userId: string;
@@ -61,53 +96,108 @@ interface BaseFeedItem {
   kind: ActivityKind;
   id: string;
   time: string;
-  amountMinor: number;
-  description?: string;
 }
 
-interface HoldFeedItem extends BaseFeedItem {
-  kind: 'PENDING_HOLD';
+interface HoldEventFeedItem extends BaseFeedItem {
+  kind: 'HOLD_EVENT';
   holdId: string;
-  createdAt: string;
+  eventId: string;
+  item: HoldEventActivityItem;
 }
 
 interface TransactionFeedItem extends BaseFeedItem {
   kind: 'POSTED_TRANSACTION';
   transactionId: string;
-  postedAt: string;
-  originHoldId?: string;
+  item: PostedTransactionActivityItem;
 }
 
-type ActivityFeedItem = HoldFeedItem | TransactionFeedItem;
+type ActivityFeedItem = HoldEventFeedItem | TransactionFeedItem;
 
-const ActivityCursorItemSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('PENDING_HOLD'),
-    holdId: z.string(),
-    createdAt: z.string(),
-    amountMinor: z.number(),
-    description: z.string().optional(),
-    time: z.string(),
-  }),
+const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
+  z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('HOLD_CREATED'),
+      holdId: z.string(),
+      amountMinor: z.number(),
+      description: z.string().optional(),
+      createdAt: z.string(),
+      counterpartyAccountNumber: z.string().optional(),
+      createdByUserId: z.string().optional(),
+      idempotencyKeyHash: z.string().optional(),
+    }),
+    z.object({
+      kind: z.literal('HOLD_RELEASED'),
+      holdId: z.string(),
+      amountMinor: z.number(),
+      description: z.string().optional(),
+      releasedAt: z.string(),
+      releaseReason: z.string().optional(),
+    }),
+    z.object({
+      kind: z.literal('HOLD_CAPTURED'),
+      holdId: z.string(),
+      amountMinor: z.number(),
+      description: z.string().optional(),
+      capturedAt: z.string(),
+      transactionId: z.string(),
+      counterpartyAccountNumber: z.string(),
+    }),
+    z.object({
+      kind: z.literal('HOLD_FAILED'),
+      holdId: z.string(),
+      amountMinor: z.number(),
+      description: z.string().optional(),
+      failedAt: z.string(),
+      failureCode: z.enum([
+        'INSUFFICIENT_FUNDS',
+        'STATE_MISMATCH',
+        'VALIDATION',
+        'INTERNAL',
+      ]),
+      failureMessage: z.string().optional(),
+    }),
+  ]);
+
+const PostedTransactionActivityItemSchema: z.ZodType<PostedTransactionActivityItem> =
   z.object({
     kind: z.literal('POSTED_TRANSACTION'),
     transactionId: z.string(),
-    postedAt: z.string(),
     amountMinor: z.number(),
     description: z.string().optional(),
+    postedAt: z.string(),
     originHoldId: z.string().optional(),
-    time: z.string(),
-  }),
+  });
+
+const HoldEventCursorItemSchema = z.object({
+  kind: z.literal('HOLD_EVENT'),
+  id: z.string(),
+  time: z.string(),
+  holdId: z.string(),
+  eventId: z.string(),
+  item: HoldEventActivityItemSchema,
+});
+
+const TransactionCursorItemSchema = z.object({
+  kind: z.literal('POSTED_TRANSACTION'),
+  id: z.string(),
+  time: z.string(),
+  transactionId: z.string(),
+  item: PostedTransactionActivityItemSchema,
+});
+
+const ActivityCursorItemSchema = z.discriminatedUnion('kind', [
+  HoldEventCursorItemSchema,
+  TransactionCursorItemSchema,
 ]);
 
 const ActivityCursorSchema = z.object({
-  holdsLek: z.string().optional(),
+  holdEventsLek: z.string().optional(),
   txnsLek: z.string().optional(),
-  holdsBuffer: z.array(ActivityCursorItemSchema).optional(),
+  holdEventsBuffer: z.array(ActivityCursorItemSchema).optional(),
   txnsBuffer: z.array(ActivityCursorItemSchema).optional(),
   last: z
     .object({
-      kind: z.enum(['PENDING_HOLD', 'POSTED_TRANSACTION']),
+      kind: z.enum(['HOLD_EVENT', 'POSTED_TRANSACTION']),
       id: z.string(),
       time: z.string(),
     })
@@ -126,9 +216,9 @@ interface SourceState {
 }
 
 interface DecodedCursor {
-  holdsLek?: string;
+  holdEventsLek?: string;
   txnsLek?: string;
-  holdsBuffer?: ActivityFeedItem[];
+  holdEventsBuffer?: ActivityFeedItem[];
   txnsBuffer?: ActivityFeedItem[];
   last?: ActivityCursorMarker;
 }
@@ -140,20 +230,90 @@ const clampLimit = (limit?: number): number => {
   return Math.min(Math.max(Math.floor(limit), 1), MAX_LIMIT);
 };
 
-const toHoldFeedItem = (hold: {
-  holdId: string;
-  createdAt: string;
-  amountMinor: number;
-  description?: string;
-}): HoldFeedItem => ({
-  kind: 'PENDING_HOLD',
-  id: hold.holdId,
-  holdId: hold.holdId,
-  createdAt: hold.createdAt,
-  time: hold.createdAt,
-  amountMinor: hold.amountMinor,
-  description: hold.description,
-});
+const buildHoldEventFeedItem = (
+  record: HoldActivityRecord
+): HoldEventFeedItem => {
+  const { event } = record;
+  switch (event.type) {
+    case 'CREATED':
+      return {
+        kind: 'HOLD_EVENT',
+        id: `${record.holdId}#${record.eventId}`,
+        holdId: record.holdId,
+        eventId: record.eventId,
+        time: event.at,
+        item: {
+          kind: 'HOLD_CREATED',
+          holdId: record.holdId,
+          amountMinor: record.amountMinor,
+          description: record.description,
+          createdAt: event.at,
+          counterpartyAccountNumber: record.counterpartyAccountNumber,
+          createdByUserId: event.createdByUserId,
+          idempotencyKeyHash: event.idempotencyKeyHash,
+        },
+      };
+    case 'RELEASED':
+      return {
+        kind: 'HOLD_EVENT',
+        id: `${record.holdId}#${record.eventId}`,
+        holdId: record.holdId,
+        eventId: record.eventId,
+        time: event.at,
+        item: {
+          kind: 'HOLD_RELEASED',
+          holdId: record.holdId,
+          amountMinor: record.amountMinor,
+          description: record.description,
+          releasedAt: event.at,
+          releaseReason: event.reason,
+        },
+      };
+    case 'CAPTURED': {
+      const counterparty =
+        event.counterpartyAccountNumber ??
+        record.counterpartyAccountNumber ??
+        '';
+      return {
+        kind: 'HOLD_EVENT',
+        id: `${record.holdId}#${record.eventId}`,
+        holdId: record.holdId,
+        eventId: record.eventId,
+        time: event.at,
+        item: {
+          kind: 'HOLD_CAPTURED',
+          holdId: record.holdId,
+          amountMinor: record.amountMinor,
+          description: record.description,
+          capturedAt: event.at,
+          transactionId: event.transactionId,
+          counterpartyAccountNumber: counterparty,
+        },
+      };
+    }
+    case 'FAILED':
+      return {
+        kind: 'HOLD_EVENT',
+        id: `${record.holdId}#${record.eventId}`,
+        holdId: record.holdId,
+        eventId: record.eventId,
+        time: event.at,
+        item: {
+          kind: 'HOLD_FAILED',
+          holdId: record.holdId,
+          amountMinor: record.amountMinor,
+          description: record.description,
+          failedAt: event.at,
+          failureCode: event.code,
+          failureMessage: event.message,
+        },
+      };
+    default: {
+      const exhaustive: never = event;
+      throw new Error(`Unhandled hold event type ${(exhaustive as any)?.type}`);
+    }
+  }
+};
 
 const toTransactionFeedItem = (summary: {
   transactionId: string;
@@ -165,71 +325,69 @@ const toTransactionFeedItem = (summary: {
   kind: 'POSTED_TRANSACTION',
   id: summary.transactionId,
   transactionId: summary.transactionId,
-  postedAt: summary.postedAt,
   time: summary.postedAt,
-  amountMinor: summary.amountMinor,
-  description: summary.description,
-  originHoldId: summary.originHoldId,
+  item: {
+    kind: 'POSTED_TRANSACTION',
+    transactionId: summary.transactionId,
+    postedAt: summary.postedAt,
+    amountMinor: summary.amountMinor,
+    description: summary.description,
+    originHoldId: summary.originHoldId,
+  },
 });
 
 const serializeFeedItem = (item: ActivityFeedItem) => {
-  if (item.kind === 'PENDING_HOLD') {
+  if (item.kind === 'HOLD_EVENT') {
     return {
       kind: item.kind,
-      holdId: item.holdId,
-      createdAt: item.createdAt,
-      amountMinor: item.amountMinor,
-      description: item.description,
+      id: item.id,
       time: item.time,
+      holdId: item.holdId,
+      eventId: item.eventId,
+      item: item.item,
     };
   }
 
   return {
     kind: item.kind,
-    transactionId: item.transactionId,
-    postedAt: item.postedAt,
-    amountMinor: item.amountMinor,
-    description: item.description,
-    originHoldId: item.originHoldId,
+    id: item.id,
     time: item.time,
+    transactionId: item.transactionId,
+    item: item.item,
   };
 };
 
 const deserializeFeedItem = (
-  item: z.infer<typeof ActivityCursorItemSchema>
+  data: z.infer<typeof ActivityCursorItemSchema>
 ): ActivityFeedItem => {
-  if (item.kind === 'PENDING_HOLD') {
+  if (data.kind === 'HOLD_EVENT') {
     return {
-      kind: 'PENDING_HOLD',
-      id: item.holdId,
-      holdId: item.holdId,
-      createdAt: item.createdAt,
-      time: item.time,
-      amountMinor: item.amountMinor,
-      description: item.description,
+      kind: 'HOLD_EVENT',
+      id: data.id,
+      time: data.time,
+      holdId: data.holdId,
+      eventId: data.eventId,
+      item: data.item,
     };
   }
 
   return {
     kind: 'POSTED_TRANSACTION',
-    id: item.transactionId,
-    transactionId: item.transactionId,
-    postedAt: item.postedAt,
-    time: item.time,
-    amountMinor: item.amountMinor,
-    description: item.description,
-    originHoldId: item.originHoldId,
+    id: data.id,
+    time: data.time,
+    transactionId: data.transactionId,
+    item: data.item,
   };
 };
 
-const decodeCursor = (cursor: string): DecodedCursor => {
+const decodeCursor = (token: string): DecodedCursor => {
   try {
-    const decoded = Buffer.from(cursor, 'base64').toString('utf8');
+    const decoded = Buffer.from(token, 'base64').toString('utf8');
     const parsed = ActivityCursorSchema.parse(JSON.parse(decoded));
     return {
-      holdsLek: parsed.holdsLek,
+      holdEventsLek: parsed.holdEventsLek,
       txnsLek: parsed.txnsLek,
-      holdsBuffer: parsed.holdsBuffer?.map(deserializeFeedItem),
+      holdEventsBuffer: parsed.holdEventsBuffer?.map(deserializeFeedItem),
       txnsBuffer: parsed.txnsBuffer?.map(deserializeFeedItem),
       last: parsed.last,
     };
@@ -241,17 +399,19 @@ const decodeCursor = (cursor: string): DecodedCursor => {
 };
 
 const encodeCursor = (cursor: {
-  holdsLek?: string;
+  holdEventsLek?: string;
   txnsLek?: string;
-  holdsBuffer?: ActivityFeedItem[];
+  holdEventsBuffer?: ActivityFeedItem[];
   txnsBuffer?: ActivityFeedItem[];
   last?: ActivityCursorMarker;
 }): string => {
   const payload = {
-    ...(cursor.holdsLek ? { holdsLek: cursor.holdsLek } : {}),
+    ...(cursor.holdEventsLek ? { holdEventsLek: cursor.holdEventsLek } : {}),
     ...(cursor.txnsLek ? { txnsLek: cursor.txnsLek } : {}),
-    ...(cursor.holdsBuffer && cursor.holdsBuffer.length > 0
-      ? { holdsBuffer: cursor.holdsBuffer.map(serializeFeedItem) }
+    ...(cursor.holdEventsBuffer && cursor.holdEventsBuffer.length > 0
+      ? {
+          holdEventsBuffer: cursor.holdEventsBuffer.map(serializeFeedItem),
+        }
       : {}),
     ...(cursor.txnsBuffer && cursor.txnsBuffer.length > 0
       ? { txnsBuffer: cursor.txnsBuffer.map(serializeFeedItem) }
@@ -334,33 +494,12 @@ const toMarker = (item: ActivityFeedItem): ActivityCursorMarker => ({
   time: item.time,
 });
 
-const toActivityItem = (item: ActivityFeedItem): ActivityItem => {
-  if (item.kind === 'PENDING_HOLD') {
-    return {
-      kind: item.kind,
-      holdId: item.holdId,
-      createdAt: item.createdAt,
-      amountMinor: item.amountMinor,
-      description: item.description,
-    };
-  }
-
-  return {
-    kind: item.kind,
-    transactionId: item.transactionId,
-    postedAt: item.postedAt,
-    amountMinor: item.amountMinor,
-    description: item.description,
-    originHoldId: item.originHoldId,
-  };
-};
-
-const listPendingHoldItems = async (
+const listHoldEventItems = async (
   holdRepository: HoldRepository,
   accountNumber: string,
   options: { limit: number; nextToken?: string }
 ) => {
-  const result = await holdRepository.listPendingHoldsByAccountNumber(
+  const result = await holdRepository.listHoldActivityByAccountNumber(
     accountNumber,
     {
       limit: options.limit,
@@ -369,14 +508,7 @@ const listPendingHoldItems = async (
   );
 
   return {
-    items: result.items.map(hold =>
-      toHoldFeedItem({
-        holdId: hold.holdId,
-        createdAt: hold.createdAt,
-        amountMinor: hold.amountMinor,
-        description: hold.description,
-      })
-    ),
+    items: result.items.map(buildHoldEventFeedItem),
     nextToken: result.nextToken,
     hasMore: result.hasMore,
   };
@@ -472,12 +604,14 @@ export async function listAccountActivity(
     const decodedCursor = cursor ? decodeCursor(cursor) : undefined;
     let lastMarker = decodedCursor?.last;
 
-    const holdsState: SourceState = {
-      queue: decodedCursor?.holdsBuffer ? [...decodedCursor.holdsBuffer] : [],
-      nextToken: decodedCursor?.holdsLek,
+    const holdEventsState: SourceState = {
+      queue: decodedCursor?.holdEventsBuffer
+        ? [...decodedCursor.holdEventsBuffer]
+        : [],
+      nextToken: decodedCursor?.holdEventsLek,
       initialFetchDone: Boolean(decodedCursor),
       fetch: options =>
-        listPendingHoldItems(holdRepository, account.accountNumber, options),
+        listHoldEventItems(holdRepository, account.accountNumber, options),
     };
 
     const txnsState: SourceState = {
@@ -491,12 +625,12 @@ export async function listAccountActivity(
     const collected: ActivityFeedItem[] = [];
 
     while (collected.length < limit) {
-      const [nextHold, nextTxn] = await Promise.all([
-        ensureNextItem(holdsState, lastMarker, limit),
+      const [nextHoldEvent, nextTxn] = await Promise.all([
+        ensureNextItem(holdEventsState, lastMarker, limit),
         ensureNextItem(txnsState, lastMarker, limit),
       ]);
 
-      const candidates = [nextHold, nextTxn].filter(
+      const candidates = [nextHoldEvent, nextTxn].filter(
         (candidate): candidate is ActivityFeedItem => Boolean(candidate)
       );
 
@@ -515,16 +649,16 @@ export async function listAccountActivity(
       }
 
       if (lastMarker && compareItemToMarker(selected, lastMarker) <= 0) {
-        if (selected.kind === 'PENDING_HOLD') {
-          holdsState.queue.shift();
+        if (selected.kind === 'HOLD_EVENT') {
+          holdEventsState.queue.shift();
         } else {
           txnsState.queue.shift();
         }
         continue;
       }
 
-      if (selected.kind === 'PENDING_HOLD') {
-        holdsState.queue.shift();
+      if (selected.kind === 'HOLD_EVENT') {
+        holdEventsState.queue.shift();
       } else {
         txnsState.queue.shift();
       }
@@ -534,22 +668,22 @@ export async function listAccountActivity(
     }
 
     const hasMore =
-      holdsState.queue.length > 0 ||
+      holdEventsState.queue.length > 0 ||
       txnsState.queue.length > 0 ||
-      Boolean(holdsState.nextToken) ||
+      Boolean(holdEventsState.nextToken) ||
       Boolean(txnsState.nextToken);
 
     const nextCursor = hasMore
       ? encodeCursor({
-          holdsLek: holdsState.nextToken,
+          holdEventsLek: holdEventsState.nextToken,
           txnsLek: txnsState.nextToken,
-          holdsBuffer: holdsState.queue,
+          holdEventsBuffer: holdEventsState.queue,
           txnsBuffer: txnsState.queue,
           last: lastMarker,
         })
       : undefined;
 
-    const items = collected.map(toActivityItem);
+    const items = collected.map(feed => feed.item);
 
     const completedTiming = TimingUtils.endTiming(timing);
 

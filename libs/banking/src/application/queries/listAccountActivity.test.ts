@@ -1,10 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { listAccountActivity } from './listAccountActivity';
 import type { BankingRepository, TransactionSummary } from '../ports';
-import type { HoldRepository } from '../HoldRepository';
+import type { HoldRepository, HoldActivityRecord } from '../HoldRepository';
 import { Account } from '../../domain/entities/Account';
 import { Money } from '../../domain/valueObjects/Money';
-import type { Hold } from '../../domain/entities/Hold';
 import { AccountNotFoundError, InvalidActivityCursorError } from '../errors';
 
 const buildAccount = () =>
@@ -33,117 +32,132 @@ const buildTransactionSummary = (
   status: 'POSTED',
   amount: new Money(1_000),
   side: 'DEBIT',
-  description: 'Transfer',
+  description: overrides.description ?? 'Transfer',
   counterpartyAccountNumber: '9876543210',
   createdAt: overrides.createdAt,
   originHoldId: overrides.originHoldId,
 });
 
-const buildPendingHold = (
-  overrides: Partial<Hold> & { holdId: string }
-): Hold => ({
+const holdActivityRecord = (
+  overrides: Partial<HoldActivityRecord> & {
+    holdId: string;
+    eventId: string;
+    event: HoldActivityRecord['event'];
+  }
+): HoldActivityRecord => ({
   holdId: overrides.holdId,
   payerAccountNumber: overrides.payerAccountNumber ?? '1234567890',
-  counterpartyAccountNumber: overrides.counterpartyAccountNumber,
   amountMinor: overrides.amountMinor ?? 5_000,
   currency: 'USD',
-  status: 'PENDING',
   description: overrides.description,
-  createdAt: overrides.createdAt ?? '2024-01-01T00:00:00.000Z',
+  counterpartyAccountNumber: overrides.counterpartyAccountNumber,
+  eventId: overrides.eventId,
+  event: overrides.event,
 });
 
 describe('listAccountActivity', () => {
   let bankingRepositoryMock: {
-    saveAccount: ReturnType<typeof vi.fn>;
     getAccountById: ReturnType<typeof vi.fn>;
     getAccountIdByNumber: ReturnType<typeof vi.fn>;
-    getAccountsByUserId: ReturnType<typeof vi.fn>;
-    saveTransactionWithAccounts: ReturnType<typeof vi.fn>;
     getTransactionsByAccount: ReturnType<typeof vi.fn>;
-    getTransactionById: ReturnType<typeof vi.fn>;
   };
   let holdRepositoryMock: {
-    putHoldMeta: ReturnType<typeof vi.fn>;
-    appendHoldEvent: ReturnType<typeof vi.fn>;
-    getHold: ReturnType<typeof vi.fn>;
-    listPendingHoldsByAccountNumber: ReturnType<typeof vi.fn>;
-    reserveHold: ReturnType<typeof vi.fn>;
-    releaseHold: ReturnType<typeof vi.fn>;
-    captureHold: ReturnType<typeof vi.fn>;
+    listHoldActivityByAccountNumber: ReturnType<typeof vi.fn>;
   };
   let bankingRepository: BankingRepository;
   let holdRepository: HoldRepository;
 
   beforeEach(() => {
     bankingRepositoryMock = {
-      saveAccount: vi.fn(),
       getAccountById: vi.fn().mockResolvedValue(buildAccount()),
       getAccountIdByNumber: vi.fn().mockResolvedValue('acc-123'),
-      getAccountsByUserId: vi.fn(),
-      saveTransactionWithAccounts: vi.fn(),
       getTransactionsByAccount: vi.fn().mockResolvedValue({
         items: [] as TransactionSummary[],
         nextToken: undefined,
         hasMore: false,
       }),
-      getTransactionById: vi.fn(),
     };
+
     holdRepositoryMock = {
-      putHoldMeta: vi.fn(),
-      appendHoldEvent: vi.fn(),
-      getHold: vi.fn(),
-      listPendingHoldsByAccountNumber: vi.fn().mockResolvedValue({
-        items: [] as Hold[],
+      listHoldActivityByAccountNumber: vi.fn().mockResolvedValue({
+        items: [] as HoldActivityRecord[],
         nextToken: undefined,
         hasMore: false,
       }),
-      reserveHold: vi.fn(),
-      releaseHold: vi.fn(),
-      captureHold: vi.fn(),
     };
 
     bankingRepository = bankingRepositoryMock as unknown as BankingRepository;
     holdRepository = holdRepositoryMock as unknown as HoldRepository;
   });
 
-  it('merges pending holds and posted transactions in descending order', async () => {
-    const holds: Hold[] = [
-      buildPendingHold({
-        holdId: 'hold-2',
-        createdAt: '2024-01-02T12:00:00.000Z',
-        amountMinor: 4_000,
-        description: 'Pending grocery',
-      }),
-      buildPendingHold({
-        holdId: 'hold-1',
-        createdAt: '2024-01-01T12:00:00.000Z',
-        amountMinor: 3_500,
-        description: 'Pending travel',
-      }),
-    ];
-
-    const transactions: TransactionSummary[] = [
-      buildTransactionSummary({
-        transactionId: 'txn-2',
-        createdAt: new Date('2024-01-03T10:00:00.000Z'),
-        description: 'Transfer in',
-      }),
-      buildTransactionSummary({
-        transactionId: 'txn-1',
-        createdAt: new Date('2024-01-02T08:00:00.000Z'),
-        description: 'Transfer out',
-        originHoldId: 'hold-2',
-      }),
-    ];
-
-    holdRepositoryMock.listPendingHoldsByAccountNumber.mockResolvedValue({
-      items: holds,
+  it('merges hold events and posted transactions in descending order', async () => {
+    holdRepositoryMock.listHoldActivityByAccountNumber.mockResolvedValue({
+      items: [
+        holdActivityRecord({
+          holdId: 'hold-2',
+          eventId: 'event-2-captured',
+          amountMinor: 4_000,
+          description: 'Pending grocery',
+          counterpartyAccountNumber: '5555555555',
+          event: {
+            at: '2024-01-03T08:00:00.000Z',
+            type: 'CAPTURED',
+            transactionId: 'txn-2',
+            counterpartyAccountNumber: '5555555555',
+          },
+        }),
+        holdActivityRecord({
+          holdId: 'hold-2',
+          eventId: 'event-2-created',
+          amountMinor: 4_000,
+          description: 'Pending grocery',
+          counterpartyAccountNumber: '5555555555',
+          event: {
+            at: '2024-01-02T12:00:00.000Z',
+            type: 'CREATED',
+          },
+        }),
+        holdActivityRecord({
+          holdId: 'hold-1',
+          eventId: 'event-1-released',
+          amountMinor: 3_500,
+          description: 'Pending travel',
+          event: {
+            at: '2024-01-02T00:00:00.000Z',
+            type: 'RELEASED',
+            reason: 'Customer request',
+          },
+        }),
+        holdActivityRecord({
+          holdId: 'hold-1',
+          eventId: 'event-1-created',
+          amountMinor: 3_500,
+          description: 'Pending travel',
+          counterpartyAccountNumber: '6666666666',
+          event: {
+            at: '2024-01-01T12:00:00.000Z',
+            type: 'CREATED',
+          },
+        }),
+      ],
       nextToken: undefined,
       hasMore: false,
     });
 
     bankingRepositoryMock.getTransactionsByAccount.mockResolvedValue({
-      items: transactions,
+      items: [
+        buildTransactionSummary({
+          transactionId: 'txn-2',
+          createdAt: new Date('2024-01-03T09:00:00.000Z'),
+          description: 'Transfer in',
+        }),
+        buildTransactionSummary({
+          transactionId: 'txn-1',
+          createdAt: new Date('2024-01-02T06:00:00.000Z'),
+          description: 'Transfer out',
+          originHoldId: 'hold-2',
+        }),
+      ],
       nextToken: undefined,
       hasMore: false,
     });
@@ -152,7 +166,6 @@ describe('listAccountActivity', () => {
       {
         userId: 'user-1',
         accountNumber: '1234567890',
-        limit: 5,
       },
       {
         bankingRepository,
@@ -162,80 +175,92 @@ describe('listAccountActivity', () => {
 
     expect(result.items.map(item => item.kind)).toEqual([
       'POSTED_TRANSACTION',
-      'PENDING_HOLD',
+      'HOLD_CAPTURED',
+      'HOLD_CREATED',
       'POSTED_TRANSACTION',
-      'PENDING_HOLD',
+      'HOLD_RELEASED',
+      'HOLD_CREATED',
     ]);
 
-    expect(result.items[0]).toMatchObject({
-      kind: 'POSTED_TRANSACTION',
-      transactionId: 'txn-2',
-      postedAt: '2024-01-03T10:00:00.000Z',
-      amountMinor: 1_000,
-    });
     expect(result.items[1]).toMatchObject({
-      kind: 'PENDING_HOLD',
+      kind: 'HOLD_CAPTURED',
       holdId: 'hold-2',
-      createdAt: '2024-01-02T12:00:00.000Z',
-      amountMinor: 4_000,
-      description: 'Pending grocery',
+      capturedAt: '2024-01-03T08:00:00.000Z',
+      transactionId: 'txn-2',
     });
-    expect(result.items[2]).toMatchObject({
-      kind: 'POSTED_TRANSACTION',
-      transactionId: 'txn-1',
-      postedAt: '2024-01-02T08:00:00.000Z',
-      amountMinor: 1_000,
-      originHoldId: 'hold-2',
-    });
-    expect(result.items[3]).toMatchObject({
-      kind: 'PENDING_HOLD',
+    expect(result.items[4]).toMatchObject({
+      kind: 'HOLD_RELEASED',
       holdId: 'hold-1',
-      createdAt: '2024-01-01T12:00:00.000Z',
-      amountMinor: 3_500,
-      description: 'Pending travel',
+      releasedAt: '2024-01-02T00:00:00.000Z',
+      releaseReason: 'Customer request',
     });
-    expect(result.nextToken).toBeUndefined();
     expect(result.hasMore).toBe(false);
   });
 
-  it('paginates using cursor without duplicates or gaps', async () => {
-    const holdPage: Hold[] = [
-      buildPendingHold({
+  it('supports pagination with cursor', async () => {
+    const holdEvents: HoldActivityRecord[] = [
+      holdActivityRecord({
         holdId: 'hold-3',
-        createdAt: '2024-01-03T09:00:00.000Z',
+        eventId: 'event-3-created',
+        amountMinor: 2_000,
+        event: {
+          at: '2024-01-04T12:00:00.000Z',
+          type: 'CREATED',
+        },
       }),
-      buildPendingHold({
+      holdActivityRecord({
         holdId: 'hold-2',
-        createdAt: '2024-01-02T09:00:00.000Z',
+        eventId: 'event-2-created',
+        amountMinor: 1_500,
+        event: {
+          at: '2024-01-03T12:00:00.000Z',
+          type: 'CREATED',
+        },
       }),
-      buildPendingHold({
+      holdActivityRecord({
         holdId: 'hold-1',
-        createdAt: '2024-01-01T09:00:00.000Z',
+        eventId: 'event-1-created',
+        amountMinor: 1_000,
+        event: {
+          at: '2024-01-02T12:00:00.000Z',
+          type: 'CREATED',
+        },
       }),
     ];
 
-    const txnPage: TransactionSummary[] = [
-      buildTransactionSummary({
-        transactionId: 'txn-2',
-        createdAt: new Date('2024-01-04T10:00:00.000Z'),
-      }),
-      buildTransactionSummary({
-        transactionId: 'txn-1',
-        createdAt: new Date('2024-01-02T06:00:00.000Z'),
-      }),
-    ];
+    holdRepositoryMock.listHoldActivityByAccountNumber
+      .mockResolvedValueOnce({
+        items: holdEvents.slice(0, 2),
+        nextToken: 'hold-token-1',
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        items: holdEvents.slice(2),
+        nextToken: undefined,
+        hasMore: false,
+      });
 
-    holdRepositoryMock.listPendingHoldsByAccountNumber.mockResolvedValue({
-      items: holdPage,
-      nextToken: undefined,
-      hasMore: false,
-    });
-
-    bankingRepositoryMock.getTransactionsByAccount.mockResolvedValue({
-      items: txnPage,
-      nextToken: undefined,
-      hasMore: false,
-    });
+    bankingRepositoryMock.getTransactionsByAccount
+      .mockResolvedValueOnce({
+        items: [
+          buildTransactionSummary({
+            transactionId: 'txn-2',
+            createdAt: new Date('2024-01-04T11:00:00.000Z'),
+          }),
+        ],
+        nextToken: 'txn-token-1',
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          buildTransactionSummary({
+            transactionId: 'txn-1',
+            createdAt: new Date('2024-01-02T11:00:00.000Z'),
+          }),
+        ],
+        nextToken: undefined,
+        hasMore: false,
+      });
 
     const firstPage = await listAccountActivity(
       {
@@ -249,9 +274,10 @@ describe('listAccountActivity', () => {
       }
     );
 
+    expect(firstPage.items).toHaveLength(2);
     expect(firstPage.items.map(item => item.kind)).toEqual([
+      'HOLD_CREATED',
       'POSTED_TRANSACTION',
-      'PENDING_HOLD',
     ]);
     expect(firstPage.hasMore).toBe(true);
     expect(firstPage.nextToken).toBeDefined();
@@ -270,22 +296,10 @@ describe('listAccountActivity', () => {
     );
 
     expect(secondPage.items.map(item => item.kind)).toEqual([
-      'PENDING_HOLD',
-      'POSTED_TRANSACTION',
+      'HOLD_CREATED',
+      'HOLD_CREATED',
     ]);
-    expect(secondPage.items[0]).toMatchObject({
-      kind: 'PENDING_HOLD',
-      holdId: 'hold-2',
-      createdAt: '2024-01-02T09:00:00.000Z',
-    });
-    expect(secondPage.items[1]).toMatchObject({
-      kind: 'POSTED_TRANSACTION',
-      transactionId: 'txn-1',
-      postedAt: '2024-01-02T06:00:00.000Z',
-      amountMinor: 1_000,
-    });
     expect(secondPage.hasMore).toBe(true);
-    expect(secondPage.nextToken).toBeDefined();
 
     const thirdPage = await listAccountActivity(
       {
@@ -300,17 +314,12 @@ describe('listAccountActivity', () => {
       }
     );
 
-    expect(thirdPage.items).toEqual([
-      {
-        kind: 'PENDING_HOLD',
-        holdId: 'hold-1',
-        createdAt: '2024-01-01T09:00:00.000Z',
-        amountMinor: 5_000,
-        description: undefined,
-      },
-    ]);
+    expect(thirdPage.items).toHaveLength(1);
+    expect(thirdPage.items[0]).toMatchObject({
+      kind: 'POSTED_TRANSACTION',
+      transactionId: 'txn-1',
+    });
     expect(thirdPage.hasMore).toBe(false);
-    expect(thirdPage.nextToken).toBeUndefined();
   });
 
   it('throws InvalidActivityCursorError when cursor cannot be decoded', async () => {

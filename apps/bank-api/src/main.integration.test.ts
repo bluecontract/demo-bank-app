@@ -1308,11 +1308,20 @@ describe('Bank API Integration Tests', () => {
       createdAt: string;
       amountMinor: number;
       description: string;
+      counterpartyAccountNumber: string;
     }>;
-    const expectedOrder: Array<{
-      kind: 'PENDING_HOLD' | 'POSTED_TRANSACTION';
-      id: string;
-    }> = [];
+    type ExpectedActivityItem =
+      | { kind: 'POSTED_TRANSACTION'; transactionId: string }
+      | {
+          kind:
+            | 'HOLD_CREATED'
+            | 'HOLD_RELEASED'
+            | 'HOLD_CAPTURED'
+            | 'HOLD_FAILED';
+          holdId: string;
+        };
+
+    const expectedOrder: ExpectedActivityItem[] = [];
 
     beforeAll(async () => {
       const creds = await signupUniqueTestUser('activity-endpoint-user');
@@ -1407,6 +1416,7 @@ describe('Bank API Integration Tests', () => {
           createdAt: new Date(newestTime + 2_000).toISOString(),
           amountMinor: 450,
           description: 'Newest pending hold',
+          counterpartyAccountNumber: destinationAccount.body.accountNumber,
         },
         {
           holdId: `hold-${crypto.randomUUID()}`,
@@ -1415,12 +1425,14 @@ describe('Bank API Integration Tests', () => {
           ).toISOString(),
           amountMinor: 350,
           description: 'Mid pending hold',
+          counterpartyAccountNumber: destinationAccount.body.accountNumber,
         },
         {
           holdId: `hold-${crypto.randomUUID()}`,
           createdAt: new Date(secondTime - 120_000).toISOString(),
           amountMinor: 250,
           description: 'Old pending hold',
+          counterpartyAccountNumber: destinationAccount.body.accountNumber,
         },
       ];
 
@@ -1428,21 +1440,39 @@ describe('Bank API Integration Tests', () => {
         await holdRepository.putHoldMeta({
           holdId: hold.holdId,
           payerAccountNumber: accountNumber,
+          counterpartyAccountNumber: hold.counterpartyAccountNumber,
           amountMinor: hold.amountMinor,
           currency: 'USD',
           status: 'PENDING',
           description: hold.description,
           createdAt: hold.createdAt,
         });
+        await holdRepository.appendHoldEvent(hold.holdId, {
+          at: hold.createdAt,
+          type: 'CREATED',
+          createdByUserId: 'system-test',
+          idempotencyKeyHash: `hash-${hold.holdId}`,
+        });
       }
 
-      expectedOrder.push(
-        { kind: 'PENDING_HOLD', id: holdEntries[0].holdId },
-        { kind: 'POSTED_TRANSACTION', id: sortedTransactions[0].transactionId },
-        { kind: 'PENDING_HOLD', id: holdEntries[1].holdId },
-        { kind: 'POSTED_TRANSACTION', id: sortedTransactions[1].transactionId },
-        { kind: 'PENDING_HOLD', id: holdEntries[2].holdId }
-      );
+      const captureAt = new Date(newestTime + 1_500).toISOString();
+      await holdRepository.putHoldMeta({
+        holdId: holdEntries[1].holdId,
+        payerAccountNumber: accountNumber,
+        counterpartyAccountNumber: holdEntries[1].counterpartyAccountNumber,
+        amountMinor: holdEntries[1].amountMinor,
+        currency: 'USD',
+        status: 'CAPTURED',
+        description: holdEntries[1].description,
+        createdAt: holdEntries[1].createdAt,
+        relatedTransactionId: sortedTransactions[0].transactionId,
+      });
+      await holdRepository.appendHoldEvent(holdEntries[1].holdId, {
+        at: captureAt,
+        type: 'CAPTURED',
+        transactionId: sortedTransactions[0].transactionId,
+        counterpartyAccountNumber: holdEntries[1].counterpartyAccountNumber!,
+      });
 
       releasedHold = {
         holdId: `hold-${crypto.randomUUID()}`,
@@ -1454,12 +1484,48 @@ describe('Bank API Integration Tests', () => {
         payerAccountNumber: accountNumber,
         amountMinor: 200,
         currency: 'USD',
+        status: 'PENDING',
+        description: 'Released pending hold',
+        createdAt: releasedHold.createdAt,
+      });
+      await holdRepository.appendHoldEvent(releasedHold.holdId, {
+        at: releasedHold.createdAt,
+        type: 'CREATED',
+        createdByUserId: 'system-test',
+      });
+      await holdRepository.putHoldMeta({
+        holdId: releasedHold.holdId,
+        payerAccountNumber: accountNumber,
+        amountMinor: 200,
+        currency: 'USD',
         status: 'RELEASED',
         description: 'Released pending hold',
         createdAt: releasedHold.createdAt,
         releasedAt: releasedHold.releasedAt,
         releaseReason: 'Merchant adjustment',
       });
+      await holdRepository.appendHoldEvent(releasedHold.holdId, {
+        at: releasedHold.releasedAt,
+        type: 'RELEASED',
+        reason: 'Merchant adjustment',
+      });
+
+      expectedOrder.push(
+        { kind: 'HOLD_CREATED', holdId: holdEntries[0].holdId },
+        { kind: 'HOLD_CAPTURED', holdId: holdEntries[1].holdId },
+        {
+          kind: 'POSTED_TRANSACTION',
+          transactionId: sortedTransactions[0].transactionId,
+        },
+        { kind: 'HOLD_CREATED', holdId: holdEntries[1].holdId },
+        {
+          kind: 'POSTED_TRANSACTION',
+          transactionId: sortedTransactions[1].transactionId,
+        },
+        { kind: 'HOLD_RELEASED', holdId: releasedHold.holdId },
+        { kind: 'HOLD_CREATED', holdId: releasedHold.holdId },
+        { kind: 'HOLD_CREATED', holdId: holdEntries[2].holdId }
+      );
 
       expiredHold = {
         holdId: `hold-${crypto.randomUUID()}`,
@@ -1486,18 +1552,47 @@ describe('Bank API Integration Tests', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const simplified = response.body.items.map((item: any) => ({
-        kind: item.kind,
-        id: item.kind === 'PENDING_HOLD' ? item.holdId : item.transactionId,
-      }));
+      const simplified = response.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
       expect(simplified).toEqual(expectedOrder);
       expect(response.body.nextCursor).toBeUndefined();
 
+      const newestHoldEvent = response.body.items[0];
+      expect(newestHoldEvent).toMatchObject({
+        kind: 'HOLD_CREATED',
+        holdId: holdEntries[0].holdId,
+        amountMinor: holdEntries[0].amountMinor,
+        createdByUserId: 'system-test',
+        idempotencyKeyHash: `hash-${holdEntries[0].holdId}`,
+      });
+
       const holdIds = response.body.items
-        .filter((item: any) => item.kind === 'PENDING_HOLD')
+        .filter((item: any) => item.kind.startsWith('HOLD_'))
         .map((item: any) => item.holdId);
-      expect(holdIds).not.toContain(releasedHold.holdId);
+      expect(holdIds).toContain(releasedHold.holdId);
       expect(holdIds).not.toContain(expiredHold.holdId);
+
+      const capturedEvent = response.body.items.find(
+        (item: any) =>
+          item.kind === 'HOLD_CAPTURED' && item.holdId === holdEntries[1].holdId
+      );
+      expect(capturedEvent).toMatchObject({
+        transactionId: sortedTransactions[0].transactionId,
+        counterpartyAccountNumber: holdEntries[1].counterpartyAccountNumber,
+      });
+
+      const releasedEvent = response.body.items.find(
+        (item: any) =>
+          item.kind === 'HOLD_RELEASED' && item.holdId === releasedHold.holdId
+      );
+      expect(releasedEvent).toMatchObject({
+        releaseReason: 'Merchant adjustment',
+        releasedAt: releasedHold.releasedAt,
+      });
     });
 
     it('should support stable pagination with cursor', async () => {
@@ -1509,10 +1604,12 @@ describe('Bank API Integration Tests', () => {
 
       expect(firstPage.statusCode).toBe(200);
       expect(firstPage.body.items).toHaveLength(2);
-      const firstIds = firstPage.body.items.map((item: any) => ({
-        kind: item.kind,
-        id: item.kind === 'PENDING_HOLD' ? item.holdId : item.transactionId,
-      }));
+      const firstIds = firstPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
       expect(firstIds).toEqual(expectedOrder.slice(0, 2));
       expect(firstPage.body.nextCursor).toBeDefined();
 
@@ -1525,10 +1622,12 @@ describe('Bank API Integration Tests', () => {
 
       expect(secondPage.statusCode).toBe(200);
       expect(secondPage.body.items).toHaveLength(2);
-      const secondIds = secondPage.body.items.map((item: any) => ({
-        kind: item.kind,
-        id: item.kind === 'PENDING_HOLD' ? item.holdId : item.transactionId,
-      }));
+      const secondIds = secondPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
       expect(secondIds).toEqual(expectedOrder.slice(2, 4));
       expect(secondPage.body.nextCursor).toBeDefined();
 
@@ -1540,13 +1639,33 @@ describe('Bank API Integration Tests', () => {
       });
 
       expect(thirdPage.statusCode).toBe(200);
-      expect(thirdPage.body.items).toHaveLength(1);
-      const thirdIds = thirdPage.body.items.map((item: any) => ({
-        kind: item.kind,
-        id: item.kind === 'PENDING_HOLD' ? item.holdId : item.transactionId,
-      }));
-      expect(thirdIds).toEqual(expectedOrder.slice(4));
-      expect(thirdPage.body.nextCursor).toBeUndefined();
+      expect(thirdPage.body.items).toHaveLength(2);
+      const thirdIds = thirdPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(thirdIds).toEqual(expectedOrder.slice(4, 6));
+      expect(thirdPage.body.nextCursor).toBeDefined();
+
+      const fourthCursor = encodeURIComponent(thirdPage.body.nextCursor);
+      const fourthPage = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountNumber}/activity?limit=2&cursor=${fourthCursor}`,
+        jwtCookie,
+      });
+
+      expect(fourthPage.statusCode).toBe(200);
+      expect(fourthPage.body.items).toHaveLength(2);
+      const fourthIds = fourthPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(fourthIds).toEqual(expectedOrder.slice(6));
+      expect(fourthPage.body.nextCursor).toBeUndefined();
     });
 
     it('should return 400 for invalid cursor token', async () => {
@@ -1691,6 +1810,8 @@ async function setupLocalStackResources(): Promise<void> {
           { AttributeName: 'BANKING_GSI2SK', AttributeType: 'S' },
           { AttributeName: 'HOLD_GSI1PK', AttributeType: 'S' },
           { AttributeName: 'HOLD_GSI1SK', AttributeType: 'S' },
+          { AttributeName: 'HOLD_EVENT_GSI1PK', AttributeType: 'S' },
+          { AttributeName: 'HOLD_EVENT_GSI1SK', AttributeType: 'S' },
         ],
         KeySchema: [
           { AttributeName: 'PK', KeyType: 'HASH' },
@@ -1727,6 +1848,14 @@ async function setupLocalStackResources(): Promise<void> {
             KeySchema: [
               { AttributeName: 'HOLD_GSI1PK', KeyType: 'HASH' },
               { AttributeName: 'HOLD_GSI1SK', KeyType: 'RANGE' },
+            ],
+            Projection: { ProjectionType: 'ALL' },
+          },
+          {
+            IndexName: 'HOLD_EVENT_GSI1',
+            KeySchema: [
+              { AttributeName: 'HOLD_EVENT_GSI1PK', KeyType: 'HASH' },
+              { AttributeName: 'HOLD_EVENT_GSI1SK', KeyType: 'RANGE' },
             ],
             Projection: { ProjectionType: 'ALL' },
           },
