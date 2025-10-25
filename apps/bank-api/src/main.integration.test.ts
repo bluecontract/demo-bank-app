@@ -45,7 +45,7 @@ const TEST_CONFIG = {
   jwtSecret: 'integration-test-jwt-secret-key-12345',
   localstackEndpoint: 'http://localhost:4566',
   region: 'us-east-1',
-  jwtTtlSeconds: 3600,
+  jwtTtlSeconds: 604800,
   testUserTtlSeconds: 600,
 };
 
@@ -243,6 +243,7 @@ describe('Bank API Integration Tests', () => {
       expect(signIn.body).toEqual({
         userId: creds.userId,
         email: creds.userEmail,
+        marketingEmailsOptIn: true,
       });
       const cookieHeader = signIn.headers?.['set-cookie'] as string | undefined;
       expect(cookieHeader).toBeDefined();
