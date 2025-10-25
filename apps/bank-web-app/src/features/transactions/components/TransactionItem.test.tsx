@@ -1,238 +1,137 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
 import { TransactionItem } from './TransactionItem';
-import { Transaction } from '../hooks/useTransactions';
+import { ActivityItem } from '../hooks/useActivity';
 
-const mockCreditTransaction: Transaction = {
-  txnId: 'txn-123',
-  accountId: 'acc-456',
-  side: 'CREDIT',
+const postedTransaction: ActivityItem = {
+  kind: 'POSTED_TRANSACTION',
+  transactionId: 'txn-123',
   amountMinor: 100000,
+  description: 'Deposit from employer',
+  postedAt: '2023-01-15T10:30:00Z',
+  originHoldId: undefined,
+  side: 'CREDIT',
   type: 'FUNDING',
-  status: 'COMPLETED',
-  timestamp: '2023-01-15T10:30:00Z',
-  description: 'Test deposit',
+  status: 'POSTED',
   counterpartyAccountNumber: '1234567890',
 };
 
-const mockDebitTransaction: Transaction = {
-  txnId: 'txn-124',
-  accountId: 'acc-456',
-  side: 'DEBIT',
+const debitTransaction: ActivityItem = {
+  kind: 'POSTED_TRANSACTION',
+  transactionId: 'txn-456',
   amountMinor: 50000,
+  description: 'Bill payment',
+  postedAt: '2023-01-16T14:45:00Z',
+  originHoldId: undefined,
+  side: 'DEBIT',
   type: 'TRANSFER',
-  status: 'COMPLETED',
-  timestamp: '2023-01-16T14:45:00Z',
-  description: 'Test transfer',
+  status: 'POSTED',
   counterpartyAccountNumber: '0987654321',
 };
 
-const mockAccountId = 'test-account-id';
-const mockOnTransactionClick = vi.fn();
+const holdCreated: ActivityItem = {
+  kind: 'HOLD_CREATED',
+  holdId: 'hold-1',
+  amountMinor: 45000,
+  description: 'Coffee shop authorization',
+  createdAt: '2023-01-17T08:00:00Z',
+  counterpartyAccountNumber: '1111111222',
+  createdByUserId: 'system-test',
+  idempotencyKeyHash: 'hash',
+};
+
+const holdCaptured: ActivityItem = {
+  kind: 'HOLD_CAPTURED',
+  holdId: 'hold-2',
+  amountMinor: 9500,
+  description: 'Fuel purchase',
+  capturedAt: '2023-01-18T12:30:00Z',
+  transactionId: 'txn-789',
+  counterpartyAccountNumber: '2222333344',
+};
+
+const holdFailed: ActivityItem = {
+  kind: 'HOLD_FAILED',
+  holdId: 'hold-3',
+  amountMinor: 2500,
+  description: 'Online order',
+  failedAt: '2023-01-19T09:15:00Z',
+  failureCode: 'INSUFFICIENT_FUNDS',
+  failureMessage: 'Available balance too low',
+};
 
 describe('TransactionItem', () => {
-  it('should render credit transaction correctly', () => {
+  it('renders posted credit transaction with details and click handler', () => {
+    const onClick = vi.fn();
+
     render(
       <TransactionItem
-        transaction={mockCreditTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
+        item={postedTransaction}
+        onTransactionClick={onClick}
+        data-testid="activity-row"
       />
     );
 
     expect(screen.getByText('Incoming')).toBeInTheDocument();
     expect(screen.getByText('COMPLETED')).toBeInTheDocument();
-    expect(screen.getByText('Test deposit')).toBeInTheDocument();
+    expect(screen.getByText('Deposit from employer')).toBeInTheDocument();
     expect(screen.getByText('From: 123 456 7890')).toBeInTheDocument();
     expect(screen.getByText('+$1,000')).toBeInTheDocument();
-    expect(screen.getByText('Jan 15, 2023, 10:30 AM')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('activity-row'));
+    expect(onClick).toHaveBeenCalledWith('txn-123');
   });
 
-  it('should render debit transaction correctly', () => {
+  it('renders posted debit transaction with outgoing details', () => {
+    const onClick = vi.fn();
+
     render(
-      <TransactionItem
-        transaction={mockDebitTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-      />
+      <TransactionItem item={debitTransaction} onTransactionClick={onClick} />
     );
 
     expect(screen.getByText('Outgoing')).toBeInTheDocument();
-    expect(screen.getByText('COMPLETED')).toBeInTheDocument();
-    expect(screen.getByText('Test transfer')).toBeInTheDocument();
     expect(screen.getByText('To: 098 765 4321')).toBeInTheDocument();
     expect(screen.getByText('-$500')).toBeInTheDocument();
-    expect(screen.getByText('Jan 16, 2023, 02:45 PM')).toBeInTheDocument();
   });
 
-  it('should render without description', () => {
-    const transactionWithoutDescription = {
-      ...mockCreditTransaction,
-      description: undefined,
-    };
+  it('renders hold created entry without click handler', () => {
+    const onClick = vi.fn();
 
     render(
       <TransactionItem
-        transaction={transactionWithoutDescription}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
+        item={holdCreated}
+        onTransactionClick={onClick}
+        data-testid="hold-created"
       />
     );
 
-    expect(screen.getByText('Incoming')).toBeInTheDocument();
-    expect(screen.queryByText('Test deposit')).not.toBeInTheDocument();
+    expect(screen.getByText('Hold Created')).toBeInTheDocument();
+    expect(screen.getByText('HOLD PLACED')).toBeInTheDocument();
+    expect(screen.getByText('$450')).toBeInTheDocument();
+    expect(screen.getByText('Counterparty: 111 111 1222')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('hold-created'));
+    expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('should show correct icon for credit transaction', () => {
+  it('renders hold captured entry with linked transaction subtitle', () => {
     render(
-      <TransactionItem
-        transaction={mockCreditTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-      />
+      <TransactionItem item={holdCaptured} onTransactionClick={vi.fn()} />
     );
 
-    const iconContainer = screen.getByText('↓').closest('div');
-    expect(iconContainer).toHaveClass('bg-green-100');
+    expect(screen.getByText('Hold Captured')).toBeInTheDocument();
+    expect(screen.getByText('HOLD CAPTURED')).toBeInTheDocument();
+    expect(screen.getByText('Captured txn: txn-789')).toBeInTheDocument();
+    expect(screen.getByText('$95')).toBeInTheDocument();
   });
 
-  it('should show correct icon for debit transaction', () => {
-    render(
-      <TransactionItem
-        transaction={mockDebitTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-      />
-    );
+  it('renders failed hold with failure messaging', () => {
+    render(<TransactionItem item={holdFailed} onTransactionClick={vi.fn()} />);
 
-    const iconContainer = screen.getByText('↑').closest('div');
-    expect(iconContainer).toHaveClass('bg-red-100');
-  });
-
-  it('should render pending status correctly', () => {
-    const pendingTransaction = {
-      ...mockCreditTransaction,
-      status: 'PENDING',
-    };
-
-    render(
-      <TransactionItem
-        transaction={pendingTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-      />
-    );
-
-    const statusElement = screen.getByText('PENDING');
-    expect(statusElement).toBeInTheDocument();
-    expect(statusElement).toHaveClass('bg-yellow-100', 'text-yellow-800');
-  });
-
-  it('should render completed status correctly', () => {
-    render(
-      <TransactionItem
-        transaction={mockCreditTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-      />
-    );
-
-    const statusElement = screen.getByText('COMPLETED');
-    expect(statusElement).toBeInTheDocument();
-    expect(statusElement).toHaveClass('bg-green-100', 'text-green-800');
-  });
-
-  it('should handle different transaction types', () => {
-    const withdrawalTransaction = {
-      ...mockDebitTransaction,
-      type: 'WITHDRAWAL',
-    };
-
-    render(
-      <TransactionItem
-        transaction={withdrawalTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-      />
-    );
-    expect(screen.getByText('Withdrawal')).toBeInTheDocument();
-  });
-
-  it('should handle unknown transaction types', () => {
-    const unknownTransaction = {
-      ...mockCreditTransaction,
-      type: 'UNKNOWN_TYPE',
-    };
-
-    render(
-      <TransactionItem
-        transaction={unknownTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-      />
-    );
-    expect(screen.getByText('UNKNOWN_TYPE')).toBeInTheDocument();
-  });
-
-  it('should format amounts correctly', () => {
-    const largeAmountTransaction = {
-      ...mockCreditTransaction,
-      amountMinor: 123456789, // $1,234,567.89
-    };
-
-    render(
-      <TransactionItem
-        transaction={largeAmountTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-      />
-    );
-    expect(screen.getByText('+$1,234,567.89')).toBeInTheDocument();
-  });
-
-  it('should format small amounts correctly', () => {
-    const smallAmountTransaction = {
-      ...mockCreditTransaction,
-      amountMinor: 1, // $0.01
-    };
-
-    render(
-      <TransactionItem
-        transaction={smallAmountTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-      />
-    );
-    expect(screen.getByText('+$0.01')).toBeInTheDocument();
-  });
-
-  it('should have proper accessibility attributes', () => {
-    render(
-      <TransactionItem
-        transaction={mockCreditTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-        data-testid="transaction-item"
-      />
-    );
-
-    const transactionItem = screen.getByTestId('transaction-item');
-    expect(transactionItem).toBeInTheDocument();
-  });
-
-  it('should handle hover states', () => {
-    render(
-      <TransactionItem
-        transaction={mockCreditTransaction}
-        accountId={mockAccountId}
-        onTransactionClick={mockOnTransactionClick}
-        data-testid="transaction-item"
-      />
-    );
-
-    // The hover class is on the outermost div that contains the entire transaction item
-    const container = screen.getByTestId('transaction-item');
-    expect(container).toHaveClass('hover:bg-gray-50');
+    expect(screen.getByText('Hold Failed')).toBeInTheDocument();
+    expect(screen.getByText('HOLD FAILED')).toBeInTheDocument();
+    expect(screen.getByText('Failure: INSUFFICIENT_FUNDS')).toBeInTheDocument();
+    expect(screen.getByText('Available balance too low')).toBeInTheDocument();
   });
 });

@@ -27,7 +27,7 @@ export interface BankingRepository {
   getTransactionsByAccount(
     accountId: string,
     options?: PaginationOptions
-  ): Promise<PaginatedResult<TransactionSummary>>;
+  ): Promise<PaginatedResult<TransactionSummary>>; // Internal feed query used by activity aggregation
   getTransactionById(transactionId: string): Promise<Transaction | null>;
 }
 

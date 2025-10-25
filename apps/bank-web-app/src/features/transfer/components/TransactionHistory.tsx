@@ -1,6 +1,6 @@
 import { Card } from '../../../ui/Card';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
-import { useTransactions } from '../../transactions/hooks/useTransactions';
+import { useActivity } from '../../transactions/hooks/useActivity';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
 import { TransactionList } from '../../transactions/components/TransactionList';
 
@@ -9,15 +9,15 @@ export function TransactionHistory() {
   const { data: accounts } = useAccounts();
 
   const {
-    data: transactionsData,
+    data: activityData,
     isLoading,
     isError,
-  } = useTransactions({
-    accountId: selectedAccount?.accountId || null,
+  } = useActivity({
+    accountNumber: selectedAccount?.accountNumber || null,
   });
 
-  const transactions = transactionsData?.items || [];
-  const isEmpty = !isLoading && !isError && transactions.length === 0;
+  const activityItems = activityData?.items || [];
+  const isEmpty = !isLoading && !isError && activityItems.length === 0;
 
   return (
     <Card className="p-8 flex flex-col flex-1 min-h-0">
@@ -34,7 +34,7 @@ export function TransactionHistory() {
       </div>
 
       <TransactionList
-        transactions={transactions}
+        activityItems={activityItems}
         accountId={selectedAccount?.accountId || ''}
         currentAccountNumber={selectedAccount?.accountNumber}
         accounts={accounts}

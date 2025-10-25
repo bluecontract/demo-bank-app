@@ -1,140 +1,228 @@
-import { Transaction } from '../hooks/useTransactions';
+import { ActivityItem, PostedTransactionActivity } from '../hooks/useActivity';
 import { formatCurrency } from '../../../lib/formatCurrency';
 import { formatAccountNumber } from '../../../lib/formatAccountNumber';
 
 interface TransactionItemProps {
-  transaction: Transaction;
-  accountId: string;
+  item: ActivityItem;
   onTransactionClick: (txnId: string) => void;
   'data-testid'?: string;
 }
 
+const formatDate = (timestamp: string) =>
+  new Date(timestamp).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  });
+
+const getTransactionTypeDisplay = (
+  type: PostedTransactionActivity['type'],
+  side: PostedTransactionActivity['side']
+) => {
+  switch (type) {
+    case 'FUNDING':
+      return 'Incoming';
+    case 'TRANSFER':
+      return side === 'CREDIT' ? 'Incoming' : 'Outgoing';
+    case 'WITHDRAWAL':
+      return 'Withdrawal';
+    default:
+      return type;
+  }
+};
+
+type VisualState = {
+  badgeLabel: string;
+  badgeClass: string;
+  icon: string;
+  iconClasses: string;
+  title: string;
+  timestamp: string;
+  subtitle?: string;
+  description?: string;
+  amountText: string;
+  amountClass: string;
+  clickable: boolean;
+  linkTransactionId?: string;
+};
+
+const buildVisualState = (item: ActivityItem): VisualState => {
+  if (item.kind === 'POSTED_TRANSACTION') {
+    const isCredit = item.side === 'CREDIT';
+    const amount = formatCurrency(item.amountMinor);
+
+    return {
+      badgeLabel:
+        item.status.toLowerCase() === 'posted'
+          ? 'COMPLETED'
+          : item.status.toUpperCase(),
+      badgeClass:
+        {
+          posted: 'bg-green-100 text-green-800',
+          completed: 'bg-green-100 text-green-800',
+          pending: 'bg-yellow-100 text-yellow-800',
+          failed: 'bg-red-100 text-red-800',
+        }[item.status.toLowerCase()] ?? 'bg-gray-100 text-gray-800',
+      icon: isCredit ? '↓' : '↑',
+      iconClasses: isCredit
+        ? 'bg-green-100 text-green-600'
+        : 'bg-red-100 text-red-600',
+      title: getTransactionTypeDisplay(item.type, item.side),
+      timestamp: item.postedAt,
+      subtitle: item.counterpartyAccountNumber
+        ? `${isCredit ? 'From' : 'To'}: ${formatAccountNumber(
+            item.counterpartyAccountNumber
+          )}`
+        : undefined,
+      description: item.description,
+      amountText: `${isCredit ? '+' : '-'}${amount}`,
+      amountClass: isCredit ? 'text-green-600' : 'text-red-600',
+      clickable: true,
+      linkTransactionId: item.transactionId,
+    };
+  }
+
+  const counterpartyAccountNumber =
+    'counterpartyAccountNumber' in item
+      ? item.counterpartyAccountNumber
+      : undefined;
+
+  const base = {
+    subtitle: counterpartyAccountNumber
+      ? `Counterparty: ${formatAccountNumber(counterpartyAccountNumber)}`
+      : undefined,
+    description: item.description,
+    amountText: formatCurrency(item.amountMinor),
+  };
+
+  switch (item.kind) {
+    case 'HOLD_CREATED':
+      return {
+        ...base,
+        badgeLabel: 'HOLD PLACED',
+        badgeClass: 'bg-yellow-100 text-yellow-800',
+        icon: '⏳',
+        iconClasses: 'bg-yellow-50 text-yellow-700',
+        title: 'Hold Created',
+        timestamp: item.createdAt,
+        amountClass: 'text-yellow-700',
+        clickable: false,
+      };
+    case 'HOLD_CAPTURED':
+      return {
+        ...base,
+        badgeLabel: 'HOLD CAPTURED',
+        badgeClass: 'bg-green-100 text-green-800',
+        icon: '✔',
+        iconClasses: 'bg-green-50 text-green-700',
+        title: 'Hold Captured',
+        timestamp: item.capturedAt,
+        subtitle: item.transactionId
+          ? `Captured txn: ${item.transactionId}`
+          : base.subtitle,
+        amountClass: 'text-green-700',
+        clickable: false,
+      };
+    case 'HOLD_RELEASED':
+      return {
+        ...base,
+        badgeLabel: 'HOLD RELEASED',
+        badgeClass: 'bg-blue-100 text-blue-800',
+        icon: '↺',
+        iconClasses: 'bg-blue-50 text-blue-700',
+        title: 'Hold Released',
+        timestamp: item.releasedAt,
+        subtitle: item.releaseReason
+          ? `Reason: ${item.releaseReason}`
+          : base.subtitle,
+        amountClass: 'text-blue-700',
+        clickable: false,
+      };
+    case 'HOLD_FAILED':
+      return {
+        ...base,
+        badgeLabel: 'HOLD FAILED',
+        badgeClass: 'bg-red-100 text-red-800',
+        icon: '✖',
+        iconClasses: 'bg-red-50 text-red-700',
+        title: 'Hold Failed',
+        timestamp: item.failedAt,
+        subtitle: `Failure: ${item.failureCode}`,
+        description: item.failureMessage ?? base.description,
+        amountClass: 'text-red-700',
+        clickable: false,
+      };
+  }
+};
+
 export function TransactionItem({
-  transaction,
-  accountId,
+  item,
   onTransactionClick,
   'data-testid': testId,
 }: TransactionItemProps) {
-  const isCredit = transaction.side === 'CREDIT';
-  const formattedAmount = formatCurrency(transaction.amountMinor);
-  const displayAmount = isCredit
-    ? `+${formattedAmount}`
-    : `-${formattedAmount}`;
-
-  // Map transaction type to display name
-  const getTransactionTypeDisplay = (type: string, side: string) => {
-    switch (type) {
-      case 'FUNDING':
-        return 'Incoming';
-      case 'TRANSFER':
-        return side === 'CREDIT' ? 'Incoming' : 'Outgoing';
-      case 'WITHDRAWAL':
-        return 'Withdrawal';
-      default:
-        return type;
-    }
-  };
-
-  // Format timestamp
-  const formatDate = (timestamp: string) => {
-    return new Date(timestamp).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'UTC',
-    });
-  };
-
-  const getStatusBadge = (status: string) => {
-    const baseClasses =
-      'inline-flex items-center px-2 py-1 rounded-full text-xs font-medium';
-
-    switch (status.toLowerCase()) {
-      case 'completed':
-      case 'posted':
-        return `${baseClasses} bg-green-100 text-green-800`;
-      case 'pending':
-        return `${baseClasses} bg-yellow-100 text-yellow-800`;
-      case 'failed':
-        return `${baseClasses} bg-red-100 text-red-800`;
-      default:
-        return `${baseClasses} bg-gray-100 text-gray-800`;
-    }
-  };
+  const visualState = buildVisualState(item);
 
   const handleClick = () => {
-    onTransactionClick(transaction.txnId);
+    if (visualState.clickable && visualState.linkTransactionId) {
+      onTransactionClick(visualState.linkTransactionId);
+    }
   };
 
   return (
     <div
-      className="flex items-center p-4 hover:bg-gray-50 transition-colors cursor-pointer"
-      onClick={handleClick}
+      className={`flex items-center p-4 transition-colors ${
+        visualState.clickable ? 'cursor-pointer hover:bg-gray-50' : ''
+      }`}
+      onClick={visualState.clickable ? handleClick : undefined}
       data-testid={testId}
     >
-      {/* Left Section: Transaction Details */}
+      {/* Left Section */}
       <div className="flex items-center space-x-3 min-w-0 shrink-0">
-        {/* Transaction Icon */}
         <div
-          className={`w-8 h-8 rounded-full flex items-center justify-center ${
-            isCredit ? 'bg-green-100' : 'bg-red-100'
-          }`}
+          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${visualState.iconClasses}`}
         >
-          <span
-            className={`text-sm ${
-              isCredit ? 'text-green-600' : 'text-red-600'
-            }`}
-          >
-            {isCredit ? '↓' : '↑'}
-          </span>
+          {visualState.icon}
         </div>
-
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className={getStatusBadge(transaction.status)}>
-              {transaction.status.toLowerCase() === 'posted'
-                ? 'COMPLETED'
-                : transaction.status}
+            <span
+              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${visualState.badgeClass}`}
+            >
+              {visualState.badgeLabel}
             </span>
           </div>
-
           <div className="text-xs text-gray-500 whitespace-nowrap">
-            {formatDate(transaction.timestamp)}
+            {formatDate(visualState.timestamp)}
           </div>
-
-          {transaction.counterpartyAccountNumber && (
+          {visualState.subtitle && (
             <div className="text-xs text-gray-500 whitespace-nowrap">
-              {isCredit ? 'From' : 'To'}:{' '}
-              {formatAccountNumber(transaction.counterpartyAccountNumber)}
+              {visualState.subtitle}
             </div>
           )}
         </div>
       </div>
 
-      {/* Center-Left Section: Transaction Direction */}
+      {/* Middle Section */}
       <div className="ml-4 shrink-0">
         <h4 className="text-base font-medium text-gray-600 whitespace-nowrap">
-          {getTransactionTypeDisplay(transaction.type, transaction.side)}
+          {visualState.title}
         </h4>
       </div>
 
-      {/* Center-Right Section: Description */}
+      {/* Description */}
       <div className="ml-6 flex-1 min-w-0">
-        {transaction.description && (
-          <p className="text-base text-gray-600">{transaction.description}</p>
+        {visualState.description && (
+          <p className="text-base text-gray-600">{visualState.description}</p>
         )}
       </div>
 
-      {/* Right Section: Amount */}
+      {/* Amount */}
       <div className="ml-4 text-right shrink-0">
-        <div
-          className={`text-lg font-semibold ${
-            isCredit ? 'text-green-600' : 'text-red-600'
-          }`}
-        >
-          {displayAmount}
+        <div className={`text-lg font-semibold ${visualState.amountClass}`}>
+          {visualState.amountText}
         </div>
       </div>
     </div>

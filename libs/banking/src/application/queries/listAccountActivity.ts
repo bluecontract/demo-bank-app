@@ -66,6 +66,10 @@ type PostedTransactionActivityItem = {
   description?: string;
   postedAt: string;
   originHoldId?: string;
+  side: 'DEBIT' | 'CREDIT';
+  type: string;
+  status: string;
+  counterpartyAccountNumber?: string;
 };
 
 export type ActivityItem =
@@ -166,6 +170,10 @@ const PostedTransactionActivityItemSchema: z.ZodType<PostedTransactionActivityIt
     description: z.string().optional(),
     postedAt: z.string(),
     originHoldId: z.string().optional(),
+    side: z.enum(['DEBIT', 'CREDIT']),
+    type: z.string(),
+    status: z.string(),
+    counterpartyAccountNumber: z.string().optional(),
   });
 
 const HoldEventCursorItemSchema = z.object({
@@ -321,6 +329,10 @@ const toTransactionFeedItem = (summary: {
   amountMinor: number;
   description?: string;
   originHoldId?: string;
+  side: 'DEBIT' | 'CREDIT';
+  type: string;
+  status: string;
+  counterpartyAccountNumber?: string;
 }): TransactionFeedItem => ({
   kind: 'POSTED_TRANSACTION',
   id: summary.transactionId,
@@ -333,6 +345,10 @@ const toTransactionFeedItem = (summary: {
     amountMinor: summary.amountMinor,
     description: summary.description,
     originHoldId: summary.originHoldId,
+    side: summary.side,
+    type: summary.type,
+    status: summary.status,
+    counterpartyAccountNumber: summary.counterpartyAccountNumber,
   },
 });
 
@@ -532,6 +548,10 @@ const listTransactionItems = async (
         amountMinor: summary.amount.toCents(),
         description: summary.description ?? undefined,
         originHoldId: summary.originHoldId,
+        side: summary.side,
+        type: summary.type,
+        status: summary.status,
+        counterpartyAccountNumber: summary.counterpartyAccountNumber,
       })
     ),
     nextToken: result.nextToken,

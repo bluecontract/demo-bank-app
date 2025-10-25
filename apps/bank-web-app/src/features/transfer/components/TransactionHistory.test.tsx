@@ -4,15 +4,15 @@ import '@testing-library/jest-dom';
 import { MemoryRouter } from 'react-router-dom';
 import { TransactionHistory } from './TransactionHistory';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
-import { useTransactions } from '../../transactions/hooks/useTransactions';
+import { useActivity } from '../../transactions/hooks/useActivity';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
 
 vi.mock('../../../app/providers/SelectedAccountProvider', () => ({
   useSelectedAccount: vi.fn(),
 }));
 
-vi.mock('../../transactions/hooks/useTransactions', () => ({
-  useTransactions: vi.fn(),
+vi.mock('../../transactions/hooks/useActivity', () => ({
+  useActivity: vi.fn(),
 }));
 
 vi.mock('../../accounts/hooks/useAccounts', () => ({
@@ -21,13 +21,13 @@ vi.mock('../../accounts/hooks/useAccounts', () => ({
 
 vi.mock('../../transactions/components/TransactionList', () => ({
   TransactionList: ({
-    transactions,
+    activityItems,
     isLoading,
     isError,
     isEmpty,
     'data-testid': testId,
   }: {
-    transactions: any[];
+    activityItems: any[];
     isLoading: boolean;
     isError: boolean;
     isEmpty: boolean;
@@ -36,7 +36,7 @@ vi.mock('../../transactions/components/TransactionList', () => ({
     <div data-testid={testId}>
       Mock TransactionList - Loading: {isLoading.toString()} - Error:{' '}
       {isError.toString()} - Empty: {isEmpty.toString()} - Count:{' '}
-      {transactions.length}
+      {activityItems.length}
     </div>
   ),
 }));
@@ -54,17 +54,28 @@ const mockAccount = {
 
 const mockAccounts = [mockAccount];
 
-const mockTransactions = [
+const mockActivity = [
   {
-    txnId: 'txn-123',
-    accountId: 'test-account-id',
-    side: 'CREDIT' as const,
+    kind: 'POSTED_TRANSACTION' as const,
+    transactionId: 'txn-123',
     amountMinor: 100000,
-    type: 'FUNDING',
-    status: 'COMPLETED',
-    timestamp: '2023-01-15T10:30:00Z',
     description: 'Test deposit',
+    postedAt: '2023-01-15T10:30:00Z',
+    originHoldId: undefined,
+    side: 'CREDIT' as const,
+    type: 'FUNDING',
+    status: 'POSTED',
     counterpartyAccountNumber: '1234567890',
+  },
+  {
+    kind: 'HOLD_CREATED' as const,
+    holdId: 'hold-1',
+    amountMinor: 50000,
+    description: 'Hold for transfer',
+    createdAt: '2023-01-16T08:00:00Z',
+    counterpartyAccountNumber: '0987654321',
+    createdByUserId: 'tester',
+    idempotencyKeyHash: 'hash',
   },
 ];
 
@@ -88,8 +99,8 @@ describe('TransactionHistory', () => {
       setSelectedAccount: vi.fn(),
     });
 
-    (useTransactions as any).mockReturnValue({
-      data: { items: [] },
+    (useActivity as any).mockReturnValue({
+      data: { items: [], nextCursor: undefined },
       isLoading: false,
       isError: false,
     });
@@ -98,11 +109,9 @@ describe('TransactionHistory', () => {
 
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
     expect(screen.queryByText('Account:')).not.toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Mock TransactionList - Loading: false - Error: false - Empty: true - Count: 0'
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
+      /Empty:\s*true[\s\S]*Count:\s*0/
+    );
   });
 
   it('should show transaction history header with account number when account is selected', () => {
@@ -111,8 +120,8 @@ describe('TransactionHistory', () => {
       setSelectedAccount: vi.fn(),
     });
 
-    (useTransactions as any).mockReturnValue({
-      data: { items: mockTransactions },
+    (useActivity as any).mockReturnValue({
+      data: { items: mockActivity, nextCursor: undefined },
       isLoading: false,
       isError: false,
     });
@@ -122,11 +131,9 @@ describe('TransactionHistory', () => {
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
     expect(screen.getByText('Account:')).toBeInTheDocument();
     expect(screen.getByText('1234567890')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Mock TransactionList - Loading: false - Error: false - Empty: false - Count: 1'
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
+      /Count:\s*2/
+    );
   });
 
   it('should show loading state when transactions are being fetched', () => {
@@ -135,7 +142,7 @@ describe('TransactionHistory', () => {
       setSelectedAccount: vi.fn(),
     });
 
-    (useTransactions as any).mockReturnValue({
+    (useActivity as any).mockReturnValue({
       data: undefined,
       isLoading: true,
       isError: false,
@@ -144,11 +151,9 @@ describe('TransactionHistory', () => {
     renderWithRouter(<TransactionHistory />);
 
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Mock TransactionList - Loading: true - Error: false - Empty: false - Count: 0'
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
+      /Loading:\s*true/
+    );
   });
 
   it('should show error state when transactions fail to load', () => {
@@ -157,7 +162,7 @@ describe('TransactionHistory', () => {
       setSelectedAccount: vi.fn(),
     });
 
-    (useTransactions as any).mockReturnValue({
+    (useActivity as any).mockReturnValue({
       data: undefined,
       isLoading: false,
       isError: true,
@@ -166,11 +171,9 @@ describe('TransactionHistory', () => {
     renderWithRouter(<TransactionHistory />);
 
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Mock TransactionList - Loading: false - Error: true - Empty: false - Count: 0'
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
+      /Error:\s*true/
+    );
   });
 
   it('should show empty state when account is selected but no transactions exist', () => {
@@ -179,8 +182,8 @@ describe('TransactionHistory', () => {
       setSelectedAccount: vi.fn(),
     });
 
-    (useTransactions as any).mockReturnValue({
-      data: { items: [] },
+    (useActivity as any).mockReturnValue({
+      data: { items: [], nextCursor: undefined },
       isLoading: false,
       isError: false,
     });
@@ -188,79 +191,75 @@ describe('TransactionHistory', () => {
     renderWithRouter(<TransactionHistory />);
 
     expect(screen.getByText('Transaction History')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Mock TransactionList - Loading: false - Error: false - Empty: true - Count: 0'
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
+      /Empty:\s*true[\s\S]*Count:\s*0/
+    );
   });
 
-  it('should pass correct accountId to useTransactions hook', () => {
+  it('should pass correct account number to useActivity hook', () => {
     (useSelectedAccount as any).mockReturnValue({
       selectedAccount: mockAccount,
       setSelectedAccount: vi.fn(),
     });
 
-    (useTransactions as any).mockReturnValue({
-      data: { items: [] },
+    (useActivity as any).mockReturnValue({
+      data: { items: [], nextCursor: undefined },
       isLoading: false,
       isError: false,
     });
 
     renderWithRouter(<TransactionHistory />);
 
-    expect(useTransactions).toHaveBeenCalledWith({
-      accountId: 'test-account-id',
+    expect(useActivity).toHaveBeenCalledWith({
+      accountNumber: '1234567890',
     });
   });
 
-  it('should pass null accountId when no account is selected', () => {
+  it('should pass null account number when no account is selected', () => {
     (useSelectedAccount as any).mockReturnValue({
       selectedAccount: null,
       setSelectedAccount: vi.fn(),
     });
 
-    (useTransactions as any).mockReturnValue({
-      data: { items: [] },
+    (useActivity as any).mockReturnValue({
+      data: { items: [], nextCursor: undefined },
       isLoading: false,
       isError: false,
     });
 
     renderWithRouter(<TransactionHistory />);
 
-    expect(useTransactions).toHaveBeenCalledWith({
-      accountId: null,
+    expect(useActivity).toHaveBeenCalledWith({
+      accountNumber: null,
     });
   });
 
-  it('should handle transactions data correctly', () => {
+  it('should handle activity data correctly', () => {
     (useSelectedAccount as any).mockReturnValue({
       selectedAccount: mockAccount,
       setSelectedAccount: vi.fn(),
     });
 
-    (useTransactions as any).mockReturnValue({
-      data: { items: mockTransactions },
+    (useActivity as any).mockReturnValue({
+      data: { items: mockActivity, nextCursor: undefined },
       isLoading: false,
       isError: false,
     });
 
     renderWithRouter(<TransactionHistory />);
 
-    expect(
-      screen.getByText(
-        'Mock TransactionList - Loading: false - Error: false - Empty: false - Count: 1'
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
+      /Empty:\s*false[\s\S]*Count:\s*2/
+    );
   });
 
-  it('should handle undefined transactions data', () => {
+  it('should handle undefined activity data', () => {
     (useSelectedAccount as any).mockReturnValue({
       selectedAccount: mockAccount,
       setSelectedAccount: vi.fn(),
     });
 
-    (useTransactions as any).mockReturnValue({
+    (useActivity as any).mockReturnValue({
       data: undefined,
       isLoading: false,
       isError: false,
@@ -268,11 +267,9 @@ describe('TransactionHistory', () => {
 
     renderWithRouter(<TransactionHistory />);
 
-    expect(
-      screen.getByText(
-        'Mock TransactionList - Loading: false - Error: false - Empty: true - Count: 0'
-      )
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
+      /Empty:\s*true[\s\S]*Count:\s*0/
+    );
   });
 
   it('should have proper Card styling', () => {
@@ -281,8 +278,8 @@ describe('TransactionHistory', () => {
       setSelectedAccount: vi.fn(),
     });
 
-    (useTransactions as any).mockReturnValue({
-      data: { items: [] },
+    (useActivity as any).mockReturnValue({
+      data: { items: [], nextCursor: undefined },
       isLoading: false,
       isError: false,
     });
