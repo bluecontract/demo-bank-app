@@ -242,7 +242,7 @@ const exampleDefinitions: ExamplePayNoteDefinition[] = [
     id: 'one-time-payment-with-authorization',
     name: 'One Time Payment with Authorization',
     description:
-      'Holds $500.00 until an approver authorizes the final disbursement.',
+      'Holds $50.00 until an approver authorizes the final disbursement.',
     yaml: ONE_TIME_PAYMENT_WITH_AUTHORIZATION_YAML,
     templateFields: [
       {
