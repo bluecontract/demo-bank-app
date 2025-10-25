@@ -1,8 +1,13 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HealthStatus } from '../../ui/HealthStatus';
 
 export function HomePage() {
   const navigate = useNavigate();
+  const [videoError, setVideoError] = useState(false);
+  const [introVideoResetCounter, setIntroVideoResetCounter] = useState(0);
+  const introVideoSource =
+    __INTRO_VIDEO_URL__ || '/assets/login-demo-placeholder.mp4';
 
   const handleSignUpClick = () => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -17,7 +22,7 @@ export function HomePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto max-w-3xl px-4 py-16">
+      <div className="container mx-auto max-w-4xl px-4 py-16">
         <header className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             Demo Bank App
@@ -28,7 +33,7 @@ export function HomePage() {
           </p>
         </header>
 
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-4xl mx-auto space-y-10">
           <div className="grid gap-4 sm:grid-cols-3">
             <a
               href="https://github.com/bluecontract/demo-bank-app/"
@@ -65,7 +70,7 @@ export function HomePage() {
             </a>
           </div>
 
-          <div className="mt-10 mb-8 p-6 bg-white rounded-lg shadow-sm border">
+          <div className="mt-10 p-6 bg-white rounded-lg shadow-sm border">
             <h2 className="text-2xl font-semibold text-gray-900 mb-4 text-center">
               Welcome
             </h2>
@@ -114,6 +119,30 @@ export function HomePage() {
               <HealthStatus />
             </div>
           </div>
+
+          <section className="rounded-2xl bg-black shadow-lg overflow-hidden">
+            {!videoError ? (
+              <video
+                key={`${introVideoSource}-${introVideoResetCounter}`}
+                className="h-full w-full aspect-video object-cover"
+                controls
+                preload="metadata"
+                playsInline
+                poster="/assets/intro-video-poster.svg"
+                onError={() => setVideoError(true)}
+                onEnded={() =>
+                  setIntroVideoResetCounter(counter => counter + 1)
+                }
+              >
+                <source src={introVideoSource} type="video/mp4" />
+                Your browser does not support MP4 playback.
+              </video>
+            ) : (
+              <div className="aspect-video flex items-center justify-center bg-black px-6 text-center text-sm text-gray-200">
+                Demo video preview is unavailable in this environment.
+              </div>
+            )}
+          </section>
         </div>
       </div>
     </div>
