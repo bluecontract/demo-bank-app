@@ -162,7 +162,15 @@ describe('PayNoteCodeInput', () => {
       expect(atob(lastCall![0])).toContain(updatedEmail);
     });
 
-    expect(screen.getByText(`email: ${updatedEmail}`)).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: /preview/i, exact: false })
+    );
+
+    expect(
+      await screen.findByText(`email: ${updatedEmail}`)
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText(/close preview/i));
   });
 
   it('prefills template defaults with the current user email when requested', async () => {
@@ -200,6 +208,14 @@ describe('PayNoteCodeInput', () => {
 
     const emailInput = await screen.findByLabelText(/notification email/i);
     expect(emailInput).toHaveValue('agent@example.com');
-    expect(screen.getByText(/contact: agent@example.com/i)).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: /preview/i, exact: false })
+    );
+
+    expect(
+      await screen.findByText(/contact: agent@example.com/i)
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText(/close preview/i));
   });
 });
