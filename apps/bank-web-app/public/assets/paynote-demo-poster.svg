@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <defs>
+    <linearGradient id="paynoteGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#60a5fa"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#paynoteGradient)" rx="32" ry="32"/>
+  <g fill="#eff6ff" font-family="Inter,Arial,sans-serif" text-anchor="middle">
+    <text x="640" y="320" font-size="64" font-weight="700">See PayNote in action</text>
+  </g>
+  <circle cx="640" cy="480" r="56" fill="#ecfeff" opacity="0.16"/>
+  <path d="M670 480l-48-28v56z" fill="#ecfeff" opacity="0.9"/>
+</svg>

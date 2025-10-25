@@ -20,6 +20,16 @@ Parameters:
     Default: ''
     Description: 'Optional: ACM certificate ARN (must be in us-east-1) when using a custom domain'
 
+  IntroVideoObjectKey:
+    Type: String
+    Default: paynote.mp4
+    Description: 'Object key within the marketing video bucket that contains the intro video file'
+
+  PaynoteDemoVideoObjectKey:
+    Type: String
+    Default: paynote-demo.mp4
+    Description: 'Object key within the marketing video bucket that contains the PayNote walkthrough file'
+
 Conditions:
   UseCustomDomain: !And
     - !Not [!Equals [!Ref DomainName, '']]
@@ -47,6 +57,27 @@ Resources:
         OriginAccessControlOriginType: s3
         SigningBehavior: always
         SigningProtocol: sigv4
+
+  LoginDemoVideoBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'demo-bank-app-login-demo-${Environment}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, HEAD]
+            AllowedOrigins: ['*']
+            MaxAge: 3600
 
   # CloudFront Distribution
   CloudFrontDistribution:
@@ -111,6 +142,19 @@ Resources:
               StringEquals:
                 'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
 
+  LoginDemoVideoBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LoginDemoVideoBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowPublicRead
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${LoginDemoVideoBucket.Arn}/*'
+
 Outputs:
   FrontendUrl:
     Description: 'CloudFront Distribution URL'
@@ -137,3 +181,27 @@ Outputs:
     Value: !Ref CloudFrontDistribution
     Export:
       Name: !Sub '${AWS::StackName}-DistributionId'
+
+  LoginDemoVideoBucketName:
+    Description: 'S3 bucket name containing the login demo marketing video'
+    Value: !Ref LoginDemoVideoBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-LoginDemoVideoBucketName'
+
+  LoginDemoVideoUrl:
+    Description: 'Public URL for the intro marketing video (legacy export name)'
+    Value: !Sub 'https://${LoginDemoVideoBucket}.s3.${AWS::Region}.amazonaws.com/${IntroVideoObjectKey}'
+    Export:
+      Name: !Sub '${AWS::StackName}-LoginDemoVideoUrl'
+
+  IntroVideoUrl:
+    Description: 'Public URL for the intro marketing video'
+    Value: !Sub 'https://${LoginDemoVideoBucket}.s3.${AWS::Region}.amazonaws.com/${IntroVideoObjectKey}'
+    Export:
+      Name: !Sub '${AWS::StackName}-IntroVideoUrl'
+
+  PaynoteDemoVideoUrl:
+    Description: 'Public URL for the PayNote walkthrough marketing video'
+    Value: !Sub 'https://${LoginDemoVideoBucket}.s3.${AWS::Region}.amazonaws.com/${PaynoteDemoVideoObjectKey}'
+    Export:
+      Name: !Sub '${AWS::StackName}-PaynoteDemoVideoUrl'
