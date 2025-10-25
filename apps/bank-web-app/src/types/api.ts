@@ -51,12 +51,14 @@ export type Transaction = ClientInferResponseBody<
   200
 >;
 
-export type TransactionsList = ClientInferResponseBody<
-  (typeof bankApiContract)['banking']['listTransactions'],
+export type TransactionDetails = Transaction;
+
+export type ActivityFeed = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['listActivity'],
   200
 >;
 
-export type TransactionDetails = Transaction;
+export type ActivityFeedItem = ActivityFeed['items'][number];
 
 // Re-export commonly used types
 export type { Transaction as TransactionItem };

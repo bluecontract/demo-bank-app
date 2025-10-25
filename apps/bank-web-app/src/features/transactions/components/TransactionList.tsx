@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { TransactionItem } from './TransactionItem';
 import { TransactionDetailsModal } from './TransactionDetailsModal';
-import { Transaction } from '../hooks/useTransactions';
+import { ActivityItem } from '../hooks/useActivity';
 import { Spinner } from '../../../ui/Spinner';
 import { Account } from '../../../types/api';
 
 interface TransactionListProps {
-  transactions: Transaction[];
+  activityItems: ActivityItem[];
   accountId: string;
   currentAccountNumber?: string;
   accounts?: Account[];
@@ -17,7 +17,7 @@ interface TransactionListProps {
 }
 
 export function TransactionList({
-  transactions,
+  activityItems,
   accountId,
   currentAccountNumber,
   accounts = [],
@@ -43,7 +43,9 @@ export function TransactionList({
       >
         <div className="text-center">
           <Spinner size="lg" />
-          <p className="mt-2 text-sm text-gray-600">Loading transactions...</p>
+          <p className="mt-2 text-sm text-gray-600">
+            Loading account activity...
+          </p>
         </div>
       </div>
     );
@@ -61,7 +63,7 @@ export function TransactionList({
               ⚠️
             </span>
           </div>
-          <div className="text-xl mb-2">Failed to load transactions</div>
+          <div className="text-xl mb-2">Failed to load account activity</div>
           <p className="text-sm">Please try refreshing the page</p>
         </div>
       </div>
@@ -80,10 +82,10 @@ export function TransactionList({
               📋
             </span>
           </div>
-          <div className="text-xl mb-2">No transactions yet</div>
+          <div className="text-xl mb-2">No activity yet</div>
           <p className="text-sm">
-            Your transaction history will appear here once you make your first
-            transfer
+            Account activity will appear here once you post a transaction or
+            create a hold.
           </p>
         </div>
       </div>
@@ -95,15 +97,21 @@ export function TransactionList({
       <div className="flex-1 flex flex-col min-h-0" data-testid={testId}>
         <div className="flex-1 overflow-y-auto bg-white rounded-lg border border-gray-200">
           <div className="divide-y divide-gray-100">
-            {transactions.map(transaction => (
-              <TransactionItem
-                key={transaction.txnId}
-                transaction={transaction}
-                accountId={accountId}
-                onTransactionClick={handleTransactionClick}
-                data-testid={`transaction-item-${transaction.txnId}`}
-              />
-            ))}
+            {activityItems.map(item => {
+              const key =
+                item.kind === 'POSTED_TRANSACTION'
+                  ? `txn-${item.transactionId}`
+                  : `hold-${item.holdId}`;
+
+              return (
+                <TransactionItem
+                  key={key}
+                  item={item}
+                  onTransactionClick={handleTransactionClick}
+                  data-testid={`activity-item-${key}`}
+                />
+              );
+            })}
           </div>
         </div>
       </div>

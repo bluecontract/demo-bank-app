@@ -49,9 +49,10 @@ export function useFundAccount(options?: UseFundAccountOptions) {
     onSuccess: (data, variables) => {
       // Invalidate accounts query to refresh balances
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      // Invalidate transactions query to refresh transaction history
+      // Invalidate activity queries to refresh transaction history
       queryClient.invalidateQueries({
-        queryKey: ['transactions', variables.accountId],
+        queryKey: ['activity'],
+        exact: false,
       });
       options?.onSuccess?.(data);
     },

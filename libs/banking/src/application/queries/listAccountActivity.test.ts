@@ -195,6 +195,16 @@ describe('listAccountActivity', () => {
       releaseReason: 'Customer request',
     });
     expect(result.hasMore).toBe(false);
+
+    const posted = result.items.find(
+      item => item.kind === 'POSTED_TRANSACTION'
+    );
+    expect(posted).toMatchObject({
+      side: 'DEBIT',
+      type: 'TRANSFER',
+      status: 'POSTED',
+      counterpartyAccountNumber: '9876543210',
+    });
   });
 
   it('supports pagination with cursor', async () => {

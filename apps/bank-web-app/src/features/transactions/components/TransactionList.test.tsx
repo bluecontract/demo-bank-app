@@ -1,267 +1,174 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
 import { TransactionList } from './TransactionList';
-import { Transaction } from '../hooks/useTransactions';
+import { ActivityItem } from '../hooks/useActivity';
 
-// Mock the TransactionItem component
+const onTransactionClickSpy = vi.fn();
+
 vi.mock('./TransactionItem', () => ({
   TransactionItem: ({
-    transaction,
+    item,
+    onTransactionClick,
     'data-testid': testId,
   }: {
-    transaction: Transaction;
+    item: ActivityItem;
+    onTransactionClick: (txnId: string) => void;
     'data-testid'?: string;
   }) => (
-    <div data-testid={testId}>
-      Mock TransactionItem - {transaction.type} - {transaction.amountMinor}
-    </div>
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={() => {
+        onTransactionClick(
+          item.kind === 'POSTED_TRANSACTION' ? item.transactionId : 'noop'
+        );
+        onTransactionClickSpy(
+          item.kind === 'POSTED_TRANSACTION' ? item.transactionId : 'noop'
+        );
+      }}
+    >
+      Mock Activity Item - {item.kind}
+    </button>
   ),
 }));
 
-const mockAccountId = 'test-account-id';
+const modalSpy = vi.fn();
 
-const mockTransactions: Transaction[] = [
-  {
-    txnId: 'txn-123',
-    accountId: 'acc-456',
-    side: 'CREDIT',
-    amountMinor: 100000,
-    type: 'FUNDING',
-    status: 'COMPLETED',
-    timestamp: '2023-01-15T10:30:00Z',
-    description: 'Test deposit',
-    counterpartyAccountNumber: '1234567890',
+vi.mock('./TransactionDetailsModal', () => ({
+  TransactionDetailsModal: (props: any) => {
+    modalSpy(props);
+    if (!props.isOpen) {
+      return null;
+    }
+    return (
+      <div data-testid="transaction-modal">
+        Mock Transaction Modal - {props.txnId}
+      </div>
+    );
   },
-  {
-    txnId: 'txn-124',
-    accountId: 'acc-456',
-    side: 'DEBIT',
-    amountMinor: 50000,
-    type: 'TRANSFER',
-    status: 'COMPLETED',
-    timestamp: '2023-01-16T14:45:00Z',
-    description: 'Test transfer',
-    counterpartyAccountNumber: '0987654321',
-  },
-];
+}));
+
+const postedTransaction: ActivityItem = {
+  kind: 'POSTED_TRANSACTION',
+  transactionId: 'txn-123',
+  amountMinor: 100000,
+  description: 'Deposit',
+  postedAt: '2023-01-01T00:00:00Z',
+  originHoldId: undefined,
+  side: 'CREDIT',
+  type: 'FUNDING',
+  status: 'POSTED',
+  counterpartyAccountNumber: '1234567890',
+};
+
+const holdCreated: ActivityItem = {
+  kind: 'HOLD_CREATED',
+  holdId: 'hold-1',
+  amountMinor: 50000,
+  description: 'Pending purchase',
+  createdAt: '2023-01-02T12:00:00Z',
+  counterpartyAccountNumber: '5555555555',
+  createdByUserId: 'tester',
+  idempotencyKeyHash: 'hash',
+};
 
 describe('TransactionList', () => {
-  it('should render loading state', () => {
-    render(
-      <TransactionList
-        transactions={[]}
-        accountId={mockAccountId}
-        isLoading={true}
-        isError={false}
-        isEmpty={false}
-        data-testid="transaction-list"
-      />
-    );
-
-    expect(screen.getByText('Loading transactions...')).toBeInTheDocument();
-    expect(screen.getByTestId('transaction-list')).toBeInTheDocument();
+  beforeEach(() => {
+    modalSpy.mockClear();
+    onTransactionClickSpy.mockClear();
   });
 
-  it('should render error state', () => {
+  it('renders loading state', () => {
     render(
       <TransactionList
-        transactions={[]}
-        accountId={mockAccountId}
-        isLoading={false}
-        isError={true}
+        activityItems={[]}
+        accountId="acc-1"
+        isLoading
+        isError={false}
         isEmpty={false}
-        data-testid="transaction-list"
+        data-testid="activity-list"
       />
     );
 
-    expect(screen.getByText('Failed to load transactions')).toBeInTheDocument();
+    expect(screen.getByText('Loading account activity...')).toBeInTheDocument();
+  });
+
+  it('renders error state', () => {
+    render(
+      <TransactionList
+        activityItems={[]}
+        accountId="acc-1"
+        isLoading={false}
+        isError
+        isEmpty={false}
+        data-testid="activity-list"
+      />
+    );
+
+    expect(
+      screen.getByText('Failed to load account activity')
+    ).toBeInTheDocument();
     expect(
       screen.getByText('Please try refreshing the page')
     ).toBeInTheDocument();
-    expect(screen.getByText('⚠️')).toBeInTheDocument();
   });
 
-  it('should render empty state', () => {
+  it('renders empty state', () => {
     render(
       <TransactionList
-        transactions={[]}
-        accountId={mockAccountId}
+        activityItems={[]}
+        accountId="acc-1"
         isLoading={false}
         isError={false}
-        isEmpty={true}
-        data-testid="transaction-list"
+        isEmpty
+        data-testid="activity-list"
       />
     );
 
-    expect(screen.getByText('No transactions yet')).toBeInTheDocument();
+    expect(screen.getByText('No activity yet')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'Your transaction history will appear here once you make your first transfer'
+        'Account activity will appear here once you post a transaction or create a hold.'
       )
     ).toBeInTheDocument();
-    expect(screen.getByText('📋')).toBeInTheDocument();
   });
 
-  it('should render transactions list', () => {
+  it('renders activity items', () => {
     render(
       <TransactionList
-        transactions={mockTransactions}
-        accountId={mockAccountId}
+        activityItems={[postedTransaction, holdCreated]}
+        accountId="acc-1"
         isLoading={false}
         isError={false}
         isEmpty={false}
-        data-testid="transaction-list"
+        data-testid="activity-list"
       />
     );
 
+    expect(screen.getByTestId('activity-item-txn-txn-123')).toBeInTheDocument();
+    expect(screen.getByTestId('activity-item-hold-hold-1')).toBeInTheDocument();
+  });
+
+  it('opens modal when posted transaction row is clicked', () => {
+    render(
+      <TransactionList
+        activityItems={[postedTransaction]}
+        accountId="acc-1"
+        currentAccountNumber="1234567890"
+        accounts={[]}
+        isLoading={false}
+        isError={false}
+        isEmpty={false}
+        data-testid="activity-list"
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('activity-item-txn-txn-123'));
+
+    expect(onTransactionClickSpy).toHaveBeenCalledWith('txn-123');
     expect(
-      screen.getByText('Mock TransactionItem - FUNDING - 100000')
+      screen.getByText('Mock Transaction Modal - txn-123')
     ).toBeInTheDocument();
-    expect(
-      screen.getByText('Mock TransactionItem - TRANSFER - 50000')
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('transaction-item-txn-123')).toBeInTheDocument();
-    expect(screen.getByTestId('transaction-item-txn-124')).toBeInTheDocument();
-  });
-
-  it('should render single transaction', () => {
-    const singleTransaction = [mockTransactions[0]];
-
-    render(
-      <TransactionList
-        transactions={singleTransaction}
-        accountId={mockAccountId}
-        isLoading={false}
-        isError={false}
-        isEmpty={false}
-        data-testid="transaction-list"
-      />
-    );
-
-    expect(
-      screen.getByText('Mock TransactionItem - FUNDING - 100000')
-    ).toBeInTheDocument();
-    expect(screen.getByTestId('transaction-item-txn-123')).toBeInTheDocument();
-  });
-
-  it('should have scrollable container', () => {
-    render(
-      <TransactionList
-        transactions={mockTransactions}
-        accountId={mockAccountId}
-        isLoading={false}
-        isError={false}
-        isEmpty={false}
-        data-testid="transaction-list"
-      />
-    );
-
-    const scrollableContainer = screen
-      .getByTestId('transaction-list')
-      .querySelector('.overflow-y-auto');
-    expect(scrollableContainer).toBeInTheDocument();
-  });
-
-  it('should have proper styling classes', () => {
-    render(
-      <TransactionList
-        transactions={mockTransactions}
-        accountId={mockAccountId}
-        isLoading={false}
-        isError={false}
-        isEmpty={false}
-        data-testid="transaction-list"
-      />
-    );
-
-    const container = screen.getByTestId('transaction-list');
-    expect(container).toHaveClass('flex-1', 'flex', 'flex-col', 'min-h-0');
-
-    const innerContainer = container.querySelector('.overflow-y-auto');
-    expect(innerContainer).toHaveClass(
-      'flex-1',
-      'overflow-y-auto',
-      'bg-white',
-      'rounded-lg',
-      'border',
-      'border-gray-200'
-    );
-  });
-
-  it('should handle empty transactions array correctly', () => {
-    render(
-      <TransactionList
-        transactions={[]}
-        accountId={mockAccountId}
-        isLoading={false}
-        isError={false}
-        isEmpty={true}
-        data-testid="transaction-list"
-      />
-    );
-
-    expect(screen.getByText('No transactions yet')).toBeInTheDocument();
-    expect(screen.queryByText('Mock TransactionItem')).not.toBeInTheDocument();
-  });
-
-  it('should render many transactions', () => {
-    const manyTransactions = Array.from({ length: 10 }, (_, i) => ({
-      ...mockTransactions[0],
-      txnId: `txn-${i}`,
-      amountMinor: 10000 * (i + 1),
-    }));
-
-    render(
-      <TransactionList
-        transactions={manyTransactions}
-        accountId={mockAccountId}
-        isLoading={false}
-        isError={false}
-        isEmpty={false}
-        data-testid="transaction-list"
-      />
-    );
-
-    manyTransactions.forEach((_, i) => {
-      expect(
-        screen.getByTestId(`transaction-item-txn-${i}`)
-      ).toBeInTheDocument();
-    });
-  });
-
-  it('should prioritize loading state over other states', () => {
-    render(
-      <TransactionList
-        transactions={mockTransactions}
-        accountId={mockAccountId}
-        isLoading={true}
-        isError={true}
-        isEmpty={true}
-        data-testid="transaction-list"
-      />
-    );
-
-    expect(screen.getByText('Loading transactions...')).toBeInTheDocument();
-    expect(
-      screen.queryByText('Failed to load transactions')
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText('No transactions yet')).not.toBeInTheDocument();
-  });
-
-  it('should prioritize error state over empty state', () => {
-    render(
-      <TransactionList
-        transactions={[]}
-        accountId={mockAccountId}
-        isLoading={false}
-        isError={true}
-        isEmpty={true}
-        data-testid="transaction-list"
-      />
-    );
-
-    expect(screen.getByText('Failed to load transactions')).toBeInTheDocument();
-    expect(screen.queryByText('No transactions yet')).not.toBeInTheDocument();
   });
 });

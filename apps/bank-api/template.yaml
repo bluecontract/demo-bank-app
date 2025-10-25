@@ -281,6 +281,18 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /v1/accounts/{accountId}
             Method: OPTIONS
+        ListAccountActivityApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountNumber}/activity
+            Method: GET
+        ListAccountActivityOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/accounts/{accountNumber}/activity
+            Method: OPTIONS
         FundAccountApi:
           Type: Api
           Properties:
@@ -304,18 +316,6 @@ Resources:
           Properties:
             RestApiId: !Ref BankApi
             Path: /v1/transfers
-            Method: OPTIONS
-        ListTransactionsApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountId}/transactions
-            Method: GET
-        ListTransactionsOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountId}/transactions
             Method: OPTIONS
         GetTransactionApi:
           Type: Api

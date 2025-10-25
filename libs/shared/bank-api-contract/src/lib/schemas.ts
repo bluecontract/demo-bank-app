@@ -67,12 +67,6 @@ export const TransactionDto = z.object({
   counterpartyAccountNumber: z.string(),
 });
 
-export const PaginatedDto = <T extends z.ZodTypeAny>(item: T) =>
-  z.object({
-    items: z.array(item),
-    next: z.string().optional(),
-  });
-
 export const ActivityPostedTransactionDto = z.object({
   kind: z.literal('POSTED_TRANSACTION'),
   transactionId: z.string(),
@@ -80,6 +74,10 @@ export const ActivityPostedTransactionDto = z.object({
   description: createSanitizedOptionalStringSchema(z.string().optional()),
   postedAt: z.string().datetime({ offset: true }),
   originHoldId: z.string().optional(),
+  side: z.enum(['DEBIT', 'CREDIT']),
+  type: z.string(),
+  status: z.string(),
+  counterpartyAccountNumber: z.string().optional(),
 });
 
 export const ActivityHoldCreatedDto = z.object({

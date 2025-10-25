@@ -1315,18 +1315,19 @@
         }
       }
     },
-    "/v1/accounts/{accountId}/transactions": {
+    "/v1/accounts/{accountNumber}/activity": {
       "get": {
-        "summary": "List transactions for a bank account",
+        "summary": "List account activity combining pending holds and posted transactions",
         "tags": ["banking"],
         "parameters": [
           {
-            "name": "accountId",
+            "name": "accountNumber",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid"
+              "minLength": 10,
+              "maxLength": 10
             }
           },
           {
@@ -1346,7 +1347,7 @@
             }
           }
         ],
-        "operationId": "listTransactions",
+        "operationId": "listActivity",
         "responses": {
           "200": {
             "description": "200",
@@ -1358,53 +1359,206 @@
                     "items": {
                       "type": "array",
                       "items": {
-                        "type": "object",
-                        "properties": {
-                          "txnId": {
-                            "type": "string",
-                            "format": "uuid"
-                          },
-                          "accountId": {
-                            "type": "string",
-                            "format": "uuid"
-                          },
-                          "side": {
-                            "type": "string",
-                            "enum": ["DEBIT", "CREDIT"]
-                          },
-                          "amountMinor": {
-                            "type": "integer"
-                          },
-                          "type": {
-                            "type": "string"
-                          },
-                          "status": {
-                            "type": "string"
-                          },
-                          "timestamp": {
-                            "type": "string",
-                            "format": "date-time"
-                          },
-                          "description": {
-                            "type": "string"
-                          },
-                          "counterpartyAccountNumber": {
-                            "type": "string"
-                          }
+                        "discriminator": {
+                          "propertyName": "kind"
                         },
-                        "required": [
-                          "txnId",
-                          "accountId",
-                          "side",
-                          "amountMinor",
-                          "type",
-                          "status",
-                          "timestamp",
-                          "counterpartyAccountNumber"
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["HOLD_CREATED"]
+                              },
+                              "holdId": {
+                                "type": "string"
+                              },
+                              "amountMinor": {
+                                "type": "integer"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "counterpartyAccountNumber": {
+                                "type": "string"
+                              },
+                              "createdByUserId": {
+                                "type": "string"
+                              },
+                              "idempotencyKeyHash": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "holdId",
+                              "amountMinor",
+                              "createdAt"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["HOLD_RELEASED"]
+                              },
+                              "holdId": {
+                                "type": "string"
+                              },
+                              "amountMinor": {
+                                "type": "integer"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "releasedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "releaseReason": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "holdId",
+                              "amountMinor",
+                              "releasedAt"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["HOLD_CAPTURED"]
+                              },
+                              "holdId": {
+                                "type": "string"
+                              },
+                              "amountMinor": {
+                                "type": "integer"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "capturedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "transactionId": {
+                                "type": "string"
+                              },
+                              "counterpartyAccountNumber": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "holdId",
+                              "amountMinor",
+                              "capturedAt",
+                              "transactionId",
+                              "counterpartyAccountNumber"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["HOLD_FAILED"]
+                              },
+                              "holdId": {
+                                "type": "string"
+                              },
+                              "amountMinor": {
+                                "type": "integer"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "failedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "failureCode": {
+                                "type": "string",
+                                "enum": [
+                                  "INSUFFICIENT_FUNDS",
+                                  "STATE_MISMATCH",
+                                  "VALIDATION",
+                                  "INTERNAL"
+                                ]
+                              },
+                              "failureMessage": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "holdId",
+                              "amountMinor",
+                              "failedAt",
+                              "failureCode"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["POSTED_TRANSACTION"]
+                              },
+                              "transactionId": {
+                                "type": "string"
+                              },
+                              "amountMinor": {
+                                "type": "integer"
+                              },
+                              "description": {
+                                "type": "string"
+                              },
+                              "postedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "originHoldId": {
+                                "type": "string"
+                              },
+                              "side": {
+                                "type": "string",
+                                "enum": ["DEBIT", "CREDIT"]
+                              },
+                              "type": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "type": "string"
+                              },
+                              "counterpartyAccountNumber": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "transactionId",
+                              "amountMinor",
+                              "postedAt",
+                              "side",
+                              "type",
+                              "status"
+                            ]
+                          }
                         ]
                       }
                     },
-                    "next": {
+                    "nextCursor": {
                       "type": "string"
                     }
                   },

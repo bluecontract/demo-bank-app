@@ -868,201 +868,6 @@ describe('Bank API Integration Tests', () => {
     });
   });
 
-  describe('List Transactions Endpoint', () => {
-    let jwtCookie: string;
-    let accountId: string;
-    const txnIds: string[] = [];
-
-    beforeAll(async () => {
-      const creds = await signupUniqueTestUser('list-transactions-user');
-      jwtCookie = creds.jwtCookie;
-
-      // Create an account
-      const createAccount = await invokeApi({
-        method: 'POST',
-        path: '/v1/accounts',
-        jwtCookie,
-        body: { name: 'Test Account' },
-      });
-      expect(createAccount.statusCode).toBe(201);
-      accountId = createAccount.body.accountId;
-
-      // Fund the account to create transactions
-      const fundResult = await invokeApi({
-        method: 'POST',
-        path: `/v1/accounts/${accountId}/funding`,
-        jwtCookie,
-        headers: {
-          'idempotency-key': crypto.randomUUID(),
-          origin: DEFAULT_TEST_ORIGIN,
-        },
-        body: { amountMinor: 1000 },
-      });
-      expect(fundResult.statusCode).toBe(201);
-      txnIds.push(fundResult.body.txnId);
-
-      // Create a second account for transfer
-      const secondUser = await signupUniqueTestUser('list-transactions-user-2');
-      const secondAccount = await invokeApi({
-        method: 'POST',
-        path: '/v1/accounts',
-        jwtCookie: secondUser.jwtCookie,
-        body: { name: 'Second Account' },
-      });
-      expect(secondAccount.statusCode).toBe(201);
-
-      // Transfer money to create another transaction
-      const transferResult = await invokeApi({
-        method: 'POST',
-        path: '/v1/transfers',
-        jwtCookie,
-        headers: {
-          'idempotency-key': crypto.randomUUID(),
-          origin: DEFAULT_TEST_ORIGIN,
-        },
-        body: {
-          sourceAccountId: accountId,
-          destinationAccountNumber: secondAccount.body.accountNumber,
-          amountMinor: 200,
-        },
-      });
-      expect(transferResult.statusCode).toBe(201);
-      txnIds.push(transferResult.body.txnId);
-    });
-
-    it('should list transactions for authenticated user', async () => {
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${accountId}/transactions`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(200);
-      expect(result.body).toHaveProperty('items');
-      expect(Array.isArray(result.body.items)).toBe(true);
-      expect(result.body.items.length).toBe(2);
-
-      // Verify transaction structure
-      for (const txn of result.body.items) {
-        expect(txn).toMatchObject({
-          txnId: expect.any(String),
-          accountId: accountId,
-          side: expect.stringMatching(/^(DEBIT|CREDIT)$/),
-          amountMinor: expect.any(Number),
-          type: expect.any(String),
-          status: expect.any(String),
-          timestamp: expect.any(String),
-          counterpartyAccountNumber: expect.any(String),
-        });
-        expect(txn.description).toBeDefined();
-      }
-
-      // Verify we have our expected transactions
-      const returnedTxnIds = result.body.items.map((t: any) => t.txnId);
-      expect(returnedTxnIds).toEqual(expect.arrayContaining(txnIds));
-    });
-
-    it('should return empty list for account with no transactions', async () => {
-      // Create a new account with no transactions
-      const newAccount = await invokeApi({
-        method: 'POST',
-        path: '/v1/accounts',
-        jwtCookie,
-        body: { name: 'Empty Account' },
-      });
-      expect(newAccount.statusCode).toBe(201);
-
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${newAccount.body.accountId}/transactions`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(200);
-      expect(result.body).toEqual({
-        items: [],
-        next: undefined,
-      });
-    });
-
-    it('should support pagination with limit parameter', async () => {
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${accountId}/transactions?limit=1`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(200);
-      expect(result.body.items).toHaveLength(1);
-      expect(result.body.items[0]).toMatchObject({
-        txnId: expect.any(String),
-        accountId: accountId,
-        side: expect.stringMatching(/^(DEBIT|CREDIT)$/),
-        amountMinor: expect.any(Number),
-        type: expect.any(String),
-        status: expect.any(String),
-        timestamp: expect.any(String),
-        counterpartyAccountNumber: expect.any(String),
-      });
-    });
-
-    it('should return 404 if account does not exist', async () => {
-      const nonExistentAccountId = crypto.randomUUID();
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${nonExistentAccountId}/transactions`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(404);
-      expect(result.body).toMatchObject({
-        error: 'ACCOUNT_NOT_FOUND',
-        message: `Account ${nonExistentAccountId} not found`,
-      });
-    });
-
-    it('should return 401 if user is not authenticated', async () => {
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${accountId}/transactions`,
-      });
-
-      expect(result.statusCode).toBe(401);
-      expect(result.body).toEqual({
-        error: 'UNAUTHORIZED',
-        message: 'Unauthorized',
-      });
-    });
-
-    it('should return 400 for invalid limit parameter', async () => {
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${accountId}/transactions?limit=0`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(400);
-      expect(result.body).toMatchObject({
-        error: 'VALIDATION_ERROR',
-        message: expect.any(String),
-      });
-    });
-
-    it('should return 400 for invalid accountId parameter', async () => {
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/invalid-uuid/transactions`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(400);
-      expect(result.body).toMatchObject({
-        error: 'VALIDATION_ERROR',
-        message: expect.any(String),
-      });
-    });
-  });
-
   describe('Get Transaction Endpoint', () => {
     let jwtCookie: string;
     let accountId: string;
@@ -1666,6 +1471,7 @@ describe('Bank API Integration Tests', () => {
         body: { amountMinor: 1_500 },
       });
       expect(fundingResult.statusCode).toBe(201);
+      const fundingTxnId = fundingResult.body.txnId;
 
       const destinationAccount = await invokeApi({
         method: 'POST',
@@ -1690,22 +1496,26 @@ describe('Bank API Integration Tests', () => {
         },
       });
       expect(transferResult.statusCode).toBe(201);
+      const transferTxnId = transferResult.body.txnId;
 
-      const transactionsResponse = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${accountId}/transactions`,
-        jwtCookie,
-      });
-      expect(transactionsResponse.statusCode).toBe(200);
+      const [fundingTxnResponse, transferTxnResponse] = await Promise.all([
+        invokeApi({
+          method: 'GET',
+          path: `/v1/accounts/${accountId}/transactions/${fundingTxnId}`,
+          jwtCookie,
+        }),
+        invokeApi({
+          method: 'GET',
+          path: `/v1/accounts/${accountId}/transactions/${transferTxnId}`,
+          jwtCookie,
+        }),
+      ]);
 
-      sortedTransactions = (
-        transactionsResponse.body.items as Array<{
-          txnId: string;
-          timestamp: string;
-          amountMinor: number;
-        }>
-      )
-        .map(item => ({
+      expect(fundingTxnResponse.statusCode).toBe(200);
+      expect(transferTxnResponse.statusCode).toBe(200);
+
+      sortedTransactions = [fundingTxnResponse.body, transferTxnResponse.body]
+        .map((item: any) => ({
           transactionId: item.txnId,
           timestamp: item.timestamp,
           amountMinor: item.amountMinor,
@@ -1990,6 +1800,32 @@ describe('Bank API Integration Tests', () => {
       const result = await invokeApi({
         method: 'GET',
         path: `/v1/accounts/${accountNumber}/activity?cursor=invalid-token`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+      });
+    });
+
+    it('should return 400 for invalid limit parameter', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountNumber}/activity?limit=0`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+      });
+    });
+
+    it('should return 400 for invalid account number format', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts/invalid-number/activity',
         jwtCookie,
       });
 

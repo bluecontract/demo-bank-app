@@ -23,6 +23,10 @@ const toResponseItem = (item: ActivityItem) => {
         description: item.description,
         postedAt: item.postedAt,
         originHoldId: item.originHoldId,
+        side: item.side,
+        type: item.type,
+        status: item.status,
+        counterpartyAccountNumber: item.counterpartyAccountNumber,
       } as const;
     case 'HOLD_CREATED':
       return {

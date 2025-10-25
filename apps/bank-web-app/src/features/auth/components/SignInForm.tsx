@@ -15,6 +15,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
   const apiClient = useApiClient();
   const navigate = useNavigate();
   const { signIn } = useAuth();
+  const genericErrorMessage = 'Sign in failed. Please try again.';
 
   const signInMutation = useMutation({
     mutationFn: async (userData: { email: string }) => {
@@ -26,15 +27,13 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
         return response.body;
       } else {
         if (response.status === 404) {
-          throw new Error(
-            'User not found. Please check the email and try again.'
-          );
+          throw new Error(genericErrorMessage);
         }
 
         const errorBody = response.body as
           | { error?: string; message?: string }
           | undefined;
-        throw new Error(errorBody?.message || 'Sign in failed');
+        throw new Error(errorBody?.message || genericErrorMessage);
       }
     },
     onSuccess: data => {
@@ -46,13 +45,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({ onSuccess }) => {
       navigate('/dashboard');
     },
     onError: (error: unknown) => {
-      if (error instanceof Error && error.message?.includes('User not found')) {
-        setErrors({
-          email: 'User not found. Please check the email and try again.',
-        });
-      } else {
-        setErrors({ email: 'Sign in failed. Please try again.' });
-      }
+      setErrors({ email: genericErrorMessage });
     },
   });
 
