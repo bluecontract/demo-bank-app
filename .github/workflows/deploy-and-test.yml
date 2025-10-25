@@ -24,6 +24,14 @@ on:
         description: 'Backend API URL'
         required: true
         type: string
+      intro-video-url:
+        description: 'Marketing intro video URL for the frontend build'
+        required: true
+        type: string
+      paynote-demo-video-url:
+        description: 'PayNote walkthrough video URL for auth pages'
+        required: true
+        type: string
     outputs:
       deployment-success:
         description: 'Whether deployment was successful'
@@ -104,6 +112,12 @@ jobs:
             if [ -n "$app" ]; then
               echo "🚀 Deploying $app to ${{ inputs.environment }}..."
               echo "🚀 BANK_API_URL=$BANK_API_URL"
+              if [ -n "$INTRO_VIDEO_URL" ]; then
+                echo "🎬 INTRO_VIDEO_URL=$INTRO_VIDEO_URL"
+              fi
+              if [ -n "$PAYNOTE_DEMO_VIDEO_URL" ]; then
+                echo "🎬 PAYNOTE_DEMO_VIDEO_URL=$PAYNOTE_DEMO_VIDEO_URL"
+              fi
               if npx nx deploy $app --environment=${{ inputs.environment }}; then
                 echo "✅ Successfully deployed $app"
               else
@@ -115,8 +129,10 @@ jobs:
 
           echo "success=$SUCCESS" >> $GITHUB_OUTPUT
         env:
-          # Set API URL for frontend builds
+          # Set API and marketing video URLs for frontend builds
           BANK_API_URL: ${{ inputs.backend-url }}
+          INTRO_VIDEO_URL: ${{ inputs.intro-video-url }}
+          PAYNOTE_DEMO_VIDEO_URL: ${{ inputs.paynote-demo-video-url }}
 
       - name: Set deployment status
         id: deploy-status
