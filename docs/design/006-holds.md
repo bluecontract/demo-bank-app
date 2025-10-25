@@ -172,7 +172,7 @@ PENDING
 ### Route
 
 ```
-GET /v1/accounts/{accountNumber}/activity?limit=20&cursor=...
+GET /v1/activity/{accountNumber}?limit=20&cursor=...
 ```
 
 ### Semantics

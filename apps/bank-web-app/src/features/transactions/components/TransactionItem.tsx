@@ -138,7 +138,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         subtitleLines: item.transactionId
           ? [...base.subtitleLines, `Captured txn: ${item.transactionId}`]
           : base.subtitleLines,
-        amountClass: 'text-green-700',
+        amountClass: 'text-yellow-700',
         clickable: false,
       };
     case 'HOLD_RELEASED':
@@ -195,7 +195,7 @@ export function TransactionItem({
       data-testid={testId}
     >
       {/* Left Section */}
-      <div className="flex items-center space-x-3 min-w-0 shrink-0">
+      <div className="flex items-center space-x-3 min-w-[350px] shrink-0">
         <div
           className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${visualState.iconClasses}`}
         >

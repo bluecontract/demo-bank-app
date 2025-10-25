@@ -1315,7 +1315,7 @@
         }
       }
     },
-    "/v1/accounts/{accountNumber}/activity": {
+    "/v1/activity/{accountNumber}": {
       "get": {
         "summary": "List account activity combining pending holds and posted transactions",
         "tags": ["banking"],
