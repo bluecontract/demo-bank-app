@@ -1675,7 +1675,7 @@ describe('Bank API Integration Tests', () => {
     it('should merge pending holds and posted transactions in descending order', async () => {
       const response = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${accountNumber}/activity`,
+        path: `/v1/activity/${accountNumber}`,
         jwtCookie,
       });
 
@@ -1726,7 +1726,7 @@ describe('Bank API Integration Tests', () => {
     it('should support stable pagination with cursor', async () => {
       const firstPage = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${accountNumber}/activity?limit=2`,
+        path: `/v1/activity/${accountNumber}?limit=2`,
         jwtCookie,
       });
 
@@ -1744,7 +1744,7 @@ describe('Bank API Integration Tests', () => {
       const secondCursor = encodeURIComponent(firstPage.body.nextCursor);
       const secondPage = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${accountNumber}/activity?limit=2&cursor=${secondCursor}`,
+        path: `/v1/activity/${accountNumber}?limit=2&cursor=${secondCursor}`,
         jwtCookie,
       });
 
@@ -1762,7 +1762,7 @@ describe('Bank API Integration Tests', () => {
       const thirdCursor = encodeURIComponent(secondPage.body.nextCursor);
       const thirdPage = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${accountNumber}/activity?limit=2&cursor=${thirdCursor}`,
+        path: `/v1/activity/${accountNumber}?limit=2&cursor=${thirdCursor}`,
         jwtCookie,
       });
 
@@ -1780,7 +1780,7 @@ describe('Bank API Integration Tests', () => {
       const fourthCursor = encodeURIComponent(thirdPage.body.nextCursor);
       const fourthPage = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${accountNumber}/activity?limit=2&cursor=${fourthCursor}`,
+        path: `/v1/activity/${accountNumber}?limit=2&cursor=${fourthCursor}`,
         jwtCookie,
       });
 
@@ -1799,7 +1799,7 @@ describe('Bank API Integration Tests', () => {
     it('should return 400 for invalid cursor token', async () => {
       const result = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${accountNumber}/activity?cursor=invalid-token`,
+        path: `/v1/activity/${accountNumber}?cursor=invalid-token`,
         jwtCookie,
       });
 
@@ -1812,7 +1812,7 @@ describe('Bank API Integration Tests', () => {
     it('should return 400 for invalid limit parameter', async () => {
       const result = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${accountNumber}/activity?limit=0`,
+        path: `/v1/activity/${accountNumber}?limit=0`,
         jwtCookie,
       });
 
@@ -1825,7 +1825,7 @@ describe('Bank API Integration Tests', () => {
     it('should return 400 for invalid account number format', async () => {
       const result = await invokeApi({
         method: 'GET',
-        path: '/v1/accounts/invalid-number/activity',
+        path: '/v1/activity/invalid-number',
         jwtCookie,
       });
 
@@ -1847,7 +1847,7 @@ describe('Bank API Integration Tests', () => {
 
       const result = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${otherAccount.body.accountNumber}/activity`,
+        path: `/v1/activity/${otherAccount.body.accountNumber}`,
         jwtCookie,
       });
 
@@ -1860,7 +1860,7 @@ describe('Bank API Integration Tests', () => {
     it('should return 401 when request is unauthenticated', async () => {
       const result = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${accountNumber}/activity`,
+        path: `/v1/activity/${accountNumber}`,
       });
 
       expect(result.statusCode).toBe(401);

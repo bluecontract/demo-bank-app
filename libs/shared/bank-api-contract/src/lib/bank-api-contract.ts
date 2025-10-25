@@ -161,7 +161,7 @@ export const bankApiContract = c.router(
 
       listActivity: {
         method: 'GET',
-        path: '/v1/accounts/:accountNumber/activity',
+        path: '/v1/activity/:accountNumber',
         pathParams: z.object({ accountNumber: z.string().length(10) }),
         query: z.object({
           limit: z.coerce.number().positive().optional(),

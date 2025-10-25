@@ -285,13 +285,13 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountNumber}/activity
+            Path: /v1/activity/{accountNumber}
             Method: GET
         ListAccountActivityOptions:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountNumber}/activity
+            Path: /v1/activity/{accountNumber}
             Method: OPTIONS
         FundAccountApi:
           Type: Api
