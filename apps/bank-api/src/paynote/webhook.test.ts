@@ -110,10 +110,9 @@ describe('payNoteWebhookHandler', () => {
       'Received PayNote webhook',
       expect.objectContaining({
         eventId: 'event-123',
-        emittedContainsCapture: true,
-        emittedEventNames: [
-          'Document Processing Initiated',
-          'Reserve Funds and Capture Immediately Requested',
+        events: [
+          { type: { name: 'Document Processing Initiated' } },
+          { type: { name: 'Reserve Funds and Capture Immediately Requested' } },
         ],
         documentBlueId: 'a56',
         payerAccountNumber: '9559276001',
@@ -167,10 +166,17 @@ describe('payNoteWebhookHandler', () => {
         document: {
           payerAccountNumber: { value: '1111111111' },
           payeeAccountNumber: { value: '2222222222' },
+          amount: { total: { value: 1 } },
         },
         emitted: [{ type: { name: 'Some Other Event' } }],
       },
     };
+
+    bankingRepository.getAccountIdByNumber.mockResolvedValue('acct-123');
+    bankingRepository.getAccountById.mockResolvedValue({
+      id: 'acct-123',
+      ownerUserId: 'user-456',
+    });
 
     fetchMock.mockResolvedValue({
       ok: true,
@@ -185,15 +191,13 @@ describe('payNoteWebhookHandler', () => {
       'Received PayNote webhook',
       expect.objectContaining({
         eventId: 'event-456',
-        emittedContainsCapture: false,
-        emittedEventNames: ['Some Other Event'],
+        events: [{ type: { name: 'Some Other Event' } }],
         documentBlueId: 'a23',
         payerAccountNumber: '1111111111',
         payeeAccountNumber: '2222222222',
       })
     );
     expect(hoisted.transferMoneyMock).not.toHaveBeenCalled();
-    expect(bankingRepository.getAccountIdByNumber).not.toHaveBeenCalled();
     expect(logger.error).not.toHaveBeenCalled();
   });
 

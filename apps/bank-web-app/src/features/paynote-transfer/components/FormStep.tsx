@@ -141,23 +141,6 @@ export function FormStep({
     return 'valid';
   };
 
-  const isStandardTransferCoreValid = () => {
-    if (!formData.fromAccount || !selectedAccount) {
-      return false;
-    }
-
-    const amountStatus = getAmountStatus();
-    if (
-      amountStatus === 'invalid-format' ||
-      amountStatus === 'non-positive' ||
-      amountStatus === 'insufficient-funds'
-    ) {
-      return false;
-    }
-
-    return true;
-  };
-
   const getDestinationAccountStatus = (): DestinationAccountStatus => {
     if (!selectedAccount) {
       return 'invalid';
@@ -186,8 +169,7 @@ export function FormStep({
     }
 
     const amountStatus = getAmountStatus();
-    const allowedAmountStatuses: AmountStatus[] = ['valid', 'missing'];
-    if (!allowedAmountStatuses.includes(amountStatus)) {
+    if (amountStatus === 'invalid-format' || amountStatus === 'non-positive') {
       return false;
     }
 
@@ -195,7 +177,7 @@ export function FormStep({
       return isPayNoteValid();
     }
 
-    return isStandardTransferCoreValid();
+    return true;
   };
 
   const canProceed = () => isFormValid();
@@ -207,6 +189,11 @@ export function FormStep({
 
     const amountStatus = getAmountStatus();
     if (amountStatus === 'missing') {
+      setActiveModal({ type: 'amount', reason: amountStatus });
+      return;
+    }
+
+    if (amountStatus === 'insufficient-funds') {
       setActiveModal({ type: 'amount', reason: amountStatus });
       return;
     }
@@ -313,6 +300,37 @@ export function FormStep({
           </div>
         </div>
       )}
+
+      {activeModal?.type === 'amount' &&
+        activeModal.reason === 'insufficient-funds' && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            role="dialog"
+            aria-modal="true"
+            data-testid="insufficient-funds-modal"
+          >
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+              <div className="p-6 space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Insufficient funds
+                </h3>
+                <p className="text-sm text-gray-700">
+                  The selected account does not have enough available balance.
+                  Enter a smaller amount or fund the account first.
+                </p>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setActiveModal(null)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       {activeModal?.type === 'destination' &&
         activeModal.context === 'standard' && (

@@ -158,6 +158,41 @@ describe('FormStep', () => {
     expect(onNext).not.toHaveBeenCalled();
   });
 
+  it('displays an insufficient funds warning when amount exceeds balance', async () => {
+    const { onNext } = setup();
+
+    fireEvent.change(screen.getByLabelText(/total amount to be paid/i), {
+      target: { value: '4000.00' },
+    });
+
+    fireEvent.change(screen.getByLabelText(/^to account$/i), {
+      target: { value: '9876543210' },
+    });
+
+    const nextButton = screen.getByRole('button', { name: /next/i });
+    await waitFor(() => expect(nextButton).toBeEnabled());
+
+    fireEvent.click(nextButton);
+
+    const modal = await screen.findByTestId('insufficient-funds-modal');
+    expect(modal).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /the selected account does not have enough available balance/i
+      )
+    ).toBeInTheDocument();
+    expect(onNext).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /^close$/i }));
+    await waitFor(() =>
+      expect(
+        screen.queryByText(
+          /the selected account does not have enough available balance/i
+        )
+      ).not.toBeInTheDocument()
+    );
+  });
+
   it('shows an amount modal when total amount is missing', async () => {
     const { onNext } = setup();
 

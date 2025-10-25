@@ -5,8 +5,9 @@ import type { MyOsCredentials } from '../shared/myOsSecrets';
 import { getDependencies } from './dependencies';
 
 // There are several other events you can react to: https://github.com/bluecontract/blue-repository/tree/main/PayNote
-const CAPTURE_EVENT_NAME = 'Capture Funds Requested';
-const CAPTURE_IMMIDIETLY_EVENT_NAME =
+const RESERVE_FUNDS_EVENT_NAME = 'Reserve Funds Requested';
+const CAPTURE_FUNDS_EVENT_NAME = 'Capture Funds Requested';
+const CAPTURE_IMMEDIATELY_EVENT_NAME =
   'Reserve Funds and Capture Immediately Requested';
 
 const returnResponse = (note?: string) => ({
@@ -127,33 +128,8 @@ export const payNoteWebhookHandler = async (
 
   const payerAccountNumber = document.payerAccountNumber?.value;
   const payeeAccountNumber = document.payeeAccountNumber?.value;
-  const transferAmountMinor = document.amount?.total?.value ?? 0;
+  const transferAmountMinor = document.amount?.total?.value;
   const transferDescription = document.name || 'PayNote transfer';
-
-  const events =
-    (eventPayload?.object?.emitted as Array<
-      { type?: { name?: string } } | undefined
-    >) ?? [];
-  const emittedEventNames = events
-    .map(item => item?.type?.name)
-    .filter(Boolean) as string[];
-
-  const emittedContainsCapture =
-    emittedEventNames.includes(CAPTURE_EVENT_NAME) ||
-    emittedEventNames.includes(CAPTURE_IMMIDIETLY_EVENT_NAME);
-
-  logger.info('Received PayNote webhook', {
-    eventId,
-    emittedContainsCapture,
-    emittedEventNames,
-    documentBlueId,
-    payerAccountNumber,
-    payeeAccountNumber,
-  });
-
-  if (!emittedContainsCapture) {
-    return returnResponse();
-  }
 
   if (!payerAccountNumber || !payeeAccountNumber) {
     return returnResponse(
@@ -217,42 +193,63 @@ export const payNoteWebhookHandler = async (
       );
     }
 
-    try {
-      const txnId = await transferMoney(
-        {
-          srcAccountId: payerAccountId,
-          dstAccountNumber: String(payeeAccountNumber),
-          amountMinor: new Money(transferAmountMinor),
-          description: transferDescription,
-          ctx: {
-            userId: ownerUserId,
-            idempotencyKey: String(documentBlueId),
-          },
-        },
-        {
-          repository: bankingRepository,
-        }
-      );
+    const events =
+      (eventPayload?.object?.emitted as Array<
+        { type?: { name?: string } } | undefined
+      >) ?? [];
 
-      logger.info('PayNote capture transfer executed', {
-        eventId,
-        txnId,
-        payerAccountId,
-        payerAccountNumber,
-        payeeAccountNumber,
-        transferAmountMinor,
-      });
-    } catch (error) {
-      return returnResponse(
-        logError('PayNote capture transfer failed', {
-          eventId,
-          payerAccountId,
-          payerAccountNumber,
-          payeeAccountNumber,
-          transferAmountMinor,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      );
+    logger.info('Received PayNote webhook', {
+      eventId,
+      events,
+      documentBlueId,
+      payerAccountNumber,
+      payeeAccountNumber,
+    });
+
+    for (const event of events) {
+      if (event?.type?.name === CAPTURE_IMMEDIATELY_EVENT_NAME) {
+        try {
+          const txnId = await transferMoney(
+            {
+              srcAccountId: payerAccountId,
+              dstAccountNumber: String(payeeAccountNumber),
+              amountMinor: new Money(transferAmountMinor),
+              description: transferDescription,
+              ctx: {
+                userId: ownerUserId,
+                idempotencyKey: String(documentBlueId),
+              },
+            },
+            {
+              repository: bankingRepository,
+            }
+          );
+
+          logger.info('PayNote capture transfer executed', {
+            eventId,
+            txnId,
+            payerAccountId,
+            payerAccountNumber,
+            payeeAccountNumber,
+            transferAmountMinor,
+          });
+        } catch (error) {
+          return returnResponse(
+            logError('PayNote capture transfer failed', {
+              eventId,
+              payerAccountId,
+              payerAccountNumber,
+              payeeAccountNumber,
+              transferAmountMinor,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          );
+        }
+      } else if (event?.type?.name === CAPTURE_FUNDS_EVENT_NAME) {
+        // TODO: release reserved hold
+      } else if (event?.type?.name === RESERVE_FUNDS_EVENT_NAME) {
+        // TODO: release hold
+      }
     }
   } catch (error) {
     return returnResponse(

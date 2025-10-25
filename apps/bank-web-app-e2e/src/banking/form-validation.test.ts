@@ -163,6 +163,22 @@ test.describe('Banking Form Validation', () => {
     await amountInput.fill('0');
     await expect(nextButton).toBeDisabled();
 
+    await amountInput.fill('250');
+    await expect(nextButton).toBeEnabled();
+
+    const insufficientFundsModal = page.locator(
+      '[data-testid="insufficient-funds-modal"]'
+    );
+    await nextButton.click();
+    await expect(insufficientFundsModal).toBeVisible();
+    await expect(
+      insufficientFundsModal.getByText(
+        'The selected account does not have enough available balance. Enter a smaller amount or fund the account first.'
+      )
+    ).toBeVisible();
+    await insufficientFundsModal.getByRole('button', { name: 'Close' }).click();
+    await expect(insufficientFundsModal).toHaveCount(0);
+
     await amountInput.fill('150.129');
     await expect(amountInput).toHaveValue('150.12');
     await expect(nextButton).toBeEnabled();
