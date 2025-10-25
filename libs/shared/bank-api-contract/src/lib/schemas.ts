@@ -72,3 +72,70 @@ export const PaginatedDto = <T extends z.ZodTypeAny>(item: T) =>
     items: z.array(item),
     next: z.string().optional(),
   });
+
+export const ActivityPostedTransactionDto = z.object({
+  kind: z.literal('POSTED_TRANSACTION'),
+  transactionId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  postedAt: z.string().datetime({ offset: true }),
+  originHoldId: z.string().optional(),
+});
+
+export const ActivityHoldCreatedDto = z.object({
+  kind: z.literal('HOLD_CREATED'),
+  holdId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  createdAt: z.string().datetime({ offset: true }),
+  counterpartyAccountNumber: z.string().optional(),
+  createdByUserId: z.string().optional(),
+  idempotencyKeyHash: z.string().optional(),
+});
+
+export const ActivityHoldReleasedDto = z.object({
+  kind: z.literal('HOLD_RELEASED'),
+  holdId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  releasedAt: z.string().datetime({ offset: true }),
+  releaseReason: z.string().optional(),
+});
+
+export const ActivityHoldCapturedDto = z.object({
+  kind: z.literal('HOLD_CAPTURED'),
+  holdId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  capturedAt: z.string().datetime({ offset: true }),
+  transactionId: z.string(),
+  counterpartyAccountNumber: z.string(),
+});
+
+export const ActivityHoldFailedDto = z.object({
+  kind: z.literal('HOLD_FAILED'),
+  holdId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  failedAt: z.string().datetime({ offset: true }),
+  failureCode: z.enum([
+    'INSUFFICIENT_FUNDS',
+    'STATE_MISMATCH',
+    'VALIDATION',
+    'INTERNAL',
+  ]),
+  failureMessage: z.string().optional(),
+});
+
+export const ActivityItemDto = z.discriminatedUnion('kind', [
+  ActivityHoldCreatedDto,
+  ActivityHoldReleasedDto,
+  ActivityHoldCapturedDto,
+  ActivityHoldFailedDto,
+  ActivityPostedTransactionDto,
+]);
+
+export const ActivityResponseDto = z.object({
+  items: z.array(ActivityItemDto),
+  nextCursor: z.string().optional(),
+});

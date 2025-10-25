@@ -18,6 +18,7 @@ import {
   DeleteTableCommand,
   DescribeTableCommand,
 } from '@aws-sdk/client-dynamodb';
+import { DynamoHoldRepository } from '@demo-bank-app/banking';
 import jwt from 'jsonwebtoken';
 import {
   assertAllSecurityHeaders,
@@ -1281,6 +1282,440 @@ describe('Bank API Integration Tests', () => {
       });
     });
   });
+
+  describe('Activity Endpoint', () => {
+    let jwtCookie: string;
+    let accountId: string;
+    let accountNumber: string;
+    let holdRepository: DynamoHoldRepository;
+    let releasedHold: {
+      holdId: string;
+      createdAt: string;
+      releasedAt: string;
+    };
+    let expiredHold: {
+      holdId: string;
+      createdAt: string;
+      expiresAt: string;
+    };
+    let sortedTransactions: Array<{
+      transactionId: string;
+      timestamp: string;
+      amountMinor: number;
+    }>;
+    let holdEntries: Array<{
+      holdId: string;
+      createdAt: string;
+      amountMinor: number;
+      description: string;
+      counterpartyAccountNumber: string;
+    }>;
+    type ExpectedActivityItem =
+      | { kind: 'POSTED_TRANSACTION'; transactionId: string }
+      | {
+          kind:
+            | 'HOLD_CREATED'
+            | 'HOLD_RELEASED'
+            | 'HOLD_CAPTURED'
+            | 'HOLD_FAILED';
+          holdId: string;
+        };
+
+    const expectedOrder: ExpectedActivityItem[] = [];
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('activity-endpoint-user');
+      jwtCookie = creds.jwtCookie;
+
+      const createAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Activity Primary Account' },
+      });
+      expect(createAccount.statusCode).toBe(201);
+      accountId = createAccount.body.accountId;
+      accountNumber = createAccount.body.accountNumber;
+
+      const fundingResult = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 1_500 },
+      });
+      expect(fundingResult.statusCode).toBe(201);
+
+      const destinationAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Activity Destination Account' },
+      });
+      expect(destinationAccount.statusCode).toBe(201);
+
+      const transferResult = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: accountId,
+          destinationAccountNumber: destinationAccount.body.accountNumber,
+          amountMinor: 300,
+        },
+      });
+      expect(transferResult.statusCode).toBe(201);
+
+      const transactionsResponse = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountId}/transactions`,
+        jwtCookie,
+      });
+      expect(transactionsResponse.statusCode).toBe(200);
+
+      sortedTransactions = (
+        transactionsResponse.body.items as Array<{
+          txnId: string;
+          timestamp: string;
+          amountMinor: number;
+        }>
+      )
+        .map(item => ({
+          transactionId: item.txnId,
+          timestamp: item.timestamp,
+          amountMinor: item.amountMinor,
+        }))
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+      if (sortedTransactions.length < 2) {
+        throw new Error(
+          'Expected at least two transactions for activity tests'
+        );
+      }
+
+      holdRepository = new DynamoHoldRepository({
+        tableName: TEST_CONFIG.tableName,
+        region: TEST_CONFIG.region,
+        endpoint: TEST_CONFIG.localstackEndpoint,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+
+      const newestTime = Date.parse(sortedTransactions[0].timestamp);
+      const secondTime = Date.parse(sortedTransactions[1].timestamp);
+
+      holdEntries = [
+        {
+          holdId: `hold-${crypto.randomUUID()}`,
+          createdAt: new Date(newestTime + 2_000).toISOString(),
+          amountMinor: 450,
+          description: 'Newest pending hold',
+          counterpartyAccountNumber: destinationAccount.body.accountNumber,
+        },
+        {
+          holdId: `hold-${crypto.randomUUID()}`,
+          createdAt: new Date(
+            Math.floor((newestTime + secondTime) / 2)
+          ).toISOString(),
+          amountMinor: 350,
+          description: 'Mid pending hold',
+          counterpartyAccountNumber: destinationAccount.body.accountNumber,
+        },
+        {
+          holdId: `hold-${crypto.randomUUID()}`,
+          createdAt: new Date(secondTime - 120_000).toISOString(),
+          amountMinor: 250,
+          description: 'Old pending hold',
+          counterpartyAccountNumber: destinationAccount.body.accountNumber,
+        },
+      ];
+
+      for (const hold of holdEntries) {
+        await holdRepository.putHoldMeta({
+          holdId: hold.holdId,
+          payerAccountNumber: accountNumber,
+          counterpartyAccountNumber: hold.counterpartyAccountNumber,
+          amountMinor: hold.amountMinor,
+          currency: 'USD',
+          status: 'PENDING',
+          description: hold.description,
+          createdAt: hold.createdAt,
+        });
+        await holdRepository.appendHoldEvent(hold.holdId, {
+          at: hold.createdAt,
+          type: 'CREATED',
+          createdByUserId: 'system-test',
+          idempotencyKeyHash: `hash-${hold.holdId}`,
+        });
+      }
+
+      const captureAt = new Date(newestTime + 1_500).toISOString();
+      await holdRepository.putHoldMeta({
+        holdId: holdEntries[1].holdId,
+        payerAccountNumber: accountNumber,
+        counterpartyAccountNumber: holdEntries[1].counterpartyAccountNumber,
+        amountMinor: holdEntries[1].amountMinor,
+        currency: 'USD',
+        status: 'CAPTURED',
+        description: holdEntries[1].description,
+        createdAt: holdEntries[1].createdAt,
+        relatedTransactionId: sortedTransactions[0].transactionId,
+      });
+      await holdRepository.appendHoldEvent(holdEntries[1].holdId, {
+        at: captureAt,
+        type: 'CAPTURED',
+        transactionId: sortedTransactions[0].transactionId,
+        counterpartyAccountNumber: holdEntries[1].counterpartyAccountNumber!,
+      });
+
+      releasedHold = {
+        holdId: `hold-${crypto.randomUUID()}`,
+        createdAt: new Date(secondTime - 30_000).toISOString(),
+        releasedAt: new Date(secondTime - 10_000).toISOString(),
+      };
+      await holdRepository.putHoldMeta({
+        holdId: releasedHold.holdId,
+        payerAccountNumber: accountNumber,
+        amountMinor: 200,
+        currency: 'USD',
+        status: 'PENDING',
+        description: 'Released pending hold',
+        createdAt: releasedHold.createdAt,
+      });
+      await holdRepository.appendHoldEvent(releasedHold.holdId, {
+        at: releasedHold.createdAt,
+        type: 'CREATED',
+        createdByUserId: 'system-test',
+      });
+      await holdRepository.putHoldMeta({
+        holdId: releasedHold.holdId,
+        payerAccountNumber: accountNumber,
+        amountMinor: 200,
+        currency: 'USD',
+        status: 'RELEASED',
+        description: 'Released pending hold',
+        createdAt: releasedHold.createdAt,
+        releasedAt: releasedHold.releasedAt,
+        releaseReason: 'Merchant adjustment',
+      });
+      await holdRepository.appendHoldEvent(releasedHold.holdId, {
+        at: releasedHold.releasedAt,
+        type: 'RELEASED',
+        reason: 'Merchant adjustment',
+      });
+
+      expectedOrder.push(
+        { kind: 'HOLD_CREATED', holdId: holdEntries[0].holdId },
+        { kind: 'HOLD_CAPTURED', holdId: holdEntries[1].holdId },
+        {
+          kind: 'POSTED_TRANSACTION',
+          transactionId: sortedTransactions[0].transactionId,
+        },
+        { kind: 'HOLD_CREATED', holdId: holdEntries[1].holdId },
+        {
+          kind: 'POSTED_TRANSACTION',
+          transactionId: sortedTransactions[1].transactionId,
+        },
+        { kind: 'HOLD_RELEASED', holdId: releasedHold.holdId },
+        { kind: 'HOLD_CREATED', holdId: releasedHold.holdId },
+        { kind: 'HOLD_CREATED', holdId: holdEntries[2].holdId }
+      );
+
+      expiredHold = {
+        holdId: `hold-${crypto.randomUUID()}`,
+        createdAt: new Date(secondTime - 180_000).toISOString(),
+        expiresAt: new Date(secondTime - 60_000).toISOString(),
+      };
+      await holdRepository.putHoldMeta({
+        holdId: expiredHold.holdId,
+        payerAccountNumber: accountNumber,
+        amountMinor: 175,
+        currency: 'USD',
+        status: 'EXPIRED',
+        description: 'Expired pending hold',
+        createdAt: expiredHold.createdAt,
+        expiresAt: expiredHold.expiresAt,
+      });
+    });
+
+    it('should merge pending holds and posted transactions in descending order', async () => {
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountNumber}/activity`,
+        jwtCookie,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const simplified = response.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(simplified).toEqual(expectedOrder);
+      expect(response.body.nextCursor).toBeUndefined();
+
+      const newestHoldEvent = response.body.items[0];
+      expect(newestHoldEvent).toMatchObject({
+        kind: 'HOLD_CREATED',
+        holdId: holdEntries[0].holdId,
+        amountMinor: holdEntries[0].amountMinor,
+        createdByUserId: 'system-test',
+        idempotencyKeyHash: `hash-${holdEntries[0].holdId}`,
+      });
+
+      const holdIds = response.body.items
+        .filter((item: any) => item.kind.startsWith('HOLD_'))
+        .map((item: any) => item.holdId);
+      expect(holdIds).toContain(releasedHold.holdId);
+      expect(holdIds).not.toContain(expiredHold.holdId);
+
+      const capturedEvent = response.body.items.find(
+        (item: any) =>
+          item.kind === 'HOLD_CAPTURED' && item.holdId === holdEntries[1].holdId
+      );
+      expect(capturedEvent).toMatchObject({
+        transactionId: sortedTransactions[0].transactionId,
+        counterpartyAccountNumber: holdEntries[1].counterpartyAccountNumber,
+      });
+
+      const releasedEvent = response.body.items.find(
+        (item: any) =>
+          item.kind === 'HOLD_RELEASED' && item.holdId === releasedHold.holdId
+      );
+      expect(releasedEvent).toMatchObject({
+        releaseReason: 'Merchant adjustment',
+        releasedAt: releasedHold.releasedAt,
+      });
+    });
+
+    it('should support stable pagination with cursor', async () => {
+      const firstPage = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountNumber}/activity?limit=2`,
+        jwtCookie,
+      });
+
+      expect(firstPage.statusCode).toBe(200);
+      expect(firstPage.body.items).toHaveLength(2);
+      const firstIds = firstPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(firstIds).toEqual(expectedOrder.slice(0, 2));
+      expect(firstPage.body.nextCursor).toBeDefined();
+
+      const secondCursor = encodeURIComponent(firstPage.body.nextCursor);
+      const secondPage = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountNumber}/activity?limit=2&cursor=${secondCursor}`,
+        jwtCookie,
+      });
+
+      expect(secondPage.statusCode).toBe(200);
+      expect(secondPage.body.items).toHaveLength(2);
+      const secondIds = secondPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(secondIds).toEqual(expectedOrder.slice(2, 4));
+      expect(secondPage.body.nextCursor).toBeDefined();
+
+      const thirdCursor = encodeURIComponent(secondPage.body.nextCursor);
+      const thirdPage = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountNumber}/activity?limit=2&cursor=${thirdCursor}`,
+        jwtCookie,
+      });
+
+      expect(thirdPage.statusCode).toBe(200);
+      expect(thirdPage.body.items).toHaveLength(2);
+      const thirdIds = thirdPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(thirdIds).toEqual(expectedOrder.slice(4, 6));
+      expect(thirdPage.body.nextCursor).toBeDefined();
+
+      const fourthCursor = encodeURIComponent(thirdPage.body.nextCursor);
+      const fourthPage = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountNumber}/activity?limit=2&cursor=${fourthCursor}`,
+        jwtCookie,
+      });
+
+      expect(fourthPage.statusCode).toBe(200);
+      expect(fourthPage.body.items).toHaveLength(2);
+      const fourthIds = fourthPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(fourthIds).toEqual(expectedOrder.slice(6));
+      expect(fourthPage.body.nextCursor).toBeUndefined();
+    });
+
+    it('should return 400 for invalid cursor token', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountNumber}/activity?cursor=invalid-token`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+      });
+    });
+
+    it('should return 404 when requesting activity for account not owned by user', async () => {
+      const otherUser = await signupUniqueTestUser('activity-endpoint-other');
+      const otherAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: otherUser.jwtCookie,
+        body: { name: 'Other Account' },
+      });
+      expect(otherAccount.statusCode).toBe(201);
+
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${otherAccount.body.accountNumber}/activity`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(404);
+      expect(result.body).toMatchObject({
+        error: 'ACCOUNT_NOT_FOUND',
+      });
+    });
+
+    it('should return 401 when request is unauthenticated', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${accountNumber}/activity`,
+      });
+
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+  });
 });
 
 // Helper functions
@@ -1373,6 +1808,10 @@ async function setupLocalStackResources(): Promise<void> {
 
           { AttributeName: 'BANKING_GSI2PK', AttributeType: 'S' },
           { AttributeName: 'BANKING_GSI2SK', AttributeType: 'S' },
+          { AttributeName: 'HOLD_GSI1PK', AttributeType: 'S' },
+          { AttributeName: 'HOLD_GSI1SK', AttributeType: 'S' },
+          { AttributeName: 'HOLD_EVENT_GSI1PK', AttributeType: 'S' },
+          { AttributeName: 'HOLD_EVENT_GSI1SK', AttributeType: 'S' },
         ],
         KeySchema: [
           { AttributeName: 'PK', KeyType: 'HASH' },
@@ -1401,6 +1840,22 @@ async function setupLocalStackResources(): Promise<void> {
             KeySchema: [
               { AttributeName: 'BANKING_GSI2PK', KeyType: 'HASH' },
               { AttributeName: 'BANKING_GSI2SK', KeyType: 'RANGE' },
+            ],
+            Projection: { ProjectionType: 'ALL' },
+          },
+          {
+            IndexName: 'HOLD_GSI1',
+            KeySchema: [
+              { AttributeName: 'HOLD_GSI1PK', KeyType: 'HASH' },
+              { AttributeName: 'HOLD_GSI1SK', KeyType: 'RANGE' },
+            ],
+            Projection: { ProjectionType: 'ALL' },
+          },
+          {
+            IndexName: 'HOLD_EVENT_GSI1',
+            KeySchema: [
+              { AttributeName: 'HOLD_EVENT_GSI1PK', KeyType: 'HASH' },
+              { AttributeName: 'HOLD_EVENT_GSI1SK', KeyType: 'RANGE' },
             ],
             Projection: { ProjectionType: 'ALL' },
           },

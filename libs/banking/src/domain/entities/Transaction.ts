@@ -15,11 +15,13 @@ export interface TransactionProps {
   description: string;
   transactionIdempotencyKey?: string;
   createdAt: Date;
+  originHoldId?: string;
 }
 
 export interface TransactionMeta {
   description: string;
   idempotencyKey?: string;
+  originHoldId?: string;
 }
 
 export interface NetAmount {
@@ -34,6 +36,7 @@ export class Transaction {
   readonly description: string;
   readonly transactionIdempotencyKey?: string;
   readonly createdAt: Date;
+  readonly originHoldId?: string;
 
   constructor(props: TransactionProps) {
     if (!props.id || props.id.trim() === '') {
@@ -54,11 +57,28 @@ export class Transaction {
     this.postings = [...props.postings];
     this.transactionIdempotencyKey = props.transactionIdempotencyKey;
     this.createdAt = props.createdAt;
+    this.originHoldId = props.originHoldId;
 
     this.validateDoubleEntry();
   }
 
   static create(postings: Posting[], meta: TransactionMeta): Transaction {
+    return Transaction.createWithId(postings, meta, randomUUID());
+  }
+
+  static createWithId(
+    postings: Posting[],
+    meta: TransactionMeta,
+    id: string
+  ): Transaction {
+    return Transaction.buildTransaction(postings, meta, id);
+  }
+
+  private static buildTransaction(
+    postings: Posting[],
+    meta: TransactionMeta,
+    id: string
+  ): Transaction {
     const sum = postings.reduce((total, posting) => {
       return (
         total +
@@ -77,13 +97,14 @@ export class Transaction {
       : 'TRANSFER';
 
     return new Transaction({
-      id: randomUUID(),
+      id,
       type: transactionType,
       status: 'POSTED',
       postings,
       description: meta.description,
       transactionIdempotencyKey: meta.idempotencyKey,
       createdAt: new Date(),
+      originHoldId: meta.originHoldId,
     });
   }
 
@@ -118,6 +139,7 @@ export class Transaction {
       this.status !== other.status ||
       this.transactionIdempotencyKey !== other.transactionIdempotencyKey ||
       this.createdAt.getTime() !== other.createdAt.getTime() ||
+      this.originHoldId !== other.originHoldId ||
       this.postings.length !== other.postings.length
     ) {
       return false;
