@@ -152,6 +152,50 @@ describe('getActivityDetailHandler', () => {
     );
   });
 
+  it('supports url-safe activity id format for transactions', async () => {
+    const transactionId = 'txn-456';
+    const mockPosting = {
+      accountId: baseAccount.id,
+      side: 'CREDIT' as const,
+      amountMinor: 1000,
+      counterpartyAccountNumber: '0000000000',
+    } as any;
+
+    const mockTransaction = {
+      id: transactionId,
+      type: 'FUNDING' as const,
+      status: 'POSTED' as const,
+      description: 'Funding transaction',
+      createdAt: new Date('2024-01-05T00:00:00.000Z'),
+      postings: [mockPosting],
+    } as any;
+
+    vi.mocked(repositoryMock.getTransactionById).mockResolvedValue(
+      mockTransaction
+    );
+
+    const response = await getActivityDetailHandler(
+      {
+        params: {
+          accountNumber: baseAccount.accountNumber,
+          activityId: `TXN--${transactionId}`,
+        },
+      },
+      {
+        request: {
+          headers: setAuthHeader(new Headers()),
+        } as unknown as MaybeAuthenticatedTsRestRequestContext,
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      kind: 'POSTED_TRANSACTION',
+      activityId: `TXN#${transactionId}`,
+      transactionId,
+    });
+  });
+
   it('returns hold activity detail with timeline', async () => {
     const holdId = 'hold-123';
     const hold = {
@@ -233,6 +277,48 @@ describe('getActivityDetailHandler', () => {
           counterpartyAccountNumber: '1234567899',
         },
       ],
+    });
+  });
+
+  it('supports url-safe activity id format for holds', async () => {
+    const holdId = 'hold-789';
+    const hold = {
+      holdId,
+      payerAccountNumber: baseAccount.accountNumber,
+      amountMinor: 1_000,
+      currency: 'USD' as const,
+      status: 'PENDING' as const,
+      description: 'Url safe hold',
+      createdAt: '2024-01-06T10:00:00.000Z',
+    } as any;
+
+    vi.mocked(holdRepositoryMock.getHold).mockResolvedValue(hold);
+    vi.mocked(holdRepositoryMock.listHoldEvents).mockResolvedValue([
+      {
+        type: 'CREATED',
+        at: '2024-01-06T10:00:00.000Z',
+      } as HoldEvent,
+    ]);
+
+    const response = await getActivityDetailHandler(
+      {
+        params: {
+          accountNumber: baseAccount.accountNumber,
+          activityId: `HOLD--${holdId}`,
+        },
+      },
+      {
+        request: {
+          headers: setAuthHeader(new Headers()),
+        } as unknown as MaybeAuthenticatedTsRestRequestContext,
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      kind: 'HOLD',
+      activityId: `HOLD#${holdId}`,
+      holdId,
     });
   });
 

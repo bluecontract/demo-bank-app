@@ -68,12 +68,12 @@ const holdFailed: ActivityItem = {
 
 describe('TransactionItem', () => {
   it('renders posted credit transaction with details and click handler', () => {
-    const onClick = vi.fn();
+    const onSelect = vi.fn();
 
     render(
       <TransactionItem
         item={postedTransaction}
-        onTransactionClick={onClick}
+        onActivitySelect={onSelect}
         data-testid="activity-row"
       />
     );
@@ -85,14 +85,14 @@ describe('TransactionItem', () => {
     expect(screen.getByText('+$1,000')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('activity-row'));
-    expect(onClick).toHaveBeenCalledWith('txn-123');
+    expect(onSelect).toHaveBeenCalledWith(postedTransaction);
   });
 
   it('renders posted debit transaction with outgoing details', () => {
-    const onClick = vi.fn();
+    const onSelect = vi.fn();
 
     render(
-      <TransactionItem item={debitTransaction} onTransactionClick={onClick} />
+      <TransactionItem item={debitTransaction} onActivitySelect={onSelect} />
     );
 
     expect(screen.getByText('Outgoing')).toBeInTheDocument();
@@ -100,13 +100,13 @@ describe('TransactionItem', () => {
     expect(screen.getByText('-$500')).toBeInTheDocument();
   });
 
-  it('renders hold created entry without click handler', () => {
-    const onClick = vi.fn();
+  it('renders hold created entry and triggers click handler', () => {
+    const onSelect = vi.fn();
 
     render(
       <TransactionItem
         item={holdCreated}
-        onTransactionClick={onClick}
+        onActivitySelect={onSelect}
         data-testid="hold-created"
       />
     );
@@ -117,13 +117,11 @@ describe('TransactionItem', () => {
     expect(screen.getByText('To: 111 111 1222')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('hold-created'));
-    expect(onClick).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledWith(holdCreated);
   });
 
   it('renders hold captured entry with linked transaction subtitle', () => {
-    render(
-      <TransactionItem item={holdCaptured} onTransactionClick={vi.fn()} />
-    );
+    render(<TransactionItem item={holdCaptured} onActivitySelect={vi.fn()} />);
 
     expect(screen.getByText('Hold Captured')).toBeInTheDocument();
     expect(screen.getByText('HOLD CAPTURED')).toBeInTheDocument();
@@ -133,7 +131,7 @@ describe('TransactionItem', () => {
   });
 
   it('renders failed hold with failure messaging', () => {
-    render(<TransactionItem item={holdFailed} onTransactionClick={vi.fn()} />);
+    render(<TransactionItem item={holdFailed} onActivitySelect={vi.fn()} />);
 
     expect(screen.getByText('Hold Failed')).toBeInTheDocument();
     expect(screen.getByText('HOLD FAILED')).toBeInTheDocument();

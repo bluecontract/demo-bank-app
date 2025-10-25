@@ -119,8 +119,21 @@ export const getActivityDetailHandler = async (
   const { accountNumber, activityId: rawActivityId } = request.params;
   const activityId = (() => {
     try {
-      return decodeURIComponent(rawActivityId);
+      const decoded = decodeURIComponent(rawActivityId);
+      if (decoded.startsWith('TXN--')) {
+        return decoded.replace('--', '#');
+      }
+      if (decoded.startsWith('HOLD--')) {
+        return decoded.replace('--', '#');
+      }
+      return decoded;
     } catch {
+      if (rawActivityId.startsWith('TXN--')) {
+        return rawActivityId.replace('--', '#');
+      }
+      if (rawActivityId.startsWith('HOLD--')) {
+        return rawActivityId.replace('--', '#');
+      }
       return rawActivityId;
     }
   })();

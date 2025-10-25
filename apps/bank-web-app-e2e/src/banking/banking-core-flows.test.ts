@@ -403,6 +403,103 @@ test.describe('Banking Core Flows', () => {
     await expect(modalContent.getByText('-$40')).toBeVisible();
   });
 
+  test('should show hold details when selecting a hold activity item', async ({
+    page,
+  }) => {
+    const accountName = createUniqueAccountName('hold-activity');
+    const holdActivity = {
+      kind: 'HOLD_CREATED',
+      activityId: 'HOLD#hold-123',
+      holdId: 'hold-123',
+      amountMinor: 12345,
+      description: 'Pending hold for vendor authorization',
+      createdAt: new Date('2024-01-05T12:00:00.000Z').toISOString(),
+      counterpartyAccountNumber: '9876543210',
+      createdByUserId: 'system-test',
+      idempotencyKeyHash: 'fixture-hash',
+    };
+
+    await page.route('**/v1/activity/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [holdActivity],
+          nextCursor: undefined,
+        }),
+      });
+    });
+
+    await page.route('**/v1/accounts/**/activity/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          kind: 'HOLD',
+          activityId: holdActivity.activityId,
+          holdId: holdActivity.holdId,
+          amountMinor: holdActivity.amountMinor,
+          currency: 'USD',
+          status: 'PENDING',
+          description: 'Pending hold for vendor authorization',
+          createdAt: holdActivity.createdAt,
+          expiresAt: new Date('2024-02-05T12:00:00.000Z').toISOString(),
+          counterpartyAccountNumber: holdActivity.counterpartyAccountNumber,
+          timeline: [
+            {
+              type: 'CREATED',
+              at: holdActivity.createdAt,
+              createdByUserId: holdActivity.createdByUserId,
+              idempotencyKeyHash: holdActivity.idempotencyKeyHash,
+            },
+          ],
+        }),
+      });
+    });
+
+    // Create account so the activity feed mounts
+    await page.click('text=Add new account');
+    await waitForModalToOpen(page, 'modal-content');
+    await page.fill('input#accountName', accountName);
+    await page.click('button[type="submit"]');
+    await waitForModalToClose(page, 'modal-content');
+
+    // Wait for activity list to render mocked hold
+    const holdRow = page.getByTestId('activity-item-hold-hold-123');
+    await expect(holdRow).toBeVisible();
+
+    await holdRow.click();
+
+    const modal = page.locator('[data-testid="transaction-modal-content"]');
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText('Hold Details')).toBeVisible();
+    await expect(modal.getByText('Hold overview')).toBeVisible();
+    await expect(modal.getByText('Hold ID: hold-123')).toBeVisible();
+    await expect(
+      modal
+        .getByTestId('modal-hold-details')
+        .getByText('$123.45', { exact: true })
+        .first()
+    ).toBeVisible();
+    await expect(
+      modal.getByText('Pending hold for vendor authorization')
+    ).toBeVisible();
+    await expect(modal.getByText('Hold created')).toBeVisible();
+
+    await page.unroute('**/v1/activity/**');
+    await page.unroute('**/v1/accounts/**/activity/**');
+  });
+
   test('should update account balance after fund and transfer operations', async ({
     page,
   }) => {
