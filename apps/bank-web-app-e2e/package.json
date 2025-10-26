@@ -1,11 +1,11 @@
 {
-  "name": "@demo-blue/bank-web-app-e2e",
+  "name": "@demo-bank-app/bank-web-app-e2e",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "nx": {
     "implicitDependencies": [
-      "@demo-blue/bank-web-app"
+      "@demo-bank-app/bank-web-app"
     ]
   }
 }

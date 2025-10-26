@@ -4,6 +4,9 @@
   "include": [],
   "references": [
     {
+      "path": "../../libs/shared/config"
+    },
+    {
       "path": "../../libs/shared/observability"
     },
     {

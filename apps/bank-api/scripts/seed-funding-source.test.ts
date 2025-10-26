@@ -14,7 +14,7 @@ const MockedMoney = vi.fn();
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-vi.doMock('@demo-blue/banking', () => ({
+vi.doMock('@demo-bank-app/banking', () => ({
   DynamoBankingRepository: MockedDynamoBankingRepository,
   Account: MockedAccount,
   FUNDING_SOURCE: {
@@ -75,7 +75,7 @@ describe('seed-funding-source functional tests', () => {
 
     // Set environment variables
     process.env.TABLE = 'test-table';
-    process.env.AWS_REGION = 'eu-central-1';
+    process.env.AWS_REGION = 'eu-west-1';
     process.env.AWS_ENDPOINT_URL = 'http://localhost:4566';
   });
 
@@ -97,7 +97,7 @@ describe('seed-funding-source functional tests', () => {
 
       expect(MockedDynamoBankingRepository).toHaveBeenCalledWith({
         tableName: 'test-table',
-        region: 'eu-central-1',
+        region: 'eu-west-1',
         endpoint: 'http://localhost:4566',
       });
     });
@@ -121,7 +121,7 @@ describe('seed-funding-source functional tests', () => {
 
       expect(MockedDynamoBankingRepository).toHaveBeenCalledWith({
         tableName: 'test-table',
-        region: 'eu-central-1',
+        region: 'eu-west-1',
       });
     });
   });
@@ -541,7 +541,7 @@ describe('seed-funding-source functional tests', () => {
 
       expect(MockedDynamoBankingRepository).toHaveBeenCalledWith(
         expect.objectContaining({
-          region: 'eu-central-1', // default fallback
+          region: 'eu-west-1', // default fallback
         })
       );
     });

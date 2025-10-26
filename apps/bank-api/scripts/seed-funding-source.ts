@@ -4,7 +4,7 @@ import {
   Account,
   FUNDING_SOURCE,
   Money,
-} from '@demo-blue/banking';
+} from '@demo-bank-app/banking';
 
 interface CloudFormationCustomResourceEvent {
   RequestType: 'Create' | 'Update' | 'Delete';
@@ -33,7 +33,7 @@ const createRepository = () => {
 
   return new DynamoBankingRepository({
     tableName: process.env.TABLE || 'BANK_DDB_TABLE_NEEDS_TO_BE_SET',
-    region: process.env.AWS_REGION || 'eu-central-1',
+    region: process.env.AWS_REGION || 'eu-west-1',
     ...(process.env.AWS_ENDPOINT_URL
       ? { endpoint: process.env.AWS_ENDPOINT_URL }
       : {}),

@@ -21,32 +21,35 @@ describe('DashboardHeader', () => {
   });
 
   it('should render app name correctly', () => {
-    renderWithRouter(<DashboardHeader userName="John Doe" />);
+    renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
 
     expect(screen.getByText('Demo Bank')).toBeInTheDocument();
   });
 
   it('should render user name correctly', () => {
-    renderWithRouter(<DashboardHeader userName="John Doe" />);
+    renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
 
-    expect(screen.getByText('John Doe')).toBeInTheDocument();
+    expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
   });
 
   it('should render user avatar with correct initials', () => {
-    renderWithRouter(<DashboardHeader userName="Alice Johnson" />);
+    renderWithRouter(<DashboardHeader userEmail="alice.johnson@example.com" />);
 
     expect(screen.getByText('AJ')).toBeInTheDocument();
   });
 
   it('should render welcome message', () => {
-    renderWithRouter(<DashboardHeader userName="John Doe" />);
+    renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
 
     expect(screen.getByText('Welcome back')).toBeInTheDocument();
   });
 
   it('should have proper layout structure', () => {
     renderWithRouter(
-      <DashboardHeader userName="John Doe" data-testid="dashboard-header" />
+      <DashboardHeader
+        userEmail="john.doe@example.com"
+        data-testid="dashboard-header"
+      />
     );
 
     const header = screen.getByTestId('dashboard-header');
@@ -55,26 +58,28 @@ describe('DashboardHeader', () => {
   });
 
   it('should render avatar when user name is provided', () => {
-    renderWithRouter(<DashboardHeader userName="Jane Smith" />);
+    renderWithRouter(<DashboardHeader userEmail="jane.smith@example.com" />);
 
     const avatar = screen.getByText('JS');
     expect(avatar).toBeInTheDocument();
   });
 
   it('should handle single name correctly', () => {
-    renderWithRouter(<DashboardHeader userName="Alice" />);
+    renderWithRouter(<DashboardHeader userEmail="alice@example.com" />);
 
-    expect(screen.getByText('A')).toBeInTheDocument();
+    expect(screen.getByText('AE')).toBeInTheDocument();
   });
 
   it('should handle long user names', () => {
-    renderWithRouter(<DashboardHeader userName="Alexander Von Der Berg" />);
+    renderWithRouter(
+      <DashboardHeader userEmail="alexander.vonderberg@example.com" />
+    );
 
     expect(screen.getByText('AV')).toBeInTheDocument();
   });
 
   it('should show dropdown menu when avatar is clicked', () => {
-    renderWithRouter(<DashboardHeader userName="John Doe" />);
+    renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
 
     const avatar = screen.getByText('JD');
     fireEvent.click(avatar);
@@ -86,7 +91,7 @@ describe('DashboardHeader', () => {
   });
 
   it('should call signOut when Sign Out is clicked', () => {
-    renderWithRouter(<DashboardHeader userName="John Doe" />);
+    renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
 
     const avatar = screen.getByText('JD');
     fireEvent.click(avatar);
@@ -100,7 +105,7 @@ describe('DashboardHeader', () => {
   it('should hide dropdown when clicking outside', () => {
     renderWithRouter(
       <div>
-        <DashboardHeader userName="John Doe" />
+        <DashboardHeader userEmail="john.doe@example.com" />
         <div data-testid="outside">Outside element</div>
       </div>
     );

@@ -1,5 +1,5 @@
 // Central constants for E2E tests
-import { expect } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 export const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:4200';
 
@@ -8,18 +8,20 @@ export const URLS = {
   HOME: `${BASE_URL}/?e2e=true`,
   SIGNUP: `${BASE_URL}/signup?e2e=true`,
   DASHBOARD: `${BASE_URL}/dashboard`,
+  NEW_TRANSFER: `${BASE_URL}/transfer/new`,
 } as const;
 
 // Test data constants
 export const TEST_DATA = {
   VALIDATION: {
-    MAX_NAME_LENGTH: 50,
+    MAX_EMAIL_LENGTH: 254,
   },
   TIMEOUTS: {
-    NAVIGATION: 10000,
-    MODAL_LOAD: 10000,
-    API_RESPONSE: 8000,
-    BALANCE_UPDATE: 5000,
+    NAVIGATION: 30000,
+    MODAL_LOAD: 30000,
+    API_RESPONSE: 15000,
+    BALANCE_UPDATE: 15000,
+    TRANSFER_COMPLETION: 30000,
   },
   AMOUNTS: {
     SMALL: '25.50',
@@ -86,10 +88,9 @@ export const UI_TEXT = {
 } as const;
 
 // Helper functions
-export const createUniqueName = (prefix = 'testuser') => {
-  return `${prefix}-${Date.now()}-${Math.random()
-    .toString(36)
-    .substring(2, 5)}`;
+export const createUniqueEmail = (prefix = 'testuser') => {
+  const uniqueSuffix = Math.random().toString(36).substring(2, 5);
+  return `${prefix}-${Date.now()}-${uniqueSuffix}@example.com`;
 };
 
 export const createUniqueAccountName = (prefix = 'testaccount') => {
@@ -133,7 +134,7 @@ export const waitForTooltipToAppear = async (
 
 export const waitForTransferCompletion = async (
   page: import('@playwright/test').Page,
-  timeout = 10000
+  timeout = TEST_DATA.TIMEOUTS.TRANSFER_COMPLETION
 ) => {
   const container = page.locator('[data-testid="confirmation-container"]');
   await expect(container).toBeVisible({ timeout });
@@ -174,4 +175,71 @@ export const expectFormValidationError = async (
     // Check for custom validation message in DOM
     await expect(page.getByText(expectedErrorText)).toBeVisible();
   }
+};
+
+export const completeStandardTransferViaStepper = async (
+  page: Page,
+  {
+    amount,
+    destinationAccountNumber,
+    recipientName = 'Test Recipient',
+    title = 'Test Transfer',
+  }: {
+    amount: string;
+    destinationAccountNumber: string;
+    recipientName?: string;
+    title?: string;
+  }
+) => {
+  await page.waitForSelector('text=Loading...', {
+    state: 'hidden',
+    timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+  });
+
+  await expect(page.getByText('Initiate New Transfer')).toBeVisible({
+    timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+  });
+
+  const amountInput = page.locator('#totalAmount');
+  await amountInput.fill(amount);
+
+  await page.fill('#recipientName', recipientName);
+
+  const toAccountInput = page.locator('#toAccount');
+  await toAccountInput.fill(destinationAccountNumber);
+  await expect(toAccountInput).toHaveValue(destinationAccountNumber);
+
+  if (await page.locator('#title').isVisible()) {
+    await page.fill('#title', title);
+  }
+
+  const nextButton = page.getByRole('button', { name: 'Next' });
+  await expect(nextButton).toBeEnabled();
+  await nextButton.click();
+
+  await expect(page.getByText('Review Transfer Details')).toBeVisible({
+    timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+  });
+
+  const reviewNextButton = page.getByRole('button', { name: 'Next' });
+  await expect(reviewNextButton).toBeEnabled();
+  await reviewNextButton.click();
+
+  await expect(page.getByText('Authorize Transfer')).toBeVisible({
+    timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+  });
+
+  const authorizeButton = page.getByRole('button', { name: 'Authorize' });
+  await expect(authorizeButton).toBeEnabled();
+  await authorizeButton.click();
+
+  await expect(
+    page.getByRole('heading', { name: 'Transfer completed successfully!' })
+  ).toBeVisible({ timeout: TEST_DATA.TIMEOUTS.NAVIGATION });
+
+  await page.getByRole('button', { name: 'Home' }).click();
+
+  await page.waitForURL(URLS.DASHBOARD, {
+    timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+  });
 };

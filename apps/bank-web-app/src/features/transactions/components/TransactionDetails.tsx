@@ -1,4 +1,4 @@
-import { TransactionDetails as TransactionDetailsType } from '../hooks/useTransaction';
+import { ActivityDetail } from '../hooks/useActivityDetail';
 import { Card } from '../../../ui/Card';
 import { formatCurrency } from '../../../lib/formatCurrency';
 import { formatAccountNumber } from '../../../lib/formatAccountNumber';
@@ -15,11 +15,13 @@ type Account = {
 };
 
 interface TransactionDetailsProps {
-  transaction: TransactionDetailsType;
+  transaction: Extract<ActivityDetail, { kind: 'POSTED_TRANSACTION' }>;
   currentAccountId: string;
   currentAccountNumber: string;
   accounts: Account[];
   'data-testid'?: string;
+  showPayNoteHelper?: boolean;
+  onViewPayNoteDetails?: () => void;
 }
 
 export function TransactionDetails({
@@ -28,6 +30,8 @@ export function TransactionDetails({
   currentAccountNumber,
   accounts,
   'data-testid': testId,
+  showPayNoteHelper = false,
+  onViewPayNoteDetails,
 }: TransactionDetailsProps) {
   const getTransactionDirection = () => {
     return transaction.side === 'CREDIT' ? 'Incoming' : 'Outgoing';
@@ -44,9 +48,12 @@ export function TransactionDetails({
   };
 
   const formatAccountWithName = (
-    accountNumber: string,
-    accountName: string
+    accountNumber?: string,
+    accountName?: string
   ): string => {
+    if (!accountNumber) {
+      return '—';
+    }
     const formattedNumber = formatAccountNumber(accountNumber);
     return accountName
       ? `${formattedNumber} (${accountName})`
@@ -59,11 +66,15 @@ export function TransactionDetails({
   const displayAmount = isCredit
     ? `+${formattedAmount}`
     : `-${formattedAmount}`;
-  const counterpartyAccountNumber = transaction.counterpartyAccountNumber;
-  const counterpartyAccountName = getAccountNameByNumber(
-    counterpartyAccountNumber
-  );
+  const counterpartyAccountNumber =
+    transaction.counterpartyAccountNumber ?? null;
+  const counterpartyAccountName = counterpartyAccountNumber
+    ? getAccountNameByNumber(counterpartyAccountNumber)
+    : '';
   const currentAccountName = getCurrentAccountName();
+  const methodLabel = showPayNoteHelper
+    ? 'PayNote Transfer'
+    : 'Standard Transfer';
 
   const getStatusBadge = (status: string) => {
     const baseClasses =
@@ -117,7 +128,7 @@ export function TransactionDetails({
         <div className="px-4 py-4 bg-gray-50">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-gray-600">
-              {formatDate(transaction.timestamp)}
+              {formatDate(transaction.postedAt)}
             </span>
             <span className={getStatusBadge(transaction.status)}>
               {getDisplayStatus(transaction.status)}
@@ -168,7 +179,7 @@ export function TransactionDetails({
 
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Method</span>
-              <span className="text-sm text-gray-900">Standard Transfer</span>
+              <span className="text-sm text-gray-900">{methodLabel}</span>
             </div>
 
             <div className="flex justify-between">
@@ -176,7 +187,9 @@ export function TransactionDetails({
               <span className="text-sm text-gray-900">
                 {isCredit
                   ? formatAccountNumber(currentAccountNumber)
-                  : formatAccountNumber(counterpartyAccountNumber)}
+                  : counterpartyAccountNumber
+                  ? formatAccountNumber(counterpartyAccountNumber)
+                  : '—'}
               </span>
             </div>
 
@@ -184,7 +197,9 @@ export function TransactionDetails({
               <span className="text-sm text-gray-600">From account</span>
               <span className="text-sm text-gray-900">
                 {isCredit
-                  ? formatAccountNumber(counterpartyAccountNumber)
+                  ? counterpartyAccountNumber
+                    ? formatAccountNumber(counterpartyAccountNumber)
+                    : '—'
                   : formatAccountNumber(currentAccountNumber)}
               </span>
             </div>
@@ -199,13 +214,15 @@ export function TransactionDetails({
                 Payment creation date
               </span>
               <span className="text-sm text-gray-900">
-                {formatDate(transaction.timestamp)}
+                {formatDate(transaction.postedAt)}
               </span>
             </div>
 
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Payment number</span>
-              <span className="text-sm text-gray-900">{transaction.txnId}</span>
+              <span className="text-sm text-gray-900">
+                {transaction.transactionId}
+              </span>
             </div>
           </div>
         </div>
@@ -220,6 +237,21 @@ export function TransactionDetails({
                 {transaction.description}
               </p>
             </div>
+          </div>
+        )}
+
+        {showPayNoteHelper && (
+          <div className="px-4 py-3 border-t border-gray-200">
+            <p className="text-sm text-gray-700">
+              This transaction is part of a PayNote transfer.{' '}
+              <button
+                type="button"
+                className="text-green-700 font-medium hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 rounded"
+                onClick={() => onViewPayNoteDetails?.()}
+              >
+                See details
+              </button>
+            </p>
           </div>
         )}
       </Card>

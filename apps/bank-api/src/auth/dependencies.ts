@@ -2,11 +2,11 @@ import {
   DynamoUserRepository,
   AwsJwtService,
   AuthEnvironmentConfiguration,
-} from '@demo-blue/auth';
+} from '@demo-bank-app/auth';
 import type {
   PowertoolsLogger,
   PowertoolsMetrics,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 import { getLogger } from '../shared/logger';
 import { getMetrics } from '../shared/metrics';
 
@@ -22,7 +22,7 @@ const initializeDependencies = async (
   const envConfig = new AuthEnvironmentConfiguration();
   const authConfig = await envConfig.getAuthConfig();
 
-  const awsRegion = process.env.AWS_REGION || 'eu-central-1';
+  const awsRegion = process.env.AWS_REGION || 'eu-west-1';
   const awsEndpoint = process.env.AWS_ENDPOINT_URL;
 
   const userRepository = new DynamoUserRepository({

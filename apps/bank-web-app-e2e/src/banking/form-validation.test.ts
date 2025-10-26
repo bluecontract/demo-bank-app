@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   URLS,
   TEST_DATA,
-  createUniqueName,
+  createUniqueEmail,
   createUniqueAccountName,
   waitForModalToClose,
   waitForModalToOpen,
@@ -12,14 +12,13 @@ import {
 } from '../constants';
 
 test.describe('Banking Form Validation', () => {
-  let testUserName: string;
-
+  test.describe.configure({ timeout: 60000 });
   test.beforeEach(async ({ page }) => {
-    testUserName = createUniqueName('validation-user');
+    const testUserEmail = createUniqueEmail('validation-user');
 
     // Sign up and get to dashboard
     await page.goto(URLS.SIGNUP);
-    await page.fill('input[name="name"]', testUserName);
+    await page.fill('input[name="email"]', testUserEmail);
     await page.click('button[type="submit"]');
 
     await page.waitForURL(URLS.DASHBOARD, {
@@ -131,40 +130,128 @@ test.describe('Banking Form Validation', () => {
       timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
     });
 
-    // Open transfer modal
-    await page.click('text=New transfer');
-    await waitForModalToOpen(page, 'modal-content');
+    const accountNumberElements = page.locator('.account-number');
+    await expect(accountNumberElements).toHaveCount(2, {
+      timeout: TEST_DATA.TIMEOUTS.API_RESPONSE,
+    });
+    const sanitizedAccountNumbers = await accountNumberElements
+      .allTextContents()
+      .then(contents => contents.map(content => content.replace(/\s/g, '')));
+    const [, targetAccountNumberRaw] = sanitizedAccountNumbers;
+    expect(targetAccountNumberRaw).toBeDefined();
+    const cleanTargetNumber = targetAccountNumberRaw!;
 
-    // Try to submit empty form
-    await page.click('button[type="submit"]');
+    await Promise.all([
+      page.waitForURL('**/transfer/new**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      page.click('text=New transfer'),
+    ]);
 
-    // Should show validation errors
-    await expectFormValidationError(
-      page,
-      'input[placeholder="Enter 10-digit account number"]'
+    await expect(page.getByText('Initiate New Transfer')).toBeVisible();
+
+    const nextButton = page.getByRole('button', { name: 'Next' });
+    await expect(nextButton).toBeEnabled();
+
+    const amountModal = page.locator('[data-testid="amount-required-modal"]');
+    await nextButton.click();
+    await expect(amountModal).toBeVisible();
+    await amountModal.getByRole('button', { name: 'Close' }).click();
+    await expect(amountModal).toHaveCount(0);
+
+    const amountInput = page.locator('#totalAmount');
+    await amountInput.fill('0');
+    await expect(nextButton).toBeDisabled();
+
+    await amountInput.fill('250');
+    await expect(nextButton).toBeEnabled();
+
+    const insufficientFundsModal = page.locator(
+      '[data-testid="insufficient-funds-modal"]'
     );
-    await expectFormValidationError(page, 'input[placeholder="$0"]');
+    await nextButton.click();
+    await expect(insufficientFundsModal).toBeVisible();
+    await expect(
+      insufficientFundsModal.getByText(
+        'The selected account does not have enough available balance. Enter a smaller amount or fund the account first.'
+      )
+    ).toBeVisible();
+    await insufficientFundsModal.getByRole('button', { name: 'Close' }).click();
+    await expect(insufficientFundsModal).toHaveCount(0);
 
-    // Fill valid data and submit
-    const targetAccountElements = page.locator('.account-number');
-    const targetAccountNumber = await targetAccountElements
-      .last()
-      .textContent();
-    const cleanTargetNumber = targetAccountNumber?.replace(/\s/g, '') || '';
+    await amountInput.fill('150.129');
+    await expect(amountInput).toHaveValue('150.12');
+    await expect(nextButton).toBeEnabled();
 
-    await page.fill(
-      'input[placeholder="Enter 10-digit account number"]',
-      cleanTargetNumber
+    const fromAccountSelect = page.locator('#fromAccount');
+    const sourceOptionValue = await fromAccountSelect
+      .locator('option')
+      .evaluateAll<string | null, string>((options, accountName) => {
+        const optionElements = options as Array<{
+          textContent?: string | null;
+          value?: string | null;
+        }>;
+        const matching = optionElements.find(option =>
+          option.textContent?.includes(accountName)
+        );
+        return matching?.value ?? null;
+      }, sourceAccount);
+    expect(sourceOptionValue).toBeTruthy();
+    if (!sourceOptionValue) {
+      throw new Error('Source account option not found');
+    }
+    await fromAccountSelect.selectOption(sourceOptionValue);
+
+    const accountNumberInput = page.locator('#toAccount');
+    const destinationModal = page.locator(
+      '[data-testid="to-account-required-modal"]'
     );
-    await page.fill('input[placeholder="$0"]', '50.00');
-    await page.click('button[type="submit"]');
 
-    // Should show success
-    await waitForTransferCompletion(page);
+    await nextButton.click();
+    await expect(destinationModal).toBeVisible();
+    await expect(
+      destinationModal.getByText(
+        'To account needs to be set before continuing.'
+      )
+    ).toBeVisible();
+    await destinationModal.getByRole('button', { name: 'Close' }).click();
+    await expect(destinationModal).toHaveCount(0);
 
-    // Close modal
-    await page.click('text=Home');
-    await waitForModalToClose(page, 'modal-content');
+    await accountNumberInput.fill('abc123');
+    await expect(accountNumberInput).toHaveValue('123');
+
+    await nextButton.click();
+    await expect(destinationModal).toBeVisible();
+    await expect(
+      destinationModal.getByText('Recipient account must be exactly 10 digits.')
+    ).toBeVisible();
+    await destinationModal.getByRole('button', { name: 'Close' }).click();
+    await expect(destinationModal).toHaveCount(0);
+
+    // Fill valid data
+    await accountNumberInput.fill(cleanTargetNumber);
+    await expect(accountNumberInput).toHaveValue(cleanTargetNumber);
+
+    await page.fill('#recipientName', 'Validation Recipient');
+    await page.fill('#title', 'Validation Transfer');
+
+    await expect(nextButton).toBeEnabled();
+    await nextButton.click();
+
+    await expect(page.getByText('Review Transfer Details')).toBeVisible();
+    const reviewNextButton = page.getByRole('button', { name: 'Next' });
+    await expect(reviewNextButton).toBeEnabled();
+    await reviewNextButton.click();
+
+    await expect(page.getByText('Authorize Transfer')).toBeVisible();
+    const authorizeButton = page.getByRole('button', { name: 'Authorize' });
+    await expect(authorizeButton).toBeEnabled();
+
+    await page.getByRole('button', { name: 'Cancel' }).click();
+
+    await page.waitForURL(URLS.DASHBOARD, {
+      timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+    });
   });
 
   test('should clear validation errors when user corrects input', async ({

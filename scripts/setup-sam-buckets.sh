@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 AWS_PROFILE="demo-bank-app-private-aws"
-AWS_REGION="eu-central-1"
+AWS_REGION="eu-west-1"
 
 echo "🪣 Creating SAM deployment buckets..."
 echo "AWS Profile: ${AWS_PROFILE}"
@@ -15,7 +15,7 @@ echo "AWS Region: ${AWS_REGION}"
 
 # Create deployment buckets for SAM
 for env in dev prod; do
-  bucket_name="demo-blue-deployments-${env}"
+  bucket_name="demo-bank-app-deployments-${env}"
   echo "Creating bucket: ${bucket_name}"
 
   aws s3 mb s3://${bucket_name} \

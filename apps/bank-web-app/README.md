@@ -51,10 +51,10 @@ This command:
 sam deploy --config-env dev --no-confirm-changeset --no-fail-on-empty-changeset
 
 # 2. Sync assets to S3
-aws s3 sync dist/apps/bank-web-app s3://demo-blue-frontend-dev --delete
+aws s3 sync dist/apps/bank-web-app s3://demo-bank-app-frontend-dev --delete
 
 # 3. Invalidate CloudFront cache
-DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name demo-blue-frontend-dev --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' --output text)
+DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name demo-bank-app-frontend-dev --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' --output text)
 aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths '/*'
 ```
 
@@ -62,8 +62,8 @@ aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths '/
 
 ### Environment-Specific Settings
 
-- **dev**: `demo-blue-frontend-dev` stack
-- **prod**: `demo-blue-frontend-prod` stack
+- **dev**: `demo-bank-app-frontend-dev` stack
+- **prod**: `demo-bank-app-frontend-prod` stack
 
 ### SAM Configuration
 

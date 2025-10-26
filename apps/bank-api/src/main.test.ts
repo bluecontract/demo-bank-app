@@ -7,7 +7,7 @@ import type {
   Callback,
   APIGatewayProxyResult,
 } from 'aws-lambda';
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 
 // Mock the auth handlers module
 vi.mock('./auth/handlers', () => ({
@@ -129,7 +129,7 @@ describe('Bank API Handler', () => {
       'JWT_SECRET_ARN',
       'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123'
     );
-    vi.stubEnv('JWT_TTL_SECONDS', '3600');
+    vi.stubEnv('JWT_TTL_SECONDS', '604800');
     vi.stubEnv('TEST_USER_TTL_SECONDS', '600');
     vi.stubEnv('SERVICE_NAME', 'test-service');
     vi.stubEnv('LOG_LEVEL', 'INFO');

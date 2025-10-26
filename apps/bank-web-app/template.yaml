@@ -8,12 +8,39 @@ Parameters:
     Default: dev
     AllowedValues: [dev, prod]
 
+  # Optional custom domain (e.g., app.example.com)
+  DomainName:
+    Type: String
+    Default: ''
+    Description: 'Optional: Custom domain name (e.g., app.example.com) for CloudFront'
+
+  # Optional ACM cert ARN in us-east-1 for CloudFront
+  CertificateArn:
+    Type: String
+    Default: ''
+    Description: 'Optional: ACM certificate ARN (must be in us-east-1) when using a custom domain'
+
+  IntroVideoObjectKey:
+    Type: String
+    Default: paynote.mp4
+    Description: 'Object key within the marketing video bucket that contains the intro video file'
+
+  PaynoteDemoVideoObjectKey:
+    Type: String
+    Default: paynote-demo.mp4
+    Description: 'Object key within the marketing video bucket that contains the PayNote walkthrough file'
+
+Conditions:
+  UseCustomDomain: !And
+    - !Not [!Equals [!Ref DomainName, '']]
+    - !Not [!Equals [!Ref CertificateArn, '']]
+
 Resources:
   # S3 Bucket for static website hosting (kept private)
   FrontendBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub 'demo-blue-frontend-${Environment}'
+      BucketName: !Sub 'demo-bank-app-frontend-${Environment}'
       # Keep bucket private - CloudFront will access via OAC
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
@@ -30,6 +57,27 @@ Resources:
         OriginAccessControlOriginType: s3
         SigningBehavior: always
         SigningProtocol: sigv4
+
+  LoginDemoVideoBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'demo-bank-app-login-demo-${Environment}'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: ['*']
+            AllowedMethods: [GET, HEAD]
+            AllowedOrigins: ['*']
+            MaxAge: 3600
 
   # CloudFront Distribution
   CloudFrontDistribution:
@@ -61,6 +109,20 @@ Resources:
             ResponseCode: 200
             ErrorCachingMinTTL: 300
         PriceClass: PriceClass_100
+        # Add alias only when using a custom domain
+        Aliases: !If
+          - UseCustomDomain
+          - [!Ref DomainName]
+          - !Ref AWS::NoValue
+        # Attach ACM cert only when provided
+        ViewerCertificate: !If
+          - UseCustomDomain
+          - {
+              AcmCertificateArn: !Ref CertificateArn,
+              SslSupportMethod: sni-only,
+              MinimumProtocolVersion: TLSv1.2_2021,
+            }
+          - !Ref AWS::NoValue
 
   # Bucket Policy allowing CloudFront OAC access
   BucketPolicy:
@@ -80,12 +142,33 @@ Resources:
               StringEquals:
                 'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
 
+  LoginDemoVideoBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref LoginDemoVideoBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowPublicRead
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${LoginDemoVideoBucket.Arn}/*'
+
 Outputs:
   FrontendUrl:
     Description: 'CloudFront Distribution URL'
     Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
     Export:
       Name: !Sub '${AWS::StackName}-FrontendUrl'
+
+  # If custom domain is used, expose that too
+  CustomDomainUrl:
+    Condition: UseCustomDomain
+    Description: 'Custom domain URL'
+    Value: !Sub 'https://${DomainName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomDomainUrl'
 
   BucketName:
     Description: 'S3 bucket name for frontend assets'
@@ -98,3 +181,27 @@ Outputs:
     Value: !Ref CloudFrontDistribution
     Export:
       Name: !Sub '${AWS::StackName}-DistributionId'
+
+  LoginDemoVideoBucketName:
+    Description: 'S3 bucket name containing the login demo marketing video'
+    Value: !Ref LoginDemoVideoBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-LoginDemoVideoBucketName'
+
+  LoginDemoVideoUrl:
+    Description: 'Public URL for the intro marketing video (legacy export name)'
+    Value: !Sub 'https://${LoginDemoVideoBucket}.s3.${AWS::Region}.amazonaws.com/${IntroVideoObjectKey}'
+    Export:
+      Name: !Sub '${AWS::StackName}-LoginDemoVideoUrl'
+
+  IntroVideoUrl:
+    Description: 'Public URL for the intro marketing video'
+    Value: !Sub 'https://${LoginDemoVideoBucket}.s3.${AWS::Region}.amazonaws.com/${IntroVideoObjectKey}'
+    Export:
+      Name: !Sub '${AWS::StackName}-IntroVideoUrl'
+
+  PaynoteDemoVideoUrl:
+    Description: 'Public URL for the PayNote walkthrough marketing video'
+    Value: !Sub 'https://${LoginDemoVideoBucket}.s3.${AWS::Region}.amazonaws.com/${PaynoteDemoVideoObjectKey}'
+    Export:
+      Name: !Sub '${AWS::StackName}-PaynoteDemoVideoUrl'

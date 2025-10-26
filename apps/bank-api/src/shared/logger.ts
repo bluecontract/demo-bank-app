@@ -1,4 +1,7 @@
-import { PowertoolsLogger, LogLevel } from '@demo-blue/shared-observability';
+import {
+  PowertoolsLogger,
+  LogLevel,
+} from '@demo-bank-app/shared-observability';
 
 let loggerInstance: PowertoolsLogger | null = null;
 

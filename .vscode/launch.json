@@ -17,7 +17,7 @@
       "request": "launch",
       "name": "Debug Vitest (bank-api)",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["nx", "run", "@demo-blue/bank-api:test:debug"],
+      "runtimeArgs": ["nx", "run", "@demo-bank-app/bank-api:test:debug"],
       "cwd": "${workspaceFolder}/apps/bank-api",
       "env": {
         "VITEST_EXCLUDE_INTEGRATION": "true"
@@ -34,7 +34,7 @@
       "runtimeArgs": [
         "nx",
         "run",
-        "@demo-blue/bank-api:test:integration:debug"
+        "@demo-bank-app/bank-api:test:integration:debug"
       ],
       "cwd": "${workspaceFolder}/apps/bank-api",
 
@@ -47,7 +47,11 @@
       "request": "launch",
       "name": "Debug Vitest (auth integration)",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["nx", "run", "@demo-blue/auth:test:integration:debug"],
+      "runtimeArgs": [
+        "nx",
+        "run",
+        "@demo-bank-app/auth:test:integration:debug"
+      ],
       "cwd": "${workspaceFolder}/libs/auth",
 
       "console": "integratedTerminal",

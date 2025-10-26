@@ -3,11 +3,10 @@ import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { vi } from 'vitest';
-import { SignUpForm } from './SignUpForm';
+import { SignUpForm, MARKETING_CONSENT_COPY } from './SignUpForm';
 import { ApiProvider } from '../../../app/providers/ApiProvider';
 import { AuthProvider } from '../../../app/providers/AuthProvider';
 
-// Use vi.hoisted to create mocks that can be used in vi.mock
 const { mockSignUp, mockHealth } = vi.hoisted(() => ({
   mockSignUp: vi.fn(),
   mockHealth: vi.fn(),
@@ -20,8 +19,7 @@ vi.mock('../../../api/client', () => ({
   },
 }));
 
-// Mock the API client library
-vi.mock('@demo-blue/shared-bank-api-client', () => ({
+vi.mock('@demo-bank-app/shared-bank-api-client', () => ({
   createApiClient: () => ({
     signUp: mockSignUp,
     health: mockHealth,
@@ -48,90 +46,107 @@ const createTestWrapper = () => {
 };
 
 describe('SignUpForm', () => {
+  const validEmail = 'john.doe@example.com';
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('renders form with all required elements', () => {
-    const TestWrapper = createTestWrapper();
+  it('renders email field and submit button', () => {
+    const Wrapper = createTestWrapper();
 
     render(
-      <TestWrapper>
+      <Wrapper>
         <SignUpForm />
-      </TestWrapper>
+      </Wrapper>
     );
 
     expect(
       screen.getByRole('heading', { name: 'Create Account' })
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Full Name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Create Account' })
     ).toBeInTheDocument();
+    expect(screen.getByLabelText(MARKETING_CONSENT_COPY)).toBeChecked();
   });
 
-  it('shows validation error for empty name', async () => {
-    const TestWrapper = createTestWrapper();
+  it('shows validation errors for empty and malformed email', async () => {
+    const Wrapper = createTestWrapper();
 
     render(
-      <TestWrapper>
+      <Wrapper>
         <SignUpForm />
-      </TestWrapper>
+      </Wrapper>
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Name is required')).toBeInTheDocument();
+      expect(screen.getByText('Email is required')).toBeInTheDocument();
     });
+
+    const emailInput = screen.getByLabelText('Email');
+    fireEvent.change(emailInput, { target: { value: 'not-an-email' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+
+    expect(
+      await screen.findByText('Enter a valid email address')
+    ).toBeInTheDocument();
   });
 
-  it('shows validation error for name too long', async () => {
-    const TestWrapper = createTestWrapper();
+  it('shows validation error for excessively long email', async () => {
+    const Wrapper = createTestWrapper();
+    const longLocalPart = 'a'.repeat(245);
 
     render(
-      <TestWrapper>
+      <Wrapper>
         <SignUpForm />
-      </TestWrapper>
+      </Wrapper>
     );
 
-    const nameInput = screen.getByLabelText('Full Name');
-    fireEvent.change(nameInput, { target: { value: 'a'.repeat(51) } });
+    const emailInput = screen.getByLabelText('Email');
+    fireEvent.change(emailInput, {
+      target: { value: `${longLocalPart}@example.com` },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
 
     await waitFor(() => {
       expect(
-        screen.getByText('Name must be 50 characters or less')
+        screen.getByText('Email must be 254 characters or less')
       ).toBeInTheDocument();
     });
   });
 
-  it('shows loading state during submission', async () => {
-    const TestWrapper = createTestWrapper();
+  it('displays loading state during submission', async () => {
+    const Wrapper = createTestWrapper();
 
     let resolvePromise: (value: {
       status: number;
-      body: { userId: string; name: string };
+      body: { userId: string; email: string; marketingEmailsOptIn: boolean };
     }) => void = vi.fn();
-    const signUpPromise = new Promise(resolve => {
-      resolvePromise = resolve;
+    const signUpPromise = new Promise<typeof mockSignUp.arguments>(resolve => {
+      resolvePromise = resolve as unknown as typeof resolvePromise;
     });
 
     mockSignUp.mockReturnValue(signUpPromise);
 
     render(
-      <TestWrapper>
+      <Wrapper>
         <SignUpForm />
-      </TestWrapper>
+      </Wrapper>
     );
 
-    const nameInput = screen.getByLabelText('Full Name');
-    fireEvent.change(nameInput, { target: { value: 'John Doe' } });
+    const emailInput = screen.getByLabelText('Email');
+    fireEvent.change(emailInput, { target: { value: validEmail } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
 
     expect(screen.getByText('Creating Account...')).toBeInTheDocument();
 
-    resolvePromise({ status: 201, body: { userId: '123', name: 'John Doe' } });
+    resolvePromise({
+      status: 201,
+      body: { userId: '123', email: validEmail, marketingEmailsOptIn: true },
+    });
     await waitFor(() => {
       expect(
         screen.getByRole('button', { name: 'Create Account' })
@@ -140,82 +155,88 @@ describe('SignUpForm', () => {
   });
 
   it('calls onSuccess when signup succeeds', async () => {
-    const TestWrapper = createTestWrapper();
+    const Wrapper = createTestWrapper();
     const onSuccess = vi.fn();
 
     mockSignUp.mockResolvedValue({
       status: 201,
-      body: { userId: '123', name: 'John Doe' },
+      body: { userId: '123', email: validEmail, marketingEmailsOptIn: true },
     });
 
     render(
-      <TestWrapper>
+      <Wrapper>
         <SignUpForm onSuccess={onSuccess} />
-      </TestWrapper>
+      </Wrapper>
     );
 
-    const nameInput = screen.getByLabelText('Full Name');
-    fireEvent.change(nameInput, { target: { value: 'John Doe' } });
+    const emailInput = screen.getByLabelText('Email');
+    fireEvent.change(emailInput, { target: { value: validEmail } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
 
     await waitFor(() => {
       expect(onSuccess).toHaveBeenCalledWith({
         userId: '123',
-        name: 'John Doe',
+        email: validEmail,
+        marketingEmailsOptIn: true,
       });
+      expect(mockSignUp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: {
+            email: validEmail,
+            marketingEmailsOptIn: true,
+          },
+        })
+      );
     });
   });
 
-  it('shows error message when user already exists', async () => {
-    const TestWrapper = createTestWrapper();
+  it('displays conflict error when email already exists', async () => {
+    const Wrapper = createTestWrapper();
 
-    // Mock the API to return a 409 status, which should cause the component to throw an error
     mockSignUp.mockResolvedValue({
       status: 409,
-      body: { error: 'CONFLICT', message: 'User already exists' },
+      body: { error: 'USER_ALREADY_EXISTS', message: 'User already exists' },
     });
 
     render(
-      <TestWrapper>
+      <Wrapper>
         <SignUpForm />
-      </TestWrapper>
+      </Wrapper>
     );
 
-    const nameInput = screen.getByLabelText('Full Name');
-    fireEvent.change(nameInput, { target: { value: 'John Doe' } });
+    const emailInput = screen.getByLabelText('Email');
+    fireEvent.change(emailInput, { target: { value: validEmail } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
 
     await waitFor(() => {
       expect(
         screen.getByText(
-          'A user with this name already exists. Please choose a different name.'
+          'A user with this email already exists. Please use a different email.'
         )
       ).toBeInTheDocument();
     });
   });
 
-  it('clears errors when typing in name field', async () => {
-    const TestWrapper = createTestWrapper();
+  it('clears errors when typing after validation message', async () => {
+    const Wrapper = createTestWrapper();
 
     render(
-      <TestWrapper>
+      <Wrapper>
         <SignUpForm />
-      </TestWrapper>
+      </Wrapper>
     );
 
-    // First trigger an error
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Name is required')).toBeInTheDocument();
+      expect(screen.getByText('Email is required')).toBeInTheDocument();
     });
 
-    // Then type in the field to clear the error
-    const nameInput = screen.getByLabelText('Full Name');
-    fireEvent.change(nameInput, { target: { value: 'John' } });
+    const emailInput = screen.getByLabelText('Email');
+    fireEvent.change(emailInput, { target: { value: validEmail } });
 
     await waitFor(() => {
-      expect(screen.queryByText('Name is required')).not.toBeInTheDocument();
+      expect(screen.queryByText('Email is required')).not.toBeInTheDocument();
     });
   });
 });

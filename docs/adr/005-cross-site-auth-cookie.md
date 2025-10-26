@@ -10,7 +10,7 @@ The initial authentication simplification (ADR 003) chose to deliver the 1-hour 
 `HttpOnly; Secure; SameSite=Strict` cookie. This setting relies on the SPA and the API sharing the
 same site. Our deployment, however, serves the React SPA from CloudFront
 (`https://<hash>.cloudfront.net`) while the Bank API is exposed via API Gateway
-(`https://<hash>.execute-api.eu-central-1.amazonaws.com`). Because these origins differ in
+(`https://<hash>.execute-api.eu-west-1.amazonaws.com`). Because these origins differ in
 **site** definition, browsers would withhold a `SameSite=Strict` cookie, breaking every authenticated
 API call.
 

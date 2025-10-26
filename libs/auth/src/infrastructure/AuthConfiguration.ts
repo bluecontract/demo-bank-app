@@ -1,5 +1,5 @@
-import { BaseConfiguration } from '@demo-blue/shared-config';
-import type { BaseConfig } from '@demo-blue/shared-config';
+import { BaseConfiguration } from '@demo-bank-app/shared-config';
+import type { BaseConfig } from '@demo-bank-app/shared-config';
 import type { Configuration } from '../application/ports';
 
 export interface AuthConfiguration extends BaseConfig {
@@ -25,7 +25,7 @@ export class AuthEnvironmentConfiguration
       ...this.getBaseConfig(),
       dynamoTableName: this.getRequiredStringEnv('AUTH_DYNAMO_TABLE_NAME'),
       jwtSecretArn: this.getRequiredStringEnv('JWT_SECRET_ARN'),
-      jwtTtlSeconds: this.getNumberEnv('JWT_TTL_SECONDS', 3600),
+      jwtTtlSeconds: this.getNumberEnv('JWT_TTL_SECONDS', 604800),
       testUserTtlSeconds: this.getNumberEnv('TEST_USER_TTL_SECONDS', 86400),
       serviceName: this.getStringEnv('SERVICE_NAME', 'auth'),
       metricsNamespace: this.getStringEnv('METRICS_NAMESPACE', 'App/Auth'),
@@ -34,8 +34,8 @@ export class AuthEnvironmentConfiguration
 
   protected performCustomValidation(errors: string[]): void {
     // Validate JWT TTL
-    const jwtTtl = this.getNumberEnv('JWT_TTL_SECONDS', 3600);
-    this.validateRange('JWT_TTL_SECONDS', jwtTtl, 1, 86400, errors);
+    const jwtTtl = this.getNumberEnv('JWT_TTL_SECONDS', 604800);
+    this.validateRange('JWT_TTL_SECONDS', jwtTtl, 1, 604800, errors);
 
     // Validate test user TTL
     const testUserTtl = this.getNumberEnv('TEST_USER_TTL_SECONDS', 86400);

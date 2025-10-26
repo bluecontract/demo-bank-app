@@ -1,5 +1,5 @@
 import { ERROR_CODES, problemResponse } from '../shared/errors';
-import { AppError } from '@demo-blue/shared-core';
+import { AppError } from '@demo-bank-app/shared-core';
 
 export class UnauthorizedRequestError extends AppError {
   readonly code = ERROR_CODES.UNAUTHORIZED;

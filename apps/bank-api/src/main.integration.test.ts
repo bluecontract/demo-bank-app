@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { createHash } from 'crypto';
 import { handler } from './main';
 import type {
   APIGatewayProxyEventV2,
@@ -18,11 +19,20 @@ import {
   DeleteTableCommand,
   DescribeTableCommand,
 } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoHoldRepository,
+  Money,
+  Posting,
+  Transaction,
+  type Hold,
+} from '@demo-bank-app/banking';
+import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import {
   assertAllSecurityHeaders,
   DEFAULT_TEST_ORIGIN,
 } from './test-helpers/security-assertions';
+import { ERROR_CODES } from './shared/errors';
 
 /**
  * Integration Tests - Test against LocalStack AWS services
@@ -31,17 +41,20 @@ import {
 
 // Test configuration
 const TEST_CONFIG = {
-  tableName: `demo-blue-bank-api-integration-test-${Date.now()}`,
-  jwtSecretArn: '/demo-blue/integration-test/jwt-secret',
+  tableName: `demo-bank-app-bank-api-integration-test-${Date.now()}`,
+  jwtSecretArn: '/demo-bank-app/integration-test/jwt-secret',
+  myOsSecretArn: '/demo-bank-app/integration-test/myos-credentials',
+  openAiSecretArn: '/demo-bank-app/integration-test/openai-api-key',
   jwtSecret: 'integration-test-jwt-secret-key-12345',
   localstackEndpoint: 'http://localhost:4566',
   region: 'us-east-1',
-  jwtTtlSeconds: 3600,
+  jwtTtlSeconds: 604800,
   testUserTtlSeconds: 600,
 };
 
 // AWS clients configured for LocalStack
 let dynamoClient: DynamoDBClient;
+let documentClient: DynamoDBDocumentClient;
 let secretsManagerClient: SecretsManagerClient;
 
 describe('Bank API Integration Tests', () => {
@@ -54,6 +67,7 @@ describe('Bank API Integration Tests', () => {
         secretAccessKey: 'test',
       },
     });
+    documentClient = DynamoDBDocumentClient.from(dynamoClient);
 
     secretsManagerClient = new SecretsManagerClient({
       endpoint: TEST_CONFIG.localstackEndpoint,
@@ -71,6 +85,8 @@ describe('Bank API Integration Tests', () => {
     process.env.JWT_TTL_SECONDS = TEST_CONFIG.jwtTtlSeconds.toString();
     process.env.TEST_USER_TTL_SECONDS =
       TEST_CONFIG.testUserTtlSeconds.toString();
+    process.env.MYOS_SECRET_ARN = TEST_CONFIG.myOsSecretArn;
+    process.env.OPENAI_API_KEY_SECRET_ARN = TEST_CONFIG.openAiSecretArn;
     process.env.SERVICE_NAME = 'bank-api-integration-test';
     process.env.LOG_LEVEL = 'INFO';
     process.env.METRICS_NAMESPACE = 'IntegrationTest';
@@ -92,6 +108,8 @@ describe('Bank API Integration Tests', () => {
     delete process.env.JWT_SECRET_ARN;
     delete process.env.JWT_TTL_SECONDS;
     delete process.env.TEST_USER_TTL_SECONDS;
+    delete process.env.MYOS_SECRET_ARN;
+    delete process.env.OPENAI_API_KEY_SECRET_ARN;
     delete process.env.SERVICE_NAME;
     delete process.env.LOG_LEVEL;
     delete process.env.METRICS_NAMESPACE;
@@ -148,22 +166,22 @@ describe('Bank API Integration Tests', () => {
     it('should successfully sign up a new user with valid JWT cookie', async () => {
       const creds = await signupUniqueTestUser('integration-test-user');
       expect(creds.userId).toBeDefined();
-      expect(creds.userName).toContain('integration-test-user');
+      expect(creds.userEmail).toContain('integration-test-user');
       expect(creds.jwtCookie).toContain('demoAuth=');
     });
 
-    it('should return 409 when signing up with existing username', async () => {
+    it('should return 409 when signing up with existing email', async () => {
       const creds = await signupUniqueTestUser('duplicate-test');
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { name: creds.userName },
+        body: { email: creds.userEmail, marketingEmailsOptIn: true },
       });
       expect(signUp.statusCode).toBe(409);
       expect(signUp.body).toEqual({
         error: 'USER_ALREADY_EXISTS',
         message:
-          'A user with this name already exists. Please choose a different name.',
+          'A user with this email already exists. Please use a different email.',
       });
     });
 
@@ -171,7 +189,7 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { name: '' },
+        body: { email: '', marketingEmailsOptIn: true },
       });
       expect(signUp.statusCode).toBe(400);
       expect(signUp.body).toEqual({
@@ -182,23 +200,19 @@ describe('Bank API Integration Tests', () => {
       expect(JSON.parse(signUp.body.errors)).toMatchObject({
         bodyErrors: [
           {
-            exact: false,
-            inclusive: true,
-            message: 'String must contain at least 1 character(s)',
-            minimum: 1,
-            path: ['name'],
-            type: 'string',
+            message: 'Invalid email',
+            path: ['email'],
           },
         ],
       });
     });
 
     it('should create test user with shorter TTL when dev=true', async () => {
-      const name = await generateUniqueTestUserName('dev-test-user');
+      const email = await generateUniqueTestUserName('dev-test-user');
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup?dev=true',
-        body: { name },
+        body: { email, marketingEmailsOptIn: true },
       });
       expect(signUp.statusCode).toBe(201);
       const cookieHeader = signUp.headers?.['set-cookie'] as string;
@@ -215,17 +229,12 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { name: maliciousAccountName },
+        body: { email: maliciousAccountName },
       });
 
-      if (signUp.statusCode === 201) {
-        // Verify XSS payloads are removed but safe content remains
-        expect(signUp.body.name).toBe(name);
-        expect(signUp.body.name).not.toContain('<img');
-        expect(signUp.body.name).not.toContain('<script>');
-        expect(signUp.body.name).not.toContain('onerror');
-        expect(signUp.body.name).not.toContain('alert');
-      }
+      expect(signUp.statusCode).toBe(400);
+      expect(signUp.body.error).toBe('VALIDATION_ERROR');
+      expect(signUp.body.message).toBe('Request validation failed');
     });
   });
 
@@ -235,19 +244,20 @@ describe('Bank API Integration Tests', () => {
       const signIn = await invokeApi({
         method: 'POST',
         path: '/auth/signin',
-        body: { name: creds.userName },
+        body: { email: creds.userEmail },
       });
       expect(signIn.statusCode).toBe(200);
       expect(signIn.body).toEqual({
         userId: creds.userId,
-        name: creds.userName,
+        email: creds.userEmail,
+        marketingEmailsOptIn: true,
       });
       const cookieHeader = signIn.headers?.['set-cookie'] as string | undefined;
       expect(cookieHeader).toBeDefined();
       expect(cookieHeader).toContain('demoAuth=');
       expect(cookieHeader).toContain('HttpOnly');
       expect(cookieHeader).toContain('Secure');
-      expect(cookieHeader).toContain('SameSite=None');
+      expect(cookieHeader).toContain('SameSite=Strict');
       expect(cookieHeader).toContain('Path=/');
       expect(cookieHeader).toContain(`Max-Age=${TEST_CONFIG.jwtTtlSeconds}`);
       if (!cookieHeader) {
@@ -260,19 +270,19 @@ describe('Bank API Integration Tests', () => {
       expect(decoded.exp).toBeDefined();
     });
 
-    it('should return 401 when signing in with non-existing username', async () => {
-      const nonExistentUserName =
+    it('should return 401 when signing in with non-existing email', async () => {
+      const nonExistentUserEmail =
         generateUniqueTestUserName('nonexistent-user');
       const signIn = await invokeApi({
         method: 'POST',
         path: '/auth/signin',
-        body: { name: nonExistentUserName },
+        body: { email: nonExistentUserEmail },
       });
       expect(signIn.statusCode).toBe(401);
       expect(signIn.body).toEqual({
         error: 'UNAUTHORIZED',
         message:
-          'User not found. Please check the name and try again or sign up.',
+          'User not found. Please check the email and try again or sign up.',
       });
     });
 
@@ -280,7 +290,7 @@ describe('Bank API Integration Tests', () => {
       const signIn = await invokeApi({
         method: 'POST',
         path: '/auth/signin',
-        body: { name: '' },
+        body: { email: '' },
       });
       expect(signIn.statusCode).toBe(400);
       const body = signIn.body;
@@ -292,12 +302,8 @@ describe('Bank API Integration Tests', () => {
       expect(JSON.parse(body.errors)).toMatchObject({
         bodyErrors: [
           {
-            exact: false,
-            inclusive: true,
-            message: 'String must contain at least 1 character(s)',
-            minimum: 1,
-            path: ['name'],
-            type: 'string',
+            message: 'Invalid email',
+            path: ['email'],
           },
         ],
         pathParameterErrors: null,
@@ -311,12 +317,12 @@ describe('Bank API Integration Tests', () => {
       const signIn = await invokeApi({
         method: 'POST',
         path: '/auth/signin?dev=true',
-        body: { name: creds.userName },
+        body: { email: creds.userEmail },
         queryStringParameters: { dev: 'true' },
       });
       expect(signIn.statusCode).toBe(200);
       expect(signIn.body.userId).toBe(creds.userId);
-      expect(signIn.body.name).toBe(creds.userName);
+      expect(signIn.body.email).toBe(creds.userEmail);
       const cookieHeader = signIn.headers?.['set-cookie'] as string;
       expect(cookieHeader).toContain(`Max-Age=600`);
     });
@@ -675,8 +681,8 @@ describe('Bank API Integration Tests', () => {
   });
 
   describe('Transfer Money Endpoint', () => {
-    let user1: { userId: string; jwtCookie: string; userName: string };
-    let user2: { userId: string; jwtCookie: string; userName: string };
+    let user1: { userId: string; jwtCookie: string; userEmail: string };
+    let user2: { userId: string; jwtCookie: string; userEmail: string };
     let user1Account: { accountId: string };
     let user2Account: { accountId: string; accountNumber: string };
 
@@ -865,201 +871,6 @@ describe('Bank API Integration Tests', () => {
       expect(result.body).toMatchObject({
         error: 'FORBIDDEN',
         message: 'Forbidden access',
-      });
-    });
-  });
-
-  describe('List Transactions Endpoint', () => {
-    let jwtCookie: string;
-    let accountId: string;
-    const txnIds: string[] = [];
-
-    beforeAll(async () => {
-      const creds = await signupUniqueTestUser('list-transactions-user');
-      jwtCookie = creds.jwtCookie;
-
-      // Create an account
-      const createAccount = await invokeApi({
-        method: 'POST',
-        path: '/v1/accounts',
-        jwtCookie,
-        body: { name: 'Test Account' },
-      });
-      expect(createAccount.statusCode).toBe(201);
-      accountId = createAccount.body.accountId;
-
-      // Fund the account to create transactions
-      const fundResult = await invokeApi({
-        method: 'POST',
-        path: `/v1/accounts/${accountId}/funding`,
-        jwtCookie,
-        headers: {
-          'idempotency-key': crypto.randomUUID(),
-          origin: DEFAULT_TEST_ORIGIN,
-        },
-        body: { amountMinor: 1000 },
-      });
-      expect(fundResult.statusCode).toBe(201);
-      txnIds.push(fundResult.body.txnId);
-
-      // Create a second account for transfer
-      const secondUser = await signupUniqueTestUser('list-transactions-user-2');
-      const secondAccount = await invokeApi({
-        method: 'POST',
-        path: '/v1/accounts',
-        jwtCookie: secondUser.jwtCookie,
-        body: { name: 'Second Account' },
-      });
-      expect(secondAccount.statusCode).toBe(201);
-
-      // Transfer money to create another transaction
-      const transferResult = await invokeApi({
-        method: 'POST',
-        path: '/v1/transfers',
-        jwtCookie,
-        headers: {
-          'idempotency-key': crypto.randomUUID(),
-          origin: DEFAULT_TEST_ORIGIN,
-        },
-        body: {
-          sourceAccountId: accountId,
-          destinationAccountNumber: secondAccount.body.accountNumber,
-          amountMinor: 200,
-        },
-      });
-      expect(transferResult.statusCode).toBe(201);
-      txnIds.push(transferResult.body.txnId);
-    });
-
-    it('should list transactions for authenticated user', async () => {
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${accountId}/transactions`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(200);
-      expect(result.body).toHaveProperty('items');
-      expect(Array.isArray(result.body.items)).toBe(true);
-      expect(result.body.items.length).toBe(2);
-
-      // Verify transaction structure
-      for (const txn of result.body.items) {
-        expect(txn).toMatchObject({
-          txnId: expect.any(String),
-          accountId: accountId,
-          side: expect.stringMatching(/^(DEBIT|CREDIT)$/),
-          amountMinor: expect.any(Number),
-          type: expect.any(String),
-          status: expect.any(String),
-          timestamp: expect.any(String),
-          counterpartyAccountNumber: expect.any(String),
-        });
-        expect(txn.description).toBeDefined();
-      }
-
-      // Verify we have our expected transactions
-      const returnedTxnIds = result.body.items.map((t: any) => t.txnId);
-      expect(returnedTxnIds).toEqual(expect.arrayContaining(txnIds));
-    });
-
-    it('should return empty list for account with no transactions', async () => {
-      // Create a new account with no transactions
-      const newAccount = await invokeApi({
-        method: 'POST',
-        path: '/v1/accounts',
-        jwtCookie,
-        body: { name: 'Empty Account' },
-      });
-      expect(newAccount.statusCode).toBe(201);
-
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${newAccount.body.accountId}/transactions`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(200);
-      expect(result.body).toEqual({
-        items: [],
-        next: undefined,
-      });
-    });
-
-    it('should support pagination with limit parameter', async () => {
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${accountId}/transactions?limit=1`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(200);
-      expect(result.body.items).toHaveLength(1);
-      expect(result.body.items[0]).toMatchObject({
-        txnId: expect.any(String),
-        accountId: accountId,
-        side: expect.stringMatching(/^(DEBIT|CREDIT)$/),
-        amountMinor: expect.any(Number),
-        type: expect.any(String),
-        status: expect.any(String),
-        timestamp: expect.any(String),
-        counterpartyAccountNumber: expect.any(String),
-      });
-    });
-
-    it('should return 404 if account does not exist', async () => {
-      const nonExistentAccountId = crypto.randomUUID();
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${nonExistentAccountId}/transactions`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(404);
-      expect(result.body).toMatchObject({
-        error: 'ACCOUNT_NOT_FOUND',
-        message: `Account ${nonExistentAccountId} not found`,
-      });
-    });
-
-    it('should return 401 if user is not authenticated', async () => {
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${accountId}/transactions`,
-      });
-
-      expect(result.statusCode).toBe(401);
-      expect(result.body).toEqual({
-        error: 'UNAUTHORIZED',
-        message: 'Unauthorized',
-      });
-    });
-
-    it('should return 400 for invalid limit parameter', async () => {
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/${accountId}/transactions?limit=0`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(400);
-      expect(result.body).toMatchObject({
-        error: 'VALIDATION_ERROR',
-        message: expect.any(String),
-      });
-    });
-
-    it('should return 400 for invalid accountId parameter', async () => {
-      const result = await invokeApi({
-        method: 'GET',
-        path: `/v1/accounts/invalid-uuid/transactions`,
-        jwtCookie,
-      });
-
-      expect(result.statusCode).toBe(400);
-      expect(result.body).toMatchObject({
-        error: 'VALIDATION_ERROR',
-        message: expect.any(String),
       });
     });
   });
@@ -1294,6 +1105,1046 @@ describe('Bank API Integration Tests', () => {
       });
     });
   });
+
+  describe('Hold Lifecycle Balance Effects', () => {
+    let holdRepository: DynamoHoldRepository;
+    let holdUser: { userId: string; jwtCookie: string; userEmail: string };
+    let payerAccountId: string;
+    let payerAccountNumber: string;
+    let counterpartyAccountId: string;
+    let counterpartyAccountNumber: string;
+
+    beforeAll(async () => {
+      holdUser = await signupUniqueTestUser('hold-balance-user');
+      holdRepository = new DynamoHoldRepository({
+        tableName: TEST_CONFIG.tableName,
+        region: TEST_CONFIG.region,
+        endpoint: TEST_CONFIG.localstackEndpoint,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+
+      const payerAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: holdUser.jwtCookie,
+        body: { name: 'Hold Balance Payer Account' },
+      });
+      expect(payerAccount.statusCode).toBe(201);
+      payerAccountId = payerAccount.body.accountId;
+      payerAccountNumber = payerAccount.body.accountNumber;
+
+      const counterpartyAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: holdUser.jwtCookie,
+        body: { name: 'Hold Balance Counterparty Account' },
+      });
+      expect(counterpartyAccount.statusCode).toBe(201);
+      counterpartyAccountId = counterpartyAccount.body.accountId;
+      counterpartyAccountNumber = counterpartyAccount.body.accountNumber;
+
+      const fundingResponse = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${payerAccountId}/funding`,
+        jwtCookie: holdUser.jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 2_000 },
+      });
+      expect(fundingResponse.statusCode).toBe(201);
+    });
+
+    const hashIdempotencyKey = (key: string) =>
+      createHash('sha256').update(key).digest('hex');
+
+    const getAccountBalanceItem = async (
+      accountId: string
+    ): Promise<{
+      availableBalanceMinor: number;
+      ledgerBalanceMinor: number;
+      version: number;
+    }> => {
+      const result = await documentClient.send(
+        new GetCommand({
+          TableName: TEST_CONFIG.tableName,
+          Key: {
+            PK: `ACCOUNT#${accountId}`,
+            SK: 'BALANCE',
+          },
+          ConsistentRead: true,
+        })
+      );
+      if (!result.Item) {
+        throw new Error(`Balance item not found for account ${accountId}`);
+      }
+      return result.Item as {
+        availableBalanceMinor: number;
+        ledgerBalanceMinor: number;
+        version: number;
+      };
+    };
+
+    it('restores available balance after releasing a hold', async () => {
+      const releaseHoldId = `hold-release-${crypto.randomUUID()}`;
+      const holdAmount = 200;
+      const createdAt = new Date().toISOString();
+
+      const initialAccount = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${payerAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(initialAccount.statusCode).toBe(200);
+      const initialLedger = initialAccount.body.ledgerBalanceMinor;
+      const initialAvailable = initialAccount.body.availableBalanceMinor;
+
+      const balanceBeforeReserve = await getAccountBalanceItem(payerAccountId);
+      const reserveIdempotencyKey = `reserve-${releaseHoldId}`;
+      const pendingHold: Hold = {
+        holdId: releaseHoldId,
+        payerAccountNumber,
+        counterpartyAccountNumber,
+        amountMinor: holdAmount,
+        currency: 'USD',
+        status: 'PENDING',
+        description: 'Release balance verification hold',
+        createdAt,
+      };
+
+      await holdRepository.reserveHold({
+        accountId: payerAccountId,
+        accountBalanceVersion: balanceBeforeReserve.version,
+        amountMinor: holdAmount,
+        availableBalanceMinor: balanceBeforeReserve.availableBalanceMinor,
+        hold: pendingHold,
+        holdEvent: {
+          at: createdAt,
+          type: 'CREATED',
+          createdByUserId: holdUser.userId,
+          idempotencyKeyHash: hashIdempotencyKey(reserveIdempotencyKey),
+        },
+        userId: holdUser.userId,
+        idempotencyKey: reserveIdempotencyKey,
+        idempotencyKeyHash: hashIdempotencyKey(reserveIdempotencyKey),
+      });
+
+      const balanceAfterReserve = await getAccountBalanceItem(payerAccountId);
+      expect(balanceAfterReserve.availableBalanceMinor).toBe(
+        balanceBeforeReserve.availableBalanceMinor - holdAmount
+      );
+
+      const releaseAt = new Date(Date.now() + 1_000).toISOString();
+      const releaseIdempotencyKey = `release-${releaseHoldId}`;
+
+      await holdRepository.releaseHold({
+        accountId: payerAccountId,
+        accountBalanceVersion: balanceAfterReserve.version,
+        amountMinor: holdAmount,
+        availableBalanceMinor: balanceAfterReserve.availableBalanceMinor,
+        hold: {
+          ...pendingHold,
+          status: 'RELEASED',
+          releasedAt: releaseAt,
+          releaseReason: 'Integration release',
+        },
+        holdEvent: {
+          at: releaseAt,
+          type: 'RELEASED',
+          reason: 'Integration release',
+        },
+        userId: holdUser.userId,
+        idempotencyKey: releaseIdempotencyKey,
+        idempotencyKeyHash: hashIdempotencyKey(releaseIdempotencyKey),
+      });
+
+      const accountAfterRelease = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${payerAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(accountAfterRelease.statusCode).toBe(200);
+      expect(accountAfterRelease.body.ledgerBalanceMinor).toBe(initialLedger);
+      expect(accountAfterRelease.body.availableBalanceMinor).toBe(
+        initialAvailable
+      );
+    });
+
+    it('applies capture balances to payer and counterparty accounts', async () => {
+      const captureHoldId = `hold-capture-${crypto.randomUUID()}`;
+      const captureAmount = 300;
+      const createdAt = new Date().toISOString();
+
+      const payerInitial = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${payerAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(payerInitial.statusCode).toBe(200);
+
+      const counterpartyInitial = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${counterpartyAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(counterpartyInitial.statusCode).toBe(200);
+
+      const balanceBeforeReserve = await getAccountBalanceItem(payerAccountId);
+      const reserveIdempotencyKey = `reserve-${captureHoldId}`;
+      const pendingHold: Hold = {
+        holdId: captureHoldId,
+        payerAccountNumber,
+        counterpartyAccountNumber,
+        amountMinor: captureAmount,
+        currency: 'USD',
+        status: 'PENDING',
+        description: 'Capture balance verification hold',
+        createdAt,
+      };
+
+      await holdRepository.reserveHold({
+        accountId: payerAccountId,
+        accountBalanceVersion: balanceBeforeReserve.version,
+        amountMinor: captureAmount,
+        availableBalanceMinor: balanceBeforeReserve.availableBalanceMinor,
+        hold: pendingHold,
+        holdEvent: {
+          at: createdAt,
+          type: 'CREATED',
+          createdByUserId: holdUser.userId,
+          idempotencyKeyHash: hashIdempotencyKey(reserveIdempotencyKey),
+        },
+        userId: holdUser.userId,
+        idempotencyKey: reserveIdempotencyKey,
+        idempotencyKeyHash: hashIdempotencyKey(reserveIdempotencyKey),
+      });
+
+      const payerBalanceAfterReserve = await getAccountBalanceItem(
+        payerAccountId
+      );
+      expect(payerBalanceAfterReserve.availableBalanceMinor).toBe(
+        balanceBeforeReserve.availableBalanceMinor - captureAmount
+      );
+
+      const counterpartyBalanceBeforeCapture = await getAccountBalanceItem(
+        counterpartyAccountId
+      );
+
+      const captureIdempotencyKey = `capture-${captureHoldId}`;
+      const captureAt = new Date(Date.now() + 2_000).toISOString();
+      const transactionId = `txn-${captureHoldId}`;
+      const postingAmount = new Money(captureAmount);
+
+      const debitPosting = new Posting({
+        accountId: payerAccountId,
+        amount: postingAmount,
+        side: 'DEBIT',
+        accountNumber: payerAccountNumber,
+        counterpartyAccountNumber,
+      });
+
+      const creditPosting = new Posting({
+        accountId: counterpartyAccountId,
+        amount: postingAmount,
+        side: 'CREDIT',
+        accountNumber: counterpartyAccountNumber,
+        counterpartyAccountNumber: payerAccountNumber,
+      });
+
+      const captureTransaction = Transaction.createWithId(
+        [debitPosting, creditPosting],
+        {
+          description: 'Capture balance verification transaction',
+          originHoldId: captureHoldId,
+          idempotencyKey: captureIdempotencyKey,
+        },
+        transactionId
+      );
+
+      await holdRepository.captureHold({
+        payerAccountId,
+        payerAccountBalanceVersion: payerBalanceAfterReserve.version,
+        counterpartyAccountId,
+        counterpartyAccountBalanceVersion:
+          counterpartyBalanceBeforeCapture.version,
+        hold: {
+          ...pendingHold,
+          status: 'CAPTURED',
+          relatedTransactionId: transactionId,
+        },
+        holdEvent: {
+          at: captureAt,
+          type: 'CAPTURED',
+          transactionId,
+          counterpartyAccountNumber,
+        },
+        transaction: captureTransaction,
+        userId: holdUser.userId,
+        idempotencyKey: captureIdempotencyKey,
+        idempotencyKeyHash: hashIdempotencyKey(captureIdempotencyKey),
+      });
+
+      const payerAfterCapture = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${payerAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(payerAfterCapture.statusCode).toBe(200);
+      expect(payerAfterCapture.body.ledgerBalanceMinor).toBe(
+        payerInitial.body.ledgerBalanceMinor - captureAmount
+      );
+      expect(payerAfterCapture.body.availableBalanceMinor).toBe(
+        payerInitial.body.availableBalanceMinor - captureAmount
+      );
+
+      const counterpartyAfterCapture = await invokeApi({
+        method: 'GET',
+        path: `/v1/accounts/${counterpartyAccountId}`,
+        jwtCookie: holdUser.jwtCookie,
+      });
+      expect(counterpartyAfterCapture.statusCode).toBe(200);
+      expect(counterpartyAfterCapture.body.ledgerBalanceMinor).toBe(
+        counterpartyInitial.body.ledgerBalanceMinor + captureAmount
+      );
+      expect(counterpartyAfterCapture.body.availableBalanceMinor).toBe(
+        counterpartyInitial.body.availableBalanceMinor + captureAmount
+      );
+    });
+  });
+
+  describe('Activity Endpoint', () => {
+    let jwtCookie: string;
+    let accountId: string;
+    let accountNumber: string;
+    let holdRepository: DynamoHoldRepository;
+    let releasedHold: {
+      holdId: string;
+      createdAt: string;
+      releasedAt: string;
+    };
+    let expiredHold: {
+      holdId: string;
+      createdAt: string;
+      expiresAt: string;
+    };
+    let sortedTransactions: Array<{
+      transactionId: string;
+      timestamp: string;
+      amountMinor: number;
+    }>;
+    let holdEntries: Array<{
+      holdId: string;
+      createdAt: string;
+      amountMinor: number;
+      description: string;
+      counterpartyAccountNumber: string;
+    }>;
+    type ExpectedActivityItem =
+      | { kind: 'POSTED_TRANSACTION'; transactionId: string }
+      | {
+          kind:
+            | 'HOLD_CREATED'
+            | 'HOLD_RELEASED'
+            | 'HOLD_CAPTURED'
+            | 'HOLD_FAILED';
+          holdId: string;
+        };
+
+    const expectedOrder: ExpectedActivityItem[] = [];
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('activity-endpoint-user');
+      jwtCookie = creds.jwtCookie;
+
+      const createAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Activity Primary Account' },
+      });
+      expect(createAccount.statusCode).toBe(201);
+      accountId = createAccount.body.accountId;
+      accountNumber = createAccount.body.accountNumber;
+
+      const fundingResult = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 1_500 },
+      });
+      expect(fundingResult.statusCode).toBe(201);
+      const fundingTxnId = fundingResult.body.txnId;
+
+      const destinationAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Activity Destination Account' },
+      });
+      expect(destinationAccount.statusCode).toBe(201);
+
+      const transferResult = await invokeApi({
+        method: 'POST',
+        path: '/v1/transfers',
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          sourceAccountId: accountId,
+          destinationAccountNumber: destinationAccount.body.accountNumber,
+          amountMinor: 300,
+        },
+      });
+      expect(transferResult.statusCode).toBe(201);
+      const transferTxnId = transferResult.body.txnId;
+
+      const [fundingTxnResponse, transferTxnResponse] = await Promise.all([
+        invokeApi({
+          method: 'GET',
+          path: `/v1/accounts/${accountId}/transactions/${fundingTxnId}`,
+          jwtCookie,
+        }),
+        invokeApi({
+          method: 'GET',
+          path: `/v1/accounts/${accountId}/transactions/${transferTxnId}`,
+          jwtCookie,
+        }),
+      ]);
+
+      expect(fundingTxnResponse.statusCode).toBe(200);
+      expect(transferTxnResponse.statusCode).toBe(200);
+
+      sortedTransactions = [fundingTxnResponse.body, transferTxnResponse.body]
+        .map((item: any) => ({
+          transactionId: item.txnId,
+          timestamp: item.timestamp,
+          amountMinor: item.amountMinor,
+        }))
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+      if (sortedTransactions.length < 2) {
+        throw new Error(
+          'Expected at least two transactions for activity tests'
+        );
+      }
+
+      holdRepository = new DynamoHoldRepository({
+        tableName: TEST_CONFIG.tableName,
+        region: TEST_CONFIG.region,
+        endpoint: TEST_CONFIG.localstackEndpoint,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      });
+
+      const newestTime = Date.parse(sortedTransactions[0].timestamp);
+      const secondTime = Date.parse(sortedTransactions[1].timestamp);
+
+      holdEntries = [
+        {
+          holdId: `hold-${crypto.randomUUID()}`,
+          createdAt: new Date(newestTime + 2_000).toISOString(),
+          amountMinor: 450,
+          description: 'Newest pending hold',
+          counterpartyAccountNumber: destinationAccount.body.accountNumber,
+        },
+        {
+          holdId: `hold-${crypto.randomUUID()}`,
+          createdAt: new Date(
+            Math.floor((newestTime + secondTime) / 2)
+          ).toISOString(),
+          amountMinor: 350,
+          description: 'Mid pending hold',
+          counterpartyAccountNumber: destinationAccount.body.accountNumber,
+        },
+        {
+          holdId: `hold-${crypto.randomUUID()}`,
+          createdAt: new Date(secondTime - 120_000).toISOString(),
+          amountMinor: 250,
+          description: 'Old pending hold',
+          counterpartyAccountNumber: destinationAccount.body.accountNumber,
+        },
+      ];
+
+      for (const hold of holdEntries) {
+        await holdRepository.putHoldMeta({
+          holdId: hold.holdId,
+          payerAccountNumber: accountNumber,
+          counterpartyAccountNumber: hold.counterpartyAccountNumber,
+          amountMinor: hold.amountMinor,
+          currency: 'USD',
+          status: 'PENDING',
+          description: hold.description,
+          createdAt: hold.createdAt,
+        });
+        await holdRepository.appendHoldEvent(hold.holdId, {
+          at: hold.createdAt,
+          type: 'CREATED',
+          createdByUserId: 'system-test',
+          idempotencyKeyHash: `hash-${hold.holdId}`,
+        });
+      }
+
+      const captureAt = new Date(newestTime + 1_500).toISOString();
+      await holdRepository.putHoldMeta({
+        holdId: holdEntries[1].holdId,
+        payerAccountNumber: accountNumber,
+        counterpartyAccountNumber: holdEntries[1].counterpartyAccountNumber,
+        amountMinor: holdEntries[1].amountMinor,
+        currency: 'USD',
+        status: 'CAPTURED',
+        description: holdEntries[1].description,
+        createdAt: holdEntries[1].createdAt,
+        relatedTransactionId: sortedTransactions[0].transactionId,
+      });
+      await holdRepository.appendHoldEvent(holdEntries[1].holdId, {
+        at: captureAt,
+        type: 'CAPTURED',
+        transactionId: sortedTransactions[0].transactionId,
+        counterpartyAccountNumber: holdEntries[1].counterpartyAccountNumber!,
+      });
+
+      releasedHold = {
+        holdId: `hold-${crypto.randomUUID()}`,
+        createdAt: new Date(secondTime - 30_000).toISOString(),
+        releasedAt: new Date(secondTime - 10_000).toISOString(),
+      };
+      await holdRepository.putHoldMeta({
+        holdId: releasedHold.holdId,
+        payerAccountNumber: accountNumber,
+        amountMinor: 200,
+        currency: 'USD',
+        status: 'PENDING',
+        description: 'Released pending hold',
+        createdAt: releasedHold.createdAt,
+      });
+      await holdRepository.appendHoldEvent(releasedHold.holdId, {
+        at: releasedHold.createdAt,
+        type: 'CREATED',
+        createdByUserId: 'system-test',
+      });
+      await holdRepository.putHoldMeta({
+        holdId: releasedHold.holdId,
+        payerAccountNumber: accountNumber,
+        amountMinor: 200,
+        currency: 'USD',
+        status: 'RELEASED',
+        description: 'Released pending hold',
+        createdAt: releasedHold.createdAt,
+        releasedAt: releasedHold.releasedAt,
+        releaseReason: 'Merchant adjustment',
+      });
+      await holdRepository.appendHoldEvent(releasedHold.holdId, {
+        at: releasedHold.releasedAt,
+        type: 'RELEASED',
+        reason: 'Merchant adjustment',
+      });
+
+      expectedOrder.push(
+        { kind: 'HOLD_CREATED', holdId: holdEntries[0].holdId },
+        { kind: 'HOLD_CAPTURED', holdId: holdEntries[1].holdId },
+        {
+          kind: 'POSTED_TRANSACTION',
+          transactionId: sortedTransactions[0].transactionId,
+        },
+        { kind: 'HOLD_CREATED', holdId: holdEntries[1].holdId },
+        {
+          kind: 'POSTED_TRANSACTION',
+          transactionId: sortedTransactions[1].transactionId,
+        },
+        { kind: 'HOLD_RELEASED', holdId: releasedHold.holdId },
+        { kind: 'HOLD_CREATED', holdId: releasedHold.holdId },
+        { kind: 'HOLD_CREATED', holdId: holdEntries[2].holdId }
+      );
+
+      expiredHold = {
+        holdId: `hold-${crypto.randomUUID()}`,
+        createdAt: new Date(secondTime - 180_000).toISOString(),
+        expiresAt: new Date(secondTime - 60_000).toISOString(),
+      };
+      await holdRepository.putHoldMeta({
+        holdId: expiredHold.holdId,
+        payerAccountNumber: accountNumber,
+        amountMinor: 175,
+        currency: 'USD',
+        status: 'EXPIRED',
+        description: 'Expired pending hold',
+        createdAt: expiredHold.createdAt,
+        expiresAt: expiredHold.expiresAt,
+      });
+    });
+
+    it('should merge pending holds and posted transactions in descending order', async () => {
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}`,
+        jwtCookie,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const simplified = response.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return {
+            kind: item.kind,
+            transactionId: item.transactionId,
+          };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(simplified).toEqual(expectedOrder);
+      expect(response.body.nextCursor).toBeUndefined();
+
+      response.body.items.forEach((item: any) => {
+        const expectedActivityId =
+          item.kind === 'POSTED_TRANSACTION'
+            ? `TXN#${item.transactionId}`
+            : `HOLD#${item.holdId}`;
+        expect(item.activityId).toBe(expectedActivityId);
+      });
+
+      const newestHoldEvent = response.body.items[0];
+      expect(newestHoldEvent).toMatchObject({
+        kind: 'HOLD_CREATED',
+        activityId: `HOLD#${holdEntries[0].holdId}`,
+        holdId: holdEntries[0].holdId,
+        amountMinor: holdEntries[0].amountMinor,
+        createdByUserId: 'system-test',
+        idempotencyKeyHash: `hash-${holdEntries[0].holdId}`,
+      });
+
+      const holdIds = response.body.items
+        .filter((item: any) => item.kind.startsWith('HOLD_'))
+        .map((item: any) => item.holdId);
+      expect(holdIds).toContain(releasedHold.holdId);
+      expect(holdIds).not.toContain(expiredHold.holdId);
+
+      const capturedEvent = response.body.items.find(
+        (item: any) =>
+          item.kind === 'HOLD_CAPTURED' && item.holdId === holdEntries[1].holdId
+      );
+      expect(capturedEvent).toMatchObject({
+        transactionId: sortedTransactions[0].transactionId,
+        counterpartyAccountNumber: holdEntries[1].counterpartyAccountNumber,
+      });
+
+      const releasedEvent = response.body.items.find(
+        (item: any) =>
+          item.kind === 'HOLD_RELEASED' && item.holdId === releasedHold.holdId
+      );
+      expect(releasedEvent).toMatchObject({
+        releaseReason: 'Merchant adjustment',
+        releasedAt: releasedHold.releasedAt,
+      });
+    });
+
+    it('should support stable pagination with cursor', async () => {
+      const firstPage = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}?limit=2`,
+        jwtCookie,
+      });
+
+      expect(firstPage.statusCode).toBe(200);
+      expect(firstPage.body.items).toHaveLength(2);
+      const firstIds = firstPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(firstIds).toEqual(expectedOrder.slice(0, 2));
+      expect(firstPage.body.nextCursor).toBeDefined();
+
+      const secondCursor = encodeURIComponent(firstPage.body.nextCursor);
+      const secondPage = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}?limit=2&cursor=${secondCursor}`,
+        jwtCookie,
+      });
+
+      expect(secondPage.statusCode).toBe(200);
+      expect(secondPage.body.items).toHaveLength(2);
+      const secondIds = secondPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(secondIds).toEqual(expectedOrder.slice(2, 4));
+      expect(secondPage.body.nextCursor).toBeDefined();
+
+      const thirdCursor = encodeURIComponent(secondPage.body.nextCursor);
+      const thirdPage = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}?limit=2&cursor=${thirdCursor}`,
+        jwtCookie,
+      });
+
+      expect(thirdPage.statusCode).toBe(200);
+      expect(thirdPage.body.items).toHaveLength(2);
+      const thirdIds = thirdPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(thirdIds).toEqual(expectedOrder.slice(4, 6));
+      expect(thirdPage.body.nextCursor).toBeDefined();
+
+      const fourthCursor = encodeURIComponent(thirdPage.body.nextCursor);
+      const fourthPage = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}?limit=2&cursor=${fourthCursor}`,
+        jwtCookie,
+      });
+
+      expect(fourthPage.statusCode).toBe(200);
+      expect(fourthPage.body.items).toHaveLength(2);
+      const fourthIds = fourthPage.body.items.map((item: any) => {
+        if (item.kind === 'POSTED_TRANSACTION') {
+          return { kind: item.kind, transactionId: item.transactionId };
+        }
+        return { kind: item.kind, holdId: item.holdId };
+      });
+      expect(fourthIds).toEqual(expectedOrder.slice(6));
+      expect(fourthPage.body.nextCursor).toBeUndefined();
+    });
+
+    it('should return 400 for invalid cursor token', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}?cursor=invalid-token`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+      });
+    });
+
+    it('should return 400 for invalid limit parameter', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}?limit=0`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+      });
+    });
+
+    it('should return 400 for invalid account number format', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: '/v1/activity/invalid-number',
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(400);
+      expect(result.body).toMatchObject({
+        error: 'VALIDATION_ERROR',
+      });
+    });
+
+    it('should return 404 when requesting activity for account not owned by user', async () => {
+      const otherUser = await signupUniqueTestUser('activity-endpoint-other');
+      const otherAccount = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: otherUser.jwtCookie,
+        body: { name: 'Other Account' },
+      });
+      expect(otherAccount.statusCode).toBe(201);
+
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${otherAccount.body.accountNumber}`,
+        jwtCookie,
+      });
+
+      expect(result.statusCode).toBe(404);
+      expect(result.body).toMatchObject({
+        error: 'ACCOUNT_NOT_FOUND',
+      });
+    });
+
+    it('should return 401 when request is unauthenticated', async () => {
+      const result = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}`,
+      });
+
+      expect(result.statusCode).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message: 'Unauthorized',
+      });
+    });
+
+    it('should return transaction activity detail for owned account', async () => {
+      const listResponse = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}`,
+        jwtCookie,
+      });
+
+      expect(listResponse.statusCode).toBe(200);
+      const postedItems = listResponse.body.items.filter(
+        (item: any) => item.kind === 'POSTED_TRANSACTION'
+      );
+      expect(postedItems.length).toBeGreaterThan(0);
+
+      let successful: any;
+      for (const txnItem of postedItems) {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const response = await invokeApi({
+            method: 'GET',
+            path: `/v1/activity/${accountNumber}/records/${encodeURIComponent(
+              txnItem.activityId
+            )}`,
+            jwtCookie,
+          });
+
+          if (response.statusCode === 200) {
+            successful = response;
+            break;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        if (successful) {
+          break;
+        }
+      }
+
+      expect(successful).toBeDefined();
+      expect(successful?.body).toMatchObject({
+        kind: 'POSTED_TRANSACTION',
+        activityId: expect.any(String),
+        transactionId: expect.any(String),
+        status: 'POSTED',
+      });
+      expect(successful?.body.amountMinor).toBeGreaterThan(0);
+      expect(typeof successful?.body.side).toBe('string');
+      expect(successful?.body.payNote).toBeUndefined();
+    });
+
+    it('should return hold activity detail with timeline', async () => {
+      const listResponse = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}`,
+        jwtCookie,
+      });
+
+      expect(listResponse.statusCode).toBe(200);
+      const holdItems = listResponse.body.items.filter((item: any) =>
+        item.kind.startsWith('HOLD_')
+      );
+      expect(holdItems.length).toBeGreaterThan(0);
+
+      let successfulHold: any;
+      for (const holdItem of holdItems) {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const response = await invokeApi({
+            method: 'GET',
+            path: `/v1/activity/${accountNumber}/records/${encodeURIComponent(
+              holdItem.activityId
+            )}`,
+            jwtCookie,
+          });
+
+          if (response.statusCode === 200) {
+            successfulHold = response;
+            break;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+
+        if (successfulHold) {
+          break;
+        }
+      }
+
+      expect(successfulHold).toBeDefined();
+      expect(successfulHold?.body).toMatchObject({
+        kind: 'HOLD',
+        activityId: expect.any(String),
+        holdId: expect.any(String),
+        amountMinor: expect.any(Number),
+      });
+      expect(Array.isArray(successfulHold?.body.timeline)).toBe(true);
+      expect(successfulHold?.body.timeline[0]).toMatchObject({
+        type: 'CREATED',
+        createdByUserId: 'system-test',
+      });
+    });
+
+    it('should return 404 for unknown activity detail', async () => {
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${accountNumber}/records/${encodeURIComponent(
+          'TXN#missing'
+        )}`,
+        jwtCookie,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toMatchObject({
+        error: 'ACTIVITY_NOT_FOUND',
+      });
+    });
+  });
+
+  describe('PayNote Detail Endpoint', () => {
+    let userJwtCookie: string;
+    let userAccountNumber: string;
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('paynote-detail-user');
+      userJwtCookie = creds.jwtCookie;
+
+      const account = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: userJwtCookie,
+        body: { name: 'PayNote Primary Account' },
+      });
+      expect(account.statusCode).toBe(201);
+      userAccountNumber = account.body.accountNumber;
+    });
+
+    it('returns PayNote details when MyOS responds successfully', async () => {
+      const eventId = 'event-success-123';
+      const originalFetch = global.fetch;
+      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          id: eventId,
+          object: {
+            document: {
+              payerAccountNumber: { value: userAccountNumber },
+            },
+            documentYaml: '---\npaynote: test',
+            emitted: [{ type: { name: 'Reserve Funds Requested' } }],
+            triggeredBy: { actor: 'payerChannel' },
+          },
+        }),
+      } as unknown as Response);
+
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
+        jwtCookie: userJwtCookie,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.myosEventId).toBe(eventId);
+      expect(typeof response.body.fetchedAt).toBe('string');
+      expect(response.body.document?.payerAccountNumber?.value).toBe(
+        userAccountNumber
+      );
+      expect(
+        Array.isArray(response.body.transactionRequest?.items) &&
+          response.body.transactionRequest.items.length > 0
+      ).toBe(true);
+      expect(response.body.triggerEvent).toMatchObject({
+        actor: { value: 'payerChannel' },
+      });
+
+      fetchSpy.mockRestore();
+      global.fetch = originalFetch;
+    });
+
+    it('returns 404 when MyOS event is missing', async () => {
+      const eventId = 'event-missing-404';
+      const originalFetch = global.fetch;
+      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: vi.fn().mockResolvedValue('not found'),
+      } as unknown as Response);
+
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
+        jwtCookie: userJwtCookie,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toMatchObject({
+        error: ERROR_CODES.PAYNOTE_NOT_FOUND,
+      });
+      fetchSpy.mockRestore();
+      global.fetch = originalFetch;
+    });
+
+    it('returns 404 when MyOS event document does not match account', async () => {
+      const eventId = 'event-wrong-account';
+      const originalFetch = global.fetch;
+      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          id: eventId,
+          object: {
+            document: {
+              payerAccountNumber: { value: '9999999999' },
+            },
+            emitted: [],
+          },
+        }),
+      } as unknown as Response);
+
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
+        jwtCookie: userJwtCookie,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.body).toMatchObject({
+        error: ERROR_CODES.PAYNOTE_NOT_FOUND,
+      });
+      fetchSpy.mockRestore();
+      global.fetch = originalFetch;
+    });
+
+    it('returns 500 when MyOS call fails with server error', async () => {
+      const eventId = 'event-server-error';
+      const originalFetch = global.fetch;
+      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: vi.fn().mockResolvedValue('server failure'),
+      } as unknown as Response);
+
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
+        jwtCookie: userJwtCookie,
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.body).toMatchObject({
+        error: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        detail: 'server failure',
+      });
+      fetchSpy.mockRestore();
+      global.fetch = originalFetch;
+    });
+  });
 });
 
 // Helper functions
@@ -1301,7 +2152,7 @@ describe('Bank API Integration Tests', () => {
 function generateUniqueTestUserName(prefix = 'test-user'): string {
   const timestamp = Date.now();
   const randomSuffix = Math.random().toString(36).substring(2, 9);
-  return `${prefix}-${timestamp}-${randomSuffix}`;
+  return `${prefix}-${timestamp}-${randomSuffix}@example.com`;
 }
 
 function createTestEvent(
@@ -1386,6 +2237,10 @@ async function setupLocalStackResources(): Promise<void> {
 
           { AttributeName: 'BANKING_GSI2PK', AttributeType: 'S' },
           { AttributeName: 'BANKING_GSI2SK', AttributeType: 'S' },
+          { AttributeName: 'HOLD_GSI1PK', AttributeType: 'S' },
+          { AttributeName: 'HOLD_GSI1SK', AttributeType: 'S' },
+          { AttributeName: 'HOLD_EVENT_GSI1PK', AttributeType: 'S' },
+          { AttributeName: 'HOLD_EVENT_GSI1SK', AttributeType: 'S' },
         ],
         KeySchema: [
           { AttributeName: 'PK', KeyType: 'HASH' },
@@ -1414,6 +2269,22 @@ async function setupLocalStackResources(): Promise<void> {
             KeySchema: [
               { AttributeName: 'BANKING_GSI2PK', KeyType: 'HASH' },
               { AttributeName: 'BANKING_GSI2SK', KeyType: 'RANGE' },
+            ],
+            Projection: { ProjectionType: 'ALL' },
+          },
+          {
+            IndexName: 'HOLD_GSI1',
+            KeySchema: [
+              { AttributeName: 'HOLD_GSI1PK', KeyType: 'HASH' },
+              { AttributeName: 'HOLD_GSI1SK', KeyType: 'RANGE' },
+            ],
+            Projection: { ProjectionType: 'ALL' },
+          },
+          {
+            IndexName: 'HOLD_EVENT_GSI1',
+            KeySchema: [
+              { AttributeName: 'HOLD_EVENT_GSI1PK', KeyType: 'HASH' },
+              { AttributeName: 'HOLD_EVENT_GSI1SK', KeyType: 'RANGE' },
             ],
             Projection: { ProjectionType: 'ALL' },
           },
@@ -1491,7 +2362,7 @@ async function setupLocalStackResources(): Promise<void> {
       throw new Error('DynamoDB table failed to become active');
     }
 
-    // Create Secrets Manager secret
+    // Create Secrets Manager secrets
     try {
       await secretsManagerClient.send(
         new CreateSecretCommand({
@@ -1503,6 +2374,42 @@ async function setupLocalStackResources(): Promise<void> {
     } catch (error) {
       if (error instanceof ResourceExistsException) {
         console.info('Secrets Manager secret already exists:', error);
+      }
+    }
+
+    const openAiSecretString = JSON.stringify({
+      openAiApiKey: 'integration-openai-key',
+    });
+    try {
+      await secretsManagerClient.send(
+        new CreateSecretCommand({
+          Name: TEST_CONFIG.openAiSecretArn,
+          SecretString: openAiSecretString,
+          Description: 'OpenAI API key for integration tests',
+        })
+      );
+    } catch (error) {
+      if (error instanceof ResourceExistsException) {
+        console.info('OpenAI secret already exists:', error);
+      }
+    }
+
+    const myOsSecretString = JSON.stringify({
+      apiKey: 'integration-myos-api-key',
+      accountId: 'integration-myos-account-id',
+      baseUrl: 'https://integration.myos.local',
+    });
+    try {
+      await secretsManagerClient.send(
+        new CreateSecretCommand({
+          Name: TEST_CONFIG.myOsSecretArn,
+          SecretString: myOsSecretString,
+          Description: 'MyOS credentials for integration tests',
+        })
+      );
+    } catch (error) {
+      if (error instanceof ResourceExistsException) {
+        console.info('MyOS secret already exists:', error);
       }
     }
   } catch (error) {
@@ -1535,6 +2442,34 @@ async function cleanupLocalStackResources(): Promise<void> {
       .then(() => void 0)
       .catch(error => {
         console.warn('Failed to cleanup Secrets Manager secret:', error);
+      })
+  );
+
+  cleanupPromises.push(
+    secretsManagerClient
+      .send(
+        new DeleteSecretCommand({
+          SecretId: TEST_CONFIG.openAiSecretArn,
+          ForceDeleteWithoutRecovery: true,
+        })
+      )
+      .then(() => void 0)
+      .catch(error => {
+        console.warn('Failed to cleanup OpenAI secret:', error);
+      })
+  );
+
+  cleanupPromises.push(
+    secretsManagerClient
+      .send(
+        new DeleteSecretCommand({
+          SecretId: TEST_CONFIG.myOsSecretArn,
+          ForceDeleteWithoutRecovery: true,
+        })
+      )
+      .then(() => void 0)
+      .catch(error => {
+        console.warn('Failed to cleanup MyOS secret:', error);
       })
   );
 
@@ -1583,13 +2518,19 @@ async function invokeApi({
 // DRY helper for signing up a unique test user and extracting credentials
 async function signupUniqueTestUser(
   namePrefix = 'test-user',
-  isTest = false
-): Promise<{ userId: string; jwtCookie: string; userName: string }> {
-  const userName = generateUniqueTestUserName(namePrefix);
+  isTest = false,
+  marketingOptIn = true
+): Promise<{
+  userId: string;
+  jwtCookie: string;
+  userEmail: string;
+  marketingEmailsOptIn: boolean;
+}> {
+  const userEmail = generateUniqueTestUserName(namePrefix);
   const signUp = await invokeApi({
     method: 'POST',
     path: isTest ? '/auth/signup?dev=true' : '/auth/signup',
-    body: { name: userName },
+    body: { email: userEmail, marketingEmailsOptIn: marketingOptIn },
   });
   expect(signUp.statusCode).toBe(201);
   if (!signUp.headers || typeof signUp.headers['set-cookie'] !== 'string') {
@@ -1598,6 +2539,7 @@ async function signupUniqueTestUser(
   return {
     userId: signUp.body.userId,
     jwtCookie: signUp.headers['set-cookie'],
-    userName,
+    userEmail,
+    marketingEmailsOptIn: signUp.body.marketingEmailsOptIn,
   };
 }

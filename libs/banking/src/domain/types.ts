@@ -9,14 +9,14 @@ export type {
 export type { PostingSide, Side } from './valueObjects/Posting';
 
 // Shared types from observability
-import type { LogLevel } from '@demo-blue/shared-observability';
+import type { LogLevel } from '@demo-bank-app/shared-observability';
 
 export type {
   LogLevel,
   Logger,
   Metrics,
   MetricUnit,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 
 // Configuration interfaces
 export interface BankingConfiguration {

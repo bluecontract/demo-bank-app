@@ -46,7 +46,7 @@ info:
 servers:
   - url: http://localhost:3000
     description: Local development server
-  - url: https://api.demo-blue-bank.com
+  - url: https://api.demo-bank-app-bank.com
     description: Production server
 tags:
   - name: Health

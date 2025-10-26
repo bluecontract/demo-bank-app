@@ -72,7 +72,7 @@ describe('AwsJwtService', () => {
       (jwt.sign as any).mockReturnValue(expectedToken);
 
       // When
-      const result = await service.generateToken(userId);
+      const result = await service.generateToken({ userId });
 
       // Then
       expect(result).toBe(expectedToken);
@@ -92,6 +92,7 @@ describe('AwsJwtService', () => {
     it('should generate token for test user with 10 minute TTL', async () => {
       // Given
       const userId = 'test-user-123';
+      const email = 'test-user@example.com';
       const expectedToken = 'test-user-token';
 
       mockSend.mockResolvedValueOnce({
@@ -100,7 +101,11 @@ describe('AwsJwtService', () => {
       (jwt.sign as any).mockReturnValue(expectedToken);
 
       // When
-      const result = await service.generateToken(userId, true);
+      const result = await service.generateToken({
+        userId,
+        email,
+        isTest: true,
+      });
 
       // Then
       expect(result).toBe(expectedToken);
@@ -109,10 +114,33 @@ describe('AwsJwtService', () => {
       const payload = (jwt.sign as any).mock.calls[0][0];
       expect(payload.sub).toBe(userId);
       expect(payload.isTest).toBe(true);
+      expect(payload.email).toBe(email);
 
       // Validate exact timestamps (10 minutes = 600 seconds)
       expect(payload.iat).toBe(fixedTimestamp);
       expect(payload.exp).toBe(fixedTimestamp + 600);
+    });
+
+    it('should include user email when provided', async () => {
+      const userId = 'user-456';
+      const email = 'user-456@example.com';
+      const expectedToken = 'token-with-email';
+
+      mockSend.mockResolvedValueOnce({
+        SecretString: mockSecretJson,
+      });
+      (jwt.sign as any).mockReturnValue(expectedToken);
+
+      const result = await service.generateToken({
+        userId,
+        email,
+      });
+
+      expect(result).toBe(expectedToken);
+      const payload = (jwt.sign as any).mock.calls[0][0];
+      expect(payload.email).toBe(email);
+      expect(payload.sub).toBe(userId);
+      expect(payload.isTest).toBeUndefined();
     });
 
     it('should call Secrets Manager to get JWT secret', async () => {
@@ -125,7 +153,7 @@ describe('AwsJwtService', () => {
       (jwt.sign as any).mockReturnValue('token');
 
       // When
-      await service.generateToken(userId);
+      await service.generateToken({ userId });
 
       // Then
       // Verify GetSecretValueCommand was created with correct parameters
@@ -152,7 +180,7 @@ describe('AwsJwtService', () => {
     (jwt.sign as any).mockReturnValue('token1');
 
     // When
-    await service.generateToken(userId);
+    await service.generateToken({ userId });
 
     // Verify first call used GetSecretValueCommand
     expect(mockGetSecretValueCommand).toHaveBeenCalledTimes(1);
@@ -161,7 +189,7 @@ describe('AwsJwtService', () => {
     const firstCallCount = mockGetSecretValueCommand.mock.calls.length;
     (jwt.sign as any).mockReturnValue('token2');
 
-    await service.generateToken(userId);
+    await service.generateToken({ userId });
 
     // Then
     // Verify no additional GetSecretValueCommand was created (cached secret)
@@ -187,7 +215,7 @@ describe('AwsJwtService', () => {
     });
 
     // When & Then
-    await expect(service.generateToken(userId)).rejects.toThrow(
+    await expect(service.generateToken({ userId })).rejects.toThrow(
       new TokenGenerationError(userId, jwtError)
     );
 
@@ -296,7 +324,7 @@ describe('AwsJwtService', () => {
       mockSend.mockRejectedValueOnce(secretsError);
 
       // When & Then
-      await expect(service.generateToken(userId)).rejects.toThrow(
+      await expect(service.generateToken({ userId })).rejects.toThrow(
         new TokenGenerationError(userId)
       );
 
@@ -311,7 +339,7 @@ describe('AwsJwtService', () => {
       });
 
       // When & Then
-      await expect(service.generateToken(userId)).rejects.toThrow(
+      await expect(service.generateToken({ userId })).rejects.toThrow(
         new TokenGenerationError(userId)
       );
 
@@ -326,7 +354,7 @@ describe('AwsJwtService', () => {
       });
 
       // When & Then
-      await expect(service.generateToken(userId)).rejects.toThrow(
+      await expect(service.generateToken({ userId })).rejects.toThrow(
         new TokenGenerationError(userId)
       );
 

@@ -13,6 +13,61 @@ export const ProblemDto = z.object({
 export type ProblemDto = z.infer<typeof ProblemDto>;
 
 const MoneyMinor = z.number().int();
+const HoldFailureCodeSchema = z.enum([
+  'INSUFFICIENT_FUNDS',
+  'STATE_MISMATCH',
+  'VALIDATION',
+  'INTERNAL',
+]);
+
+const ActivityIdSchema = z
+  .string()
+  .min(1, 'activityId is required')
+  .describe(
+    'Stable activity identifier. Transactions use TXN#<transactionId>; holds use HOLD#<holdId>.'
+  );
+
+const ActivityPayNoteReferenceSchema = z.object({
+  myosEventId: z.string(),
+});
+
+const HoldStatusSchema = z.enum([
+  'PENDING',
+  'CAPTURED',
+  'RELEASED',
+  'EXPIRED',
+  'FAILED',
+]);
+
+const HoldTimelineEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('CREATED'),
+    at: z.string().datetime({ offset: true }),
+    createdByUserId: z.string().optional(),
+    idempotencyKeyHash: z.string().optional(),
+    payNoteEventId: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('CAPTURED'),
+    at: z.string().datetime({ offset: true }),
+    transactionId: z.string(),
+    counterpartyAccountNumber: z.string().optional(),
+    payNoteEventId: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('RELEASED'),
+    at: z.string().datetime({ offset: true }),
+    reason: z.string().optional(),
+    payNoteEventId: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('FAILED'),
+    at: z.string().datetime({ offset: true }),
+    code: HoldFailureCodeSchema,
+    message: z.string().optional(),
+    payNoteEventId: z.string().optional(),
+  }),
+]);
 
 export const AccountDto = z.object({
   accountId: z.string().uuid(),
@@ -67,8 +122,136 @@ export const TransactionDto = z.object({
   counterpartyAccountNumber: z.string(),
 });
 
-export const PaginatedDto = <T extends z.ZodTypeAny>(item: T) =>
-  z.object({
-    items: z.array(item),
-    next: z.string().optional(),
-  });
+export const ActivityPostedTransactionDto = z.object({
+  kind: z.literal('POSTED_TRANSACTION'),
+  activityId: ActivityIdSchema,
+  transactionId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  postedAt: z.string().datetime({ offset: true }),
+  originHoldId: z.string().optional(),
+  side: z.enum(['DEBIT', 'CREDIT']),
+  type: z.string(),
+  status: z.string(),
+  counterpartyAccountNumber: z.string().optional(),
+});
+
+export const ActivityHoldCreatedDto = z.object({
+  kind: z.literal('HOLD_CREATED'),
+  activityId: ActivityIdSchema,
+  holdId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  createdAt: z.string().datetime({ offset: true }),
+  counterpartyAccountNumber: z.string().optional(),
+  createdByUserId: z.string().optional(),
+  idempotencyKeyHash: z.string().optional(),
+});
+
+export const ActivityHoldReleasedDto = z.object({
+  kind: z.literal('HOLD_RELEASED'),
+  activityId: ActivityIdSchema,
+  holdId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  releasedAt: z.string().datetime({ offset: true }),
+  releaseReason: z.string().optional(),
+});
+
+export const ActivityHoldCapturedDto = z.object({
+  kind: z.literal('HOLD_CAPTURED'),
+  activityId: ActivityIdSchema,
+  holdId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  capturedAt: z.string().datetime({ offset: true }),
+  transactionId: z.string(),
+  counterpartyAccountNumber: z.string(),
+});
+
+export const ActivityHoldFailedDto = z.object({
+  kind: z.literal('HOLD_FAILED'),
+  activityId: ActivityIdSchema,
+  holdId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  failedAt: z.string().datetime({ offset: true }),
+  failureCode: HoldFailureCodeSchema,
+  failureMessage: z.string().optional(),
+});
+
+export const ActivityItemDto = z.discriminatedUnion('kind', [
+  ActivityHoldCreatedDto,
+  ActivityHoldReleasedDto,
+  ActivityHoldCapturedDto,
+  ActivityHoldFailedDto,
+  ActivityPostedTransactionDto,
+]);
+
+export const ActivityResponseDto = z.object({
+  items: z.array(ActivityItemDto),
+  nextCursor: z.string().optional(),
+});
+
+const ActivityDetailPostedTransactionDto = z.object({
+  kind: z.literal('POSTED_TRANSACTION'),
+  activityId: ActivityIdSchema,
+  transactionId: z.string(),
+  amountMinor: MoneyMinor,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  postedAt: z.string().datetime({ offset: true }),
+  originHoldId: z.string().optional(),
+  side: z.enum(['DEBIT', 'CREDIT']),
+  type: z.string(),
+  status: z.string(),
+  counterpartyAccountNumber: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
+});
+
+const ActivityDetailHoldDto = z.object({
+  kind: z.literal('HOLD'),
+  activityId: ActivityIdSchema,
+  holdId: z.string(),
+  amountMinor: MoneyMinor,
+  currency: z.literal('USD'),
+  status: HoldStatusSchema,
+  description: createSanitizedOptionalStringSchema(z.string().optional()),
+  createdAt: z.string().datetime({ offset: true }),
+  expiresAt: z.string().datetime({ offset: true }).optional(),
+  releasedAt: z.string().datetime({ offset: true }).optional(),
+  releaseReason: z.string().optional(),
+  capturedAt: z.string().datetime({ offset: true }).optional(),
+  captureTransactionId: z.string().optional(),
+  failedAt: z.string().datetime({ offset: true }).optional(),
+  failureCode: HoldFailureCodeSchema.optional(),
+  failureMessage: z.string().optional(),
+  counterpartyAccountNumber: z.string().optional(),
+  timeline: z.array(HoldTimelineEventSchema),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
+});
+
+export const ActivityDetailDto = z.discriminatedUnion('kind', [
+  ActivityDetailPostedTransactionDto,
+  ActivityDetailHoldDto,
+]);
+
+export type ActivityDetailDto = z.infer<typeof ActivityDetailDto>;
+
+export const PayNoteDetailsDto = z.object({
+  myosEventId: z.string(),
+  documentYaml: z.string().optional(),
+  document: z.unknown().optional(),
+  transactionRequest: z.unknown(),
+  triggerEvent: z.unknown(),
+  fetchedAt: z.string().datetime({ offset: true }),
+});
+
+export type PayNoteDetailsDto = z.infer<typeof PayNoteDetailsDto>;
+
+export const NotImplementedResponseDto = z.object({
+  message: z.string(),
+});
+
+export type NotImplementedResponseDto = z.infer<
+  typeof NotImplementedResponseDto
+>;

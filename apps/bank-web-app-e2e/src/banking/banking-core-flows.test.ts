@@ -3,24 +3,24 @@ import {
   URLS,
   TEST_DATA,
   UI_TEXT,
-  createUniqueName,
+  createUniqueEmail,
   createUniqueAccountName,
   waitForModalToClose,
   waitForModalToOpen,
   waitForTooltipToAppear,
   DASHBOARD_HEADING_TEXT,
   waitForTransferCompletion,
+  completeStandardTransferViaStepper,
 } from '../constants';
 
 test.describe('Banking Core Flows', () => {
-  let testUserName: string;
-
+  test.describe.configure({ timeout: 60000 });
   test.beforeEach(async ({ page }) => {
-    testUserName = createUniqueName('banking-user');
+    const testUserEmail = createUniqueEmail('banking-user');
 
     // Sign up and get to dashboard
     await page.goto(URLS.SIGNUP);
-    await page.fill('input[name="name"]', testUserName);
+    await page.fill('input[name="email"]', testUserEmail);
     await page.click('button[type="submit"]');
 
     await page.waitForURL(URLS.DASHBOARD, {
@@ -150,8 +150,7 @@ test.describe('Banking Core Flows', () => {
 
   test('should transfer money between accounts with confirmation', async ({
     page,
-  }, testInfo) => {
-    testInfo.setTimeout(15000);
+  }) => {
     // Create two accounts
     const sourceAccount = createUniqueAccountName('source');
     const targetAccount = createUniqueAccountName('target');
@@ -194,25 +193,23 @@ test.describe('Banking Core Flows', () => {
     const cleanTargetNumber = targetAccountNumber?.replace(/\s/g, '') || '';
 
     // Initiate transfer
-    await page.click('text=New transfer');
-    await waitForModalToOpen(page, 'modal-content');
+    await Promise.all([
+      page.waitForURL('**/transfer/new**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      page.click('text=New transfer'),
+    ]);
 
-    // Fill transfer form
-    await page.fill(
-      'input[placeholder="Enter 10-digit account number"]',
-      cleanTargetNumber
-    );
-    await page.fill('input[placeholder="$0"]', '75.00');
+    await completeStandardTransferViaStepper(page, {
+      amount: '75.00',
+      destinationAccountNumber: cleanTargetNumber,
+      recipientName: 'E2E Transfer Recipient',
+      title: 'E2E Transfer',
+    });
 
-    // Submit transfer
-    await page.click('button[type="submit"]');
-
-    // Wait for success confirmation
-    await waitForTransferCompletion(page);
-
-    // Close confirmation modal
-    await page.click('text=Home');
-    await waitForModalToClose(page, 'modal-content');
+    await expect(
+      page.getByRole('heading', { name: 'Transaction History' })
+    ).toBeVisible();
 
     // Verify source account balance updated - target the balance display specifically
     await expect(
@@ -282,7 +279,7 @@ test.describe('Banking Core Flows', () => {
     ).toBeVisible();
 
     // Click on the first transaction to open details modal
-    await page.click('[data-testid^="transaction-item-"]');
+    await page.click('[data-testid^="activity-item-"]');
 
     // Wait for modal to open and verify content
     await expect(
@@ -305,8 +302,7 @@ test.describe('Banking Core Flows', () => {
 
   test('should show transaction details for outgoing transfer', async ({
     page,
-  }, testInfo) => {
-    testInfo.setTimeout(20000);
+  }) => {
     // Create two accounts
     await page.click('text=Add new account');
     await waitForModalToOpen(page, 'modal-content');
@@ -353,14 +349,23 @@ test.describe('Banking Core Flows', () => {
 
     // Transfer money from first to second account
     await page.click(`text=${account1}`);
-    await page.click('text=New transfer');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#destinationAccountNumber', cleanDestinationNumber);
-    await page.fill('input#amount', '40.00');
-    await page.click('button[type="submit"]');
-    await waitForTransferCompletion(page);
-    await page.click('text=Home');
-    await waitForModalToClose(page, 'modal-content');
+    await Promise.all([
+      page.waitForURL('**/transfer/new**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      page.click('text=New transfer'),
+    ]);
+
+    await completeStandardTransferViaStepper(page, {
+      amount: '40.00',
+      destinationAccountNumber: cleanDestinationNumber,
+      recipientName: 'Outgoing Transfer Recipient',
+      title: 'Outgoing Transfer',
+    });
+
+    await expect(
+      page.getByRole('heading', { name: 'Transaction History' })
+    ).toBeVisible();
 
     // Wait for transaction history to load
     await expect(
@@ -398,10 +403,256 @@ test.describe('Banking Core Flows', () => {
     await expect(modalContent.getByText('-$40')).toBeVisible();
   });
 
+  test('should show hold details when selecting a hold activity item', async ({
+    page,
+  }) => {
+    const accountName = createUniqueAccountName('hold-activity');
+    const holdActivity = {
+      kind: 'HOLD_CREATED',
+      activityId: 'HOLD#hold-123',
+      holdId: 'hold-123',
+      amountMinor: 12345,
+      description: 'Pending hold for vendor authorization',
+      createdAt: new Date('2024-01-05T12:00:00.000Z').toISOString(),
+      counterpartyAccountNumber: '9876543210',
+      createdByUserId: 'system-test',
+      idempotencyKeyHash: 'fixture-hash',
+    };
+
+    await page.route('**/v1/activity/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [holdActivity],
+          nextCursor: undefined,
+        }),
+      });
+    });
+
+    await page.route('**/v1/activity/**/records/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          kind: 'HOLD',
+          activityId: holdActivity.activityId,
+          holdId: holdActivity.holdId,
+          amountMinor: holdActivity.amountMinor,
+          currency: 'USD',
+          status: 'PENDING',
+          description: 'Pending hold for vendor authorization',
+          createdAt: holdActivity.createdAt,
+          expiresAt: new Date('2024-02-05T12:00:00.000Z').toISOString(),
+          counterpartyAccountNumber: holdActivity.counterpartyAccountNumber,
+          timeline: [
+            {
+              type: 'CREATED',
+              at: holdActivity.createdAt,
+              createdByUserId: holdActivity.createdByUserId,
+              idempotencyKeyHash: holdActivity.idempotencyKeyHash,
+            },
+          ],
+        }),
+      });
+    });
+
+    // Create account so the activity feed mounts
+    await page.click('text=Add new account');
+    await waitForModalToOpen(page, 'modal-content');
+    await page.fill('input#accountName', accountName);
+    await page.click('button[type="submit"]');
+    await waitForModalToClose(page, 'modal-content');
+
+    // Wait for activity list to render mocked hold
+    const holdRow = page.getByTestId('activity-item-hold-hold-123');
+    await expect(holdRow).toBeVisible();
+
+    await holdRow.click();
+
+    const modal = page.locator('[data-testid="transaction-modal-content"]');
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText('Hold Details')).toBeVisible();
+    await expect(modal.getByText('Hold overview')).toBeVisible();
+    await expect(
+      modal
+        .locator('[data-testid="modal-hold-details"]')
+        .locator('text=Hold ID: hold-123')
+        .first()
+    ).toBeVisible();
+    await expect(
+      modal
+        .getByTestId('modal-hold-details')
+        .getByText('$123.45', { exact: true })
+        .first()
+    ).toBeVisible();
+    await expect(
+      modal.getByText('Pending hold for vendor authorization')
+    ).toBeVisible();
+    await expect(modal.getByText('Hold placed')).toBeVisible();
+
+    await page.unroute('**/v1/activity/**');
+    await page.unroute('**/v1/accounts/**/activity/**');
+  });
+
+  test('should surface PayNote transfer details within the activity modal', async ({
+    page,
+  }) => {
+    const accountName = createUniqueAccountName('paynote-activity');
+    const myosEventId = 'event-paynote-001';
+    const transactionActivity = {
+      kind: 'POSTED_TRANSACTION',
+      activityId: 'TXN#txn-paynote-001',
+      transactionId: 'txn-paynote-001',
+      amountMinor: 9850,
+      description: 'PayNote settlement',
+      postedAt: new Date('2024-03-10T12:00:00.000Z').toISOString(),
+      originHoldId: null,
+      side: 'DEBIT',
+      type: 'TRANSFER',
+      status: 'POSTED',
+      counterpartyAccountNumber: '5555999911',
+    };
+
+    await page.route('**/v1/activity/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [transactionActivity],
+          nextCursor: undefined,
+        }),
+      });
+    });
+
+    await page.route('**/v1/activity/**/records/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          kind: 'POSTED_TRANSACTION',
+          activityId: transactionActivity.activityId,
+          transactionId: transactionActivity.transactionId,
+          amountMinor: transactionActivity.amountMinor,
+          description: transactionActivity.description,
+          postedAt: transactionActivity.postedAt,
+          originHoldId: transactionActivity.originHoldId,
+          side: transactionActivity.side,
+          type: transactionActivity.type,
+          status: transactionActivity.status,
+          counterpartyAccountNumber:
+            transactionActivity.counterpartyAccountNumber,
+          payNote: { myosEventId },
+        }),
+      });
+    });
+
+    await page.route('**/v1/activity/**/paynotes/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          myosEventId,
+          documentYaml:
+            '---\npayNote:\n  payer: 5555999911\n  payee: 0001122334\n  amountMinor: 9850',
+          transactionRequest: {
+            id: 'request-1',
+            amountMinor: 9850,
+          },
+          triggerEvent: {
+            id: 'trigger-1',
+            source: 'myos',
+          },
+          fetchedAt: new Date().toISOString(),
+        }),
+      });
+    });
+
+    await page.route('**/v1/accounts/**/transactions/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: 'NotFound',
+          message: 'Transaction not found',
+        }),
+      });
+    });
+
+    await page.click('text=Add new account');
+    await waitForModalToOpen(page, 'modal-content');
+    await page.fill('input#accountName', accountName);
+    await page.click('button[type="submit"]');
+    await waitForModalToClose(page, 'modal-content');
+
+    const activityRow = page.getByTestId('activity-item-txn-txn-paynote-001');
+    await expect(activityRow).toBeVisible();
+
+    await activityRow.click();
+
+    const modal = page.locator('[data-testid="transaction-modal-content"]');
+    await expect(modal).toBeVisible();
+    await expect(
+      modal.getByText('PayNote Transfer', { exact: true })
+    ).toBeVisible();
+    await expect(
+      modal.getByText('This transaction is part of a PayNote transfer.')
+    ).toBeVisible();
+
+    await modal.getByRole('button', { name: 'See details' }).click();
+
+    const payNoteView = modal.getByTestId('paynote-details-view');
+    await expect(payNoteView).toBeVisible();
+    await expect(
+      payNoteView.getByText('PayNote transfer details')
+    ).toBeVisible();
+    await expect(payNoteView.getByText('PayNote Document')).toBeVisible();
+    await expect(payNoteView.getByText('Transaction Request')).toBeVisible();
+    await expect(payNoteView.getByText('Triggering Event')).toBeVisible();
+
+    await payNoteView.getByTestId('paynote-back-button').click();
+
+    await expect(modal.getByTestId('modal-transaction-details')).toBeVisible();
+
+    await page.unroute('**/v1/activity/**');
+    await page.unroute('**/v1/activity/**/records/**');
+    await page.unroute('**/v1/activity/**/paynotes/**');
+    await page.unroute('**/v1/accounts/**/transactions/**');
+  });
+
   test('should update account balance after fund and transfer operations', async ({
     page,
-  }, testInfo) => {
-    testInfo.setTimeout(15000);
+  }) => {
     // Create account
     await page.click('text=Add new account');
     await waitForModalToOpen(page, 'modal-content');
@@ -450,8 +701,7 @@ test.describe('Banking Core Flows', () => {
 
   test('should switch between accounts and show respective transaction history', async ({
     page,
-  }, testInfo) => {
-    testInfo.setTimeout(15000);
+  }) => {
     // Create two accounts
     await page.click('text=Add new account');
     await waitForModalToOpen(page, 'modal-content');
@@ -481,9 +731,7 @@ test.describe('Banking Core Flows', () => {
     await expect(
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
-    await expect(
-      page.locator('[data-testid^="transaction-item-"]')
-    ).toBeVisible();
+    await expect(page.locator('[data-testid^="activity-item-"]')).toBeVisible();
 
     // Switch to second account
     await page.click(`text=${account2}`);
@@ -499,7 +747,7 @@ test.describe('Banking Core Flows', () => {
     // Check if there are no transaction items for the second account
     // If the account switching is not working properly, just check that we have less transactions
     const transactionCount = await page
-      .locator('[data-testid^="transaction-item-"]')
+      .locator('[data-testid^="activity-item-"]')
       .count();
     expect(transactionCount).toBeLessThanOrEqual(1);
 
@@ -510,8 +758,6 @@ test.describe('Banking Core Flows', () => {
     await expect(
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
-    await expect(
-      page.locator('[data-testid^="transaction-item-"]')
-    ).toBeVisible();
+    await expect(page.locator('[data-testid^="activity-item-"]')).toBeVisible();
   });
 });

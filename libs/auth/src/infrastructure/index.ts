@@ -6,7 +6,7 @@ export type { DynamoUserRepositoryConfig } from './DynamoUserRepository';
 
 // Service implementations
 export { AuthEnvironmentConfiguration } from './AuthConfiguration';
-export { ConfigurationValidationError } from '@demo-blue/shared-config';
+export { ConfigurationValidationError } from '@demo-bank-app/shared-config';
 export {
   TokenGenerationError,
   TokenVerificationError,

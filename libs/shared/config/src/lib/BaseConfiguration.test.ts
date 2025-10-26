@@ -243,7 +243,7 @@ describe('BaseConfiguration', () => {
     it('should return AWS configuration with defaults', () => {
       const awsConfig = config.testGetAwsConfig();
       expect(awsConfig).toEqual({
-        region: 'eu-central-1',
+        region: 'eu-west-1',
         endpoint: undefined,
       });
     });

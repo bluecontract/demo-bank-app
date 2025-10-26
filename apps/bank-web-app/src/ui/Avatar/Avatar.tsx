@@ -18,18 +18,37 @@ export function Avatar({
   const [imageError, setImageError] = useState(false);
 
   const getInitials = (fullName: string): string => {
-    if (!fullName.trim()) return '?';
+    const value = fullName.trim();
+    if (!value) return '?';
 
-    const names = fullName.trim().split(' ');
-    if (names.length === 1) {
-      return names[0][0]?.toUpperCase() || '?';
+    const toInitial = (token?: string) => token?.[0]?.toUpperCase() ?? '';
+
+    if (value.includes('@')) {
+      const [localPart, domainPart = ''] = value.split('@');
+      const localTokens = localPart.split(/[-_.\s]+/).filter(Boolean);
+      const domainTokens = domainPart.split(/[-_.\s]+/).filter(Boolean);
+
+      const firstInitial = toInitial(localTokens[0] ?? domainTokens[0]);
+      const secondInitial = toInitial(
+        localTokens.length > 1
+          ? localTokens[localTokens.length - 1]
+          : domainTokens[0]
+      );
+
+      const initials = `${firstInitial}${secondInitial}`;
+      return initials || '?';
     }
 
-    // Take first letter of first name and first letter of second name
-    const firstInitial = names[0][0]?.toUpperCase() || '';
-    const secondInitial = names[1][0]?.toUpperCase() || '';
+    const names = value.split(/\s+/);
+    if (names.length === 1) {
+      return toInitial(names[0]) || '?';
+    }
 
-    return `${firstInitial}${secondInitial}`;
+    const firstInitial = toInitial(names[0]);
+    const secondInitial = toInitial(names[1]);
+
+    const initials = `${firstInitial}${secondInitial}`;
+    return initials || '?';
   };
 
   const sizeClasses = {

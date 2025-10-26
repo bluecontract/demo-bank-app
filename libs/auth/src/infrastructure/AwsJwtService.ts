@@ -3,22 +3,25 @@ import {
   GetSecretValueCommand,
 } from '@aws-sdk/client-secrets-manager';
 import jwt from 'jsonwebtoken';
-import type { JwtService, JwtPayload } from '../application/ports';
-import { User } from '../domain/entities/User';
+import type {
+  JwtService,
+  JwtPayload,
+  GenerateTokenParams,
+} from '../application/ports';
 import {
   TokenVerificationError,
   TokenExpiredError,
   TokenGenerationError,
   TokenServiceError,
 } from './errors';
-import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
-import type { Logger, Metrics } from '@demo-blue/shared-observability';
+import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
+import type { Logger, Metrics } from '@demo-bank-app/shared-observability';
 import {
   TimingUtils,
   METRIC_NAMES,
   OPERATION_NAMES,
   METRIC_UNITS,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 
 export interface AwsJwtServiceConfig {
   region: string;
@@ -49,11 +52,16 @@ export class AwsJwtService implements JwtService {
     this.metrics = config.metrics;
   }
 
-  async generateToken(userId: User['id'], isTest?: boolean): Promise<string> {
+  async generateToken({
+    userId,
+    email,
+    isTest,
+  }: GenerateTokenParams): Promise<string> {
     const timing = TimingUtils.startTiming(OPERATION_NAMES.AUTH.JWT_GENERATE);
 
     this.logger?.debug('JWT token generation started', {
       userId,
+      email,
       isTest: isTest || false,
       ...TimingUtils.createTimingMetadata(timing),
     });
@@ -70,6 +78,7 @@ export class AwsJwtService implements JwtService {
         iat: now,
         exp: now + ttl,
         ...(isTest && { isTest: true }),
+        ...(email && { email }),
       };
 
       const token = jwt.sign(payload, secret, { algorithm: 'HS256' });
@@ -84,6 +93,7 @@ export class AwsJwtService implements JwtService {
 
       this.logger?.debug('JWT token generation completed', {
         userId,
+        email,
         isTest: isTest || false,
         tokenLength: token.length,
         ...TimingUtils.createTimingMetadata(completedTiming),
@@ -95,6 +105,7 @@ export class AwsJwtService implements JwtService {
 
       this.logger?.error('JWT token generation failed', {
         userId,
+        email,
         isTest: isTest || false,
         error: error instanceof Error ? error.message : 'Unknown error',
         ...TimingUtils.createTimingMetadata(failedTiming),

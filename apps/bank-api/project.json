@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/bank-api",
+  "name": "@demo-bank-app/bank-api",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "sourceRoot": "apps/bank-api/src",

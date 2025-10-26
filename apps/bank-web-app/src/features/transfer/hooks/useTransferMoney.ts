@@ -49,9 +49,10 @@ export function useTransferMoney(options?: UseTransferMoneyOptions) {
     onSuccess: (data, variables) => {
       // Invalidate accounts query to refresh balances
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      // Invalidate transactions query to refresh transaction history for source account
+      // Invalidate activity queries to refresh transaction history
       queryClient.invalidateQueries({
-        queryKey: ['transactions', variables.sourceAccountId],
+        queryKey: ['activity'],
+        exact: false,
       });
       options?.onSuccess?.(data);
     },

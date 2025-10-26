@@ -3,12 +3,12 @@ import { Dropdown, DropdownItem } from '../../../ui/Dropdown';
 import { useAuth } from '../../../app/providers/AuthProvider';
 
 interface DashboardHeaderProps {
-  userName: string;
+  userEmail: string;
   'data-testid'?: string;
 }
 
 export function DashboardHeader({
-  userName,
+  userEmail,
   'data-testid': testId,
 }: DashboardHeaderProps) {
   const { signOut } = useAuth();
@@ -31,9 +31,9 @@ export function DashboardHeader({
       {/* Right side - User profile */}
       <div className="flex items-center space-x-3">
         <div className="text-right">
-          <p className="text-sm font-medium text-white">{userName}</p>
+          <p className="text-sm font-medium text-white">{userEmail}</p>
         </div>
-        <Dropdown trigger={<Avatar name={userName} size="xl" />} align="right">
+        <Dropdown trigger={<Avatar name={userEmail} size="xl" />} align="right">
           <DropdownItem
             onClick={handleSignOut}
             icon={

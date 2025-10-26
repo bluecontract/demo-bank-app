@@ -10,13 +10,14 @@ import {
   METRIC_NAMES,
   OPERATION_NAMES,
   METRIC_UNITS,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 import { User } from '../../domain/entities/User';
 import { randomUUID } from 'crypto';
 
 export interface SignUpCommand {
-  name: string;
+  email: string;
   isTest?: boolean;
+  marketingEmailsOptIn: boolean;
 }
 
 export interface SignUpDependencies {
@@ -30,9 +31,10 @@ function toAuthResult(user: User, token: string): AuthResult {
   return {
     user: {
       id: user.id,
-      name: user.name,
+      email: user.email,
       createdAt: user.createdAt.toISOString(),
       isTest: user.isTest,
+      marketingEmailsOptIn: user.marketingEmailsOptIn,
     },
     token,
   };
@@ -44,11 +46,11 @@ export async function signUp(
 ): Promise<AuthResult> {
   const { userRepository, jwtService, logger, metrics } = dependencies;
 
-  const { name, isTest = false } = command;
+  const { email, isTest = false, marketingEmailsOptIn } = command;
   const timing = TimingUtils.startTiming(OPERATION_NAMES.AUTH.SIGN_UP);
 
   logger.info('User sign-up started', {
-    userName: name,
+    userEmail: email,
     isTest,
     ...TimingUtils.createTimingMetadata(timing),
   });
@@ -58,17 +60,19 @@ export async function signUp(
   try {
     const user = new User({
       id: randomUUID(),
-      name: name,
+      email,
       createdAt: new Date(),
       isTest,
+      marketingEmailsOptIn,
     });
 
     savedUser = await userRepository.save(user);
 
-    const token = await jwtService.generateToken(
-      savedUser.id,
-      savedUser.isTest
-    );
+    const token = await jwtService.generateToken({
+      userId: savedUser.id,
+      email: savedUser.email,
+      isTest: savedUser.isTest,
+    });
 
     const completedTiming = TimingUtils.endTiming(timing);
 
@@ -83,7 +87,7 @@ export async function signUp(
     );
 
     logger.info('User sign-up completed successfully', {
-      userName: name,
+      userEmail: email,
       userId: savedUser.id,
       isTest,
       ...TimingUtils.createTimingMetadata(completedTiming),
@@ -95,7 +99,7 @@ export async function signUp(
 
     if (error instanceof UserAlreadyExistsError) {
       logger.error('User sign-up failed', {
-        userName: name,
+        userEmail: email,
         error: 'User already exists',
         ...TimingUtils.createTimingMetadata(failedTiming),
       });
@@ -114,7 +118,7 @@ export async function signUp(
 
     if (error instanceof TokenGenerationError) {
       logger.error('JWT generation failed during sign-up', {
-        userName: name,
+        userEmail: email,
         userId: savedUser?.id || 'unknown',
         error: error.message,
         ...TimingUtils.createTimingMetadata(failedTiming),
@@ -128,7 +132,7 @@ export async function signUp(
     }
 
     logger.error('Unexpected error during user sign-up', {
-      userName: name,
+      userEmail: email,
       error: error instanceof Error ? error.message : 'Unknown error',
       ...TimingUtils.createTimingMetadata(failedTiming),
     });

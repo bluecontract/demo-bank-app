@@ -24,14 +24,37 @@ import {
   RepositoryError,
 } from './repositoryErrors';
 import { PostingSide, Posting } from '../domain/valueObjects/Posting';
-import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
+import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 import type { Logger, Metrics } from '../domain/types';
 import {
   TimingUtils,
   METRIC_NAMES,
   OPERATION_NAMES,
   METRIC_UNITS,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
+import { getIdempotencyKeyHash } from './dynamo/idempotency';
+import {
+  TABLE_PREFIXES,
+  SORT_KEYS,
+  GSI_NAMES,
+  GSI_PARTITION_KEYS,
+  GSI_SORT_KEYS,
+  CONDITION_EXPRESSIONS,
+  UPDATE_EXPRESSIONS,
+  EXPRESSION_ATTRIBUTE_NAMES,
+  DYNAMO_ERROR_CODES,
+} from './dynamo/constants';
+import {
+  buildPostingPutItems,
+  buildTransactionHeaderPutItem,
+  TransactionHeaderItem,
+  PostingItem,
+} from './dynamo/transactions/items';
+
+export type {
+  TransactionHeaderItem,
+  PostingItem,
+} from './dynamo/transactions/items';
 
 export interface DynamoBankingRepositoryConfig {
   tableName: string;
@@ -49,34 +72,6 @@ export interface IdempotencyItem {
   transactionId: string;
   createdAt: string;
   ttl: number;
-}
-
-export interface TransactionHeaderItem {
-  PK: string; // TXN#txnId
-  SK: 'META';
-  type: string;
-  status: string;
-  createdAt: string;
-  description: string;
-  transactionId: string;
-  transactionIdempotencyKey?: string;
-}
-
-export interface PostingItem {
-  PK: string; // TXN#txnId
-  SK: string; // POST#n
-  BANKING_GSI2PK: string;
-  BANKING_GSI2SK: string;
-  accountId: string;
-  amount: number;
-  side: string;
-  accountNumber: string;
-  counterpartyAccountNumber: string;
-  type: TransactionHeaderItem['type'];
-  status: TransactionHeaderItem['status'];
-  createdAt: TransactionHeaderItem['createdAt'];
-  description: TransactionHeaderItem['description'];
-  transactionId: TransactionHeaderItem['transactionId'];
 }
 
 export interface AccountMetaItem {
@@ -107,55 +102,6 @@ export interface AccountBalanceItem {
   version: number;
 }
 
-// DynamoDB table constants
-const TABLE_PREFIXES = {
-  ACCOUNT: 'ACCOUNT#',
-  TRANSACTION: 'TXN#',
-  USER: 'USER#',
-  POSTING: 'POST#',
-  ACCOUNT_NUMBER: 'ACCOUNT_NUMBER#',
-  IDEMPOTENCY: 'IDEMPOTENCY#',
-} as const;
-
-const SORT_KEYS = {
-  META: 'META',
-  BALANCE: 'BALANCE',
-  RESERVE: 'RESERVE',
-} as const;
-
-const GSI_NAMES = {
-  BANKING_GSI1: 'BANKING_GSI1',
-  BANKING_GSI2: 'BANKING_GSI2',
-} as const;
-
-const GSI_PARTITION_KEYS = {
-  BANKING_GSI1PK: 'BANKING_GSI1PK',
-  BANKING_GSI2PK: 'BANKING_GSI2PK',
-} as const;
-
-const GSI_SORT_KEYS = {
-  BANKING_GSI1SK: 'BANKING_GSI1SK',
-  BANKING_GSI2SK: 'BANKING_GSI2SK',
-} as const;
-
-const CONDITION_EXPRESSIONS = {
-  ATTRIBUTE_NOT_EXISTS: 'attribute_not_exists(SK)',
-  BALANCE_VERSION_CHECK: '#version = :currentVersion',
-} as const;
-
-const UPDATE_EXPRESSIONS = {
-  UPDATE_BALANCE:
-    'ADD ledgerBalanceMinor :ledger, availableBalanceMinor :available SET #version = #version + :inc',
-} as const;
-
-const EXPRESSION_ATTRIBUTE_NAMES = {
-  VERSION: '#version',
-} as const;
-
-const DYNAMO_ERROR_CODES = {
-  CONDITIONAL_CHECK_FAILED: 'ConditionalCheckFailed',
-} as const;
-
 export class DynamoBankingRepository implements BankingRepository {
   private readonly client: DynamoDBDocumentClient;
   private readonly tableName: string;
@@ -180,7 +126,7 @@ export class DynamoBankingRepository implements BankingRepository {
     context: TransactionContext,
     transaction: Transaction
   ) {
-    const keyHash = this.getIdempotencyKeyHash(context.idempotencyKey);
+    const keyHash = getIdempotencyKeyHash(context.idempotencyKey);
 
     const idempotencyItem: IdempotencyItem = {
       PK: `${TABLE_PREFIXES.USER}${context.userId}`,
@@ -197,58 +143,6 @@ export class DynamoBankingRepository implements BankingRepository {
         ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
       },
     };
-  }
-
-  private buildTransactionHeaderItem(transaction: Transaction) {
-    const transactionHeaderItem: TransactionHeaderItem = {
-      PK: `${TABLE_PREFIXES.TRANSACTION}${transaction.id}`,
-      SK: SORT_KEYS.META,
-      type: transaction.type,
-      status: transaction.status,
-      createdAt: transaction.createdAt.toISOString(),
-      description: transaction.description,
-      transactionId: transaction.id,
-      transactionIdempotencyKey: transaction.transactionIdempotencyKey,
-    };
-
-    return {
-      Put: {
-        TableName: this.tableName,
-        Item: transactionHeaderItem,
-        ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
-      },
-    };
-  }
-
-  private buildPostingItems(transaction: Transaction) {
-    return transaction.postings.map((posting, index) => {
-      const postingItem: PostingItem = {
-        PK: `${TABLE_PREFIXES.TRANSACTION}${transaction.id}`,
-        SK: `${TABLE_PREFIXES.POSTING}${index}`,
-        BANKING_GSI2PK: `${TABLE_PREFIXES.ACCOUNT}${posting.accountId}`,
-        BANKING_GSI2SK: `${
-          TABLE_PREFIXES.POSTING
-        }${transaction.createdAt.toISOString()}`,
-        accountId: posting.accountId,
-        amount: posting.amount.toCents(),
-        side: posting.side,
-        accountNumber: posting.accountNumber,
-        counterpartyAccountNumber: posting.counterpartyAccountNumber,
-        description: transaction.description,
-        createdAt: transaction.createdAt.toISOString(),
-        type: transaction.type,
-        status: transaction.status,
-        transactionId: transaction.id,
-      };
-
-      return {
-        Put: {
-          TableName: this.tableName,
-          Item: postingItem,
-          ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
-        },
-      };
-    });
   }
 
   private buildAccountBalanceUpdates(accounts: Account[]) {
@@ -420,9 +314,11 @@ export class DynamoBankingRepository implements BankingRepository {
         transactItems.push(this.buildIdempotencyItem(context, transaction));
       }
 
-      transactItems.push(this.buildTransactionHeaderItem(transaction));
+      transactItems.push(
+        buildTransactionHeaderPutItem(this.tableName, transaction)
+      );
 
-      transactItems.push(...this.buildPostingItems(transaction));
+      transactItems.push(...buildPostingPutItems(this.tableName, transaction));
 
       transactItems.push(...this.buildAccountBalanceUpdates(accounts));
 
@@ -742,6 +638,7 @@ export class DynamoBankingRepository implements BankingRepository {
         accountNumber: item.accountNumber,
         counterpartyAccountNumber: item.counterpartyAccountNumber,
         createdAt: new Date(item.createdAt),
+        originHoldId: item.originHoldId,
       }));
 
       return {
@@ -809,6 +706,8 @@ export class DynamoBankingRepository implements BankingRepository {
         description: headerItem.description,
         transactionIdempotencyKey: headerItem.transactionIdempotencyKey,
         createdAt: new Date(headerItem.createdAt),
+        originHoldId: headerItem.originHoldId,
+        payNoteEventId: headerItem.payNoteEventId,
       });
     } catch (error: unknown) {
       throw new RepositoryError(
@@ -839,12 +738,6 @@ export class DynamoBankingRepository implements BankingRepository {
     });
   }
 
-  private getIdempotencyKeyHash(idempotencyKey: string): string {
-    return Buffer.from(idempotencyKey)
-      .toString('base64')
-      .replace(/[^a-zA-Z0-9]/g, '');
-  }
-
   private async getTransactionIdByIdempotencyKey(
     userId: string,
     idempotencyKey: string
@@ -853,7 +746,7 @@ export class DynamoBankingRepository implements BankingRepository {
       TableName: this.tableName,
       Key: {
         PK: `${TABLE_PREFIXES.USER}${userId}`,
-        SK: `${TABLE_PREFIXES.IDEMPOTENCY}${this.getIdempotencyKeyHash(
+        SK: `${TABLE_PREFIXES.IDEMPOTENCY}${getIdempotencyKeyHash(
           idempotencyKey
         )}`,
       },

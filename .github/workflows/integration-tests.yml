@@ -97,7 +97,7 @@ jobs:
           export AWS_ENDPOINT_URL=http://localhost:4566
 
           # Run integration tests using CI-specific target (no localstack:serve dependency)
-          if npx nx run @demo-blue/bank-api:test:integration:ci --skip-nx-cache; then
+          if npx nx run @demo-bank-app/bank-api:test:integration:ci --skip-nx-cache; then
             echo "✅ Integration tests passed"
             echo "success=true" >> $GITHUB_OUTPUT
           else

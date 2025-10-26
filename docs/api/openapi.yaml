@@ -30,12 +30,305 @@ paths:
                   - timestamp
                   - version
                   - environment
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
   /auth/signup:
     post:
-      summary: Sign up with a unique name
+      summary: Sign up with a unique email
       tags: []
       parameters: []
       operationId: signUp
+      requestBody:
+        description: Body
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+              required:
+                - email
+      responses:
+        '201':
+          description: '201'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userId:
+                    type: string
+                  email:
+                    type: string
+                    format: email
+                required:
+                  - userId
+                  - email
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '409':
+          description: '409'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /auth/signin:
+    post:
+      summary: Sign in with existing email
+      tags: []
+      parameters: []
+      operationId: signIn
+      requestBody:
+        description: Body
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+              required:
+                - email
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userId:
+                    type: string
+                  email:
+                    type: string
+                    format: email
+                required:
+                  - userId
+                  - email
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '404':
+          description: '404'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /v1/accounts:
+    post:
+      summary: Create a bank account
+      tags: &ref_0
+        - banking
+      parameters: []
+      operationId: createAccount
       requestBody:
         description: Body
         content:
@@ -57,13 +350,37 @@ paths:
               schema:
                 type: object
                 properties:
-                  userId:
+                  accountId:
                     type: string
+                    format: uuid
+                  accountNumber:
+                    type: string
+                    minLength: 10
+                    maxLength: 10
                   name:
                     type: string
+                  currency:
+                    type: string
+                    enum:
+                      - USD
+                  createdAt:
+                    type: string
+                    format: date-time
+                  ledgerBalanceMinor:
+                    type: integer
+                  availableBalanceMinor:
+                    type: integer
+                  status:
+                    type: string
                 required:
-                  - userId
+                  - accountId
+                  - accountNumber
                   - name
+                  - currency
+                  - createdAt
+                  - ledgerBalanceMinor
+                  - availableBalanceMinor
+                  - status
         '400':
           description: '400'
           content:
@@ -75,11 +392,13 @@ paths:
                     type: string
                   message:
                     type: string
+                  detail:
+                    type: string
                 required:
                   - error
                   - message
-        '409':
-          description: '409'
+        '401':
+          description: '401'
           content:
             application/json:
               schema:
@@ -88,6 +407,1385 @@ paths:
                   error:
                     type: string
                   message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+    get:
+      summary: List user bank accounts
+      tags: *ref_0
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            exclusiveMinimum: 0
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      operationId: listAccounts
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        accountId:
+                          type: string
+                          format: uuid
+                        accountNumber:
+                          type: string
+                          minLength: 10
+                          maxLength: 10
+                        name:
+                          type: string
+                        currency:
+                          type: string
+                          enum:
+                            - USD
+                        createdAt:
+                          type: string
+                          format: date-time
+                        ledgerBalanceMinor:
+                          type: integer
+                        availableBalanceMinor:
+                          type: integer
+                        status:
+                          type: string
+                      required:
+                        - accountId
+                        - accountNumber
+                        - name
+                        - currency
+                        - createdAt
+                        - ledgerBalanceMinor
+                        - availableBalanceMinor
+                        - status
+                required:
+                  - accounts
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /v1/accounts/{accountId}:
+    get:
+      summary: Get a bank account by ID
+      tags: *ref_0
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      operationId: getAccount
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accountId:
+                    type: string
+                    format: uuid
+                  accountNumber:
+                    type: string
+                    minLength: 10
+                    maxLength: 10
+                  name:
+                    type: string
+                  currency:
+                    type: string
+                    enum:
+                      - USD
+                  createdAt:
+                    type: string
+                    format: date-time
+                  ledgerBalanceMinor:
+                    type: integer
+                  availableBalanceMinor:
+                    type: integer
+                  status:
+                    type: string
+                required:
+                  - accountId
+                  - accountNumber
+                  - name
+                  - currency
+                  - createdAt
+                  - ledgerBalanceMinor
+                  - availableBalanceMinor
+                  - status
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '404':
+          description: '404'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /v1/accounts/{accountId}/funding:
+    post:
+      summary: Fund a bank account
+      tags: *ref_0
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+      operationId: fundAccount
+      requestBody:
+        description: Body
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amountMinor:
+                  type: integer
+                  minimum: 0
+                  exclusiveMinimum: 0
+              required:
+                - amountMinor
+      responses:
+        '201':
+          description: '201'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  txnId:
+                    type: string
+                    format: uuid
+                required:
+                  - txnId
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '404':
+          description: '404'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /v1/transfers:
+    post:
+      summary: Transfer money between bank accounts
+      tags: *ref_0
+      parameters:
+        - name: idempotency-key
+          in: header
+          required: true
+          schema:
+            type: string
+      operationId: transferMoney
+      requestBody:
+        description: Body
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sourceAccountId:
+                  type: string
+                  format: uuid
+                destinationAccountNumber:
+                  type: string
+                  minLength: 10
+                  maxLength: 10
+                amountMinor:
+                  type: integer
+                  minimum: 0
+                  exclusiveMinimum: 0
+                description:
+                  type: string
+                  maxLength: 140
+              required:
+                - sourceAccountId
+                - destinationAccountNumber
+                - amountMinor
+      responses:
+        '201':
+          description: '201'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  txnId:
+                    type: string
+                    format: uuid
+                required:
+                  - txnId
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '404':
+          description: '404'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /v1/activity/{accountNumber}:
+    get:
+      summary: List account activity combining pending holds and posted transactions
+      tags: *ref_0
+      parameters:
+        - name: accountNumber
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 10
+            maxLength: 10
+        - name: limit
+          in: query
+          schema:
+            type: number
+            minimum: 0
+            exclusiveMinimum: 0
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      operationId: listActivity
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      discriminator:
+                        propertyName: kind
+                      oneOf:
+                        - type: object
+                          properties:
+                            kind:
+                              type: string
+                              enum:
+                                - HOLD_CREATED
+                            holdId:
+                              type: string
+                            amountMinor:
+                              type: integer
+                            description:
+                              type: string
+                            createdAt:
+                              type: string
+                              format: date-time
+                            counterpartyAccountNumber:
+                              type: string
+                            createdByUserId:
+                              type: string
+                            idempotencyKeyHash:
+                              type: string
+                          required:
+                            - kind
+                            - holdId
+                            - amountMinor
+                            - createdAt
+                        - type: object
+                          properties:
+                            kind:
+                              type: string
+                              enum:
+                                - HOLD_RELEASED
+                            holdId:
+                              type: string
+                            amountMinor:
+                              type: integer
+                            description:
+                              type: string
+                            releasedAt:
+                              type: string
+                              format: date-time
+                            releaseReason:
+                              type: string
+                          required:
+                            - kind
+                            - holdId
+                            - amountMinor
+                            - releasedAt
+                        - type: object
+                          properties:
+                            kind:
+                              type: string
+                              enum:
+                                - HOLD_CAPTURED
+                            holdId:
+                              type: string
+                            amountMinor:
+                              type: integer
+                            description:
+                              type: string
+                            capturedAt:
+                              type: string
+                              format: date-time
+                            transactionId:
+                              type: string
+                            counterpartyAccountNumber:
+                              type: string
+                          required:
+                            - kind
+                            - holdId
+                            - amountMinor
+                            - capturedAt
+                            - transactionId
+                            - counterpartyAccountNumber
+                        - type: object
+                          properties:
+                            kind:
+                              type: string
+                              enum:
+                                - HOLD_FAILED
+                            holdId:
+                              type: string
+                            amountMinor:
+                              type: integer
+                            description:
+                              type: string
+                            failedAt:
+                              type: string
+                              format: date-time
+                            failureCode:
+                              type: string
+                              enum:
+                                - INSUFFICIENT_FUNDS
+                                - STATE_MISMATCH
+                                - VALIDATION
+                                - INTERNAL
+                            failureMessage:
+                              type: string
+                          required:
+                            - kind
+                            - holdId
+                            - amountMinor
+                            - failedAt
+                            - failureCode
+                        - type: object
+                          properties:
+                            kind:
+                              type: string
+                              enum:
+                                - POSTED_TRANSACTION
+                            transactionId:
+                              type: string
+                            amountMinor:
+                              type: integer
+                            description:
+                              type: string
+                            postedAt:
+                              type: string
+                              format: date-time
+                            originHoldId:
+                              type: string
+                            side:
+                              type: string
+                              enum:
+                                - DEBIT
+                                - CREDIT
+                            type:
+                              type: string
+                            status:
+                              type: string
+                            counterpartyAccountNumber:
+                              type: string
+                          required:
+                            - kind
+                            - transactionId
+                            - amountMinor
+                            - postedAt
+                            - side
+                            - type
+                            - status
+                  nextCursor:
+                    type: string
+                required:
+                  - items
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '404':
+          description: '404'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /v1/accounts/{accountId}/transactions/{txnId}:
+    get:
+      summary: Get a transaction by ID
+      tags: *ref_0
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      operationId: getTransaction
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  txnId:
+                    type: string
+                    format: uuid
+                  accountId:
+                    type: string
+                    format: uuid
+                  side:
+                    type: string
+                    enum:
+                      - DEBIT
+                      - CREDIT
+                  amountMinor:
+                    type: integer
+                  type:
+                    type: string
+                  status:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+                  description:
+                    type: string
+                  counterpartyAccountNumber:
+                    type: string
+                required:
+                  - txnId
+                  - accountId
+                  - side
+                  - amountMinor
+                  - type
+                  - status
+                  - timestamp
+                  - counterpartyAccountNumber
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '404':
+          description: '404'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /v1/paynotes/validate:
+    post:
+      summary: Validate a PayNote for transfer
+      tags: *ref_0
+      parameters: []
+      operationId: validatePayNote
+      requestBody:
+        description: Body
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                yamlContent:
+                  type: string
+                formData:
+                  type: object
+                  properties:
+                    fromAccount:
+                      type: string
+                    toAccount:
+                      type: string
+                    recipientName:
+                      type: string
+                    totalAmount:
+                      type: string
+                    title:
+                      type: string
+                    payNoteCode:
+                      type: string
+              required:
+                - yamlContent
+                - formData
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  validationScore:
+                    type: number
+                    minimum: 0
+                    maximum: 10
+                  explanation:
+                    type: string
+                required:
+                  - validationScore
+                  - explanation
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /v1/paynotes/bootstrap:
+    post:
+      summary: Bootstrap a PayNote in preparation for execution
+      tags: *ref_0
+      parameters: []
+      operationId: bootstrapPayNote
+      requestBody:
+        description: Body
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                payNote:
+                  type: object
+                  additionalProperties:
+                    nullable: true
+                formData:
+                  type: object
+                  properties:
+                    fromAccount:
+                      type: string
+                    toAccount:
+                      type: string
+                    recipientName:
+                      type: string
+                    totalAmount:
+                      type: string
+                    title:
+                      type: string
+                    payNoteCode:
+                      type: string
+              required:
+                - payNote
+                - formData
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    enum:
+                      - Bootstrap accepted
+                required:
+                  - message
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /v1/paynotes/parse-pdf:
+    post:
+      summary: Reconstruct PayNote YAML content from PDF text extraction items.
+      tags: *ref_0
+      parameters: []
+      operationId: parsePayNotePdf
+      requestBody:
+        description: Body
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      str:
+                        type: string
+                      transform:
+                        type: array
+                        items:
+                          type: number
+                        minItems: 6
+                        maxItems: 6
+                      width:
+                        type: number
+                      height:
+                        type: number
+                      dir:
+                        type: string
+                      fontName:
+                        type: string
+                    required:
+                      - str
+                      - transform
+                      - width
+                      - height
+                  minItems: 1
+              required:
+                - items
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  yaml:
+                    type: string
+                required:
+                  - yaml
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+  /v1/paynotes/webhook:
+    post:
+      summary: Webhook for PayNote events.
+      tags: *ref_0
+      parameters: []
+      operationId: payNoteWebhook
+      requestBody:
+        description: Body
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                nullable: true
+      responses:
+        '200':
+          description: '200'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum:
+                      - ok
+                required:
+                  - status
+        '400':
+          description: '400'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '401':
+          description: '401'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '403':
+          description: '403'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
+                    type: string
+                required:
+                  - error
+                  - message
+        '500':
+          description: '500'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  message:
+                    type: string
+                  detail:
                     type: string
                 required:
                   - error
@@ -108,7 +1806,7 @@ info:
 servers:
   - url: http://localhost:3000
     description: Local development server
-  - url: https://api.demo-blue-bank.com
+  - url: https://api.demo-bank-app-bank.com
     description: Production server
 tags:
   - name: Health

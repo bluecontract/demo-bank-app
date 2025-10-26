@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { signUpHandler, signInHandler } from './handlers';
 import { getDependencies, resetDependencies } from './dependencies';
-import { UserAlreadyExistsError, UserValidationError } from '@demo-blue/auth';
-import { signUp, signIn } from '@demo-blue/auth';
+import {
+  UserAlreadyExistsError,
+  UserValidationError,
+} from '@demo-bank-app/auth';
+import { signUp, signIn } from '@demo-bank-app/auth';
 
 // Mock dependencies for unit tests
 vi.mock('./dependencies', () => ({
@@ -10,7 +13,7 @@ vi.mock('./dependencies', () => ({
   resetDependencies: vi.fn(),
 }));
 
-vi.mock('@demo-blue/auth', () => ({
+vi.mock('@demo-bank-app/auth', () => ({
   signIn: vi.fn(),
   signUp: vi.fn(),
   UserAlreadyExistsError: vi.fn(),
@@ -44,38 +47,57 @@ describe('Auth Handlers', () => {
     it('should return 201 and set cookie for successful sign-up', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockResolvedValue({
         user: {
           id: 'test-user-id',
-          name: 'testuser',
+          email: 'testuser@example.com',
           isTest: false,
           createdAt: '2021-01-01',
+          marketingEmailsOptIn: true,
         },
         token: 'jwt-token',
       });
       const responseHeaders = createMockHeaders();
       const result = await signUpHandler(
-        { body: { name: 'testuser' }, query: {} },
+        {
+          body: {
+            email: 'testuser@example.com',
+            marketingEmailsOptIn: true,
+          },
+          query: {},
+        },
         { responseHeaders } as any
       );
       expect(result.status).toBe(201);
-      expect(result.body).toEqual({ userId: 'test-user-id', name: 'testuser' });
+      expect(result.body).toEqual({
+        userId: 'test-user-id',
+        email: 'testuser@example.com',
+        marketingEmailsOptIn: true,
+      });
       expect(responseHeaders.get('Set-Cookie')).toContain('demoAuth=jwt-token');
     });
 
     it('should return 409 for UserAlreadyExistsError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
-      mockSignUp.mockRejectedValue(new UserAlreadyExistsError('existinguser'));
+      mockSignUp.mockRejectedValue(
+        new UserAlreadyExistsError('existinguser@example.com')
+      );
       const responseHeaders = createMockHeaders();
       const result = await signUpHandler(
-        { body: { name: 'existinguser' }, query: {} },
+        {
+          body: {
+            email: 'existinguser@example.com',
+            marketingEmailsOptIn: true,
+          },
+          query: {},
+        },
         {
           responseHeaders,
         } as any
@@ -84,63 +106,75 @@ describe('Auth Handlers', () => {
       expect(result.body).toEqual({
         error: 'USER_ALREADY_EXISTS',
         message:
-          'A user with this name already exists. Please choose a different name.',
+          'A user with this email already exists. Please use a different email.',
       });
     });
 
     it('should return 400 for UserValidationError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockRejectedValue(
-        new UserValidationError('', 'Invalid username format')
+        new UserValidationError('', 'Invalid email format')
       );
       const responseHeaders = createMockHeaders();
       await expect(
-        signUpHandler({ body: { name: '' }, query: {} }, {
-          responseHeaders,
-        } as any)
+        signUpHandler(
+          { body: { email: '', marketingEmailsOptIn: true }, query: {} },
+          {
+            responseHeaders,
+          } as any
+        )
       ).rejects.toThrow(UserValidationError);
     });
 
     it('should propagate RequestValidationError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = {
-        name: 'RequestValidationError',
+        email: 'RequestValidationError',
         message: 'Request validation failed',
         pathParamsError: '{}',
         queryParamsError: '{}',
-        bodyError: '{"name": "Required"}',
+        bodyError: '{"email": "Required"}',
         headerError: '{}',
       };
       mockSignUp.mockRejectedValue(error);
       const responseHeaders = createMockHeaders();
       await expect(
-        signUpHandler({ body: { name: '' }, query: {} }, {
-          responseHeaders,
-        } as any)
+        signUpHandler(
+          { body: { email: '', marketingEmailsOptIn: true }, query: {} },
+          {
+            responseHeaders,
+          } as any
+        )
       ).rejects.toEqual(error);
     });
 
     it('should propagate unknown errors', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = new Error('Database connection failed');
       mockSignUp.mockRejectedValue(error);
       const responseHeaders = createMockHeaders();
       await expect(
-        signUpHandler({ body: { name: 'testuser' }, query: {} }, {
-          responseHeaders,
-        } as any)
+        signUpHandler(
+          {
+            body: { email: 'testuser@example.com', marketingEmailsOptIn: true },
+            query: {},
+          },
+          {
+            responseHeaders,
+          } as any
+        )
       ).rejects.toThrow('Database connection failed');
     });
   });
@@ -149,95 +183,105 @@ describe('Auth Handlers', () => {
     it('should return 200 and set cookie for successful sign-in', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignIn.mockResolvedValue({
         user: {
           id: 'test-user-id',
-          name: 'testuser',
+          email: 'testuser@example.com',
           isTest: false,
           createdAt: '2021-01-01',
+          marketingEmailsOptIn: true,
         },
         token: 'jwt-token',
       });
       const responseHeaders = createMockHeaders();
-      const result = await signInHandler({ body: { name: 'testuser' } }, {
-        responseHeaders,
-      } as any);
+      const result = await signInHandler(
+        { body: { email: 'testuser@example.com' } },
+        {
+          responseHeaders,
+        } as any
+      );
       expect(result.status).toBe(200);
-      expect(result.body).toEqual({ userId: 'test-user-id', name: 'testuser' });
+      expect(result.body).toEqual({
+        userId: 'test-user-id',
+        email: 'testuser@example.com',
+        marketingEmailsOptIn: true,
+      });
       expect(responseHeaders.get('Set-Cookie')).toContain('demoAuth=jwt-token');
     });
 
     it('should return 404 for UserNotFoundError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       class UserNotFoundError extends Error {
         code = 'USER_NOT_FOUND';
-        constructor(name: string) {
-          super(name);
+        constructor(email: string) {
+          super(email);
         }
       }
-      mockSignIn.mockRejectedValue(new UserNotFoundError('missinguser'));
+      mockSignIn.mockRejectedValue(
+        new UserNotFoundError('missinguser@example.com')
+      );
       const responseHeaders = createMockHeaders();
       await expect(
-        signInHandler({ body: { name: 'missinguser' } }, {
+        signInHandler({ body: { email: 'missinguser@example.com' } }, {
           responseHeaders,
         } as any)
-      ).rejects.toThrow('missinguser');
+      ).rejects.toThrow('missinguser@example.com');
     });
 
     it('should return 400 for UserValidationError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignIn.mockRejectedValue(
-        new UserValidationError('', 'Invalid username format')
+        new UserValidationError('', 'Invalid email format')
       );
       const responseHeaders = createMockHeaders();
       await expect(
-        signInHandler({ body: { name: '' } }, { responseHeaders } as any)
+        signInHandler({ body: { email: '' } }, { responseHeaders } as any)
       ).rejects.toThrow(UserValidationError);
     });
 
     it('should propagate RequestValidationError', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = {
-        name: 'RequestValidationError',
+        email: 'RequestValidationError',
         message: 'Request validation failed',
         pathParamsError: '{}',
         queryParamsError: '{}',
-        bodyError: '{"name": "Required"}',
+        bodyError: '{"email": "Required"}',
         headerError: '{}',
       };
       mockSignIn.mockRejectedValue(error);
       const responseHeaders = createMockHeaders();
       await expect(
-        signInHandler({ body: { name: '' } }, { responseHeaders } as any)
+        signInHandler({ body: { email: '' } }, { responseHeaders } as any)
       ).rejects.toEqual(error);
     });
 
     it('should propagate unknown errors', async () => {
       const mockDeps = {
         logger: mockLogger,
-        config: { jwtTtlSeconds: 3600, testUserTtlSeconds: 600 },
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = new Error('Database connection failed');
       mockSignIn.mockRejectedValue(error);
       const responseHeaders = createMockHeaders();
       await expect(
-        signInHandler({ body: { name: 'testuser' } }, {
+        signInHandler({ body: { email: 'testuser@example.com' } }, {
           responseHeaders,
         } as any)
       ).rejects.toThrow('Database connection failed');

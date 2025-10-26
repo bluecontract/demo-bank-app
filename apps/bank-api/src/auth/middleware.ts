@@ -5,6 +5,7 @@ import { UnauthorizedRequestError } from './errors';
 
 export type MaybeAuthenticatedRequestContext = {
   userId?: string;
+  userEmail?: string;
   isTest?: boolean;
 };
 
@@ -36,9 +37,16 @@ function matchExclusion(
   });
 }
 
+type AuthTokenPayload = {
+  sub?: string;
+  email?: string;
+  userEmail?: string;
+  isTest?: boolean;
+};
+
 export async function extractAuthInfo(request: {
   headers: Headers;
-}): Promise<{ userId: string; isTest: boolean }> {
+}): Promise<{ userId: string; userEmail?: string; isTest: boolean }> {
   try {
     const cookieHeader = request.headers.get('cookie');
     if (!cookieHeader) {
@@ -54,14 +62,19 @@ export async function extractAuthInfo(request: {
     if (parts.length !== 3) {
       throw new Error('Invalid token');
     }
-    const payload = JSON.parse(
-      Buffer.from(parts[1], 'base64').toString('utf-8')
-    );
+    const rawPayload = Buffer.from(parts[1], 'base64').toString('utf-8');
+    const payload = JSON.parse(rawPayload) as AuthTokenPayload;
     if (!payload.sub) {
       throw new Error('Invalid token');
     }
     return {
       userId: payload.sub,
+      userEmail:
+        typeof payload.email === 'string'
+          ? payload.email
+          : typeof payload.userEmail === 'string'
+          ? payload.userEmail
+          : undefined,
       isTest: !!payload.isTest,
     };
   } catch (error: unknown) {

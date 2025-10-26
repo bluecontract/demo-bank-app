@@ -6,6 +6,18 @@ import { useAuth } from '../../app/providers/AuthProvider';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import { useCreateAccount } from '../../features/accounts/hooks/useCreateAccount';
 
+const mockNavigate = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>(
+    'react-router-dom'
+  );
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
 // Mock the hooks and components
 vi.mock('../../app/providers/AuthProvider', () => ({
   useAuth: vi.fn(),
@@ -20,16 +32,6 @@ vi.mock('../../features/accounts/hooks/useCreateAccount', () => ({
 }));
 
 vi.mock('../../features/transfer', () => ({
-  TransferModal: vi.fn(({ isOpen, onClose, accounts, defaultAccountId }) =>
-    isOpen ? (
-      <div data-testid="transfer-modal">
-        Transfer Modal
-        <button onClick={onClose} data-testid="close-transfer-modal">
-          Close
-        </button>
-      </div>
-    ) : null
-  ),
   FundModal: vi.fn(({ isOpen, onClose, accounts, defaultAccountId }) =>
     isOpen ? (
       <div data-testid="fund-modal">
@@ -46,8 +48,8 @@ vi.mock('../../features/transfer', () => ({
 }));
 
 vi.mock('../../features/dashboard/components', () => ({
-  DashboardHeader: vi.fn(({ userName }) => (
-    <div data-testid="dashboard-header">Dashboard Header - {userName}</div>
+  DashboardHeader: vi.fn(({ userEmail }) => (
+    <div data-testid="dashboard-header">Dashboard Header - {userEmail}</div>
   )),
 }));
 
@@ -136,7 +138,7 @@ describe('DashboardPage', () => {
 
     // Default mock implementations
     mockUseAuth.mockReturnValue({
-      user: { name: 'Alice', userId: 'user-1' },
+      user: { email: 'alice@example.com', userId: 'user-1' },
       signOut: vi.fn(),
     });
 
@@ -204,7 +206,9 @@ describe('DashboardPage', () => {
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
     expect(screen.getByTestId('dashboard-header')).toBeInTheDocument();
-    expect(screen.getByText('Dashboard Header - Alice')).toBeInTheDocument();
+    expect(
+      screen.getByText('Dashboard Header - alice@example.com')
+    ).toBeInTheDocument();
   });
 
   it('should render horizontal accounts list when accounts exist', () => {
@@ -267,8 +271,9 @@ describe('DashboardPage', () => {
 
     fireEvent.click(screen.getByTestId('transfer-btn'));
 
-    // Check that the transfer modal is opened
-    expect(screen.getByTestId('transfer-modal')).toBeInTheDocument();
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/transfer/new?accountId=test-id'
+    );
   });
 
   it('should handle guest user name', () => {

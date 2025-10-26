@@ -37,7 +37,6 @@ Leverage available tools and MCP servers as needed
 1. Load specific rules according to the development step and context.
 2. Always explicitly list all loaded rules in the chat at the very end of the response
 3. Propose cursor rules update upon addition or changes to technology, conventions, etc.
-4. `PROJECT.md` is the canonical project tracker; always consult and update it when phase status or major decisions change.
 
 Phase 1 - Problem Exploration: `fullcycle-problem-exploration.mdc`
 Phase 2 - Requirements: `fullcycle-requirements-analysis.mdc`

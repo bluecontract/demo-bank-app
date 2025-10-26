@@ -6,16 +6,16 @@
 
 ## Functional Requirements
 
-| ID       | Requirement                                                                                                                                                                                                  | Priority |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| FR-ACC-1 | **Create Account** – A signed‑in user can create multiple bank accounts; system generates `accountId` (UUID) and a **10‑digit account number** unique across demo.                                           | Must     |
-| FR-ACC-2 | **Fund Account** – In the _Funding_ UI a user enters an _amount_ (positive integer ≤ 1,000,000) which results in a **credit** transaction of type `FUNDING`.                                                 | Must     |
-| FR-ACC-3 | **Internal Transfer** – User can send money to another valid **account number** in the demo. Amount must be ≤ _available balance_.                                                                           | Must     |
-| FR-ACC-4 | **Validation** – Transfer fails with clear error when: destination account unknown, amount ≤ 0, or insufficient available balance.                                                                           | Must     |
-| FR-ACC-5 | **Transaction List** – User can list their last N transactions with: date, type, counter‑party, amount (signed), status, resulting balance.                                                                  | Must     |
-| FR-ACC-6 | **Balance Endpoint** – API returns both `ledgerBalance` and `availableBalance` calculated **synchronously** within the transaction request for deterministic UX.                                             | Must     |
-| FR-ACC-7 | **Idempotency** – `CreateTransaction` accepts `Idempotency-Key` header; duplicate keys return the original 201 response.                                                                                     | Must     |
-| FR-ACC-8 | **Ephemeral Test Data** – If the authenticated JWT carries `isTest=true`, _every_ DynamoDB item written in that request MUST include a `ttl` ≤ 24 h so data self‑purges; no destructive endpoint is allowed. | Should   |
+| ID       | Requirement                                                                                                                                                                                                      | Priority |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| FR-ACC-1 | **Create Account** – A signed‑in user can create multiple bank accounts; system generates `accountId` (UUID) and a **10‑digit account number** unique across demo.                                               | Must     |
+| FR-ACC-2 | **Fund Account** – In the _Funding_ UI a user enters an _amount_ (positive integer ≤ 1,000,000) which results in a **credit** transaction of type `FUNDING`.                                                     | Must     |
+| FR-ACC-3 | **Internal Transfer** – User can send money to another valid **account number** in the demo. Amount must be ≤ _available balance_.                                                                               | Must     |
+| FR-ACC-4 | **Validation** – Transfer fails with clear error when: destination account unknown, amount ≤ 0, or insufficient available balance.                                                                               | Must     |
+| FR-ACC-5 | **Account Activity Feed** – User can list their last N activity items (posted transactions + hold lifecycle) with: date, type, counter‑party, amount (signed or reserved), status badge, resulting balance cues. | Must     |
+| FR-ACC-6 | **Balance Endpoint** – API returns both `ledgerBalance` and `availableBalance` calculated **synchronously** within the transaction request for deterministic UX.                                                 | Must     |
+| FR-ACC-7 | **Idempotency** – `CreateTransaction` accepts `Idempotency-Key` header; duplicate keys return the original 201 response.                                                                                         | Must     |
+| FR-ACC-8 | **Ephemeral Test Data** – If the authenticated JWT carries `isTest=true`, _every_ DynamoDB item written in that request MUST include a `ttl` ≤ 24 h so data self‑purges; no destructive endpoint is allowed.     | Should   |
 
 ## Non‑Functional Requirements
 

@@ -8,8 +8,8 @@ The test suite is organized into the following modules:
 
 ### Authentication Tests (`src/auth/`)
 
-- **`signin.test.ts`** - User sign-in functionality
-- **`signup.test.ts`** - User registration functionality
+- **`signin.test.ts`** – email-based sign-in, sign-out, session persistence, and protected route checks
+- **`signup.test.ts`** – email registration flow and duplicate email handling
 
 ### Banking Features Tests (`src/banking/`)
 
@@ -45,7 +45,7 @@ The banking core flows test comprehensively covers:
 
 ### 4. Transfer Money Operations
 
-- ✅ Transfer money between accounts with modal interface
+- ✅ Transfer money between accounts
 - ✅ Form validation (account number format, amount validation)
 - ✅ Transfer confirmation page
 - ✅ Source account balance refresh after transfer
@@ -83,20 +83,21 @@ The banking core flows test comprehensively covers:
 
 ### Environment Variables
 
-- `E2E_BASE_URL` - Base URL for the application (defaults to `http://localhost:4200`)
+- `E2E_BASE_URL` – Base URL for the application (defaults to `http://localhost:4200`)
 
 ### Test Data
 
-- All tests use unique, generated names to avoid conflicts
-- Test users are created with unique identifiers
-- Account names are generated uniquely per test run
+- Tests generate unique **email addresses** via `createUniqueEmail` for every sign-up
+- Each scenario creates isolated demo users, accounts, and amounts
+- Helper functions in `src/constants.ts` centralise unique name / amount generation
 
 ### Timeouts
 
-- **Navigation**: 10 seconds
+- **Navigation**: 20 seconds
 - **Modal load**: 5 seconds
 - **API response**: 8 seconds
 - **Balance update**: 5 seconds
+- **Transfer completion**: 20 seconds
 
 ## Running the Tests
 
@@ -120,8 +121,8 @@ npx nx run bank-web-app-e2e:e2e --headed
 
 Each test is completely independent and creates its own test data:
 
-- Unique user accounts for each test
-- Unique account names and amounts
+- Unique email accounts are generated for each scenario
+- Account names and monetary amounts are randomised per run
 - No shared state between tests
 
 ### 2. Comprehensive Coverage
@@ -145,10 +146,9 @@ Tests simulate real user interactions:
 
 Tests use appropriate waiting strategies:
 
-- Wait for modals to open/close
-- Wait for API responses
-- Wait for balance updates
-- Verify specific UI elements are visible
+- Reusable helpers (`waitForDashboard`, `waitForModalToOpen/Close`, `waitForTransferCompletion`) wrap Playwright waits
+- API-driven UI updates (balances, transaction history) wait for specific containers to stabilise
+- Explicit verification of visible elements using role/text selectors within scoped containers
 
 ## Key Features Tested
 
@@ -156,7 +156,6 @@ Tests use appropriate waiting strategies:
 
 - Account creation modal
 - Fund account modal
-- Transfer money modal
 - Transaction details modal
 - Confirmation pages
 
@@ -184,16 +183,16 @@ Tests use appropriate waiting strategies:
 
 ### Adding New Tests
 
-1. Follow the existing pattern in `banking-core-flows.test.ts`
-2. Use helper functions from `constants.ts`
-3. Create unique test data for each test
-4. Ensure proper cleanup (modal closing, state reset)
+1. Follow the existing patterns (e.g. `banking-core-flows.test.ts`, `auth/signin.test.ts`)
+2. Reuse helper utilities exported from `src/constants.ts` (navigation waits, tooltip helpers, form validation helpers)
+3. Generate unique emails/accounts for every test to avoid clashes in parallel runs
+4. Ensure UI is brought back to a stable state (close modals, wait for loaders to disappear)
 
 ### Updating Selectors
 
-- Use data-testid attributes where available
-- Prefer semantic selectors (text content, roles)
-- Update constants.ts helper functions as needed
+- Prefer `data-testid` attributes exposed by the app (e.g. `dashboard-main-container`, `confirmation-container`)
+- Use accessible selectors (`getByRole`, `getByText`) for user-facing content
+- Update shared helpers in `constants.ts` when selectors change
 
 ### Test Debugging
 

@@ -1,5 +1,5 @@
 {
-  "name": "@demo-blue/shared-core",
+  "name": "@demo-bank-app/shared-core",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
   "sourceRoot": "libs/shared/core/src",

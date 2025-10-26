@@ -13,7 +13,7 @@ describe('signUp', () => {
   const mockUserRepository: UserRepository = {
     save: vi.fn(),
     findById: vi.fn(),
-    findByName: vi.fn(),
+    findByEmail: vi.fn(),
   };
 
   const mockJwtService: JwtService = {
@@ -50,13 +50,18 @@ describe('signUp', () => {
 
   it('should create and save a new user successfully', async () => {
     // Given
-    const command: SignUpCommand = { name: 'john-doe', isTest: false };
+    const command: SignUpCommand = {
+      email: 'john.doe@example.com',
+      isTest: false,
+      marketingEmailsOptIn: true,
+    };
 
     const mockUser = new User({
       id: 'user-123',
-      name: 'john-doe',
+      email: 'john.doe@example.com',
       createdAt: new Date(),
       isTest: false,
+      marketingEmailsOptIn: true,
     });
     const mockToken = 'jwt-token-123';
 
@@ -68,23 +73,26 @@ describe('signUp', () => {
 
     // Then
     expect(result.user.id).toBe('user-123');
-    expect(result.user.name).toBe('john-doe');
+    expect(result.user.email).toBe('john.doe@example.com');
     expect(result.user.isTest).toBe(false);
+    expect(result.user.marketingEmailsOptIn).toBe(true);
     expect(result.token).toBe(mockToken);
     expect(mockUserRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'john-doe',
+        email: 'john.doe@example.com',
         isTest: false,
+        marketingEmailsOptIn: true,
       })
     );
-    expect(mockJwtService.generateToken).toHaveBeenCalledWith(
-      'user-123',
-      false
-    );
+    expect(mockJwtService.generateToken).toHaveBeenCalledWith({
+      userId: 'user-123',
+      email: 'john.doe@example.com',
+      isTest: false,
+    });
     expect(mockLogger.info).toHaveBeenCalledWith(
       'User sign-up completed successfully',
       expect.objectContaining({
-        userName: 'john-doe',
+        userEmail: 'john.doe@example.com',
         userId: 'user-123',
         isTest: false,
       })
@@ -98,13 +106,18 @@ describe('signUp', () => {
 
   it('should create and save a test user successfully', async () => {
     // Given
-    const command: SignUpCommand = { name: 'test-user', isTest: true };
+    const command: SignUpCommand = {
+      email: 'test.user@example.com',
+      isTest: true,
+      marketingEmailsOptIn: true,
+    };
 
     const mockUser = new User({
       id: 'test-user-123',
-      name: 'test-user',
+      email: 'test.user@example.com',
       createdAt: new Date(),
       isTest: true,
+      marketingEmailsOptIn: true,
     });
     const mockToken = 'jwt-token-test';
 
@@ -116,19 +129,21 @@ describe('signUp', () => {
 
     // Then
     expect(result.user.id).toBe('test-user-123');
-    expect(result.user.name).toBe('test-user');
+    expect(result.user.email).toBe('test.user@example.com');
     expect(result.user.isTest).toBe(true);
     expect(result.token).toBe(mockToken);
     expect(mockUserRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'test-user',
+        email: 'test.user@example.com',
         isTest: true,
+        marketingEmailsOptIn: true,
       })
     );
-    expect(mockJwtService.generateToken).toHaveBeenCalledWith(
-      'test-user-123',
-      true
-    );
+    expect(mockJwtService.generateToken).toHaveBeenCalledWith({
+      userId: 'test-user-123',
+      email: 'test.user@example.com',
+      isTest: true,
+    });
     expect(mockMetrics.addMetric).toHaveBeenCalledWith(
       'TestUserSignUp',
       'Count',
@@ -138,21 +153,26 @@ describe('signUp', () => {
 
   it('should throw UserAlreadyExistsError when user already exists', async () => {
     // Given
-    const command: SignUpCommand = { name: 'existing-user' };
+    const command: SignUpCommand = {
+      email: 'existing.user@example.com',
+      marketingEmailsOptIn: true,
+    };
 
-    const userAlreadyExistsError = new UserAlreadyExistsError('existing-user');
+    const userAlreadyExistsError = new UserAlreadyExistsError(
+      'existing.user@example.com'
+    );
     vi.mocked(mockUserRepository.save).mockRejectedValue(
       userAlreadyExistsError
     );
 
     // When & Then
     await expect(signUp(command, dependencies)).rejects.toThrow(
-      new UserAlreadyExistsError('existing-user')
+      new UserAlreadyExistsError('existing.user@example.com')
     );
     expect(mockLogger.error).toHaveBeenCalledWith(
       'User sign-up failed',
       expect.objectContaining({
-        userName: 'existing-user',
+        userEmail: 'existing.user@example.com',
         error: 'User already exists',
       })
     );
@@ -165,13 +185,17 @@ describe('signUp', () => {
 
   it('should rethrow error when JWT generation fails', async () => {
     // Given
-    const command: SignUpCommand = { name: 'test-user' };
+    const command: SignUpCommand = {
+      email: 'test.user@example.com',
+      marketingEmailsOptIn: true,
+    };
 
     const mockUser = new User({
       id: 'user-123',
-      name: 'test-user',
+      email: 'test.user@example.com',
       createdAt: new Date(),
       isTest: false,
+      marketingEmailsOptIn: true,
     });
     const jwtError = new TokenGenerationError('user-123');
 
@@ -185,7 +209,7 @@ describe('signUp', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(
       'JWT generation failed during sign-up',
       expect.objectContaining({
-        userName: 'test-user',
+        userEmail: 'test.user@example.com',
         userId: 'user-123',
         error: "Failed to generate token for user 'user-123'",
       })
@@ -199,13 +223,17 @@ describe('signUp', () => {
 
   it('should throw AuthError when unexpected error occurs', async () => {
     // Given
-    const command: SignUpCommand = { name: 'test-user' };
+    const command: SignUpCommand = {
+      email: 'test.user@example.com',
+      marketingEmailsOptIn: true,
+    };
 
     const mockUser = new User({
       id: 'user-123',
-      name: 'test-user',
+      email: 'test.user@example.com',
       createdAt: new Date(),
       isTest: false,
+      marketingEmailsOptIn: true,
     });
     const unexpectedError = new Error('Unexpected error');
 
@@ -219,7 +247,7 @@ describe('signUp', () => {
     expect(mockLogger.error).toHaveBeenCalledWith(
       'Unexpected error during user sign-up',
       expect.objectContaining({
-        userName: 'test-user',
+        userEmail: 'test.user@example.com',
         error: 'Unexpected error',
       })
     );

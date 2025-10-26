@@ -1,6 +1,6 @@
 import React, { createContext, useContext } from 'react';
 import { apiClient } from '../../api/client';
-import type { ApiClient } from '@demo-blue/shared-bank-api-client';
+import type { ApiClient } from '@demo-bank-app/shared-bank-api-client';
 
 const ApiContext = createContext<ApiClient | undefined>(undefined);
 

@@ -9,10 +9,13 @@ const __dirname = dirname(__filename);
 
 export default defineConfig(() => ({
   root: __dirname,
-  cacheDir: '../../node_modules/.vite/apps/demo-blue',
+  cacheDir: '../../node_modules/.vite/apps/demo-bank-app',
   server: {
     port: 4200,
     host: 'localhost',
+    watch: {
+      usePolling: true,
+    },
   },
   preview: {
     port: 4300,
@@ -23,6 +26,12 @@ export default defineConfig(() => ({
     // Transform BANK_API_URL environment variable to a global constant
     __BANK_API_URL__: JSON.stringify(
       process.env.BANK_API_URL || 'http://localhost:3000'
+    ),
+    __INTRO_VIDEO_URL__: JSON.stringify(
+      process.env.INTRO_VIDEO_URL || '/assets/login-demo-placeholder.mp4'
+    ),
+    __PAYNOTE_DEMO_VIDEO_URL__: JSON.stringify(
+      process.env.PAYNOTE_DEMO_VIDEO_URL || '/assets/login-demo-placeholder.mp4'
     ),
   },
   // Uncomment this if you are using workers.

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { SelectedAccountProvider } from '../../app/providers/SelectedAccountProvider';
 import { DashboardHeader } from '../../features/dashboard/components';
@@ -6,11 +7,7 @@ import {
   HorizontalAccountsList,
   AccountCreationModal,
 } from '../../features/accounts/components';
-import {
-  TransferModal,
-  FundModal,
-  TransactionHistory,
-} from '../../features/transfer';
+import { FundModal, TransactionHistory } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import { SpinnerWithText } from '../../ui/Spinner';
 
@@ -28,17 +25,10 @@ type Account = {
 export function DashboardPage() {
   const { user } = useAuth();
   const { data: accounts, isLoading, error } = useAccounts();
+  const navigate = useNavigate();
 
   const [accountCreationModal, setAccountCreationModal] = useState({
     isOpen: false,
-  });
-
-  const [transferModal, setTransferModal] = useState<{
-    isOpen: boolean;
-    defaultAccountId: string | undefined;
-  }>({
-    isOpen: false,
-    defaultAccountId: undefined,
   });
 
   const [fundModal, setFundModal] = useState<{
@@ -58,10 +48,7 @@ export function DashboardPage() {
   };
 
   const handleTransfer = (accountId: string) => {
-    setTransferModal({
-      isOpen: true,
-      defaultAccountId: accountId,
-    });
+    navigate(`/transfer/new?accountId=${accountId}`);
   };
 
   const handleFund = (accountId: string) => {
@@ -72,13 +59,6 @@ export function DashboardPage() {
         sourceAccount: account,
       });
     }
-  };
-
-  const closeTransferModal = () => {
-    setTransferModal({
-      isOpen: false,
-      defaultAccountId: undefined,
-    });
   };
 
   const closeFundModal = () => {
@@ -118,7 +98,7 @@ export function DashboardPage() {
         data-testid="dashboard-main-container"
       >
         <div className="px-4 py-4">
-          <DashboardHeader userName={user?.name || 'Guest'} />
+          <DashboardHeader userEmail={user?.email || 'Guest'} />
 
           <div className="mt-4">
             {/* Accounts Section */}
@@ -143,16 +123,6 @@ export function DashboardPage() {
         isOpen={accountCreationModal.isOpen}
         onClose={closeAccountCreationModal}
       />
-
-      {/* Transfer Modal */}
-      {accounts && accounts.length > 0 && (
-        <TransferModal
-          isOpen={transferModal.isOpen}
-          onClose={closeTransferModal}
-          accounts={accounts}
-          defaultAccountId={transferModal.defaultAccountId}
-        />
-      )}
 
       {/* Fund Modal */}
       <FundModal

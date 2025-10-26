@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AuthEnvironmentConfiguration } from './AuthConfiguration';
-import { ConfigurationValidationError } from '@demo-blue/shared-config';
+import { ConfigurationValidationError } from '@demo-bank-app/shared-config';
 
 describe('AuthEnvironmentConfiguration', () => {
   let config: AuthEnvironmentConfiguration;
@@ -22,7 +22,7 @@ describe('AuthEnvironmentConfiguration', () => {
       process.env.AUTH_DYNAMO_TABLE_NAME = 'auth-table';
       process.env.JWT_SECRET_ARN =
         'arn:aws:secretsmanager:region:account:secret:jwt-secret';
-      process.env.JWT_TTL_SECONDS = '7200';
+      process.env.JWT_TTL_SECONDS = '604800';
       process.env.TEST_USER_TTL_SECONDS = '172800';
       process.env.NODE_ENV = 'production';
       process.env.SERVICE_NAME = 'my-auth-service';
@@ -34,7 +34,7 @@ describe('AuthEnvironmentConfiguration', () => {
       expect(authConfig).toEqual({
         dynamoTableName: 'auth-table',
         jwtSecretArn: 'arn:aws:secretsmanager:region:account:secret:jwt-secret',
-        jwtTtlSeconds: 7200,
+        jwtTtlSeconds: 604800,
         testUserTtlSeconds: 172800,
         environment: 'production',
         serviceName: 'my-auth-service',
@@ -53,7 +53,7 @@ describe('AuthEnvironmentConfiguration', () => {
       expect(authConfig).toEqual({
         dynamoTableName: 'auth-table',
         jwtSecretArn: 'arn:aws:secretsmanager:region:account:secret:jwt-secret',
-        jwtTtlSeconds: 3600,
+        jwtTtlSeconds: 604800,
         testUserTtlSeconds: 86400,
         environment: 'development',
         serviceName: 'auth',
@@ -83,7 +83,7 @@ describe('AuthEnvironmentConfiguration', () => {
       process.env.AUTH_DYNAMO_TABLE_NAME = 'auth-table';
       process.env.JWT_SECRET_ARN =
         'arn:aws:secretsmanager:region:account:secret:jwt-secret';
-      process.env.JWT_TTL_SECONDS = '86401'; // More than 24 hours
+      process.env.JWT_TTL_SECONDS = '604801'; // More than allowed
 
       await expect(config.getAuthConfig()).rejects.toThrow(
         ConfigurationValidationError

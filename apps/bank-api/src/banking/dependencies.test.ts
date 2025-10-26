@@ -3,16 +3,17 @@ import { getDependencies, resetDependencies } from './dependencies';
 import {
   PowertoolsLogger,
   PowertoolsMetrics,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 
 describe('Banking Dependencies', () => {
   beforeEach(() => {
     resetDependencies();
   });
 
-  it('should return dependencies object with repository and accountNumberGenerator', async () => {
+  it('should return dependencies object with repository, holdRepository, and accountNumberGenerator', async () => {
     const deps = await getDependencies();
     expect(deps).toHaveProperty('repository');
+    expect(deps).toHaveProperty('holdRepository');
     expect(deps).toHaveProperty('accountNumberGenerator');
     expect(deps.logger).toBeInstanceOf(PowertoolsLogger);
     expect(deps.metrics).toBeInstanceOf(PowertoolsMetrics);

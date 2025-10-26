@@ -11,6 +11,9 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
+      "path": "../../libs/shared/config/tsconfig.lib.json"
+    },
+    {
       "path": "../../libs/shared/observability/tsconfig.lib.json"
     },
     {

@@ -1,9 +1,9 @@
 {
-  "name": "@demo-blue/bank-web-app-e2e",
+  "name": "@demo-bank-app/bank-web-app-e2e",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "sourceRoot": "apps/bank-web-app-e2e/src",
-  "implicitDependencies": ["@demo-blue/bank-web-app"],
+  "implicitDependencies": ["@demo-bank-app/bank-web-app"],
   "targets": {
     "e2e": {
       "executor": "nx:run-commands",

@@ -141,13 +141,16 @@ export function HorizontalAccountsList({
         ref={scrollContainerRef}
         className="flex gap-4 overflow-x-auto scrollbar-hide px-4 py-4"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        data-testid="accounts-scroll-container"
       >
         {/* Account Cards */}
         {accounts.map(account => (
-          <div key={account.accountId} className="flex-shrink-0 w-80">
+          <div key={account.accountNumber} className="flex-shrink-0 w-80">
             <AccountCard
               account={account}
-              isSelected={selectedAccount?.accountId === account.accountId}
+              isSelected={
+                selectedAccount?.accountNumber === account.accountNumber
+              }
               onDetailsClick={handleAccountDetails}
               onTransferClick={onTransfer}
               onFundClick={onFund}

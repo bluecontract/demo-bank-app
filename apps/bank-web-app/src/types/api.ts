@@ -1,4 +1,4 @@
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { ClientInferResponseBody } from '@ts-rest/core';
 
 // Health check types
@@ -51,12 +51,14 @@ export type Transaction = ClientInferResponseBody<
   200
 >;
 
-export type TransactionsList = ClientInferResponseBody<
-  (typeof bankApiContract)['banking']['listTransactions'],
+export type TransactionDetails = Transaction;
+
+export type ActivityFeed = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['listActivity'],
   200
 >;
 
-export type TransactionDetails = Transaction;
+export type ActivityFeedItem = ActivityFeed['items'][number];
 
 // Re-export commonly used types
 export type { Transaction as TransactionItem };

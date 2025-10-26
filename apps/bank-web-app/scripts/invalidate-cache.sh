@@ -10,8 +10,8 @@ if [ -z "$1" ]; then
 fi
 
 ENVIRONMENT=$1
-STACK_NAME="demo-blue-frontend-${ENVIRONMENT}"
-REGION="eu-central-1"
+STACK_NAME="demo-bank-app-frontend-${ENVIRONMENT}"
+REGION="eu-west-1"
 
 echo "🔄 Invalidating CloudFront cache for ${ENVIRONMENT} environment..."
 
@@ -49,4 +49,4 @@ INVALIDATION_ID=$(aws cloudfront create-invalidation \
 echo "✅ Cache invalidation created successfully!"
 echo "📝 Invalidation ID: ${INVALIDATION_ID}"
 echo "🔗 Monitor status: https://console.aws.amazon.com/cloudfront/home#distribution-settings:${DISTRIBUTION_ID}"
-echo "⏳ Note: Invalidation can take 10-15 minutes to complete" 
+echo "⏳ Note: Invalidation can take 10-15 minutes to complete"

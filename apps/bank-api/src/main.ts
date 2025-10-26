@@ -1,5 +1,5 @@
 import { createLambdaHandler, tsr } from '@ts-rest/serverless/aws';
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { signUpHandler, signInHandler } from './auth/handlers';
 
 import { createErrorHandler } from './errors';
@@ -16,8 +16,14 @@ import { listAccountsHandler } from './banking/listAccounts';
 import { getAccountHandler } from './banking/getAccount';
 import { fundAccountHandler } from './banking/fundAccount';
 import { transferMoneyHandler } from './banking/transferMoney';
-import { listTransactionsHandler } from './banking/listTransactions';
 import { getTransactionHandler } from './banking/getTransaction';
+import { listAccountActivityHandler } from './banking/activity';
+import { getActivityDetailHandler } from './banking/getActivityDetail';
+import { validatePayNoteHandler } from './paynote/validatePayNote';
+import { parsePayNotePdfHandler } from './paynote/parsePayNotePdf';
+import { bootstrapPayNoteHandler } from './paynote/bootstrapPayNote';
+import { payNoteWebhookHandler } from './paynote/webhook';
+import { getPayNoteDetailsHandler } from './paynote/getPayNoteDetails';
 
 const metrics = getMetrics();
 const logger = getLogger();
@@ -50,8 +56,14 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       getAccount: getAccountHandler,
       fundAccount: fundAccountHandler,
       transferMoney: transferMoneyHandler,
-      listTransactions: listTransactionsHandler,
+      listActivity: listAccountActivityHandler,
+      getActivityDetail: getActivityDetailHandler,
       getTransaction: getTransactionHandler,
+      validatePayNote: validatePayNoteHandler,
+      bootstrapPayNote: bootstrapPayNoteHandler,
+      parsePayNotePdf: parsePayNotePdfHandler,
+      getPayNoteDetails: getPayNoteDetailsHandler,
+      payNoteWebhook: payNoteWebhookHandler,
     },
   }),
   {
@@ -79,6 +91,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
           { path: /^\/health\/?$/, method: 'GET' },
           { path: '/auth/signup', method: 'POST' },
           { path: '/auth/signin', method: 'POST' },
+          { path: '/v1/paynotes/webhook', method: 'POST' },
         ],
       }),
     ],

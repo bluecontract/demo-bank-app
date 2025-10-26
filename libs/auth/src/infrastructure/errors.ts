@@ -1,4 +1,4 @@
-import { AppError } from '@demo-blue/shared-core';
+import { AppError } from '@demo-bank-app/shared-core';
 
 export class TokenGenerationError extends AppError {
   readonly code = 'TOKEN_GENERATION_ERROR';
@@ -35,16 +35,16 @@ export class TokenServiceError extends AppError {
 export class UserAlreadyExistsError extends AppError {
   readonly code = 'USER_ALREADY_EXISTS';
 
-  constructor(name: string, cause?: Error) {
-    super(`User with name '${name}' already exists`, { cause });
+  constructor(email: string, cause?: Error) {
+    super(`User with email '${email}' already exists`, { cause });
   }
 }
 
 export class UserNotFoundError extends AppError {
   readonly code = 'USER_NOT_FOUND';
 
-  constructor(name: string, cause?: Error) {
-    super(`User with name '${name}' not found`, { cause });
+  constructor(email: string, cause?: Error) {
+    super(`User with email '${email}' not found`, { cause });
   }
 }
 

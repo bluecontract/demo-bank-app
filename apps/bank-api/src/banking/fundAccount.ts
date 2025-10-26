@@ -1,14 +1,14 @@
-import { InsufficientFundsError } from '@demo-blue/banking';
+import { InsufficientFundsError } from '@demo-bank-app/banking';
 import { ServerInferRequest } from '@ts-rest/core';
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { getDependencies } from './dependencies';
 import {
   extractAuthInfo,
   MaybeAuthenticatedTsRestRequestContext,
 } from '../auth/middleware';
-import { Money } from '@demo-blue/banking';
-import { fundAccount } from '@demo-blue/banking';
-import { AccountNotFoundError, ForbiddenError } from '@demo-blue/banking';
+import { Money } from '@demo-bank-app/banking';
+import { fundAccount } from '@demo-bank-app/banking';
+import { AccountNotFoundError, ForbiddenError } from '@demo-bank-app/banking';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 
 export const fundAccountHandler = async (

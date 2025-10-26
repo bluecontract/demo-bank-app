@@ -1,6 +1,23 @@
-# Blue Demo Bank
+# Demo Bank App
 
-A modern banking application demonstrating Blue Language integration and state-of-the-art serverless architecture.
+Demo Bank App is the end-to-end reference for modelling banking workflows using **PayNotes** and driving them through the MyOS.
+
+A **PayNote** is a programmable payment agreement shared by a payer, payee, and guarantor.
+It captures the commercial promise, the evidence required to fulfill it, and the automated actions that release or refund funds.
+Everyone sees the same terms and same timeline.
+
+## PayNote + MyOS Integration (only ~500 lines of code)
+
+- `POST /v1/paynotes/bootstrap` → `apps/bank-api/src/paynote/bootstrapPayNote.ts` validates the uploaded PayNote, hydrates payer/payee accounts, and forwards the document plus channel bindings to MyOS `POST /documents/bootstrap` so processing begins instantly.
+- `POST /v1/paynotes/webhook` → `apps/bank-api/src/paynote/webhook.ts` ingests MyOS callbacks, downloads event detail via `GET /myos-events/{eventId}`, and maps capture events to real ledger transfers.
+- Together these handlers amount to **~500 lines of code** illustrating how little code is required to wrap a PayNote flow with bank-grade system.
+
+### Flow at a Glance
+
+1. The web app collects the PayNote (YAML or parsed PDF), prompts for source/destination accounts, then calls `POST /v1/paynotes/bootstrap`.
+2. The bootstrap handler verifies the document, binds participants, and hands it to MyOS via `POST /documents/bootstrap`.
+3. MyOS processes the PayNote and calls back into `POST /v1/paynotes/webhook`; the handler retrieves the full payload with `GET /myos-events/{eventId}`.
+4. When capture events (for example `Capture Funds Requested` or `Reserve Funds and Capture Immediately Requested`) appear, the webhook performs the corresponding bank transfer and logs the result.
 
 ## 🚀 Quick Start
 
@@ -126,14 +143,14 @@ npm run serve:all
 
 # Start individual services
 nx serve localstack           # ensures LocalStack is running
-nx serve @demo-blue/bank-api  # Backend API only (starts localstack)
-nx serve @demo-blue/bank-web-app # Frontend only
+nx serve @demo-bank-app/bank-api  # Backend API only (starts localstack)
+nx serve @demo-bank-app/bank-web-app # Frontend only
 
 # Check service status
-docker ps --filter 'name=localstack-demo-blue'
+docker ps --filter 'name=localstack-demo-bank-app'
 
 # Stop services when done
-docker stop localstack-demo-blue
+docker stop localstack-demo-bank-app
 ```
 
 ## 🧪 Testing
@@ -217,7 +234,7 @@ npm run graph  # View dependency graph
 This project follows a **hexagonal architecture** within an **Nx monorepo**.
 
 ```
-demo-blue/
+demo-bank-app/
 ├── apps/                           # Deployable applications
 │   ├── bank-web-app/              # React SPA (Vite + Tailwind)
 │   │   ├── src/                   # Frontend source code

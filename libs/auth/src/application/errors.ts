@@ -1,4 +1,4 @@
-import { AppError } from '@demo-blue/shared-core';
+import { AppError } from '@demo-bank-app/shared-core';
 
 export class AuthError extends AppError {
   readonly code = 'AUTH_ERROR';

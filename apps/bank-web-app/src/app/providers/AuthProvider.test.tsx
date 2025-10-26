@@ -40,9 +40,17 @@ const TestComponent = () => {
         {isAuthenticated ? 'Authenticated' : 'Not Authenticated'}
       </div>
       <div data-testid="user">
-        {user ? `User: ${user.name} (${user.userId})` : 'No User'}
+        {user ? `User: ${user.email} (${user.userId})` : 'No User'}
       </div>
-      <button onClick={() => signIn({ userId: 'test-id', name: 'Test User' })}>
+      <button
+        onClick={() =>
+          signIn({
+            userId: 'test-id',
+            email: 'test.user@example.com',
+            marketingEmailsOptIn: true,
+          })
+        }
+      >
         Sign In
       </button>
       <button onClick={signOut}>Sign Out</button>
@@ -97,7 +105,10 @@ describe('AuthProvider', () => {
   });
 
   it('should restore user from localStorage on mount', async () => {
-    const storedUser = { userId: 'stored-id', name: 'Stored User' };
+    const storedUser = {
+      userId: 'stored-id',
+      email: 'stored.user@example.com',
+    };
     localStorageMock.getItem.mockReturnValue(JSON.stringify(storedUser));
 
     const TestWrapper = createTestWrapper();
@@ -117,10 +128,10 @@ describe('AuthProvider', () => {
       'Authenticated'
     );
     expect(screen.getByTestId('user')).toHaveTextContent(
-      'User: Stored User (stored-id)'
+      'User: stored.user@example.com (stored-id)'
     );
     expect(localStorageMock.getItem).toHaveBeenCalledWith(
-      'demo-blue-auth-user'
+      'demo-bank-app-auth-user'
     );
   });
 
@@ -147,7 +158,7 @@ describe('AuthProvider', () => {
       'Not Authenticated'
     );
     expect(localStorageMock.removeItem).toHaveBeenCalledWith(
-      'demo-blue-auth-user'
+      'demo-bank-app-auth-user'
     );
     expect(consoleSpy).toHaveBeenCalledWith(
       'Failed to restore auth state:',
@@ -187,13 +198,17 @@ describe('AuthProvider', () => {
         'Authenticated'
       );
       expect(screen.getByTestId('user')).toHaveTextContent(
-        'User: Test User (test-id)'
+        'User: test.user@example.com (test-id)'
       );
     });
 
     expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      'demo-blue-auth-user',
-      JSON.stringify({ userId: 'test-id', name: 'Test User' })
+      'demo-bank-app-auth-user',
+      JSON.stringify({
+        userId: 'test-id',
+        email: 'test.user@example.com',
+        marketingEmailsOptIn: true,
+      })
     );
   });
 
@@ -236,7 +251,7 @@ describe('AuthProvider', () => {
     });
 
     expect(localStorageMock.removeItem).toHaveBeenCalledWith(
-      'demo-blue-auth-user'
+      'demo-bank-app-auth-user'
     );
   });
 

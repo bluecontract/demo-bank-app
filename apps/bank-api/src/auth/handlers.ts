@@ -4,9 +4,9 @@ import {
   type AuthResult,
   UserNotFoundError,
   UserAlreadyExistsError,
-} from '@demo-blue/auth';
+} from '@demo-bank-app/auth';
 
-import { bankApiContract } from '@demo-blue/shared-bank-api-contract';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 
 import { getDependencies } from './dependencies';
 import { ServerInferRequest } from '@ts-rest/core';
@@ -15,7 +15,7 @@ import { toUserAlreadyExistsError } from './errors';
 
 const COOKIE_CONFIG = {
   NAME: 'demoAuth',
-  ATTRIBUTES: 'HttpOnly; Secure; SameSite=None; Path=/',
+  ATTRIBUTES: 'HttpOnly; Secure; SameSite=Strict; Path=/',
 } as const;
 
 const createAuthCookie = (token: string, ttlSeconds: number): string => {
@@ -41,7 +41,8 @@ const toAuthResponse = (
     status,
     body: {
       userId: user.id,
-      name: user.name,
+      email: user.email,
+      marketingEmailsOptIn: user.marketingEmailsOptIn,
     },
   };
 };
@@ -56,8 +57,9 @@ export const signUpHandler = async (
   try {
     const result = await signUp(
       {
-        name: body.name,
+        email: body.email,
         isTest: query?.dev === 'true',
+        marketingEmailsOptIn: body.marketingEmailsOptIn,
       },
       deps
     );
@@ -66,7 +68,7 @@ export const signUpHandler = async (
     logger.error('Sign-up failed', { error: String(error) });
     if (error instanceof UserAlreadyExistsError) {
       return toUserAlreadyExistsError(
-        'A user with this name already exists. Please choose a different name.'
+        'A user with this email already exists. Please use a different email.'
       );
     }
     throw error;
@@ -81,20 +83,20 @@ export const signInHandler = async (
   const { logger, config } = deps;
 
   try {
-    logger.info('Signing in', { name: body.name });
+    logger.info('Signing in', { email: body.email });
     const result = await signIn(
       {
-        name: body.name,
+        email: body.email,
       },
       deps
     );
     logger.info('Signed in', { userId: result.user.id });
     return toAuthResponse(200, result, config, responseHeaders);
   } catch (error: unknown) {
-    logger.error('Sign-in failed', { error: String(error), name: body.name });
+    logger.error('Sign-in failed', { error: String(error), email: body.email });
     if (error instanceof UserNotFoundError) {
       return toUnauthorizedResponse(
-        'User not found. Please check the name and try again or sign up.'
+        'User not found. Please check the email and try again or sign up.'
       );
     }
     throw error;

@@ -45,13 +45,21 @@ Resources:
           AttributeType: S
         - AttributeName: BANKING_GSI2SK
           AttributeType: S
+        - AttributeName: HOLD_GSI1PK
+          AttributeType: S
+        - AttributeName: HOLD_GSI1SK
+          AttributeType: S
+        - AttributeName: HOLD_EVENT_GSI1PK
+          AttributeType: S
+        - AttributeName: HOLD_EVENT_GSI1SK
+          AttributeType: S
       KeySchema:
         - AttributeName: PK
           KeyType: HASH
         - AttributeName: SK
           KeyType: RANGE
       GlobalSecondaryIndexes:
-        # AUTH_GSI1 –(PK = USERNAME#name, SK PROFILE)` get user by username.
+        # AUTH_GSI1 –(PK = EMAIL#email, SK PROFILE)` get user by email.
         - IndexName: AUTH_GSI1
           KeySchema:
             - AttributeName: AUTH_GSI1PK
@@ -79,6 +87,24 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
+        # HOLD_GSI1 – (PK = ACCOUNT#<payerAccountNumber>, SK = <status>#<createdAt>#<holdId>) for pending holds listing
+        - IndexName: HOLD_GSI1
+          KeySchema:
+            - AttributeName: HOLD_GSI1PK
+              KeyType: HASH
+            - AttributeName: HOLD_GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        # HOLD_EVENT_GSI1 – (PK = ACCOUNT#<payerAccountNumber>, SK = EVENT#<at>#<holdId>#<eventId>) for full hold history
+        - IndexName: HOLD_EVENT_GSI1
+          KeySchema:
+            - AttributeName: HOLD_EVENT_GSI1PK
+              KeyType: HASH
+            - AttributeName: HOLD_EVENT_GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
@@ -86,7 +112,7 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
         - Key: Application
-          Value: demo-blue
+          Value: demo-bank-app
         - Key: Component
           Value: database
 
@@ -94,8 +120,8 @@ Resources:
   JwtSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub '/demo-blue/${Environment}/auth-jwt-secret'
-      Description: !Sub 'JWT signing secret for demo-blue ${Environment}'
+      Name: !Sub '/demo-bank-app/${Environment}/auth-jwt-secret'
+      Description: !Sub 'JWT signing secret for demo-bank-app ${Environment}'
       GenerateSecretString:
         SecretStringTemplate: '{}'
         GenerateStringKey: 'secret'
@@ -105,9 +131,39 @@ Resources:
         - Key: Environment
           Value: !Ref Environment
         - Key: Application
-          Value: demo-blue
+          Value: demo-bank-app
         - Key: Component
           Value: auth
+
+  OpenAiKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '/demo-bank-app/${Environment}/openai-api-key'
+      Description: !Sub 'OpenAI API key for demo-bank-app ${Environment}'
+      SecretString: |
+        {"openAiApiKey":""}
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: demo-bank-app
+        - Key: Component
+          Value: openai
+
+  MyOsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '/demo-bank-app/${Environment}/myos-credentials'
+      Description: !Sub 'MyOS credentials for demo-bank-app ${Environment}'
+      SecretString: |
+        {"apiKey":"","accountId":""}
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: demo-bank-app
+        - Key: Component
+          Value: myos
 
   BankApi:
     Type: AWS::Serverless::Api
@@ -129,7 +185,9 @@ Resources:
           AUTH_DYNAMO_TABLE_NAME: !Ref BankTable
           BANKING_DYNAMO_TABLE_NAME: !Ref BankTable
           JWT_SECRET_ARN: !Ref JwtSecret
-          JWT_TTL_SECONDS: 3600
+          OPENAI_API_KEY_SECRET_ARN: !Ref OpenAiKeySecret
+          MYOS_SECRET_ARN: !Ref MyOsSecret
+          JWT_TTL_SECONDS: 604800
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
           SERVICE_NAME: !Sub 'bank-api-${Environment}'
           LOG_LEVEL: INFO
@@ -144,6 +202,14 @@ Resources:
               Action:
                 - secretsmanager:GetSecretValue
               Resource: !Ref JwtSecret
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref OpenAiKeySecret
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MyOsSecret
             - Effect: Allow
               Action:
                 - cloudwatch:PutMetricData
@@ -215,6 +281,30 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /v1/accounts/{accountId}
             Method: OPTIONS
+        ListAccountActivityApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/activity/{accountNumber}
+            Method: GET
+        ListAccountActivityOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/activity/{accountNumber}
+            Method: OPTIONS
+        GetActivityDetailApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/activity/{accountNumber}/records/{activityId}
+            Method: GET
+        GetActivityDetailOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/activity/{accountNumber}/records/{activityId}
+            Method: OPTIONS
         FundAccountApi:
           Type: Api
           Properties:
@@ -239,18 +329,6 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /v1/transfers
             Method: OPTIONS
-        ListTransactionsApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountId}/transactions
-            Method: GET
-        ListTransactionsOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountId}/transactions
-            Method: OPTIONS
         GetTransactionApi:
           Type: Api
           Properties:
@@ -262,6 +340,66 @@ Resources:
           Properties:
             RestApiId: !Ref BankApi
             Path: /v1/accounts/{accountId}/transactions/{txnId}
+            Method: OPTIONS
+        ValidatePayNoteApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/validate
+            Method: POST
+        ValidatePayNoteOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/validate
+            Method: OPTIONS
+        ParsePayNotePdfApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/parse-pdf
+            Method: POST
+        ParsePayNotePdfOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/parse-pdf
+            Method: OPTIONS
+        GetPayNoteDetailsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/activity/{accountNumber}/paynotes/{myosEventId}
+            Method: GET
+        GetPayNoteDetailsOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/activity/{accountNumber}/paynotes/{myosEventId}
+            Method: OPTIONS
+        BootstrapPayNoteApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/bootstrap
+            Method: POST
+        BootstrapPayNoteOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/bootstrap
+            Method: OPTIONS
+        PayNoteWebhookApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/webhook
+            Method: POST
+        PayNoteWebhookOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/webhook
             Method: OPTIONS
   # ------------------------------------------------------------------
   # Seed the FUNDING_SOURCE account and its BALANCE row (idempotent)
@@ -310,3 +448,9 @@ Outputs:
     Value: !Ref JwtSecret
     Export:
       Name: !Sub '${AWS::StackName}-JwtSecretArn'
+
+  OpenAiKeySecretArn:
+    Description: 'Secrets Manager secret ARN for OpenAI API key'
+    Value: !Ref OpenAiKeySecret
+    Export:
+      Name: !Sub '${AWS::StackName}-OpenAiKeySecretArn'

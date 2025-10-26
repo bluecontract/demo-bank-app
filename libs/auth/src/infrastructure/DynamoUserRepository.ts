@@ -8,14 +8,14 @@ import {
 import type { UserRepository } from '../application/ports';
 import { User } from '../domain/entities/User';
 import { UserAlreadyExistsError, AuthRepositoryError } from './errors';
-import { AwsResilienceConfigBuilder } from '@demo-blue/shared-config';
-import type { Logger, Metrics } from '@demo-blue/shared-observability';
+import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
+import type { Logger, Metrics } from '@demo-bank-app/shared-observability';
 import {
   TimingUtils,
   METRIC_NAMES,
   OPERATION_NAMES,
   METRIC_UNITS,
-} from '@demo-blue/shared-observability';
+} from '@demo-bank-app/shared-observability';
 
 export interface DynamoUserRepositoryConfig {
   tableName: string;
@@ -27,9 +27,9 @@ export interface DynamoUserRepositoryConfig {
   metrics?: Metrics;
 }
 
-interface UsernameReservationDbItem {
-  PK: string; // USERNAME#{userName}
-  SK: 'USERNAME';
+interface EmailReservationDbItem {
+  PK: string; // EMAIL#{userEmail}
+  SK: 'EMAIL';
   userId: User['id'];
   createdAt: string;
   ttl?: number; // Optional TTL for test users
@@ -38,12 +38,13 @@ interface UsernameReservationDbItem {
 interface UserProfileDbItem {
   PK: string; // USER#{userId}
   SK: 'PROFILE';
-  AUTH_GSI1PK: string; // USERNAME#{userName}
+  AUTH_GSI1PK: string; // EMAIL#{userEmail}
   AUTH_GSI1SK: 'PROFILE';
   id: User['id'];
-  name: User['name'];
+  email: User['email'];
   createdAt: string;
   isTest: boolean;
+  marketingEmailsOptIn: boolean;
   ttl?: number; // Optional TTL for test users
 }
 
@@ -54,9 +55,10 @@ interface UnknownDbItem {
   AUTH_GSI1PK?: string;
   AUTH_GSI1SK?: string;
   id?: string;
-  name?: string;
+  email?: string;
   createdAt?: string;
   isTest?: boolean;
+  marketingEmailsOptIn?: boolean;
   ttl?: number;
   [key: string]: unknown; // Allow additional properties
 }
@@ -91,13 +93,13 @@ export class DynamoUserRepository implements UserRepository {
 
     this.logger?.info('User repository save started', {
       userId: user.id,
-      userName: user.name,
+      userEmail: user.email,
       isTest: user.isTest,
       ...TimingUtils.createTimingMetadata(timing),
     });
 
     const userProfileItem = this.buildUserProfileItem(user);
-    const usernameReservationItem = this.buildUsernameReservationItem(user);
+    const emailReservationItem = this.buildEmailReservationItem(user);
 
     try {
       await this.client.send(
@@ -106,7 +108,7 @@ export class DynamoUserRepository implements UserRepository {
             {
               Put: {
                 TableName: this.tableName,
-                Item: usernameReservationItem,
+                Item: emailReservationItem,
                 ConditionExpression: 'attribute_not_exists(PK)',
               },
             },
@@ -131,7 +133,7 @@ export class DynamoUserRepository implements UserRepository {
 
       this.logger?.info('User repository save completed', {
         userId: user.id,
-        userName: user.name,
+        userEmail: user.email,
         isTest: user.isTest,
         ...TimingUtils.createTimingMetadata(completedTiming),
       });
@@ -142,7 +144,7 @@ export class DynamoUserRepository implements UserRepository {
 
       this.logger?.error('User repository save failed', {
         userId: user.id,
-        userName: user.name,
+        userEmail: user.email,
         isTest: user.isTest,
         error: error instanceof Error ? error.message : 'Unknown error',
         ...TimingUtils.createTimingMetadata(failedTiming),
@@ -158,7 +160,7 @@ export class DynamoUserRepository implements UserRepository {
         this.isConditionalCheckFailedException(error) ||
         this.isTransactionCanceledException(error)
       ) {
-        throw new UserAlreadyExistsError(user.name);
+        throw new UserAlreadyExistsError(user.email);
       }
 
       throw new AuthRepositoryError(
@@ -223,7 +225,7 @@ export class DynamoUserRepository implements UserRepository {
         userId: userId,
         findBy: 'id',
         found: true,
-        userName: user.name,
+        userEmail: user.email,
         isTest: user.isTest,
         ...TimingUtils.createTimingMetadata(completedTiming),
       });
@@ -252,14 +254,14 @@ export class DynamoUserRepository implements UserRepository {
     }
   }
 
-  async findByName(userName: User['name']): Promise<User | null> {
+  async findByEmail(userEmail: User['email']): Promise<User | null> {
     const timing = TimingUtils.startTiming(
       OPERATION_NAMES.AUTH.USER_REPOSITORY_FIND
     );
 
-    this.logger?.debug('User repository find by name started', {
-      userName: userName,
-      findBy: 'name',
+    this.logger?.debug('User repository find by email started', {
+      userEmail,
+      findBy: 'email',
       ...TimingUtils.createTimingMetadata(timing),
     });
 
@@ -271,7 +273,7 @@ export class DynamoUserRepository implements UserRepository {
           KeyConditionExpression:
             'AUTH_GSI1PK = :gsi1pk AND AUTH_GSI1SK = :gsi1sk',
           ExpressionAttributeValues: {
-            ':gsi1pk': `USERNAME#${userName}`,
+            ':gsi1pk': `EMAIL#${userEmail}`,
             ':gsi1sk': 'PROFILE',
           },
         })
@@ -286,9 +288,9 @@ export class DynamoUserRepository implements UserRepository {
           1
         );
 
-        this.logger?.debug('User repository find by name completed', {
-          userName: userName,
-          findBy: 'name',
+        this.logger?.debug('User repository find by email completed', {
+          userEmail,
+          findBy: 'email',
           found: false,
           ...TimingUtils.createTimingMetadata(completedTiming),
         });
@@ -306,9 +308,9 @@ export class DynamoUserRepository implements UserRepository {
         1
       );
 
-      this.logger?.debug('User repository find by name completed', {
-        userName: userName,
-        findBy: 'name',
+      this.logger?.debug('User repository find by email completed', {
+        userEmail,
+        findBy: 'email',
         found: true,
         userId: user.id,
         isTest: user.isTest,
@@ -319,9 +321,9 @@ export class DynamoUserRepository implements UserRepository {
     } catch (error: unknown) {
       const failedTiming = TimingUtils.endTiming(timing);
 
-      this.logger?.error('User repository find by name failed', {
-        userName: userName,
-        findBy: 'name',
+      this.logger?.error('User repository find by email failed', {
+        userEmail,
+        findBy: 'email',
         error: error instanceof Error ? error.message : 'Unknown error',
         ...TimingUtils.createTimingMetadata(failedTiming),
       });
@@ -333,16 +335,16 @@ export class DynamoUserRepository implements UserRepository {
       );
 
       throw new AuthRepositoryError(
-        'find user by name',
+        'find user by email',
         error instanceof Error ? error : undefined
       );
     }
   }
 
-  private buildUsernameReservationItem(user: User): UsernameReservationDbItem {
-    const item: UsernameReservationDbItem = {
-      PK: `USERNAME#${user.name}`,
-      SK: 'USERNAME', // Fixed value for username reservations
+  private buildEmailReservationItem(user: User): EmailReservationDbItem {
+    const item: EmailReservationDbItem = {
+      PK: `EMAIL#${user.email}`,
+      SK: 'EMAIL', // Fixed value for email reservations
       userId: user.id,
       createdAt: user.createdAt.toISOString(),
     };
@@ -359,12 +361,13 @@ export class DynamoUserRepository implements UserRepository {
     const item: UserProfileDbItem = {
       PK: `USER#${user.id}`,
       SK: 'PROFILE', // Use PROFILE for user authentication data
-      AUTH_GSI1PK: `USERNAME#${user.name}`,
-      AUTH_GSI1SK: 'PROFILE', // Only index profile records for username lookup
+      AUTH_GSI1PK: `EMAIL#${user.email}`,
+      AUTH_GSI1SK: 'PROFILE', // Only index profile records for email lookup
       id: user.id,
-      name: user.name,
+      email: user.email,
       createdAt: user.createdAt.toISOString(),
       isTest: user.isTest,
+      marketingEmailsOptIn: user.marketingEmailsOptIn,
     };
 
     // Add TTL for test users
@@ -378,13 +381,13 @@ export class DynamoUserRepository implements UserRepository {
   private mapToUser(item: UnknownDbItem): User {
     try {
       // Validate required fields exist and have correct types
-      if (!item.id || !item.name || !item.createdAt) {
+      if (!item.id || !item.email || !item.createdAt) {
         throw new Error('Invalid user item: missing required fields');
       }
 
       if (
         typeof item.id !== 'string' ||
-        typeof item.name !== 'string' ||
+        typeof item.email !== 'string' ||
         typeof item.createdAt !== 'string'
       ) {
         throw new Error('Invalid user item: incorrect field types');
@@ -406,11 +409,23 @@ export class DynamoUserRepository implements UserRepository {
       }
       const isTest = (isTestValue as boolean) ?? false;
 
+      const marketingOptInValue = item.marketingEmailsOptIn;
+      if (
+        marketingOptInValue !== undefined &&
+        typeof marketingOptInValue !== 'boolean'
+      ) {
+        throw new Error(
+          'Invalid user item: marketingEmailsOptIn must be boolean'
+        );
+      }
+      const marketingEmailsOptIn = marketingOptInValue ?? false;
+
       return new User({
         id: item.id,
-        name: item.name,
+        email: item.email,
         createdAt,
         isTest,
+        marketingEmailsOptIn,
       });
     } catch (error: unknown) {
       throw new AuthRepositoryError(

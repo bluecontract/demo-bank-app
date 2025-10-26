@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Transaction } from './Transaction';
 import { Posting } from '../valueObjects/Posting';
 import { Money } from '../valueObjects/Money';
-import { InvalidTransactionError } from '../errors';
+import { InvalidTransactionError, UnbalancedTransactionError } from '../errors';
 import { FUNDING_SOURCE } from './Account';
 
 const TEST_ACCOUNT_NUMBER_1 = '1234567890';
@@ -318,6 +318,80 @@ describe('Transaction', () => {
       });
 
       expect(transaction1.equals(transaction2)).toBe(false);
+    });
+  });
+
+  describe('createWithId', () => {
+    const postings = [
+      new Posting({
+        accountId: 'acc-123',
+        amount: new Money(100),
+        side: 'DEBIT',
+        accountNumber: TEST_ACCOUNT_NUMBER_1,
+        counterpartyAccountNumber: TEST_ACCOUNT_NUMBER_2,
+      }),
+      new Posting({
+        accountId: 'acc-456',
+        amount: new Money(100),
+        side: 'CREDIT',
+        accountNumber: TEST_ACCOUNT_NUMBER_2,
+        counterpartyAccountNumber: TEST_ACCOUNT_NUMBER_1,
+      }),
+    ];
+
+    it('should create a transaction matching create semantics with provided id', () => {
+      const meta = {
+        description: 'Transfer with known id',
+        idempotencyKey: 'idem-123',
+      };
+
+      vi.useFakeTimers();
+      const frozen = new Date('2024-01-02T00:00:00.000Z');
+      vi.setSystemTime(frozen);
+
+      try {
+        const withId = Transaction.createWithId(postings, meta, 'txn-known');
+        const generated = Transaction.create(postings, meta);
+
+        expect(withId.id).toBe('txn-known');
+        expect(withId.type).toBe(generated.type);
+        expect(withId.status).toBe(generated.status);
+        expect(withId.postings).toEqual(generated.postings);
+        expect(withId.description).toBe(generated.description);
+        expect(withId.transactionIdempotencyKey).toBe(
+          generated.transactionIdempotencyKey
+        );
+        expect(withId.createdAt).toEqual(generated.createdAt);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should enforce balance validation', () => {
+      const unbalancedPostings = [
+        new Posting({
+          accountId: 'acc-123',
+          amount: new Money(100),
+          side: 'DEBIT',
+          accountNumber: TEST_ACCOUNT_NUMBER_1,
+          counterpartyAccountNumber: TEST_ACCOUNT_NUMBER_2,
+        }),
+        new Posting({
+          accountId: 'acc-456',
+          amount: new Money(200),
+          side: 'CREDIT',
+          accountNumber: TEST_ACCOUNT_NUMBER_2,
+          counterpartyAccountNumber: TEST_ACCOUNT_NUMBER_1,
+        }),
+      ];
+
+      expect(() =>
+        Transaction.createWithId(
+          unbalancedPostings,
+          { description: 'Invalid', idempotencyKey: 'invalid' },
+          'txn-invalid'
+        )
+      ).toThrow(UnbalancedTransactionError);
     });
   });
 });

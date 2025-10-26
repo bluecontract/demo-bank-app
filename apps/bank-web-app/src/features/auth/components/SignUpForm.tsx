@@ -9,15 +9,22 @@ interface SignUpFormProps {
   onSuccess?: (user: User) => void;
 }
 
+export const MARKETING_CONSENT_COPY =
+  'I agree to the collection of my email address by Blue Language Labs Inc. and its use for future marketing communications.';
+
 export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
-  const [name, setName] = useState('');
-  const [errors, setErrors] = useState<{ name?: string }>({});
+  const [email, setEmail] = useState('');
+  const [marketingOptIn, setMarketingOptIn] = useState(true);
+  const [errors, setErrors] = useState<{ email?: string }>({});
   const apiClient = useApiClient();
   const navigate = useNavigate();
   const { signIn } = useAuth();
 
   const signUpMutation = useMutation({
-    mutationFn: async (userData: { name: string }) => {
+    mutationFn: async (userData: {
+      email: string;
+      marketingEmailsOptIn: boolean;
+    }) => {
       const isE2ETest =
         typeof window !== 'undefined' &&
         (window.location.search.includes('e2e=true') ||
@@ -34,7 +41,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
       } else {
         if (response.status === 409) {
           throw new Error(
-            'A user with this name already exists. Please choose a different name.'
+            'A user with this email already exists. Please use a different email.'
           );
         }
 
@@ -53,22 +60,31 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
       navigate('/dashboard');
     },
     onError: (error: unknown) => {
-      if (error instanceof Error && error.message?.includes('different name')) {
+      if (
+        error instanceof Error &&
+        error.message?.includes('different email')
+      ) {
         setErrors({
-          name: 'A user with this name already exists. Please choose a different name.',
+          email:
+            'A user with this email already exists. Please use a different email.',
         });
       } else {
-        setErrors({ name: 'Sign up failed. Please try again.' });
+        setErrors({ email: 'Sign up failed. Please try again.' });
       }
     },
   });
 
-  const validateName = (nameValue: string): string | undefined => {
-    if (!nameValue.trim()) {
-      return 'Name is required';
+  const validateEmail = (emailValue: string): string | undefined => {
+    const trimmed = emailValue.trim();
+    if (!trimmed) {
+      return 'Email is required';
     }
-    if (nameValue.length > 50) {
-      return 'Name must be 50 characters or less';
+    if (trimmed.length > 254) {
+      return 'Email must be 254 characters or less';
+    }
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(trimmed)) {
+      return 'Enter a valid email address';
     }
     return undefined;
   };
@@ -76,14 +92,17 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const nameError = validateName(name);
-    if (nameError) {
-      setErrors({ name: nameError });
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setErrors({ email: emailError });
       return;
     }
 
     setErrors({});
-    signUpMutation.mutate({ name: name.trim() });
+    signUpMutation.mutate({
+      email: email.trim().toLowerCase(),
+      marketingEmailsOptIn: marketingOptIn,
+    });
   };
 
   const clearErrors = () => {
@@ -96,40 +115,52 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
         Create Account
       </h2>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
         <div>
           <label
-            htmlFor="name"
+            htmlFor="email"
             className="block text-sm font-medium text-gray-700 mb-2"
           >
-            Full Name
+            Email
           </label>
           <input
-            id="name"
-            name="name"
-            type="text"
-            value={name}
+            id="email"
+            name="email"
+            type="email"
+            value={email}
             onChange={e => {
-              setName(e.target.value);
+              setEmail(e.target.value);
               clearErrors();
             }}
-            className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              errors.name ? 'border-red-500' : 'border-gray-300'
+            className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+              errors.email ? 'border-red-500' : 'border-gray-300'
             }`}
-            placeholder="Enter your full name"
+            placeholder="Enter your email address"
             disabled={signUpMutation.isPending}
           />
-          {errors.name && (
+          {errors.email && (
             <p className="mt-1 text-sm text-red-600" role="alert">
-              {errors.name}
+              {errors.email}
             </p>
           )}
         </div>
 
+        <label className="flex items-start gap-3 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            name="marketingOptIn"
+            checked={marketingOptIn}
+            onChange={event => setMarketingOptIn(event.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            disabled={signUpMutation.isPending}
+          />
+          <span className="leading-5">{MARKETING_CONSENT_COPY}</span>
+        </label>
+
         <button
           type="submit"
           disabled={signUpMutation.isPending}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-emerald-600 text-white py-2 px-4 rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {signUpMutation.isPending ? 'Creating Account...' : 'Create Account'}
         </button>
