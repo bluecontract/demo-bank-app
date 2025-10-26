@@ -165,7 +165,19 @@ export function TransactionDetailsModal({
     return createdEventId ?? fallbackEventId ?? null;
   }, [holdDetail, selectedActivity]);
 
+  const transactionSide = useMemo(() => {
+    if (activityDetail?.kind === 'POSTED_TRANSACTION') {
+      return activityDetail.side;
+    }
+    return resolvedTransaction?.side;
+  }, [activityDetail, resolvedTransaction]);
+
+  const shouldSuppressPayNote = transactionSide === 'CREDIT';
+
   const payNoteReference = useMemo(() => {
+    if (shouldSuppressPayNote) {
+      return null;
+    }
     if (activityDetail?.payNote) {
       return activityDetail.payNote;
     }
@@ -176,13 +188,20 @@ export function TransactionDetailsModal({
       return { myosEventId: holdTimelinePayNoteEventId };
     }
     return null;
-  }, [activityDetail, resolvedTransaction, holdTimelinePayNoteEventId]);
+  }, [
+    activityDetail,
+    resolvedTransaction,
+    holdTimelinePayNoteEventId,
+    shouldSuppressPayNote,
+  ]);
   const hasPayNote = !!payNoteReference;
-  const transactionHasPayNote = !!(
-    resolvedTransaction?.payNote ||
-    (activityDetail?.kind === 'POSTED_TRANSACTION' && activityDetail?.payNote)
-  );
-  const holdHasPayNote = !!holdTimelinePayNoteEventId;
+  const transactionHasPayNote =
+    !shouldSuppressPayNote &&
+    !!(
+      resolvedTransaction?.payNote ||
+      (activityDetail?.kind === 'POSTED_TRANSACTION' && activityDetail?.payNote)
+    );
+  const holdHasPayNote = !shouldSuppressPayNote && !!holdTimelinePayNoteEventId;
   useEffect(() => {
     if (!hasPayNote) {
       setView('activity');
