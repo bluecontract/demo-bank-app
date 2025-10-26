@@ -1,31 +1,27 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom';
-import { TransactionList } from './TransactionList';
 import { ActivityItem } from '../hooks/useActivity';
+import { TransactionList } from './TransactionList';
 
-const onTransactionClickSpy = vi.fn();
+const onActivitySelectSpy = vi.fn();
 
 vi.mock('./TransactionItem', () => ({
   TransactionItem: ({
     item,
-    onTransactionClick,
+    onActivitySelect,
     'data-testid': testId,
   }: {
     item: ActivityItem;
-    onTransactionClick: (txnId: string) => void;
+    onActivitySelect: (activity: ActivityItem) => void;
     'data-testid'?: string;
   }) => (
     <button
       type="button"
       data-testid={testId}
       onClick={() => {
-        onTransactionClick(
-          item.kind === 'POSTED_TRANSACTION' ? item.transactionId : 'noop'
-        );
-        onTransactionClickSpy(
-          item.kind === 'POSTED_TRANSACTION' ? item.transactionId : 'noop'
-        );
+        onActivitySelect(item);
+        onActivitySelectSpy(item);
       }}
     >
       Mock Activity Item - {item.kind}
@@ -43,7 +39,7 @@ vi.mock('./TransactionDetailsModal', () => ({
     }
     return (
       <div data-testid="transaction-modal">
-        Mock Transaction Modal - {props.txnId}
+        Mock Transaction Modal - {props.activityId}
       </div>
     );
   },
@@ -51,6 +47,7 @@ vi.mock('./TransactionDetailsModal', () => ({
 
 const postedTransaction: ActivityItem = {
   kind: 'POSTED_TRANSACTION',
+  activityId: 'TXN#txn-123',
   transactionId: 'txn-123',
   amountMinor: 100000,
   description: 'Deposit',
@@ -64,6 +61,7 @@ const postedTransaction: ActivityItem = {
 
 const holdCreated: ActivityItem = {
   kind: 'HOLD_CREATED',
+  activityId: 'HOLD#hold-1',
   holdId: 'hold-1',
   amountMinor: 50000,
   description: 'Pending purchase',
@@ -76,7 +74,7 @@ const holdCreated: ActivityItem = {
 describe('TransactionList', () => {
   beforeEach(() => {
     modalSpy.mockClear();
-    onTransactionClickSpy.mockClear();
+    onActivitySelectSpy.mockClear();
   });
 
   it('renders loading state', () => {
@@ -166,9 +164,66 @@ describe('TransactionList', () => {
 
     fireEvent.click(screen.getByTestId('activity-item-txn-txn-123'));
 
-    expect(onTransactionClickSpy).toHaveBeenCalledWith('txn-123');
+    expect(onActivitySelectSpy).toHaveBeenCalledWith(postedTransaction);
     expect(
-      screen.getByText('Mock Transaction Modal - txn-123')
+      screen.getByText('Mock Transaction Modal - TXN#txn-123')
     ).toBeInTheDocument();
+  });
+
+  it('opens modal when hold row is clicked', () => {
+    render(
+      <TransactionList
+        activityItems={[holdCreated]}
+        accountId="acc-1"
+        currentAccountNumber="1234567890"
+        accounts={[]}
+        isLoading={false}
+        isError={false}
+        isEmpty={false}
+        data-testid="activity-list"
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('activity-item-hold-hold-1'));
+
+    expect(onActivitySelectSpy).toHaveBeenCalledWith(holdCreated);
+    expect(
+      screen.getByText('Mock Transaction Modal - HOLD#hold-1')
+    ).toBeInTheDocument();
+  });
+
+  it('clears selection when account context changes', () => {
+    const { rerender } = render(
+      <TransactionList
+        activityItems={[postedTransaction]}
+        accountId="acc-1"
+        currentAccountNumber="1234567890"
+        accounts={[]}
+        isLoading={false}
+        isError={false}
+        isEmpty={false}
+        data-testid="activity-list"
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('activity-item-txn-txn-123'));
+    expect(
+      screen.getByText('Mock Transaction Modal - TXN#txn-123')
+    ).toBeInTheDocument();
+
+    rerender(
+      <TransactionList
+        activityItems={[postedTransaction]}
+        accountId="acc-2"
+        currentAccountNumber="1111111111"
+        accounts={[]}
+        isLoading={false}
+        isError={false}
+        isEmpty={false}
+        data-testid="activity-list"
+      />
+    );
+
+    expect(screen.queryByTestId('transaction-modal')).not.toBeInTheDocument();
   });
 });

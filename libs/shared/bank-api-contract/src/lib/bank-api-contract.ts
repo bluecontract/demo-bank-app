@@ -11,6 +11,9 @@ import {
   TransferReqDto,
   TransactionDto,
   ActivityResponseDto,
+  ActivityDetailDto,
+  PayNoteDetailsDto,
+  NotImplementedResponseDto,
 } from './schemas';
 
 const c = initContract();
@@ -176,6 +179,21 @@ export const bankApiContract = c.router(
           'List account activity combining pending holds and posted transactions',
       },
 
+      getActivityDetail: {
+        method: 'GET',
+        path: '/v1/activity/:accountNumber/records/:activityId',
+        pathParams: z.object({
+          accountNumber: z.string().length(10),
+          activityId: z.string(),
+        }),
+        responses: {
+          200: ActivityDetailDto,
+          404: ProblemDto,
+          501: NotImplementedResponseDto,
+        },
+        summary: 'Get detail for a specific activity item',
+      },
+
       getTransaction: {
         method: 'GET',
         path: '/v1/accounts/:accountId/transactions/:txnId',
@@ -185,6 +203,22 @@ export const bankApiContract = c.router(
         }),
         responses: { 200: TransactionDto, 404: ProblemDto },
         summary: 'Get a transaction by ID',
+      },
+
+      getPayNoteDetails: {
+        method: 'GET',
+        path: '/v1/activity/:accountNumber/paynotes/:myosEventId',
+        pathParams: z.object({
+          accountNumber: z.string().length(10),
+          myosEventId: z.string(),
+        }),
+        responses: {
+          200: PayNoteDetailsDto,
+          404: ProblemDto,
+          501: NotImplementedResponseDto,
+        },
+        summary:
+          'Retrieve PayNote document and trigger payload for a given MyOS event',
       },
 
       validatePayNote: {

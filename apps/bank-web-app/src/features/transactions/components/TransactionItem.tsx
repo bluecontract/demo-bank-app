@@ -2,12 +2,6 @@ import { ActivityItem, PostedTransactionActivity } from '../hooks/useActivity';
 import { formatCurrency } from '../../../lib/formatCurrency';
 import { formatAccountNumber } from '../../../lib/formatAccountNumber';
 
-interface TransactionItemProps {
-  item: ActivityItem;
-  onTransactionClick: (txnId: string) => void;
-  'data-testid'?: string;
-}
-
 const formatDate = (timestamp: string) =>
   new Date(timestamp).toLocaleDateString('en-US', {
     month: 'short',
@@ -46,7 +40,7 @@ type VisualState = {
   amountText: string;
   amountClass: string;
   clickable: boolean;
-  linkTransactionId?: string;
+  activityId: string;
 };
 
 const formatCounterpartyLine = (
@@ -91,7 +85,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       amountText: `${isCredit ? '+' : '-'}${amount}`,
       amountClass: isCredit ? 'text-green-600' : 'text-red-600',
       clickable: true,
-      linkTransactionId: item.transactionId,
+      activityId: item.activityId,
     };
   }
 
@@ -124,7 +118,8 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         title: 'Hold Created',
         timestamp: item.createdAt,
         amountClass: 'text-yellow-700',
-        clickable: false,
+        clickable: true,
+        activityId: item.activityId,
       };
     case 'HOLD_CAPTURED':
       return {
@@ -139,7 +134,8 @@ const buildVisualState = (item: ActivityItem): VisualState => {
           ? [...base.subtitleLines, `Captured txn: ${item.transactionId}`]
           : base.subtitleLines,
         amountClass: 'text-yellow-700',
-        clickable: false,
+        clickable: true,
+        activityId: item.activityId,
       };
     case 'HOLD_RELEASED':
       return {
@@ -154,7 +150,8 @@ const buildVisualState = (item: ActivityItem): VisualState => {
           ? [...base.subtitleLines, `Reason: ${item.releaseReason}`]
           : base.subtitleLines,
         amountClass: 'text-blue-700',
-        clickable: false,
+        clickable: true,
+        activityId: item.activityId,
       };
     case 'HOLD_FAILED':
       return {
@@ -168,21 +165,28 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         subtitleLines: [`Failure: ${item.failureCode}`],
         description: item.failureMessage ?? base.description,
         amountClass: 'text-red-700',
-        clickable: false,
+        clickable: true,
+        activityId: item.activityId,
       };
   }
 };
 
+interface TransactionItemProps {
+  item: ActivityItem;
+  onActivitySelect: (activity: ActivityItem) => void;
+  'data-testid'?: string;
+}
+
 export function TransactionItem({
   item,
-  onTransactionClick,
+  onActivitySelect,
   'data-testid': testId,
 }: TransactionItemProps) {
   const visualState = buildVisualState(item);
 
   const handleClick = () => {
-    if (visualState.clickable && visualState.linkTransactionId) {
-      onTransactionClick(visualState.linkTransactionId);
+    if (visualState.clickable) {
+      onActivitySelect(item);
     }
   };
 

@@ -11,6 +11,7 @@ export interface TransactionHeaderItem {
   transactionId: string;
   transactionIdempotencyKey?: string;
   originHoldId?: string;
+  payNoteEventId?: string;
 }
 
 export interface PostingItem {
@@ -29,6 +30,7 @@ export interface PostingItem {
   description: TransactionHeaderItem['description'];
   transactionId: TransactionHeaderItem['transactionId'];
   originHoldId?: string;
+  payNoteEventId?: string;
 }
 
 export function buildTransactionHeaderPutItem(
@@ -46,6 +48,9 @@ export function buildTransactionHeaderPutItem(
     transactionIdempotencyKey: transaction.transactionIdempotencyKey,
     ...(transaction.originHoldId
       ? { originHoldId: transaction.originHoldId }
+      : {}),
+    ...(transaction.payNoteEventId
+      ? { payNoteEventId: transaction.payNoteEventId }
       : {}),
   };
 
@@ -82,6 +87,9 @@ export function buildPostingPutItems(
       transactionId: transaction.id,
       ...(transaction.originHoldId
         ? { originHoldId: transaction.originHoldId }
+        : {}),
+      ...(transaction.payNoteEventId
+        ? { payNoteEventId: transaction.payNoteEventId }
         : {}),
     };
 

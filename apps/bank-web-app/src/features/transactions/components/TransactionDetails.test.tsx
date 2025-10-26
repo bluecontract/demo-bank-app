@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import { TransactionDetails } from './TransactionDetails';
-import { TransactionDetails as TransactionDetailsType } from '../hooks/useTransaction';
+import { ActivityDetail } from '../hooks/useActivityDetail';
 
 vi.mock('../../../lib/formatCurrency', () => ({
   formatCurrency: vi.fn((amount: number) => `$${(amount / 100).toFixed(2)}`),
@@ -14,17 +14,20 @@ vi.mock('../../../lib/formatAccountNumber', () => ({
   }),
 }));
 
-const mockTransaction: TransactionDetailsType = {
-  txnId: 'txn-123',
-  accountId: 'acc-123',
-  side: 'DEBIT',
-  amountMinor: 1000,
-  type: 'TRANSFER',
-  status: 'POSTED',
-  timestamp: '2024-01-01T00:00:00.000Z',
-  description: 'Test transaction description',
-  counterpartyAccountNumber: '0987654321',
-};
+const mockTransaction: Extract<ActivityDetail, { kind: 'POSTED_TRANSACTION' }> =
+  {
+    kind: 'POSTED_TRANSACTION',
+    activityId: 'TXN#txn-123',
+    transactionId: 'txn-123',
+    amountMinor: 1000,
+    description: 'Test transaction description',
+    postedAt: '2024-01-01T00:00:00.000Z',
+    originHoldId: undefined,
+    side: 'DEBIT',
+    type: 'TRANSFER',
+    status: 'POSTED',
+    counterpartyAccountNumber: '0987654321',
+  };
 
 const mockAccounts = [
   {
@@ -70,10 +73,12 @@ describe('TransactionDetails', () => {
   });
 
   it('should render transaction details for incoming transfer', () => {
-    const incomingTransaction = {
+    const incomingTransaction: Extract<
+      ActivityDetail,
+      { kind: 'POSTED_TRANSACTION' }
+    > = {
       ...mockTransaction,
-      side: 'CREDIT' as const,
-      accountId: 'acc-456',
+      side: 'CREDIT',
       counterpartyAccountNumber: '1234567890',
     };
 
@@ -103,10 +108,12 @@ describe('TransactionDetails', () => {
   });
 
   it('should display correct account information for incoming transfer with names', () => {
-    const incomingTransaction = {
+    const incomingTransaction: Extract<
+      ActivityDetail,
+      { kind: 'POSTED_TRANSACTION' }
+    > = {
       ...mockTransaction,
-      side: 'CREDIT' as const,
-      accountId: 'acc-456',
+      side: 'CREDIT',
       counterpartyAccountNumber: '1234567890',
     };
 
@@ -133,7 +140,10 @@ describe('TransactionDetails', () => {
   });
 
   it('should display completed status correctly', () => {
-    const completedTransaction = {
+    const completedTransaction: Extract<
+      ActivityDetail,
+      { kind: 'POSTED_TRANSACTION' }
+    > = {
       ...mockTransaction,
       status: 'COMPLETED',
     };
@@ -157,7 +167,10 @@ describe('TransactionDetails', () => {
   });
 
   it('should not display description section when not provided', () => {
-    const transactionWithoutDescription = {
+    const transactionWithoutDescription: Extract<
+      ActivityDetail,
+      { kind: 'POSTED_TRANSACTION' }
+    > = {
       ...mockTransaction,
       description: undefined,
     };

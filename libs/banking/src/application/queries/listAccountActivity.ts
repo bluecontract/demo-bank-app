@@ -24,6 +24,7 @@ const KIND_PRIORITY: Record<ActivityKind, number> = {
 type HoldEventActivityItem =
   | {
       kind: 'HOLD_CREATED';
+      activityId: string;
       holdId: string;
       amountMinor: number;
       description?: string;
@@ -34,6 +35,7 @@ type HoldEventActivityItem =
     }
   | {
       kind: 'HOLD_RELEASED';
+      activityId: string;
       holdId: string;
       amountMinor: number;
       description?: string;
@@ -42,6 +44,7 @@ type HoldEventActivityItem =
     }
   | {
       kind: 'HOLD_CAPTURED';
+      activityId: string;
       holdId: string;
       amountMinor: number;
       description?: string;
@@ -51,6 +54,7 @@ type HoldEventActivityItem =
     }
   | {
       kind: 'HOLD_FAILED';
+      activityId: string;
       holdId: string;
       amountMinor: number;
       description?: string;
@@ -61,6 +65,7 @@ type HoldEventActivityItem =
 
 type PostedTransactionActivityItem = {
   kind: 'POSTED_TRANSACTION';
+  activityId: string;
   transactionId: string;
   amountMinor: number;
   description?: string;
@@ -121,6 +126,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
   z.discriminatedUnion('kind', [
     z.object({
       kind: z.literal('HOLD_CREATED'),
+      activityId: z.string(),
       holdId: z.string(),
       amountMinor: z.number(),
       description: z.string().optional(),
@@ -131,6 +137,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
     }),
     z.object({
       kind: z.literal('HOLD_RELEASED'),
+      activityId: z.string(),
       holdId: z.string(),
       amountMinor: z.number(),
       description: z.string().optional(),
@@ -139,6 +146,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
     }),
     z.object({
       kind: z.literal('HOLD_CAPTURED'),
+      activityId: z.string(),
       holdId: z.string(),
       amountMinor: z.number(),
       description: z.string().optional(),
@@ -148,6 +156,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
     }),
     z.object({
       kind: z.literal('HOLD_FAILED'),
+      activityId: z.string(),
       holdId: z.string(),
       amountMinor: z.number(),
       description: z.string().optional(),
@@ -165,6 +174,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
 const PostedTransactionActivityItemSchema: z.ZodType<PostedTransactionActivityItem> =
   z.object({
     kind: z.literal('POSTED_TRANSACTION'),
+    activityId: z.string(),
     transactionId: z.string(),
     amountMinor: z.number(),
     description: z.string().optional(),
@@ -252,6 +262,7 @@ const buildHoldEventFeedItem = (
         time: event.at,
         item: {
           kind: 'HOLD_CREATED',
+          activityId: `HOLD#${record.holdId}`,
           holdId: record.holdId,
           amountMinor: record.amountMinor,
           description: record.description,
@@ -270,6 +281,7 @@ const buildHoldEventFeedItem = (
         time: event.at,
         item: {
           kind: 'HOLD_RELEASED',
+          activityId: `HOLD#${record.holdId}`,
           holdId: record.holdId,
           amountMinor: record.amountMinor,
           description: record.description,
@@ -290,6 +302,7 @@ const buildHoldEventFeedItem = (
         time: event.at,
         item: {
           kind: 'HOLD_CAPTURED',
+          activityId: `HOLD#${record.holdId}`,
           holdId: record.holdId,
           amountMinor: record.amountMinor,
           description: record.description,
@@ -308,6 +321,7 @@ const buildHoldEventFeedItem = (
         time: event.at,
         item: {
           kind: 'HOLD_FAILED',
+          activityId: `HOLD#${record.holdId}`,
           holdId: record.holdId,
           amountMinor: record.amountMinor,
           description: record.description,
@@ -340,6 +354,7 @@ const toTransactionFeedItem = (summary: {
   time: summary.postedAt,
   item: {
     kind: 'POSTED_TRANSACTION',
+    activityId: `TXN#${summary.transactionId}`,
     transactionId: summary.transactionId,
     postedAt: summary.postedAt,
     amountMinor: summary.amountMinor,

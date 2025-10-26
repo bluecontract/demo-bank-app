@@ -18,3 +18,12 @@ export const calculateBlueIdFromObject = (
   const node = blue.jsonValueToNode(payNote);
   return blue.calculateBlueIdSync(node);
 };
+
+export const toReversedJson = (
+  payNote: Record<string, unknown>
+): Record<string, unknown> => {
+  const paynoteNode = blue.jsonValueToNode(payNote);
+  const reversedNode = blue.reverse(paynoteNode);
+  const restoredNode = blue.restoreInlineTypes(reversedNode);
+  return blue.nodeToJson(restoredNode) as Record<string, unknown>;
+};

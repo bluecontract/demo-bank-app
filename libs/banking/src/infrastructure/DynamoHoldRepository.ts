@@ -268,6 +268,27 @@ export class DynamoHoldRepository implements HoldRepository {
     return mapHoldMetaItemToHold(result.Item as HoldMetaItem);
   }
 
+  async listHoldEvents(holdId: Hold['holdId']): Promise<HoldEvent[]> {
+    const query = await this.client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :eventPrefix)',
+        ExpressionAttributeNames: {
+          '#pk': 'PK',
+          '#sk': 'SK',
+        },
+        ExpressionAttributeValues: {
+          ':pk': `${HOLD_ITEM_CONSTANTS.TABLE_PREFIXES.HOLD}${holdId}`,
+          ':eventPrefix': HOLD_ITEM_CONSTANTS.SORT_KEYS.EVENT_PREFIX,
+        },
+        ScanIndexForward: true,
+      })
+    );
+
+    const events = (query.Items ?? []) as HoldEventItem[];
+    return events.map(item => mapHoldEventItemToHoldEvent(item));
+  }
+
   async listHoldActivityByAccountNumber(
     accountNumber: Hold['payerAccountNumber'],
     options: PaginationOptions = {}

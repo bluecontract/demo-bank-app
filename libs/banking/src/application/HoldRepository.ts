@@ -75,6 +75,7 @@ export interface HoldRepository {
   putHoldMeta(hold: Hold): Promise<void>;
   appendHoldEvent(holdId: Hold['holdId'], event: HoldEvent): Promise<void>;
   getHold(holdId: Hold['holdId']): Promise<Hold | null>;
+  listHoldEvents(holdId: Hold['holdId']): Promise<HoldEvent[]>;
   listHoldActivityByAccountNumber(
     accountNumber: Hold['payerAccountNumber'],
     options?: PaginationOptions

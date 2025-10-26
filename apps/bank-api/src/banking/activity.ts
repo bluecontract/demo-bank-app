@@ -18,6 +18,7 @@ const toResponseItem = (item: ActivityItem) => {
     case 'POSTED_TRANSACTION':
       return {
         kind: item.kind,
+        activityId: item.activityId,
         transactionId: item.transactionId,
         amountMinor: item.amountMinor,
         description: item.description,
@@ -31,6 +32,7 @@ const toResponseItem = (item: ActivityItem) => {
     case 'HOLD_CREATED':
       return {
         kind: item.kind,
+        activityId: item.activityId,
         holdId: item.holdId,
         amountMinor: item.amountMinor,
         description: item.description,
@@ -42,6 +44,7 @@ const toResponseItem = (item: ActivityItem) => {
     case 'HOLD_RELEASED':
       return {
         kind: item.kind,
+        activityId: item.activityId,
         holdId: item.holdId,
         amountMinor: item.amountMinor,
         description: item.description,
@@ -51,6 +54,7 @@ const toResponseItem = (item: ActivityItem) => {
     case 'HOLD_CAPTURED':
       return {
         kind: item.kind,
+        activityId: item.activityId,
         holdId: item.holdId,
         amountMinor: item.amountMinor,
         description: item.description,
@@ -61,6 +65,7 @@ const toResponseItem = (item: ActivityItem) => {
     case 'HOLD_FAILED':
       return {
         kind: item.kind,
+        activityId: item.activityId,
         holdId: item.holdId,
         amountMinor: item.amountMinor,
         description: item.description,

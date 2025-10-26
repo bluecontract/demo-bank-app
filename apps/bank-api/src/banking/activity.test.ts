@@ -62,12 +62,14 @@ describe('listAccountActivityHandler', () => {
       items: [
         {
           kind: 'HOLD_CREATED' as const,
+          activityId: 'HOLD#hold-123',
           holdId: 'hold-123',
           amountMinor: 5_000,
           createdAt: '2024-01-02T00:00:00.000Z',
         },
         {
           kind: 'HOLD_RELEASED' as const,
+          activityId: 'HOLD#hold-123',
           holdId: 'hold-123',
           amountMinor: 5_000,
           releasedAt: '2024-01-02T02:00:00.000Z',
@@ -75,6 +77,7 @@ describe('listAccountActivityHandler', () => {
         },
         {
           kind: 'POSTED_TRANSACTION' as const,
+          activityId: 'TXN#txn-123',
           transactionId: 'txn-123',
           amountMinor: 5_000,
           postedAt: '2024-01-02T03:00:00.000Z',
@@ -114,6 +117,7 @@ describe('listAccountActivityHandler', () => {
       items: [
         {
           kind: 'HOLD_CREATED',
+          activityId: 'HOLD#hold-123',
           holdId: 'hold-123',
           amountMinor: 5_000,
           description: undefined,
@@ -124,6 +128,7 @@ describe('listAccountActivityHandler', () => {
         },
         {
           kind: 'HOLD_RELEASED',
+          activityId: 'HOLD#hold-123',
           holdId: 'hold-123',
           amountMinor: 5_000,
           description: undefined,
@@ -132,6 +137,7 @@ describe('listAccountActivityHandler', () => {
         },
         {
           kind: 'POSTED_TRANSACTION',
+          activityId: 'TXN#txn-123',
           transactionId: 'txn-123',
           amountMinor: 5_000,
           description: undefined,

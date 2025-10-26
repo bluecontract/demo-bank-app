@@ -24,6 +24,7 @@ export interface Hold {
   relatedTransactionId?: string;
   releasedAt?: string;
   releaseReason?: string;
+  payNoteEventId?: string;
 }
 
 export type HoldEvent =
@@ -32,21 +33,25 @@ export type HoldEvent =
       type: 'CREATED';
       createdByUserId?: string;
       idempotencyKeyHash?: string;
+      payNoteEventId?: string;
     }
   | {
       at: string;
       type: 'CAPTURED';
       transactionId: string;
       counterpartyAccountNumber: string;
+      payNoteEventId?: string;
     }
   | {
       at: string;
       type: 'RELEASED';
       reason?: string;
+      payNoteEventId?: string;
     }
   | {
       at: string;
       type: 'FAILED';
       code: HoldFailedCode;
       message?: string;
+      payNoteEventId?: string;
     };

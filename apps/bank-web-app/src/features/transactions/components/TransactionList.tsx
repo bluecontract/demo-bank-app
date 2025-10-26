@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TransactionItem } from './TransactionItem';
 import { TransactionDetailsModal } from './TransactionDetailsModal';
 import { ActivityItem } from '../hooks/useActivity';
@@ -26,15 +26,23 @@ export function TransactionList({
   isEmpty,
   'data-testid': testId,
 }: TransactionListProps) {
-  const [selectedTxnId, setSelectedTxnId] = useState<string | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(
+    null
+  );
 
-  const handleTransactionClick = (txnId: string) => {
-    setSelectedTxnId(txnId);
+  const handleActivitySelect = (activity: ActivityItem) => {
+    setSelectedActivity(activity);
   };
 
   const handleCloseModal = () => {
-    setSelectedTxnId(null);
+    setSelectedActivity(null);
   };
+
+  useEffect(() => {
+    // Reset selection when account context changes to avoid stale details
+    setSelectedActivity(null);
+  }, [accountId, currentAccountNumber]);
+
   if (isLoading) {
     return (
       <div
@@ -107,7 +115,7 @@ export function TransactionList({
                 <TransactionItem
                   key={key}
                   item={item}
-                  onTransactionClick={handleTransactionClick}
+                  onActivitySelect={handleActivitySelect}
                   data-testid={`activity-item-${key}`}
                 />
               );
@@ -116,12 +124,14 @@ export function TransactionList({
         </div>
       </div>
 
-      {selectedTxnId && (
+      {selectedActivity && (
         <TransactionDetailsModal
-          isOpen={!!selectedTxnId}
+          isOpen={!!selectedActivity}
           onClose={handleCloseModal}
           accountId={accountId}
-          txnId={selectedTxnId}
+          accountNumber={currentAccountNumber}
+          activityId={selectedActivity.activityId}
+          selectedActivity={selectedActivity}
           currentAccountNumber={currentAccountNumber}
           accounts={accounts}
         />

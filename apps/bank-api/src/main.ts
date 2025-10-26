@@ -18,10 +18,12 @@ import { fundAccountHandler } from './banking/fundAccount';
 import { transferMoneyHandler } from './banking/transferMoney';
 import { getTransactionHandler } from './banking/getTransaction';
 import { listAccountActivityHandler } from './banking/activity';
+import { getActivityDetailHandler } from './banking/getActivityDetail';
 import { validatePayNoteHandler } from './paynote/validatePayNote';
 import { parsePayNotePdfHandler } from './paynote/parsePayNotePdf';
 import { bootstrapPayNoteHandler } from './paynote/bootstrapPayNote';
 import { payNoteWebhookHandler } from './paynote/webhook';
+import { getPayNoteDetailsHandler } from './paynote/getPayNoteDetails';
 
 const metrics = getMetrics();
 const logger = getLogger();
@@ -55,10 +57,12 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       fundAccount: fundAccountHandler,
       transferMoney: transferMoneyHandler,
       listActivity: listAccountActivityHandler,
+      getActivityDetail: getActivityDetailHandler,
       getTransaction: getTransactionHandler,
       validatePayNote: validatePayNoteHandler,
       bootstrapPayNote: bootstrapPayNoteHandler,
       parsePayNotePdf: parsePayNotePdfHandler,
+      getPayNoteDetails: getPayNoteDetailsHandler,
       payNoteWebhook: payNoteWebhookHandler,
     },
   }),

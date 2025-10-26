@@ -31,6 +31,7 @@ export interface CaptureHoldCommand {
   userId: string;
   idempotencyKey: string;
   counterpartyAccountNumber?: string;
+  payNoteEventId?: string;
 }
 
 export interface CaptureHoldDependencies {
@@ -185,6 +186,7 @@ export async function captureHold(
           existingHold.description ??
           `Captured hold ${existingHold.holdId} to ${resolvedCounterparty}`,
         originHoldId: existingHold.holdId,
+        payNoteEventId: cmd.payNoteEventId ?? existingHold.payNoteEventId,
       },
       transactionId
     );
@@ -210,6 +212,7 @@ export async function captureHold(
         type: 'CAPTURED',
         transactionId: transaction.id,
         counterpartyAccountNumber: resolvedCounterparty,
+        payNoteEventId: cmd.payNoteEventId,
       },
       transaction,
       idempotencyKey: cmd.idempotencyKey,

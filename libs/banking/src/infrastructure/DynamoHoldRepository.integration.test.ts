@@ -1441,4 +1441,85 @@ describe('DynamoHoldRepository integration', () => {
       counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
     });
   });
+
+  it('returns timeline events for a hold in chronological order', async () => {
+    const holdId = 'hold-timeline';
+    const createdAt = '2024-02-01T10:00:00.000Z';
+    const capturedAt = '2024-02-01T11:00:00.000Z';
+    const releasedAt = '2024-02-01T12:00:00.000Z';
+
+    await repository.putHoldMeta({
+      holdId,
+      payerAccountNumber: ACCOUNT_NUMBER,
+      counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+      amountMinor: 750,
+      currency: 'USD',
+      status: 'PENDING',
+      description: 'Timeline verification hold',
+      createdAt,
+    });
+    await repository.appendHoldEvent(holdId, {
+      at: createdAt,
+      type: 'CREATED',
+      createdByUserId: USER_ID,
+      idempotencyKeyHash: hashIdempotencyKey('timeline-created'),
+    });
+
+    await repository.putHoldMeta({
+      holdId,
+      payerAccountNumber: ACCOUNT_NUMBER,
+      counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+      amountMinor: 750,
+      currency: 'USD',
+      status: 'CAPTURED',
+      description: 'Timeline verification hold',
+      createdAt,
+      relatedTransactionId: 'txn-timeline',
+    });
+    await repository.appendHoldEvent(holdId, {
+      at: capturedAt,
+      type: 'CAPTURED',
+      transactionId: 'txn-timeline',
+      counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+    });
+
+    await repository.putHoldMeta({
+      holdId,
+      payerAccountNumber: ACCOUNT_NUMBER,
+      counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+      amountMinor: 750,
+      currency: 'USD',
+      status: 'RELEASED',
+      description: 'Timeline verification hold',
+      createdAt,
+      releasedAt,
+      releaseReason: 'Completed',
+    });
+    await repository.appendHoldEvent(holdId, {
+      at: releasedAt,
+      type: 'RELEASED',
+      reason: 'Completed',
+    });
+
+    const events = await repository.listHoldEvents(holdId);
+
+    expect(events.map(event => event.type)).toEqual([
+      'CREATED',
+      'CAPTURED',
+      'RELEASED',
+    ]);
+    expect(events[0]).toMatchObject({
+      type: 'CREATED',
+      createdByUserId: USER_ID,
+    });
+    expect(events[1]).toMatchObject({
+      type: 'CAPTURED',
+      transactionId: 'txn-timeline',
+      counterpartyAccountNumber: COUNTERPARTY_ACCOUNT_NUMBER,
+    });
+    expect(events[2]).toMatchObject({
+      type: 'RELEASED',
+      reason: 'Completed',
+    });
+  });
 });
