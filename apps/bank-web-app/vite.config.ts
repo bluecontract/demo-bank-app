@@ -27,6 +27,12 @@ export default defineConfig(() => ({
     __BANK_API_URL__: JSON.stringify(
       process.env.BANK_API_URL || 'http://localhost:3000'
     ),
+    __INTRO_VIDEO_URL__: JSON.stringify(
+      process.env.INTRO_VIDEO_URL || '/assets/login-demo-placeholder.mp4'
+    ),
+    __PAYNOTE_DEMO_VIDEO_URL__: JSON.stringify(
+      process.env.PAYNOTE_DEMO_VIDEO_URL || '/assets/login-demo-placeholder.mp4'
+    ),
   },
   // Uncomment this if you are using workers.
   // worker: {

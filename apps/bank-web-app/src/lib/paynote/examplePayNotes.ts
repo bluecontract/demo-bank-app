@@ -97,8 +97,16 @@ contracts:
 
 payNoteInitialStateDescription:
   summary: |
-    ## You are about to send a one-time payment of $250.00.
-    Once you approve, we'll immediately send $250.00 to the recipient.
+    ## This is a direct payment of $250.00.
+    This document authorizes a single, immediate transfer of funds.
+  description: |
+    #### Participants
+    * **Payer**: Initiates the request and funds the payment.
+    * **Payee**: Receives payment once approval is granted.
+    * **Guarantor**: Holds and releases the funds.
+
+    #### Operations
+    There are no actions for any participant to take. This payment is fully automated.
 `;
 
 const ONE_TIME_PAYMENT_WITH_AUTHORIZATION_YAML = `name: One time payment with authorization
@@ -147,9 +155,8 @@ contracts:
 payNoteInitialStateDescription:
   summary: |
     ## Transfer $50.00 after an approval step
-    We'll hold the funds until the designated approver authorizes the payment.
+    This document holds the funds until the designated approver authorizes payment.
   details: |
-    This PayNote adds a lightweight authorization step to a one-time transfer.
 
     #### Participants
     * **Payer**: Initiates the request and funds the payment.
@@ -247,7 +254,7 @@ const exampleDefinitions: ExamplePayNoteDefinition[] = [
     templateFields: [
       {
         key: 'AUTHORIZER_EMAIL',
-        label: 'Approver Email',
+        label: 'Authorizer Email',
         description: 'Notification email for the approver who must authorize.',
         placeholder: 'e.g. approver@bluecontract.com',
         defaultValue: '{{CURRENT_USER_EMAIL}}',
