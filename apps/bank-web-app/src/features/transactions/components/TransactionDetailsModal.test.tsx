@@ -345,8 +345,56 @@ describe('TransactionDetailsModal', () => {
     expect(screen.getByText('Fallback failure')).toBeInTheDocument();
   });
 
-  it('shows PayNote helper when payNote metadata is present', () => {
+  it('shows PayNote helper when payNote metadata is present for payer view', () => {
     let latestOptions: unknown;
+    usePayNoteDetailsMock.mockImplementation(options => {
+      latestOptions = options;
+      return {
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        error: undefined,
+        refetch: vi.fn(),
+      };
+    });
+
+    useActivityDetailMock.mockReturnValue({
+      data: {
+        kind: 'POSTED_TRANSACTION',
+        activityId: 'TXN#txn-1',
+        transactionId: 'txn-1',
+        amountMinor: 1200,
+        description: 'Test',
+        postedAt: '2024-01-01T00:00:00.000Z',
+        originHoldId: null,
+        side: 'DEBIT',
+        type: 'FUNDING',
+        status: 'POSTED',
+        counterpartyAccountNumber: '0987654321',
+        payNote: { myosEventId: 'event-123' },
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(
+      <TransactionDetailsModal
+        {...defaultProps}
+        selectedActivity={{ ...transactionActivity, side: 'DEBIT' }}
+      />
+    );
+
+    expect(
+      screen.getByText(/This transaction is part of a PayNote transfer/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'See details' })
+    ).toBeInTheDocument();
+    expect((latestOptions as { enabled?: boolean })?.enabled).toBe(false);
+  });
+
+  it('hides PayNote helper for receiver view even when payNote metadata exists', () => {
+    let latestOptions: { enabled?: boolean } | undefined;
     usePayNoteDetailsMock.mockImplementation(options => {
       latestOptions = options;
       return {
@@ -380,15 +428,13 @@ describe('TransactionDetailsModal', () => {
     render(<TransactionDetailsModal {...defaultProps} />);
 
     expect(
-      screen.getByText(/This transaction is part of a PayNote transfer/i)
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'See details' })
-    ).toBeInTheDocument();
-    expect((latestOptions as { enabled?: boolean })?.enabled).toBe(false);
+      screen.queryByText(/This transaction is part of a PayNote transfer/i)
+    ).not.toBeInTheDocument();
+    expect(screen.getByText('Standard Transfer')).toBeInTheDocument();
+    expect(latestOptions?.enabled).toBe(false);
   });
 
-  it('switches to PayNote view and displays details when helper is activated', async () => {
+  it('switches to PayNote view and displays details when helper is activated for payer view', async () => {
     const payNoteDetails = {
       myosEventId: 'event-123',
       document: { sample: 'yaml' },
@@ -418,7 +464,7 @@ describe('TransactionDetailsModal', () => {
         description: 'Test',
         postedAt: '2024-01-01T00:00:00.000Z',
         originHoldId: null,
-        side: 'CREDIT',
+        side: 'DEBIT',
         type: 'FUNDING',
         status: 'POSTED',
         counterpartyAccountNumber: '0987654321',
@@ -428,7 +474,12 @@ describe('TransactionDetailsModal', () => {
       isError: false,
     });
 
-    render(<TransactionDetailsModal {...defaultProps} />);
+    render(
+      <TransactionDetailsModal
+        {...defaultProps}
+        selectedActivity={{ ...transactionActivity, side: 'DEBIT' }}
+      />
+    );
 
     expect(latestOptions?.enabled).toBe(false);
 
@@ -461,7 +512,7 @@ describe('TransactionDetailsModal', () => {
     );
   });
 
-  it('renders PayNote loading state while details are fetching', async () => {
+  it('renders PayNote loading state while details are fetching for payer view', async () => {
     usePayNoteDetailsMock.mockImplementation(options => ({
       data: undefined,
       isLoading: Boolean(options.enabled),
@@ -479,7 +530,7 @@ describe('TransactionDetailsModal', () => {
         description: 'Test',
         postedAt: '2024-01-01T00:00:00.000Z',
         originHoldId: null,
-        side: 'CREDIT',
+        side: 'DEBIT',
         type: 'FUNDING',
         status: 'POSTED',
         counterpartyAccountNumber: '0987654321',
@@ -489,14 +540,19 @@ describe('TransactionDetailsModal', () => {
       isError: false,
     });
 
-    render(<TransactionDetailsModal {...defaultProps} />);
+    render(
+      <TransactionDetailsModal
+        {...defaultProps}
+        selectedActivity={{ ...transactionActivity, side: 'DEBIT' }}
+      />
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'See details' }));
 
     expect(await screen.findByTestId('paynote-loading')).toBeInTheDocument();
   });
 
-  it('renders PayNote error state and allows retry', async () => {
+  it('renders PayNote error state and allows retry for payer view', async () => {
     const refetchMock = vi.fn();
     const error = Object.assign(new Error('Unable to fetch'), { status: 500 });
 
@@ -517,7 +573,7 @@ describe('TransactionDetailsModal', () => {
         description: 'Test',
         postedAt: '2024-01-01T00:00:00.000Z',
         originHoldId: null,
-        side: 'CREDIT',
+        side: 'DEBIT',
         type: 'FUNDING',
         status: 'POSTED',
         counterpartyAccountNumber: '0987654321',
@@ -527,7 +583,12 @@ describe('TransactionDetailsModal', () => {
       isError: false,
     });
 
-    render(<TransactionDetailsModal {...defaultProps} />);
+    render(
+      <TransactionDetailsModal
+        {...defaultProps}
+        selectedActivity={{ ...transactionActivity, side: 'DEBIT' }}
+      />
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'See details' }));
 
