@@ -144,17 +144,60 @@ describe('getPayNoteDetailsHandler', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual({
+    expect(response.body).toMatchObject({
       myosEventId,
-      documentYaml: '---\npaynote',
-      transactionRequest: [{ type: { name: 'Reserve Funds Requested' } }],
-      triggerEvent: { actor: 'payerChannel' },
+      document: {
+        payerAccountNumber: {
+          value: TEST_ACCOUNT_NUMBER,
+        },
+      },
       fetchedAt: '2024-02-01T12:00:00.000Z',
+    });
+
+    expect(response.body.document?.payerAccountNumber?.type).toBeDefined();
+    expect(Array.isArray(response.body.transactionRequest?.items)).toBe(true);
+    expect(response.body.transactionRequest?.items?.length).toBeGreaterThan(0);
+    expect(response.body.triggerEvent).toMatchObject({
+      actor: { value: 'payerChannel' },
     });
     expect(logger.info).toHaveBeenCalledWith(
       'PayNote details fetched successfully',
       expect.objectContaining({ myosEventId })
     );
+  });
+
+  it('returns document object when documentYaml is missing', async () => {
+    const myosEventId = 'event-serialize';
+    const payload = {
+      id: myosEventId,
+      object: {
+        document: {
+          payerAccountNumber: { value: TEST_ACCOUNT_NUMBER },
+          payeeAccountNumber: { value: '0987654321' },
+        },
+        emitted: [],
+        triggeredBy: null,
+      },
+    };
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue(payload),
+    });
+
+    const response = await getPayNoteDetailsHandler(
+      {
+        params: { accountNumber: TEST_ACCOUNT_NUMBER, myosEventId },
+      } as any,
+      { request: createRequestContext() }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.document).toMatchObject({
+      payerAccountNumber: { value: TEST_ACCOUNT_NUMBER },
+      payeeAccountNumber: { value: '0987654321' },
+    });
   });
 
   it('returns 404 if account is not owned by the user', async () => {

@@ -45,23 +45,27 @@ const HoldTimelineEventSchema = z.discriminatedUnion('type', [
     at: z.string().datetime({ offset: true }),
     createdByUserId: z.string().optional(),
     idempotencyKeyHash: z.string().optional(),
+    payNoteEventId: z.string().optional(),
   }),
   z.object({
     type: z.literal('CAPTURED'),
     at: z.string().datetime({ offset: true }),
     transactionId: z.string(),
     counterpartyAccountNumber: z.string().optional(),
+    payNoteEventId: z.string().optional(),
   }),
   z.object({
     type: z.literal('RELEASED'),
     at: z.string().datetime({ offset: true }),
     reason: z.string().optional(),
+    payNoteEventId: z.string().optional(),
   }),
   z.object({
     type: z.literal('FAILED'),
     at: z.string().datetime({ offset: true }),
     code: HoldFailureCodeSchema,
     message: z.string().optional(),
+    payNoteEventId: z.string().optional(),
   }),
 ]);
 
@@ -236,6 +240,7 @@ export type ActivityDetailDto = z.infer<typeof ActivityDetailDto>;
 export const PayNoteDetailsDto = z.object({
   myosEventId: z.string(),
   documentYaml: z.string().optional(),
+  document: z.unknown().optional(),
   transactionRequest: z.unknown(),
   triggerEvent: z.unknown(),
   fetchedAt: z.string().datetime({ offset: true }),

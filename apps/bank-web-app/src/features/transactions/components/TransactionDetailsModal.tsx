@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { TransactionDetails } from './TransactionDetails';
 import { HoldDetails } from './HoldDetails';
 import { useActivityDetail, ActivityDetail } from '../hooks/useActivityDetail';
@@ -7,6 +8,8 @@ import { Spinner } from '../../../ui/Spinner';
 import { Button } from '../../../ui/Button';
 import { Account } from '../../../types/api';
 import { ActivityItem } from '../hooks/useActivity';
+import { usePayNoteDetails } from '../hooks/usePayNoteDetails';
+import { PayNoteDetailsPanel } from './PayNoteDetailsPanel';
 
 interface TransactionDetailsModalProps {
   isOpen: boolean;
@@ -29,6 +32,7 @@ export function TransactionDetailsModal({
   currentAccountNumber,
   accounts: propAccounts,
 }: TransactionDetailsModalProps) {
+  const [view, setView] = useState<'activity' | 'paynote'>('activity');
   const {
     data: activityDetail,
     isLoading,
@@ -43,6 +47,17 @@ export function TransactionDetailsModal({
   const { data: fetchedAccounts, isLoading: isLoadingAccounts } = useAccounts();
 
   const accounts = propAccounts || fetchedAccounts || [];
+  const isPayNoteView = view === 'paynote';
+
+  useEffect(() => {
+    if (!isOpen) {
+      setView('activity');
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    setView('activity');
+  }, [activityId, accountNumber]);
 
   const fallbackTransactionId =
     selectedActivity?.kind === 'POSTED_TRANSACTION'
@@ -89,6 +104,90 @@ export function TransactionDetailsModal({
       : fallbackActivityDetail;
 
   const holdDetail = activityDetail?.kind === 'HOLD' ? activityDetail : null;
+  const holdTimelinePayNoteEventId = useMemo(() => {
+    if (!holdDetail?.timeline) {
+      return null;
+    }
+
+    const desiredType = (() => {
+      switch (selectedActivity?.kind) {
+        case 'HOLD_CREATED':
+          return 'CREATED';
+        case 'HOLD_CAPTURED':
+          return 'CAPTURED';
+        case 'HOLD_RELEASED':
+          return 'RELEASED';
+        case 'HOLD_FAILED':
+          return 'FAILED';
+        default:
+          return null;
+      }
+    })();
+
+    const matchesSelectedActivity = (
+      event: (typeof holdDetail.timeline)[number]
+    ) => {
+      if (!selectedActivity) return false;
+      if (event.payNoteEventId == null) return false;
+
+      switch (selectedActivity.kind) {
+        case 'HOLD_CREATED':
+          return event.type === 'CREATED';
+        case 'HOLD_CAPTURED':
+          return (
+            event.type === 'CAPTURED' &&
+            'transactionId' in event &&
+            event.transactionId === selectedActivity.transactionId
+          );
+        case 'HOLD_RELEASED':
+          return event.type === 'RELEASED';
+        case 'HOLD_FAILED':
+          return event.type === 'FAILED';
+        default:
+          return false;
+      }
+    };
+
+    if (desiredType) {
+      const matchedEvent = holdDetail.timeline.find(matchesSelectedActivity);
+      if (matchedEvent?.payNoteEventId) {
+        return matchedEvent.payNoteEventId;
+      }
+    }
+
+    const createdEventId = holdDetail.timeline.find(
+      event => event.type === 'CREATED' && event.payNoteEventId
+    )?.payNoteEventId;
+    const fallbackEventId = holdDetail.timeline.find(
+      event => event.payNoteEventId
+    )?.payNoteEventId;
+
+    return createdEventId ?? fallbackEventId ?? null;
+  }, [holdDetail, selectedActivity]);
+
+  const payNoteReference = useMemo(() => {
+    if (activityDetail?.payNote) {
+      return activityDetail.payNote;
+    }
+    if (resolvedTransaction?.payNote) {
+      return resolvedTransaction.payNote;
+    }
+    if (holdTimelinePayNoteEventId) {
+      return { myosEventId: holdTimelinePayNoteEventId };
+    }
+    return null;
+  }, [activityDetail, resolvedTransaction, holdTimelinePayNoteEventId]);
+  const hasPayNote = !!payNoteReference;
+  const transactionHasPayNote = !!(
+    resolvedTransaction?.payNote ||
+    (activityDetail?.kind === 'POSTED_TRANSACTION' && activityDetail?.payNote)
+  );
+  const holdHasPayNote = !!holdTimelinePayNoteEventId;
+  useEffect(() => {
+    if (!hasPayNote) {
+      setView('activity');
+    }
+  }, [hasPayNote]);
 
   const hasResolvedTransaction = !!resolvedTransaction;
   const hasHoldDetail = !!holdDetail;
@@ -104,6 +203,32 @@ export function TransactionDetailsModal({
     (fallbackError instanceof Error && fallbackError.message) ||
     (error instanceof Error && error.message) ||
     'We could not load the selected activity item.';
+  const {
+    data: payNoteDetails,
+    isLoading: isPayNoteLoading,
+    isError: isPayNoteError,
+    error: payNoteError,
+    refetch: refetchPayNoteDetails,
+  } = usePayNoteDetails({
+    accountNumber: accountNumber ?? null,
+    myosEventId: payNoteReference?.myosEventId,
+    enabled: isOpen && isPayNoteView && hasPayNote,
+  });
+  const payNoteErrorStatus = (payNoteError as { status?: number } | undefined)
+    ?.status;
+  const payNoteErrorMessage =
+    payNoteErrorStatus === 404
+      ? 'PayNote details are not available yet.'
+      : payNoteError?.message;
+
+  const handleShowPayNoteDetails = () => {
+    if (hasPayNote) {
+      setView('paynote');
+    }
+  };
+  const handleBackToActivityView = () => {
+    setView('activity');
+  };
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -196,7 +321,19 @@ export function TransactionDetailsModal({
             </div>
           )}
 
-          {resolvedTransaction && (
+          {isPayNoteView && hasPayNote && (
+            <PayNoteDetailsPanel
+              details={payNoteDetails}
+              isLoading={isPayNoteLoading}
+              isError={isPayNoteError}
+              errorMessage={payNoteErrorMessage}
+              errorStatus={payNoteErrorStatus}
+              onRetry={refetchPayNoteDetails}
+              onBack={handleBackToActivityView}
+            />
+          )}
+
+          {!isPayNoteView && resolvedTransaction && (
             <TransactionDetails
               transaction={resolvedTransaction}
               currentAccountId={accountId}
@@ -205,10 +342,12 @@ export function TransactionDetailsModal({
               }
               accounts={accounts || []}
               data-testid="modal-transaction-details"
+              showPayNoteHelper={transactionHasPayNote}
+              onViewPayNoteDetails={handleShowPayNoteDetails}
             />
           )}
 
-          {holdDetail && (
+          {!isPayNoteView && holdDetail && (
             <HoldDetails
               hold={holdDetail}
               accountId={accountId}
@@ -216,6 +355,8 @@ export function TransactionDetailsModal({
               isLoadingAccounts={isLoadingAccounts}
               accounts={accounts || []}
               data-testid="modal-hold-details"
+              showPayNoteHelper={holdHasPayNote}
+              onViewPayNoteDetails={handleShowPayNoteDetails}
             />
           )}
 

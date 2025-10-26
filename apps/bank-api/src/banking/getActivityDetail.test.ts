@@ -152,6 +152,50 @@ describe('getActivityDetailHandler', () => {
     );
   });
 
+  it('includes PayNote metadata when transaction is linked', async () => {
+    const transactionId = 'txn-paynote';
+    const mockPosting = {
+      accountId: baseAccount.id,
+      side: 'DEBIT' as const,
+      amountMinor: 5_000,
+      counterpartyAccountNumber: '1111222233',
+    } as any;
+
+    const mockTransaction = {
+      id: transactionId,
+      type: 'TRANSFER' as const,
+      status: 'POSTED' as const,
+      description: 'PayNote transfer',
+      createdAt: new Date('2024-01-10T00:00:00.000Z'),
+      postings: [mockPosting],
+      payNoteEventId: 'event-abc',
+    } as any;
+
+    vi.mocked(repositoryMock.getTransactionById).mockResolvedValue(
+      mockTransaction
+    );
+
+    const response = await getActivityDetailHandler(
+      {
+        params: {
+          accountNumber: baseAccount.accountNumber,
+          activityId: `TXN#${transactionId}`,
+        },
+      },
+      {
+        request: {
+          headers: setAuthHeader(new Headers()),
+        } as unknown as MaybeAuthenticatedTsRestRequestContext,
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      kind: 'POSTED_TRANSACTION',
+      payNote: { myosEventId: 'event-abc' },
+    });
+  });
+
   it('supports url-safe activity id format for transactions', async () => {
     const transactionId = 'txn-456';
     const mockPosting = {
@@ -269,15 +313,68 @@ describe('getActivityDetailHandler', () => {
           at: '2024-01-03T10:00:00.000Z',
           createdByUserId: 'system',
           idempotencyKeyHash: 'hash-1',
+          payNoteEventId: undefined,
         },
         {
           type: 'CAPTURED',
           at: '2024-01-04T09:00:00.000Z',
           transactionId: 'txn-555',
           counterpartyAccountNumber: '1234567899',
+          payNoteEventId: undefined,
         },
       ],
     });
+  });
+
+  it('includes PayNote metadata when hold is linked', async () => {
+    const holdId = 'hold-paynote';
+
+    const events: HoldEvent[] = [
+      {
+        type: 'CREATED',
+        at: '2024-01-02T00:00:00.000Z',
+        payNoteEventId: 'event-hold-123',
+      },
+    ];
+
+    vi.mocked(holdRepositoryMock.getHold).mockResolvedValue({
+      holdId,
+      payerAccountNumber: baseAccount.accountNumber,
+      amountMinor: 12_000,
+      currency: 'USD' as const,
+      status: 'PENDING' as const,
+      description: 'PayNote hold',
+      createdAt: '2024-01-02T00:00:00.000Z',
+      payNoteEventId: 'event-hold-123',
+    });
+
+    vi.mocked(holdRepositoryMock.listHoldEvents).mockResolvedValue(events);
+
+    const response = await getActivityDetailHandler(
+      {
+        params: {
+          accountNumber: baseAccount.accountNumber,
+          activityId: `HOLD#${holdId}`,
+        },
+      },
+      {
+        request: {
+          headers: setAuthHeader(new Headers()),
+        } as unknown as MaybeAuthenticatedTsRestRequestContext,
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.kind).toBe('HOLD');
+    expect(response.body.payNote).toBeUndefined();
+    expect(response.body.timeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'CREATED',
+          payNoteEventId: 'event-hold-123',
+        }),
+      ])
+    );
   });
 
   it('supports url-safe activity id format for holds', async () => {

@@ -707,6 +707,7 @@ export class DynamoBankingRepository implements BankingRepository {
         transactionIdempotencyKey: headerItem.transactionIdempotencyKey,
         createdAt: new Date(headerItem.createdAt),
         originHoldId: headerItem.originHoldId,
+        payNoteEventId: headerItem.payNoteEventId,
       });
     } catch (error: unknown) {
       throw new RepositoryError(

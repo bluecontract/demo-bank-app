@@ -181,7 +181,7 @@ export const bankApiContract = c.router(
 
       getActivityDetail: {
         method: 'GET',
-        path: '/v1/accounts/:accountNumber/activity/:activityId',
+        path: '/v1/activity/:accountNumber/records/:activityId',
         pathParams: z.object({
           accountNumber: z.string().length(10),
           activityId: z.string(),
@@ -207,7 +207,7 @@ export const bankApiContract = c.router(
 
       getPayNoteDetails: {
         method: 'GET',
-        path: '/v1/accounts/:accountNumber/paynotes/:myosEventId',
+        path: '/v1/activity/:accountNumber/paynotes/:myosEventId',
         pathParams: z.object({
           accountNumber: z.string().length(10),
           myosEventId: z.string(),

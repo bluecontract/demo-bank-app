@@ -21,6 +21,8 @@ interface HoldDetailsProps {
   currentAccountNumber?: string;
   isLoadingAccounts?: boolean;
   'data-testid'?: string;
+  showPayNoteHelper?: boolean;
+  onViewPayNoteDetails?: () => void;
 }
 
 const statusStyles: Record<
@@ -121,6 +123,8 @@ export function HoldDetails({
   currentAccountNumber,
   isLoadingAccounts,
   'data-testid': testId,
+  showPayNoteHelper = false,
+  onViewPayNoteDetails,
 }: HoldDetailsProps) {
   const formattedAmount = formatCurrency(hold.amountMinor);
   const timeline = [...hold.timeline].sort(
@@ -143,8 +147,12 @@ export function HoldDetails({
   );
 
   const displayStatus = deriveStatus(hold);
+  const methodLabel = showPayNoteHelper
+    ? 'PayNote Transfer'
+    : 'Standard Transfer';
 
   const detailRows: Array<{ label: string; value: string }> = [
+    { label: 'Method', value: methodLabel },
     { label: 'From account', value: currentAccountDisplay },
     { label: 'To account', value: counterpartyDisplay },
     { label: 'Amount', value: formattedAmount },
@@ -253,6 +261,21 @@ export function HoldDetails({
                 {hold.description}
               </p>
             </div>
+          </div>
+        )}
+
+        {showPayNoteHelper && (
+          <div className="px-4 py-3 border-t border-gray-200">
+            <p className="text-sm text-gray-700">
+              This transaction is part of a PayNote transfer.{' '}
+              <button
+                type="button"
+                className="text-green-700 font-medium hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 rounded"
+                onClick={() => onViewPayNoteDetails?.()}
+              >
+                See details
+              </button>
+            </p>
           </div>
         )}
 

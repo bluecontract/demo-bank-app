@@ -435,7 +435,7 @@ test.describe('Banking Core Flows', () => {
       });
     });
 
-    await page.route('**/v1/accounts/**/activity/**', async route => {
+    await page.route('**/v1/activity/**/records/**', async route => {
       if (route.request().method() !== 'GET') {
         await route.fallback();
         return;
@@ -503,6 +503,151 @@ test.describe('Banking Core Flows', () => {
 
     await page.unroute('**/v1/activity/**');
     await page.unroute('**/v1/accounts/**/activity/**');
+  });
+
+  test('should surface PayNote transfer details within the activity modal', async ({
+    page,
+  }) => {
+    const accountName = createUniqueAccountName('paynote-activity');
+    const myosEventId = 'event-paynote-001';
+    const transactionActivity = {
+      kind: 'POSTED_TRANSACTION',
+      activityId: 'TXN#txn-paynote-001',
+      transactionId: 'txn-paynote-001',
+      amountMinor: 9850,
+      description: 'PayNote settlement',
+      postedAt: new Date('2024-03-10T12:00:00.000Z').toISOString(),
+      originHoldId: null,
+      side: 'DEBIT',
+      type: 'TRANSFER',
+      status: 'POSTED',
+      counterpartyAccountNumber: '5555999911',
+    };
+
+    await page.route('**/v1/activity/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [transactionActivity],
+          nextCursor: undefined,
+        }),
+      });
+    });
+
+    await page.route('**/v1/activity/**/records/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          kind: 'POSTED_TRANSACTION',
+          activityId: transactionActivity.activityId,
+          transactionId: transactionActivity.transactionId,
+          amountMinor: transactionActivity.amountMinor,
+          description: transactionActivity.description,
+          postedAt: transactionActivity.postedAt,
+          originHoldId: transactionActivity.originHoldId,
+          side: transactionActivity.side,
+          type: transactionActivity.type,
+          status: transactionActivity.status,
+          counterpartyAccountNumber:
+            transactionActivity.counterpartyAccountNumber,
+          payNote: { myosEventId },
+        }),
+      });
+    });
+
+    await page.route('**/v1/activity/**/paynotes/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          myosEventId,
+          documentYaml:
+            '---\npayNote:\n  payer: 5555999911\n  payee: 0001122334\n  amountMinor: 9850',
+          transactionRequest: {
+            id: 'request-1',
+            amountMinor: 9850,
+          },
+          triggerEvent: {
+            id: 'trigger-1',
+            source: 'myos',
+          },
+          fetchedAt: new Date().toISOString(),
+        }),
+      });
+    });
+
+    await page.route('**/v1/accounts/**/transactions/**', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 404,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: 'NotFound',
+          message: 'Transaction not found',
+        }),
+      });
+    });
+
+    await page.click('text=Add new account');
+    await waitForModalToOpen(page, 'modal-content');
+    await page.fill('input#accountName', accountName);
+    await page.click('button[type="submit"]');
+    await waitForModalToClose(page, 'modal-content');
+
+    const activityRow = page.getByTestId('activity-item-txn-txn-paynote-001');
+    await expect(activityRow).toBeVisible();
+
+    await activityRow.click();
+
+    const modal = page.locator('[data-testid="transaction-modal-content"]');
+    await expect(modal).toBeVisible();
+    await expect(
+      modal.getByText('PayNote Transfer', { exact: true })
+    ).toBeVisible();
+    await expect(
+      modal.getByText('This transaction is part of a PayNote transfer.')
+    ).toBeVisible();
+
+    await modal.getByRole('button', { name: 'See details' }).click();
+
+    const payNoteView = modal.getByTestId('paynote-details-view');
+    await expect(payNoteView).toBeVisible();
+    await expect(
+      payNoteView.getByText('PayNote transfer details')
+    ).toBeVisible();
+    await expect(payNoteView.getByText('PayNote Document')).toBeVisible();
+    await expect(payNoteView.getByText('Transaction Request')).toBeVisible();
+    await expect(payNoteView.getByText('Triggering Event')).toBeVisible();
+
+    await payNoteView.getByTestId('paynote-back-button').click();
+
+    await expect(modal.getByTestId('modal-transaction-details')).toBeVisible();
+
+    await page.unroute('**/v1/activity/**');
+    await page.unroute('**/v1/activity/**/records/**');
+    await page.unroute('**/v1/activity/**/paynotes/**');
+    await page.unroute('**/v1/accounts/**/transactions/**');
   });
 
   test('should update account balance after fund and transfer operations', async ({

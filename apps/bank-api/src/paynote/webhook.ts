@@ -213,6 +213,7 @@ export const payNoteWebhookHandler = async (
             dstAccountNumber: payeeAccountNumber,
             amountMinor: new Money(transferAmountMinor),
             description: transferDescription,
+            payNoteEventId: eventId,
             ctx: {
               userId: ownerUserId,
               idempotencyKey: payNoteBankId,
@@ -238,6 +239,7 @@ export const payNoteWebhookHandler = async (
             userId: ownerUserId,
             idempotencyKey: payNoteBankId,
             counterpartyAccountNumber: payeeAccountNumber,
+            payNoteEventId: eventId,
           },
           {
             bankingRepository,
@@ -262,6 +264,7 @@ export const payNoteWebhookHandler = async (
             payerAccountNumber: payerAccountNumber,
             amountMinor: transferAmountMinor,
             counterpartyAccountNumber: payeeAccountNumber,
+            payNoteEventId: eventId,
           },
           {
             bankingRepository,

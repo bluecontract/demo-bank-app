@@ -20,6 +20,8 @@ interface TransactionDetailsProps {
   currentAccountNumber: string;
   accounts: Account[];
   'data-testid'?: string;
+  showPayNoteHelper?: boolean;
+  onViewPayNoteDetails?: () => void;
 }
 
 export function TransactionDetails({
@@ -28,6 +30,8 @@ export function TransactionDetails({
   currentAccountNumber,
   accounts,
   'data-testid': testId,
+  showPayNoteHelper = false,
+  onViewPayNoteDetails,
 }: TransactionDetailsProps) {
   const getTransactionDirection = () => {
     return transaction.side === 'CREDIT' ? 'Incoming' : 'Outgoing';
@@ -68,6 +72,9 @@ export function TransactionDetails({
     ? getAccountNameByNumber(counterpartyAccountNumber)
     : '';
   const currentAccountName = getCurrentAccountName();
+  const methodLabel = showPayNoteHelper
+    ? 'PayNote Transfer'
+    : 'Standard Transfer';
 
   const getStatusBadge = (status: string) => {
     const baseClasses =
@@ -172,7 +179,7 @@ export function TransactionDetails({
 
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Method</span>
-              <span className="text-sm text-gray-900">Standard Transfer</span>
+              <span className="text-sm text-gray-900">{methodLabel}</span>
             </div>
 
             <div className="flex justify-between">
@@ -230,6 +237,21 @@ export function TransactionDetails({
                 {transaction.description}
               </p>
             </div>
+          </div>
+        )}
+
+        {showPayNoteHelper && (
+          <div className="px-4 py-3 border-t border-gray-200">
+            <p className="text-sm text-gray-700">
+              This transaction is part of a PayNote transfer.{' '}
+              <button
+                type="button"
+                className="text-green-700 font-medium hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 rounded"
+                onClick={() => onViewPayNoteDetails?.()}
+              >
+                See details
+              </button>
+            </p>
           </div>
         )}
       </Card>

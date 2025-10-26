@@ -297,13 +297,13 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountNumber}/activity/{activityId}
+            Path: /v1/activity/{accountNumber}/records/{activityId}
             Method: GET
         GetActivityDetailOptions:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountNumber}/activity/{activityId}
+            Path: /v1/activity/{accountNumber}/records/{activityId}
             Method: OPTIONS
         FundAccountApi:
           Type: Api
@@ -369,13 +369,13 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountNumber}/paynotes/{myosEventId}
+            Path: /v1/activity/{accountNumber}/paynotes/{myosEventId}
             Method: GET
         GetPayNoteDetailsOptions:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountNumber}/paynotes/{myosEventId}
+            Path: /v1/activity/{accountNumber}/paynotes/{myosEventId}
             Method: OPTIONS
         BootstrapPayNoteApi:
           Type: Api

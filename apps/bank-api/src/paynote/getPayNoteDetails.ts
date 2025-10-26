@@ -7,6 +7,7 @@ import {
 import { getDependencies } from './dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { AccountNotFoundError, type Account } from '@demo-bank-app/banking';
+import { toReversedJson } from './blueId';
 
 type FetchCredentialsFn = () => Promise<{
   apiKey: string;
@@ -184,18 +185,22 @@ export const getPayNoteDetailsHandler = async (
 
     const detail = {
       myosEventId,
-      documentYaml:
-        typeof payNoteObject.documentYaml === 'string'
-          ? payNoteObject.documentYaml
-          : undefined,
-      transactionRequest: payNoteObject.emitted ?? null,
-      triggerEvent: payNoteObject.triggeredBy ?? null,
+      document: document ? toReversedJson(document) : undefined,
+      transactionRequest: toReversedJson(payNoteObject.emitted) ?? undefined,
+      triggerEvent: toReversedJson(payNoteObject.triggeredBy) ?? null,
       fetchedAt: new Date().toISOString(),
     };
 
     logger.info('PayNote details fetched successfully', {
       accountNumber,
       myosEventId,
+      hasDocument: !!detail.document,
+      transactionRequestCount: Array.isArray(detail.transactionRequest)
+        ? detail.transactionRequest.length
+        : detail.transactionRequest
+        ? 1
+        : 0,
+      hasTriggerEvent: !!detail.triggerEvent,
     });
 
     return {

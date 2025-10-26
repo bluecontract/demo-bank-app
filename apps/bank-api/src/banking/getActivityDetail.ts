@@ -40,6 +40,9 @@ const mapTransactionDetail = (
   type: transaction.type,
   status: transaction.status,
   counterpartyAccountNumber: posting.counterpartyAccountNumber,
+  ...(transaction.payNoteEventId
+    ? { payNote: { myosEventId: transaction.payNoteEventId } }
+    : {}),
 });
 
 const mapHoldTimeline = (events: HoldEvent[]) =>
@@ -51,6 +54,7 @@ const mapHoldTimeline = (events: HoldEvent[]) =>
           at: event.at,
           createdByUserId: event.createdByUserId,
           idempotencyKeyHash: event.idempotencyKeyHash,
+          payNoteEventId: event.payNoteEventId,
         };
       case 'CAPTURED':
         return {
@@ -58,12 +62,14 @@ const mapHoldTimeline = (events: HoldEvent[]) =>
           at: event.at,
           transactionId: event.transactionId,
           counterpartyAccountNumber: event.counterpartyAccountNumber,
+          payNoteEventId: event.payNoteEventId,
         };
       case 'RELEASED':
         return {
           type: 'RELEASED' as const,
           at: event.at,
           reason: event.reason,
+          payNoteEventId: event.payNoteEventId,
         };
       case 'FAILED':
         return {
@@ -71,6 +77,7 @@ const mapHoldTimeline = (events: HoldEvent[]) =>
           at: event.at,
           code: event.code,
           message: event.message,
+          payNoteEventId: event.payNoteEventId,
         };
     }
   });

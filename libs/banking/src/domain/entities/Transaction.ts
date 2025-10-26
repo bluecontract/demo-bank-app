@@ -16,12 +16,14 @@ export interface TransactionProps {
   transactionIdempotencyKey?: string;
   createdAt: Date;
   originHoldId?: string;
+  payNoteEventId?: string;
 }
 
 export interface TransactionMeta {
   description: string;
   idempotencyKey?: string;
   originHoldId?: string;
+  payNoteEventId?: string;
 }
 
 export interface NetAmount {
@@ -37,6 +39,7 @@ export class Transaction {
   readonly transactionIdempotencyKey?: string;
   readonly createdAt: Date;
   readonly originHoldId?: string;
+  readonly payNoteEventId?: string;
 
   constructor(props: TransactionProps) {
     if (!props.id || props.id.trim() === '') {
@@ -58,6 +61,7 @@ export class Transaction {
     this.transactionIdempotencyKey = props.transactionIdempotencyKey;
     this.createdAt = props.createdAt;
     this.originHoldId = props.originHoldId;
+    this.payNoteEventId = props.payNoteEventId;
 
     this.validateDoubleEntry();
   }
@@ -105,6 +109,7 @@ export class Transaction {
       transactionIdempotencyKey: meta.idempotencyKey,
       createdAt: new Date(),
       originHoldId: meta.originHoldId,
+      payNoteEventId: meta.payNoteEventId,
     });
   }
 
@@ -140,6 +145,7 @@ export class Transaction {
       this.transactionIdempotencyKey !== other.transactionIdempotencyKey ||
       this.createdAt.getTime() !== other.createdAt.getTime() ||
       this.originHoldId !== other.originHoldId ||
+      this.payNoteEventId !== other.payNoteEventId ||
       this.postings.length !== other.postings.length
     ) {
       return false;

@@ -1907,7 +1907,7 @@ describe('Bank API Integration Tests', () => {
         for (let attempt = 0; attempt < 5; attempt++) {
           const response = await invokeApi({
             method: 'GET',
-            path: `/v1/accounts/${accountNumber}/activity/${encodeURIComponent(
+            path: `/v1/activity/${accountNumber}/records/${encodeURIComponent(
               txnItem.activityId
             )}`,
             jwtCookie,
@@ -1956,7 +1956,7 @@ describe('Bank API Integration Tests', () => {
         for (let attempt = 0; attempt < 5; attempt++) {
           const response = await invokeApi({
             method: 'GET',
-            path: `/v1/accounts/${accountNumber}/activity/${encodeURIComponent(
+            path: `/v1/activity/${accountNumber}/records/${encodeURIComponent(
               holdItem.activityId
             )}`,
             jwtCookie,
@@ -1992,7 +1992,7 @@ describe('Bank API Integration Tests', () => {
     it('should return 404 for unknown activity detail', async () => {
       const response = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${accountNumber}/activity/${encodeURIComponent(
+        path: `/v1/activity/${accountNumber}/records/${encodeURIComponent(
           'TXN#missing'
         )}`,
         jwtCookie,
@@ -2045,20 +2045,23 @@ describe('Bank API Integration Tests', () => {
 
       const response = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${userAccountNumber}/paynotes/${eventId}`,
+        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
         jwtCookie: userJwtCookie,
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.body).toMatchObject({
-        myosEventId: eventId,
-        documentYaml: '---\npaynote: test',
-        fetchedAt: expect.any(String),
+      expect(response.body.myosEventId).toBe(eventId);
+      expect(typeof response.body.fetchedAt).toBe('string');
+      expect(response.body.document?.payerAccountNumber?.value).toBe(
+        userAccountNumber
+      );
+      expect(
+        Array.isArray(response.body.transactionRequest?.items) &&
+          response.body.transactionRequest.items.length > 0
+      ).toBe(true);
+      expect(response.body.triggerEvent).toMatchObject({
+        actor: { value: 'payerChannel' },
       });
-      expect(response.body.transactionRequest).toEqual([
-        { type: { name: 'Reserve Funds Requested' } },
-      ]);
-      expect(response.body.triggerEvent).toEqual({ actor: 'payerChannel' });
 
       fetchSpy.mockRestore();
       global.fetch = originalFetch;
@@ -2075,7 +2078,7 @@ describe('Bank API Integration Tests', () => {
 
       const response = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${userAccountNumber}/paynotes/${eventId}`,
+        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
         jwtCookie: userJwtCookie,
       });
 
@@ -2106,7 +2109,7 @@ describe('Bank API Integration Tests', () => {
 
       const response = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${userAccountNumber}/paynotes/${eventId}`,
+        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
         jwtCookie: userJwtCookie,
       });
 
@@ -2129,7 +2132,7 @@ describe('Bank API Integration Tests', () => {
 
       const response = await invokeApi({
         method: 'GET',
-        path: `/v1/accounts/${userAccountNumber}/paynotes/${eventId}`,
+        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
         jwtCookie: userJwtCookie,
       });
 

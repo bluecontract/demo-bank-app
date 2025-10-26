@@ -29,6 +29,7 @@ export interface ReserveFundsCommand {
   amountMinor: number;
   description?: string;
   counterpartyAccountNumber?: string;
+  payNoteEventId?: string;
 }
 
 export interface ReserveFundsDependencies {
@@ -113,6 +114,7 @@ export async function reserveFunds(
       status: 'PENDING',
       description: cmd.description,
       createdAt,
+      payNoteEventId: cmd.payNoteEventId,
     };
 
     const reserveRequest: ReserveHoldRequest = {
@@ -126,6 +128,7 @@ export async function reserveFunds(
         type: 'CREATED',
         createdByUserId: cmd.userId,
         idempotencyKeyHash,
+        payNoteEventId: cmd.payNoteEventId,
       },
       idempotencyKey: cmd.idempotencyKey,
       idempotencyKeyHash,

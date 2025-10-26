@@ -49,6 +49,7 @@ export interface HoldMetaItem {
   relatedTransactionId?: string;
   releasedAt?: string;
   releaseReason?: string;
+  payNoteEventId?: string;
 }
 
 export interface HoldEventItem {
@@ -90,6 +91,7 @@ export function buildHoldMetaItem(hold: Hold): HoldMetaItem {
     relatedTransactionId: hold.relatedTransactionId,
     releasedAt: hold.releasedAt,
     releaseReason: hold.releaseReason,
+    payNoteEventId: hold.payNoteEventId,
   };
 }
 
@@ -107,6 +109,7 @@ export function mapHoldMetaItemToHold(item: HoldMetaItem): Hold {
     relatedTransactionId: item.relatedTransactionId,
     releasedAt: item.releasedAt,
     releaseReason: item.releaseReason,
+    payNoteEventId: item.payNoteEventId,
   };
 }
 
@@ -192,20 +195,24 @@ function holdEventPayload(
       return compactRecord({
         createdByUserId: event.createdByUserId,
         idempotencyKeyHash: event.idempotencyKeyHash,
+        payNoteEventId: event.payNoteEventId,
       });
     case 'CAPTURED':
-      return {
+      return compactRecord({
         transactionId: event.transactionId,
         counterpartyAccountNumber: event.counterpartyAccountNumber,
-      };
+        payNoteEventId: event.payNoteEventId,
+      });
     case 'RELEASED':
       return compactRecord({
         reason: event.reason,
+        payNoteEventId: event.payNoteEventId,
       });
     case 'FAILED':
       return compactRecord({
         code: event.code,
         message: event.message,
+        payNoteEventId: event.payNoteEventId,
       });
     default:
       return undefined;
@@ -224,6 +231,7 @@ function parseHoldEvent(item: HoldEventItem): HoldEvent {
           payload,
           'idempotencyKeyHash'
         ),
+        payNoteEventId: extractOptionalString(payload, 'payNoteEventId'),
       };
     case 'CAPTURED': {
       const transactionId = extractRequiredString(
@@ -241,6 +249,7 @@ function parseHoldEvent(item: HoldEventItem): HoldEvent {
         type: 'CAPTURED',
         transactionId,
         counterpartyAccountNumber,
+        payNoteEventId: extractOptionalString(payload, 'payNoteEventId'),
       };
     }
     case 'RELEASED':
@@ -248,6 +257,7 @@ function parseHoldEvent(item: HoldEventItem): HoldEvent {
         at: item.at,
         type: 'RELEASED',
         reason: extractOptionalString(payload, 'reason'),
+        payNoteEventId: extractOptionalString(payload, 'payNoteEventId'),
       };
     case 'FAILED':
       return {
@@ -255,6 +265,7 @@ function parseHoldEvent(item: HoldEventItem): HoldEvent {
         type: 'FAILED',
         code: extractRequiredFailedCode(payload, item),
         message: extractOptionalString(payload, 'message'),
+        payNoteEventId: extractOptionalString(payload, 'payNoteEventId'),
       };
   }
 }
