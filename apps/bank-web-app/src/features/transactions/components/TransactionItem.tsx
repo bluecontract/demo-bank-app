@@ -131,7 +131,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         title: 'Hold Captured',
         timestamp: item.capturedAt,
         subtitleLines: item.transactionId
-          ? [...base.subtitleLines, `Captured txn: ${item.transactionId}`]
+          ? [...base.subtitleLines, `txn: ${item.transactionId}`]
           : base.subtitleLines,
         amountClass: 'text-yellow-700',
         clickable: true,

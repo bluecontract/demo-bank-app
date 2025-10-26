@@ -126,7 +126,7 @@ describe('TransactionItem', () => {
     expect(screen.getByText('Hold Captured')).toBeInTheDocument();
     expect(screen.getByText('HOLD CAPTURED')).toBeInTheDocument();
     expect(screen.getByText('To: 222 233 3344')).toBeInTheDocument();
-    expect(screen.getByText('Captured txn: txn-789')).toBeInTheDocument();
+    expect(screen.getByText('txn: txn-789')).toBeInTheDocument();
     expect(screen.getByText('$95')).toBeInTheDocument();
   });
 
