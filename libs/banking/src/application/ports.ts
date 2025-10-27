@@ -1,8 +1,8 @@
 import { Account } from '../domain/entities/Account';
 import { Transaction } from '../domain/entities/Transaction';
 import { PaginationOptions, PaginatedResult } from '../domain/types';
-import { Money } from 'src/domain/valueObjects/Money';
-import { Posting } from 'src/domain/valueObjects/Posting';
+import { Money } from '../domain/valueObjects/Money';
+import { Posting } from '../domain/valueObjects/Posting';
 
 export interface TransactionContext {
   userId: string;

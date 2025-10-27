@@ -13,12 +13,13 @@ import {
   validatePayNote as validatePayNoteUseCase,
   type PayNoteValidationProvider,
   type PayNoteValidationFormData,
+  createBlueIdCalculator,
+  createSystemClock,
 } from '@demo-bank-app/paynotes';
 import {
   MIN_PAYNOTE_VERIFICATION_SCORE,
   TEST_VERIFICATION_TTL_SECONDS,
 } from './constants';
-import { createBlueIdCalculator, createClock } from './useCaseAdapters';
 
 const ValidationResultSchema = z.object({
   validationScore: z.number().min(0).max(10),
@@ -591,7 +592,7 @@ export const validatePayNoteHandler = async (
         verificationRepository: payNoteVerificationRepository,
         validationProvider,
         blueIdCalculator: createBlueIdCalculator(),
-        clock: createClock(),
+        clock: createSystemClock(),
         config: {
           minimumSuccessfulScore: MIN_PAYNOTE_VERIFICATION_SCORE,
           testVerificationTtlSeconds: TEST_VERIFICATION_TTL_SECONDS,

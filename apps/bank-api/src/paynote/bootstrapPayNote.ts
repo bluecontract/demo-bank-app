@@ -7,12 +7,11 @@ import {
 import { getDependencies } from './dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { MIN_PAYNOTE_VERIFICATION_SCORE } from './constants';
-import { bootstrapPayNote as bootstrapPayNoteUseCase } from '@demo-bank-app/paynotes';
 import {
+  bootstrapPayNote as bootstrapPayNoteUseCase,
   createBlueIdCalculator,
-  createIdGenerator,
-  createMyOsClient,
-} from './useCaseAdapters';
+  createRandomIdGenerator,
+} from '@demo-bank-app/paynotes';
 
 export const bootstrapPayNoteHandler = async (
   request: ServerInferRequest<
@@ -22,7 +21,7 @@ export const bootstrapPayNoteHandler = async (
     request: MaybeAuthenticatedTsRestRequestContext;
   }
 ) => {
-  const { logger, getMyOsCredentials, payNoteVerificationRepository } =
+  const { logger, payNoteVerificationRepository, myOsClient } =
     await getDependencies();
 
   try {
@@ -34,7 +33,6 @@ export const bootstrapPayNoteHandler = async (
       userEmail,
       payNote,
     });
-    const myOsClient = createMyOsClient(getMyOsCredentials);
 
     const result = await bootstrapPayNoteUseCase(
       {
@@ -46,7 +44,7 @@ export const bootstrapPayNoteHandler = async (
       {
         verificationRepository: payNoteVerificationRepository,
         myOsClient,
-        idGenerator: createIdGenerator(),
+        idGenerator: createRandomIdGenerator(),
         blueIdCalculator: createBlueIdCalculator(),
         minimumSuccessfulScore: MIN_PAYNOTE_VERIFICATION_SCORE,
       }

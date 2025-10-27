@@ -17,22 +17,6 @@ vi.mock('./dependencies', () => ({
   getDependencies: hoistedDeps.getDependenciesMock,
 }));
 
-vi.mock('./useCaseAdapters', () => ({
-  createMyOsClient: () => ({
-    getCredentials: vi.fn(),
-    bootstrapDocument: vi.fn(),
-    fetchEvent: (eventId: string) => hoistedAdapters.fetchEventImpl(eventId),
-  }),
-  createBankingFacade: () => ({
-    getAccountByNumber: (accountNumber: string) =>
-      hoistedAdapters.getAccountByNumberImpl(accountNumber),
-    getAccountForUser: vi.fn(),
-    transferFunds: hoistedAdapters.transferFundsMock,
-    reserveFunds: hoistedAdapters.reserveFundsMock,
-    captureHold: hoistedAdapters.captureHoldMock,
-  }),
-}));
-
 describe('payNoteWebhookHandler', () => {
   const logger = {
     info: vi.fn(),
@@ -51,11 +35,25 @@ describe('payNoteWebhookHandler', () => {
     hoistedAdapters.reserveFundsMock.mockReset();
     hoistedAdapters.captureHoldMock.mockReset();
 
+    const myOsClient = {
+      getCredentials: vi.fn(),
+      bootstrapDocument: vi.fn(),
+      fetchEvent: (eventId: string) => hoistedAdapters.fetchEventImpl(eventId),
+    };
+
+    const bankingFacade = {
+      getAccountByNumber: (accountNumber: string) =>
+        hoistedAdapters.getAccountByNumberImpl(accountNumber),
+      getAccountForUser: vi.fn(),
+      transferFunds: hoistedAdapters.transferFundsMock,
+      reserveFunds: hoistedAdapters.reserveFundsMock,
+      captureHold: hoistedAdapters.captureHoldMock,
+    };
+
     hoistedDeps.getDependenciesMock.mockResolvedValue({
       logger,
-      getMyOsCredentials: vi.fn(),
-      bankingRepository: {},
-      holdRepository: {},
+      myOsClient,
+      bankingFacade,
     });
   });
 

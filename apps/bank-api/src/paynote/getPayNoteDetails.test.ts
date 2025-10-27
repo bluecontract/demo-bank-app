@@ -10,9 +10,18 @@ import { Account, Money } from '@demo-bank-app/banking';
 import { MaybeAuthenticatedTsRestRequestContext } from '../auth/middleware';
 import { ERROR_CODES } from '../shared/errors';
 import { UnauthorizedRequestError } from '../auth/errors';
+import { createHttpMyOsGateway } from '@demo-bank-app/paynotes';
 
 const hoisted = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
+}));
+
+const hoistedFacade = vi.hoisted(() => ({
+  getAccountForUserMock: vi.fn(),
+  getAccountByNumberMock: vi.fn(),
+  transferFundsMock: vi.fn(),
+  reserveFundsMock: vi.fn(),
+  captureHoldMock: vi.fn(),
 }));
 
 vi.mock('./dependencies', () => ({
@@ -88,12 +97,45 @@ describe('getPayNoteDetailsHandler', () => {
       getAccountById: vi.fn().mockResolvedValue(baseAccount),
     } as unknown as DynamoBankingRepository;
 
+    hoistedFacade.getAccountForUserMock.mockReset();
+    hoistedFacade.getAccountByNumberMock.mockReset();
+    hoistedFacade.transferFundsMock.mockReset();
+    hoistedFacade.reserveFundsMock.mockReset();
+    hoistedFacade.captureHoldMock.mockReset();
+
+    hoistedFacade.getAccountForUserMock.mockImplementation(
+      async (accountNumber: string, userId: string) => {
+        if (
+          accountNumber === baseAccount.accountNumber &&
+          userId === baseAccount.ownerUserId
+        ) {
+          return {
+            id: baseAccount.id,
+            accountNumber: baseAccount.accountNumber,
+            ownerUserId: baseAccount.ownerUserId,
+          };
+        }
+        return null;
+      }
+    );
+
+    const myOsClient = createHttpMyOsGateway(getMyOsCredentials);
+    const bankingFacade = {
+      getAccountByNumber: hoistedFacade.getAccountByNumberMock,
+      getAccountForUser: hoistedFacade.getAccountForUserMock,
+      transferFunds: hoistedFacade.transferFundsMock,
+      reserveFunds: hoistedFacade.reserveFundsMock,
+      captureHold: hoistedFacade.captureHoldMock,
+    };
+
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       metrics,
       getMyOsCredentials,
       bankingRepository,
       holdRepository,
+      myOsClient,
+      bankingFacade,
     });
   });
 
@@ -211,22 +253,7 @@ describe('getPayNoteDetailsHandler', () => {
   });
 
   it('returns 404 if account is not owned by the user', async () => {
-    const foreignAccount = new Account({
-      id: 'acc-999',
-      accountNumber: TEST_ACCOUNT_NUMBER,
-      name: 'Checking',
-      ownerUserId: 'someone-else',
-      status: 'ACTIVE',
-      currency: 'USD',
-      createdAt: new Date('2024-01-01T00:00:00.000Z'),
-      ledgerBalanceMinor: new Money(1_000_00),
-      availableBalanceMinor: new Money(1_000_00),
-      balanceVersion: 1,
-    });
-
-    vi.mocked(bankingRepository.getAccountById).mockResolvedValueOnce(
-      foreignAccount
-    );
+    hoistedFacade.getAccountForUserMock.mockResolvedValueOnce(null);
 
     const response = await getPayNoteDetailsHandler(
       {

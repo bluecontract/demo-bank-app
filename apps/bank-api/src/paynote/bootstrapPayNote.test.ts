@@ -6,42 +6,35 @@ const hoistedDeps = vi.hoisted(() => ({
   extractAuthInfoMock: vi.fn(),
 }));
 
-const hoistedBlueId = vi.hoisted(() => ({
-  calculateBlueIdFromObjectMock: vi.fn().mockReturnValue('blue-id-123'),
-}));
-
 const hoistedAdapters = vi.hoisted(() => ({
   bootstrapDocumentMock: vi.fn(),
   bootstrapResponse: { ok: true, status: 200, body: { documentId: 'doc-123' } },
   idGeneratorMock: vi.fn().mockReturnValue('generated-id'),
+  calculateBlueIdFromObjectMock: vi.fn().mockReturnValue('blue-id-123'),
+  getCredentialsMock: vi.fn(),
 }));
 
 vi.mock('./dependencies', () => ({
   getDependencies: hoistedDeps.getDependenciesMock,
 }));
 
-vi.mock('./blueId', () => ({
-  calculateBlueIdFromObject: hoistedBlueId.calculateBlueIdFromObjectMock,
-}));
+vi.mock('@demo-bank-app/paynotes', async () => {
+  const actual = await vi.importActual<
+    typeof import('@demo-bank-app/paynotes')
+  >('@demo-bank-app/paynotes');
 
-vi.mock('./useCaseAdapters', () => ({
-  createBlueIdCalculator: () => ({
-    fromYaml: vi.fn(),
-    fromObject: hoistedBlueId.calculateBlueIdFromObjectMock,
-    toReversedJson: vi.fn(),
-  }),
-  createIdGenerator: () => ({
-    generate: hoistedAdapters.idGeneratorMock,
-  }),
-  createMyOsClient: (resolveCredentials: () => Promise<any>) => ({
-    getCredentials: resolveCredentials,
-    bootstrapDocument: async (input: any) => {
-      hoistedAdapters.bootstrapDocumentMock(input);
-      return hoistedAdapters.bootstrapResponse;
-    },
-    fetchEvent: vi.fn(),
-  }),
-}));
+  return {
+    ...actual,
+    createBlueIdCalculator: () => ({
+      fromYaml: vi.fn(),
+      fromObject: hoistedAdapters.calculateBlueIdFromObjectMock,
+      toReversedJson: vi.fn(),
+    }),
+    createRandomIdGenerator: () => ({
+      generate: hoistedAdapters.idGeneratorMock,
+    }),
+  };
+});
 
 vi.mock('../auth/middleware', () => ({
   extractAuthInfo: hoistedDeps.extractAuthInfoMock,
@@ -76,23 +69,39 @@ describe('bootstrapPayNoteHandler', () => {
     logger.info.mockReset();
     logger.error.mockReset();
     verificationRepository.getVerification.mockReset();
-    hoistedBlueId.calculateBlueIdFromObjectMock.mockReturnValue('blue-id-123');
     hoistedAdapters.bootstrapDocumentMock.mockReset();
     hoistedAdapters.bootstrapResponse = {
       ok: true,
       status: 200,
       body: { documentId: 'doc-123' },
     };
+    hoistedAdapters.idGeneratorMock.mockReset();
+    hoistedAdapters.calculateBlueIdFromObjectMock.mockReset();
+    hoistedAdapters.getCredentialsMock.mockReset();
     hoistedAdapters.idGeneratorMock.mockReturnValue('generated-id');
+    hoistedAdapters.calculateBlueIdFromObjectMock.mockReturnValue(
+      'blue-id-123'
+    );
+    hoistedAdapters.getCredentialsMock.mockResolvedValue({
+      apiKey: 'myos-api-key',
+      accountId: 'myos-account',
+      baseUrl: 'https://test-api.myos.blue',
+    });
+
+    const myOsClient = {
+      getCredentials: hoistedAdapters.getCredentialsMock,
+      bootstrapDocument: async (input: any) => {
+        hoistedAdapters.bootstrapDocumentMock(input);
+        return hoistedAdapters.bootstrapResponse;
+      },
+      fetchEvent: vi.fn(),
+    };
 
     hoistedDeps.getDependenciesMock.mockResolvedValue({
       logger,
-      getMyOsCredentials: vi.fn().mockResolvedValue({
-        apiKey: 'myos-api-key',
-        accountId: 'myos-account',
-        baseUrl: 'https://test-api.myos.blue',
-      }),
+      getMyOsCredentials: hoistedAdapters.getCredentialsMock,
       payNoteVerificationRepository: verificationRepository,
+      myOsClient,
     });
 
     hoistedDeps.extractAuthInfoMock.mockResolvedValue({

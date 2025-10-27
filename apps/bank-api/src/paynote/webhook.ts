@@ -2,7 +2,6 @@ import { ServerInferRequest } from '@ts-rest/core';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { handleWebhookEvent as handleWebhookEventUseCase } from '@demo-bank-app/paynotes';
 import { getDependencies } from './dependencies';
-import { createMyOsClient, createBankingFacade } from './useCaseAdapters';
 
 const returnResponse = (note?: string) => ({
   status: 200 as const,
@@ -16,8 +15,7 @@ export const payNoteWebhookHandler = async (
     (typeof bankApiContract)['banking']['payNoteWebhook']
   >
 ) => {
-  const { logger, getMyOsCredentials, bankingRepository, holdRepository } =
-    await getDependencies();
+  const { logger, myOsClient, bankingFacade } = await getDependencies();
 
   const { id: eventId } = request.body ?? {};
 
@@ -27,13 +25,6 @@ export const payNoteWebhookHandler = async (
     });
     return returnResponse('PayNote webhook received payload without valid id');
   }
-
-  const myOsClient = createMyOsClient(getMyOsCredentials);
-  const bankingFacade = createBankingFacade({
-    bankingRepository,
-    holdRepository,
-    logger,
-  });
 
   const result = await handleWebhookEventUseCase(
     {

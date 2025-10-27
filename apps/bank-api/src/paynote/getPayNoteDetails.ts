@@ -7,13 +7,11 @@ import {
 import { getDependencies } from './dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { AccountNotFoundError } from '@demo-bank-app/banking';
-import { getPayNoteDetails as getPayNoteDetailsUseCase } from '@demo-bank-app/paynotes';
 import {
-  createBankingFacade,
+  getPayNoteDetails as getPayNoteDetailsUseCase,
   createBlueIdCalculator,
-  createClock,
-  createMyOsClient,
-} from './useCaseAdapters';
+  createSystemClock,
+} from '@demo-bank-app/paynotes';
 
 export const getPayNoteDetailsHandler = async (
   request: ServerInferRequest<
@@ -21,8 +19,7 @@ export const getPayNoteDetailsHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { logger, getMyOsCredentials, bankingRepository, holdRepository } =
-    await getDependencies();
+  const { logger, myOsClient, bankingFacade } = await getDependencies();
 
   const { accountNumber, myosEventId } = request.params;
 
@@ -33,12 +30,6 @@ export const getPayNoteDetailsHandler = async (
 
   try {
     const { userId } = await extractAuthInfo(context.request);
-    const myOsClient = createMyOsClient(getMyOsCredentials);
-    const bankingFacade = createBankingFacade({
-      bankingRepository,
-      holdRepository,
-      logger,
-    });
 
     const result = await getPayNoteDetailsUseCase(
       {
@@ -50,7 +41,7 @@ export const getPayNoteDetailsHandler = async (
         bankingFacade,
         myOsClient,
         blueIdCalculator: createBlueIdCalculator(),
-        clock: createClock(),
+        clock: createSystemClock(),
       }
     );
 

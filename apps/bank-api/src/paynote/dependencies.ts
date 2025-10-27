@@ -8,14 +8,20 @@ import {
   type MyOsCredentials,
 } from '../shared/myOsSecrets';
 import {
-  DynamoPayNoteVerificationRepository,
   DynamoBankingRepository,
   BankingEnvironmentConfiguration,
-  type PayNoteVerificationRepository,
   type BankingRepository,
   DynamoHoldRepository,
   HoldRepository,
 } from '@demo-bank-app/banking';
+import {
+  createBankingFacade,
+  createHttpMyOsGateway,
+  DynamoPayNoteVerificationRepository,
+  type PayNoteVerificationRepository,
+  type BankingFacade,
+  type MyOsClient,
+} from '@demo-bank-app/paynotes';
 
 type PaynoteDependencies = {
   logger: PowertoolsLogger;
@@ -24,6 +30,8 @@ type PaynoteDependencies = {
   payNoteVerificationRepository: PayNoteVerificationRepository;
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
+  myOsClient: MyOsClient;
+  bankingFacade: BankingFacade;
 };
 
 let cachedDependencies: PaynoteDependencies | null = null;
@@ -85,6 +93,14 @@ const initializeDependencies = (): PaynoteDependencies => {
     ...(awsEndpoint && { endpoint: awsEndpoint }),
   });
 
+  const myOsClient = createHttpMyOsGateway(getMyOsCredentials);
+
+  const bankingFacade = createBankingFacade({
+    bankingRepository,
+    holdRepository,
+    logger,
+  });
+
   return {
     logger,
     getOpenAiApiKey,
@@ -92,6 +108,8 @@ const initializeDependencies = (): PaynoteDependencies => {
     payNoteVerificationRepository,
     bankingRepository,
     holdRepository,
+    myOsClient,
+    bankingFacade,
   };
 };
 

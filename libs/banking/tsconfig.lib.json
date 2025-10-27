@@ -21,9 +21,6 @@
     },
     {
       "path": "../shared/config/tsconfig.lib.json"
-    },
-    {
-      "path": "../paynotes/tsconfig.lib.json"
     }
   ],
   "exclude": [

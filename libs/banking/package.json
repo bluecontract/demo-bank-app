@@ -95,7 +95,6 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
-    "@demo-bank-app/paynotes": "*",
     "@demo-bank-app/shared-config": "*",
     "@demo-bank-app/shared-core": "*",
     "@demo-bank-app/shared-observability": "*",

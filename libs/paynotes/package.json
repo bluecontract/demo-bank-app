@@ -95,6 +95,12 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
-    "@demo-bank-app/shared-config": "*"
+    "@demo-bank-app/shared-config": "*",
+    "@demo-bank-app/banking": "*",
+    "@demo-bank-app/shared-observability": "*",
+    "@blue-labs/language": "^1.37.0",
+    "@blue-repository/core-dev": "^0.22.0",
+    "@blue-repository/myos-dev": "^0.30.0",
+    "@blue-repository/pay-note": "^0.4.0"
   }
 }
