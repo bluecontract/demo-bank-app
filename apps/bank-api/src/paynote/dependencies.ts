@@ -23,7 +23,7 @@ import {
   type MyOsClient,
 } from '@demo-bank-app/paynotes';
 
-type PaynoteDependencies = {
+export type PaynoteDependencies = {
   logger: PowertoolsLogger;
   getOpenAiApiKey: () => Promise<string>;
   getMyOsCredentials: () => Promise<MyOsCredentials>;
