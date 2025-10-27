@@ -4,16 +4,7 @@
   "include": [],
   "references": [
     {
-      "path": "../shared/observability"
-    },
-    {
-      "path": "../shared/core"
-    },
-    {
       "path": "../shared/config"
-    },
-    {
-      "path": "../paynotes"
     },
     {
       "path": "./tsconfig.lib.json"

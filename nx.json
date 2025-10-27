@@ -57,7 +57,8 @@
         "libs/shared/core/*",
         "libs/shared/config/*",
         "libs/auth/*",
-        "libs/banking/*"
+        "libs/banking/*",
+        "libs/paynotes/*"
       ],
       "options": {
         "build": {

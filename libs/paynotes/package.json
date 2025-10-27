@@ -1,5 +1,5 @@
 {
-  "name": "@demo-bank-app/banking",
+  "name": "@demo-bank-app/paynotes",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -26,20 +26,20 @@
           "{options.outputPath}"
         ],
         "options": {
-          "outputPath": "libs/banking/dist",
-          "main": "libs/banking/src/index.ts",
-          "tsConfig": "libs/banking/tsconfig.lib.json",
+          "outputPath": "libs/paynotes/dist",
+          "main": "libs/paynotes/src/index.ts",
+          "tsConfig": "libs/paynotes/tsconfig.lib.json",
           "format": [
             "esm"
           ],
-          "declarationRootDir": "libs/banking/src"
+          "declarationRootDir": "libs/paynotes/src"
         }
       },
       "test": {
         "executor": "nx:run-commands",
         "options": {
           "command": "npx vitest run --config vitest.config.ts --exclude **/*.integration.test.ts",
-          "cwd": "libs/banking",
+          "cwd": "libs/paynotes",
           "env": {
             "VITEST_EXCLUDE_INTEGRATION": "true"
           }
@@ -54,7 +54,7 @@
           "commands": [
             "find src -name '*.integration.test.ts' -exec npx vitest run --config vitest.config.ts {} +"
           ],
-          "cwd": "libs/banking",
+          "cwd": "libs/paynotes",
           "parallel": false
         },
         "dependsOn": [
@@ -68,7 +68,7 @@
           "commands": [
             "find src -name '*.integration.test.ts' -exec npx vitest run --config vitest.config.ts {} +"
           ],
-          "cwd": "libs/banking",
+          "cwd": "libs/paynotes",
           "parallel": false
         },
         "dependsOn": [
@@ -82,8 +82,8 @@
         ],
         "options": {
           "lintFilePatterns": [
-            "libs/banking/**/*.{ts,tsx,js,jsx}",
-            "libs/banking/package.json"
+            "libs/paynotes/**/*.{ts,tsx,js,jsx}",
+            "libs/paynotes/package.json"
           ]
         },
         "dependsOn": [
@@ -95,10 +95,6 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
-    "@demo-bank-app/paynotes": "*",
-    "@demo-bank-app/shared-config": "*",
-    "@demo-bank-app/shared-core": "*",
-    "@demo-bank-app/shared-observability": "*",
-    "zod": "^3.25.67"
+    "@demo-bank-app/shared-config": "*"
   }
 }
