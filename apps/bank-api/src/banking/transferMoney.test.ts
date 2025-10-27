@@ -140,7 +140,7 @@ describe('transferMoneyHandler', () => {
   });
 
   it('should return 401 if JWT token is missing', async () => {
-    const result = await expect(
+    await expect(
       transferMoneyHandler(
         {
           body: {

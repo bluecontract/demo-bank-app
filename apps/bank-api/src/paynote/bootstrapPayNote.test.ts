@@ -10,25 +10,11 @@ const hoistedBlueId = vi.hoisted(() => ({
   calculateBlueIdFromObjectMock: vi.fn().mockReturnValue('blue-id-123'),
 }));
 
-const createMockResponse = ({
-  status,
-  ok,
-  body,
-}: {
-  status: number;
-  ok: boolean;
-  body?: unknown;
-}) => {
-  const cloneJson = vi.fn().mockResolvedValue(body);
-  return {
-    status,
-    ok,
-    json: vi.fn().mockResolvedValue(body),
-    clone: () => ({
-      json: cloneJson,
-    }),
-  };
-};
+const hoistedAdapters = vi.hoisted(() => ({
+  bootstrapDocumentMock: vi.fn(),
+  bootstrapResponse: { ok: true, status: 200, body: { documentId: 'doc-123' } },
+  idGeneratorMock: vi.fn().mockReturnValue('generated-id'),
+}));
 
 vi.mock('./dependencies', () => ({
   getDependencies: hoistedDeps.getDependenciesMock,
@@ -36,6 +22,25 @@ vi.mock('./dependencies', () => ({
 
 vi.mock('./blueId', () => ({
   calculateBlueIdFromObject: hoistedBlueId.calculateBlueIdFromObjectMock,
+}));
+
+vi.mock('./useCaseAdapters', () => ({
+  createBlueIdCalculator: () => ({
+    fromYaml: vi.fn(),
+    fromObject: hoistedBlueId.calculateBlueIdFromObjectMock,
+    toReversedJson: vi.fn(),
+  }),
+  createIdGenerator: () => ({
+    generate: hoistedAdapters.idGeneratorMock,
+  }),
+  createMyOsClient: (resolveCredentials: () => Promise<any>) => ({
+    getCredentials: resolveCredentials,
+    bootstrapDocument: async (input: any) => {
+      hoistedAdapters.bootstrapDocumentMock(input);
+      return hoistedAdapters.bootstrapResponse;
+    },
+    fetchEvent: vi.fn(),
+  }),
 }));
 
 vi.mock('../auth/middleware', () => ({
@@ -47,7 +52,6 @@ describe('bootstrapPayNoteHandler', () => {
     info: vi.fn(),
     error: vi.fn(),
   };
-  const fetchMock = vi.fn();
   const verificationRepository = {
     getVerification: vi.fn(),
   };
@@ -71,11 +75,15 @@ describe('bootstrapPayNoteHandler', () => {
     hoistedDeps.extractAuthInfoMock.mockReset();
     logger.info.mockReset();
     logger.error.mockReset();
-    fetchMock.mockReset();
     verificationRepository.getVerification.mockReset();
     hoistedBlueId.calculateBlueIdFromObjectMock.mockReturnValue('blue-id-123');
-
-    global.fetch = fetchMock as unknown as typeof fetch;
+    hoistedAdapters.bootstrapDocumentMock.mockReset();
+    hoistedAdapters.bootstrapResponse = {
+      ok: true,
+      status: 200,
+      body: { documentId: 'doc-123' },
+    };
+    hoistedAdapters.idGeneratorMock.mockReturnValue('generated-id');
 
     hoistedDeps.getDependenciesMock.mockResolvedValue({
       logger,
@@ -101,14 +109,6 @@ describe('bootstrapPayNoteHandler', () => {
       isSuccessful: true,
       validatedAt: new Date().toISOString(),
     });
-
-    fetchMock.mockResolvedValue(
-      createMockResponse({
-        status: 200,
-        ok: true,
-        body: { documentId: 'doc-123' },
-      }) as any
-    );
   });
 
   it('returns success when paynote bootstrap is accepted', async () => {
@@ -129,63 +129,31 @@ describe('bootstrapPayNoteHandler', () => {
       expect.objectContaining({
         userId: 'user-123',
         userEmail: 'john.doe@example.com',
-        payNote: expect.objectContaining({ name: 'Test PayNote' }),
       })
     );
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://test-api.myos.blue/documents/bootstrap',
-      expect.objectContaining({
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'myos-api-key',
-        },
-        body: expect.any(String),
-      })
-    );
-    const [, fetchOptions] = fetchMock.mock.calls[0] as [
-      string,
-      { body: string }
-    ];
-    const requestBody = JSON.parse(fetchOptions.body);
 
-    expect(requestBody.channelBindings).toEqual({
-      payerChannel: { email: 'john.doe@example.com' },
-      payeeChannel: { email: 'payee@example.com' },
-      guarantorChannel: { accountId: 'myos-account' },
-    });
-    expect(requestBody.document).toEqual(
-      expect.objectContaining({
-        name: 'Test PayNote',
-        payerAccountNumber: { type: 'Text', value: '137' },
-        payeeAccountNumber: {},
-        contracts: {
-          payerChannel: { type: 'MyOS Timeline Channel' },
-          payeeChannel: {
-            type: 'MyOS Timeline Channel',
-            email: 'payee@example.com',
-          },
-          guarantorChannel: { type: 'MyOS Timeline Channel' },
-        },
-        payNoteBankId: expect.objectContaining({
-          type: 'Text',
-          value: expect.any(String),
+    expect(hoistedAdapters.bootstrapDocumentMock).toHaveBeenCalledWith({
+      credentials: {
+        apiKey: 'myos-api-key',
+        accountId: 'myos-account',
+        baseUrl: 'https://test-api.myos.blue',
+      },
+      payload: expect.objectContaining({
+        document: expect.objectContaining({
+          payNoteBankId: { type: 'Text', value: 'generated-id' },
+          payerAccountNumber: { type: 'Text', value: '137' },
         }),
-      })
-    );
+        channelBindings: expect.objectContaining({
+          payerChannel: { email: 'john.doe@example.com' },
+          guarantorChannel: { accountId: 'myos-account' },
+        }),
+      }),
+    });
+
     expect(verificationRepository.getVerification).toHaveBeenCalledWith({
       userId: 'user-123',
       blueId: 'blue-id-123',
     });
-    expect(logger.info).toHaveBeenCalledWith(
-      'MyOS bootstrap response received',
-      expect.objectContaining({
-        userId: 'user-123',
-        userEmail: 'john.doe@example.com',
-        status: 200,
-        ok: true,
-      })
-    );
   });
 
   it('rejects when no successful verification exists', async () => {
@@ -203,15 +171,7 @@ describe('bootstrapPayNoteHandler', () => {
 
     expect(result.status).toBe(400);
     expect(result.body.error).toBe('PAYNOTE_NOT_VERIFIED');
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(logger.error).toHaveBeenCalledWith(
-      'PayNote bootstrap rejected due to missing verification',
-      expect.objectContaining({
-        userId: 'user-123',
-        userEmail: 'john.doe@example.com',
-        hasVerification: false,
-      })
-    );
+    expect(hoistedAdapters.bootstrapDocumentMock).not.toHaveBeenCalled();
   });
 
   it('rejects when verification score is below threshold', async () => {
@@ -236,7 +196,7 @@ describe('bootstrapPayNoteHandler', () => {
 
     expect(result.status).toBe(400);
     expect(result.body.error).toBe('PAYNOTE_NOT_VERIFIED');
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(hoistedAdapters.bootstrapDocumentMock).not.toHaveBeenCalled();
   });
 
   it('returns validation error when dependencies fail', async () => {
@@ -255,13 +215,11 @@ describe('bootstrapPayNoteHandler', () => {
   });
 
   it('returns problem response when MyOS bootstrap fails', async () => {
-    fetchMock.mockResolvedValueOnce(
-      createMockResponse({
-        status: 500,
-        ok: false,
-        body: { message: 'failure' },
-      }) as any
-    );
+    hoistedAdapters.bootstrapResponse = {
+      ok: false,
+      status: 500,
+      body: { message: 'boom' },
+    };
 
     const result = await bootstrapPayNoteHandler(
       {

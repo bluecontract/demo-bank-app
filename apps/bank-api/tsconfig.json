@@ -4,13 +4,16 @@
   "include": [],
   "references": [
     {
-      "path": "../../libs/shared/config"
+      "path": "../../libs/paynotes"
     },
     {
       "path": "../../libs/shared/observability"
     },
     {
       "path": "../../libs/shared/core"
+    },
+    {
+      "path": "../../libs/shared/config"
     },
     {
       "path": "../../libs/shared/bank-api-contract"

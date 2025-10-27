@@ -45,6 +45,17 @@ vi.mock('./blueId', () => ({
   calculateBlueIdFromYaml: hoistedBlueId.calculateBlueIdFromYamlMock,
 }));
 
+vi.mock('./useCaseAdapters', () => ({
+  createBlueIdCalculator: () => ({
+    fromYaml: hoistedBlueId.calculateBlueIdFromYamlMock,
+    fromObject: vi.fn(),
+    toReversedJson: vi.fn(),
+  }),
+  createClock: () => ({
+    now: () => new Date(),
+  }),
+}));
+
 vi.mock('../auth/middleware', () => ({
   extractAuthInfo: hoistedDeps.extractAuthInfoMock,
 }));

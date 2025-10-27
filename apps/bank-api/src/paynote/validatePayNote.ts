@@ -9,11 +9,16 @@ import {
 import { z } from 'zod';
 import OpenAI from 'openai';
 import { zodTextFormat } from 'openai/helpers/zod';
-import { calculateBlueIdFromYaml } from './blueId';
+import {
+  validatePayNote as validatePayNoteUseCase,
+  type PayNoteValidationProvider,
+  type PayNoteValidationFormData,
+} from '@demo-bank-app/paynotes';
 import {
   MIN_PAYNOTE_VERIFICATION_SCORE,
   TEST_VERIFICATION_TTL_SECONDS,
 } from './constants';
+import { createBlueIdCalculator, createClock } from './useCaseAdapters';
 
 const ValidationResultSchema = z.object({
   validationScore: z.number().min(0).max(10),
@@ -480,13 +485,7 @@ Additional notes:
 
 const buildUserPrompt = (
   yamlContent: string,
-  formData: {
-    fromAccount?: string;
-    toAccount?: string;
-    recipientName?: string;
-    totalAmount?: string;
-    title?: string;
-  }
+  formData: PayNoteValidationFormData
 ) => {
   return `
 Analyze the following PayNote and transaction details.
@@ -505,11 +504,9 @@ ${yamlContent}
 `.trim();
 };
 
-const callValidationProvider = async (
+const validateWithOpenAi = async (
   yamlContent: string,
-  formData: ServerInferRequest<
-    (typeof bankApiContract)['banking']['validatePayNote']
-  >['body']['formData'],
+  formData: PayNoteValidationFormData,
   apiKey: string
 ): Promise<ValidationResult> => {
   const client = new OpenAI({
@@ -543,6 +540,13 @@ const callValidationProvider = async (
   return validationResult as ValidationResult;
 };
 
+const createOpenAiValidationProvider = (
+  apiKey: string
+): PayNoteValidationProvider => ({
+  validate: ({ yamlContent, formData }) =>
+    validateWithOpenAi(yamlContent, formData, apiKey),
+});
+
 export const validatePayNoteHandler = async (
   request: ServerInferRequest<
     (typeof bankApiContract)['banking']['validatePayNote']
@@ -573,44 +577,40 @@ export const validatePayNoteHandler = async (
       });
     }
 
-    const blueId = calculateBlueIdFromYaml(yamlContent);
-
     const apiKey = await getOpenAiApiKey();
+    const validationProvider = createOpenAiValidationProvider(apiKey);
 
-    const validationResult = await callValidationProvider(
-      yamlContent,
-      formData,
-      apiKey
+    const result = await validatePayNoteUseCase(
+      {
+        userId,
+        yamlContent,
+        formData,
+        isTestRun: isTest,
+      },
+      {
+        verificationRepository: payNoteVerificationRepository,
+        validationProvider,
+        blueIdCalculator: createBlueIdCalculator(),
+        clock: createClock(),
+        config: {
+          minimumSuccessfulScore: MIN_PAYNOTE_VERIFICATION_SCORE,
+          testVerificationTtlSeconds: TEST_VERIFICATION_TTL_SECONDS,
+        },
+      }
     );
-
-    const validatedAt = new Date().toISOString();
-    const isSuccessful =
-      validationResult.validationScore >= MIN_PAYNOTE_VERIFICATION_SCORE;
-
-    await payNoteVerificationRepository.saveVerification({
-      userId,
-      blueId,
-      validationScore: validationResult.validationScore,
-      explanation: validationResult.explanation,
-      isSuccessful,
-      validatedAt,
-      ttl: isTest
-        ? Math.floor(Date.now() / 1000) + TEST_VERIFICATION_TTL_SECONDS
-        : undefined,
-    });
 
     logger.info('PayNote validated', {
       userId,
-      validationScore: validationResult.validationScore,
-      blueId,
-      isSuccessful,
+      validationScore: result.validationScore,
+      blueId: result.blueId,
+      isSuccessful: result.isSuccessful,
     });
 
     return {
       status: 200 as const,
       body: {
-        validationScore: validationResult.validationScore,
-        explanation: validationResult.explanation,
+        validationScore: result.validationScore,
+        explanation: result.explanation,
       },
     };
   } catch (err) {

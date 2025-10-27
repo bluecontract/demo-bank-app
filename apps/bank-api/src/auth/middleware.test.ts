@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createAuthMiddleware } from './middleware';
 import { getDependencies } from './dependencies';
-import { toUnauthorizedResponse } from '../shared/errors';
-
 vi.mock('./dependencies', () => ({
   getDependencies: vi.fn(),
 }));

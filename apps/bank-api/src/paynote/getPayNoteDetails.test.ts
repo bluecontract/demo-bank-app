@@ -38,6 +38,7 @@ describe('getPayNoteDetailsHandler', () => {
   let bankingRepository: DynamoBankingRepository;
   let originalFetch: typeof global.fetch;
   let fetchMock: ReturnType<typeof vi.fn>;
+  const holdRepository = {};
 
   const baseAccount = new Account({
     id: 'acc-123',
@@ -79,6 +80,7 @@ describe('getPayNoteDetailsHandler', () => {
     getMyOsCredentials = vi.fn().mockResolvedValue({
       apiKey: 'api-key',
       baseUrl: 'https://myos.example.com',
+      accountId: 'acct-myos',
     });
 
     bankingRepository = {
@@ -91,6 +93,7 @@ describe('getPayNoteDetailsHandler', () => {
       metrics,
       getMyOsCredentials,
       bankingRepository,
+      holdRepository,
     });
   });
 
@@ -123,6 +126,7 @@ describe('getPayNoteDetailsHandler', () => {
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue(payload),
+      text: vi.fn().mockResolvedValue(JSON.stringify(payload)),
     });
 
     const response = await getPayNoteDetailsHandler(
@@ -160,9 +164,14 @@ describe('getPayNoteDetailsHandler', () => {
     expect(response.body.triggerEvent).toMatchObject({
       actor: { value: 'payerChannel' },
     });
-    expect(logger.info).toHaveBeenCalledWith(
-      'PayNote details fetched successfully',
-      expect.objectContaining({ myosEventId })
+    const successLog = logger.info.mock.calls.find(
+      ([message]) => message === 'PayNote details fetched successfully'
+    );
+    expect(successLog?.[1]).toEqual(
+      expect.objectContaining({
+        myOsEventId: myosEventId,
+        hasDocument: true,
+      })
     );
   });
 
@@ -184,6 +193,7 @@ describe('getPayNoteDetailsHandler', () => {
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue(payload),
+      text: vi.fn().mockResolvedValue(JSON.stringify(payload)),
     });
 
     const response = await getPayNoteDetailsHandler(
@@ -282,7 +292,7 @@ describe('getPayNoteDetailsHandler', () => {
     });
     expect(logger.error).toHaveBeenCalledWith(
       'Failed to retrieve PayNote event from MyOS',
-      expect.objectContaining({ myosEventId: 'event-500' })
+      expect.objectContaining({ myOsEventId: 'event-500' })
     );
   });
 

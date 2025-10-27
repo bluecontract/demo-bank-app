@@ -26,6 +26,7 @@
     "@blue-repository/pay-note": "^0.4.0",
     "@demo-bank-app/auth": "*",
     "@demo-bank-app/banking": "*",
+    "@demo-bank-app/paynotes": "*",
     "@demo-bank-app/shared-bank-api-contract": "*",
     "@demo-bank-app/shared-config": "*",
     "@demo-bank-app/shared-core": "*",
