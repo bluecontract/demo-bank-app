@@ -1,33 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { validatePayNoteHandler } from './validatePayNote';
 
-const hoistedOpenAI = vi.hoisted(() => {
-  const responsesCreateMock = vi.fn();
-  const responsesParseMock = vi.fn();
-
-  class OpenAIStub {
-    public responses = {
-      create: responsesCreateMock,
-      parse: responsesParseMock,
-    };
-    constructor(public readonly options: { apiKey: string }) {}
-  }
-
-  return { responsesCreateMock, responsesParseMock, OpenAIStub };
-});
-
-vi.mock('openai', () => ({
-  default: hoistedOpenAI.OpenAIStub,
-}));
-
-const hoistedZod = vi.hoisted(() => ({
-  zodTextFormatMock: vi.fn(() => 'mock-format'),
-}));
-
-vi.mock('openai/helpers/zod', () => ({
-  zodTextFormat: hoistedZod.zodTextFormatMock,
-}));
-
 const hoistedDeps = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
   extractAuthInfoMock: vi.fn(),
@@ -46,30 +19,35 @@ describe('validatePayNoteHandler', () => {
     info: vi.fn(),
     error: vi.fn(),
   };
-  const getOpenAiApiKey = vi.fn().mockResolvedValue('api-key');
   const verificationRepository = {
     saveVerification: vi.fn(),
   };
+  const validationProvider = {
+    validate: vi.fn(),
+  };
+  const getOpenAiValidationProvider = vi
+    .fn()
+    .mockResolvedValue(validationProvider);
 
   beforeEach(() => {
-    hoistedOpenAI.responsesCreateMock.mockReset();
-    hoistedOpenAI.responsesParseMock.mockReset();
     logger.info.mockReset();
     logger.error.mockReset();
-    getOpenAiApiKey.mockClear();
-    hoistedZod.zodTextFormatMock.mockClear();
+    verificationRepository.saveVerification.mockReset();
+    validationProvider.validate.mockReset();
+    getOpenAiValidationProvider.mockClear();
     hoistedDeps.getDependenciesMock.mockClear();
     hoistedDeps.extractAuthInfoMock.mockClear();
-    verificationRepository.saveVerification.mockReset();
+
     hoistedDeps.getDependenciesMock.mockResolvedValue({
       logger,
-      getOpenAiApiKey,
+      getOpenAiValidationProvider,
       payNoteVerificationRepository: verificationRepository,
       bankingRepository: {} as any,
       holdRepository: {} as any,
       bankingFacade: {} as any,
       myOsClient: {} as any,
       getMyOsCredentials: vi.fn(),
+      getOpenAiApiKey: vi.fn(),
       blueIdCalculator: {
         fromYaml: vi.fn().mockReturnValue('blue-id-xyz'),
         fromObject: vi.fn(),
@@ -78,6 +56,7 @@ describe('validatePayNoteHandler', () => {
       clock: { now: () => new Date() },
       idGenerator: { generate: vi.fn() },
     });
+
     hoistedDeps.extractAuthInfoMock.mockResolvedValue({
       userId: 'user-123',
       isTest: false,
@@ -97,12 +76,13 @@ describe('validatePayNoteHandler', () => {
 
     expect(result.status).toBe(400);
     expect(result.body.error).toBe('VALIDATION_ERROR');
-    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(validationProvider.validate).not.toHaveBeenCalled();
   });
 
   it('calls the provider and returns validation results', async () => {
-    hoistedOpenAI.responsesParseMock.mockResolvedValue({
-      output_parsed: { validationScore: 8, explanation: 'Valid PayNote' },
+    validationProvider.validate.mockResolvedValue({
+      validationScore: 8,
+      explanation: 'Valid PayNote',
     });
 
     const result = await validatePayNoteHandler(
@@ -118,13 +98,13 @@ describe('validatePayNoteHandler', () => {
       { request: {} as any }
     );
 
-    expect(getOpenAiApiKey).toHaveBeenCalled();
-    expect(hoistedZod.zodTextFormatMock).toHaveBeenCalled();
-    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledWith({
-      model: 'gpt-5',
-      reasoning: { effort: 'minimal' },
-      input: expect.any(Array),
-      text: { format: 'mock-format' },
+    expect(getOpenAiValidationProvider).toHaveBeenCalled();
+    expect(validationProvider.validate).toHaveBeenCalledWith({
+      yamlContent: 'name: demo',
+      formData: {
+        fromAccount: '137',
+        totalAmount: '100.00',
+      },
     });
     expect(result.status).toBe(200);
     expect(result.body).toEqual({
@@ -138,13 +118,12 @@ describe('validatePayNoteHandler', () => {
         validationScore: 8,
         explanation: 'Valid PayNote',
         isSuccessful: true,
-        ttl: undefined,
       })
     );
   });
 
   it('handles provider failures gracefully', async () => {
-    hoistedOpenAI.responsesParseMock.mockResolvedValue({ output_parsed: null });
+    validationProvider.validate.mockRejectedValue(new Error('boom'));
 
     const result = await validatePayNoteHandler(
       {
@@ -166,8 +145,9 @@ describe('validatePayNoteHandler', () => {
       userId: 'user-123',
       isTest: true,
     });
-    hoistedOpenAI.responsesParseMock.mockResolvedValue({
-      output_parsed: { validationScore: 7, explanation: 'Looks okay' },
+    validationProvider.validate.mockResolvedValue({
+      validationScore: 7,
+      explanation: 'Looks okay',
     });
 
     vi.useFakeTimers();
@@ -188,7 +168,7 @@ describe('validatePayNoteHandler', () => {
       vi.useRealTimers();
     }
 
-    expect(verificationRepository.saveVerification).toHaveBeenCalled();
+    expect(validationProvider.validate).toHaveBeenCalled();
     const payload =
       verificationRepository.saveVerification.mock.calls[0]?.[0] ?? {};
     const expectedTtl = Math.floor(fixedDate.getTime() / 1000) + 24 * 60 * 60;

@@ -101,6 +101,8 @@
     "@blue-labs/language": "^1.37.0",
     "@blue-repository/core-dev": "^0.22.0",
     "@blue-repository/myos-dev": "^0.30.0",
-    "@blue-repository/pay-note": "^0.4.0"
+    "@blue-repository/pay-note": "^0.4.0",
+    "openai": "^6.3.0",
+    "zod": "^3.25.67"
   }
 }

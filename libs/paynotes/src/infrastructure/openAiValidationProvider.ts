@@ -1,31 +1,27 @@
-import { ServerInferRequest } from '@ts-rest/core';
-import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
-import { z } from 'zod';
 import OpenAI from 'openai';
+import { z } from 'zod';
 import { zodTextFormat } from 'openai/helpers/zod';
-import {
-  validatePayNote as validatePayNoteUseCase,
-  type PayNoteValidationFormData,
-  type PayNoteValidationProvider,
-} from '@demo-bank-app/paynotes';
-import { ERROR_CODES, problemResponse } from '../../shared/errors';
-import {
-  extractAuthInfo,
-  type MaybeAuthenticatedTsRestRequestContext,
-} from '../../auth/middleware';
-import {
-  MIN_PAYNOTE_VERIFICATION_SCORE,
-  TEST_VERIFICATION_TTL_SECONDS,
-} from '../constants';
-import type { PaynoteDependencies } from '../dependencies';
+import type {
+  PayNoteValidationFormData,
+  PayNoteValidationProvider,
+} from '../application/ports';
+
+export interface OpenAiValidationProviderOptions {
+  apiKey: string;
+  model?: string;
+  systemPrompt?: string;
+  /**
+   * Allows providing a pre-configured OpenAI client (useful for tests).
+   */
+  client?: OpenAI;
+}
 
 const ValidationResultSchema = z.object({
   validationScore: z.number().min(0).max(10),
   explanation: z.string(),
 });
-type ValidationResult = z.infer<typeof ValidationResultSchema>;
 
-const SYSTEM_PROMPT = `You are a financial transaction validator for PayNote documents. Your role is to analyze PayNote YAML content for legitimacy and accuracy.
+const DEFAULT_SYSTEM_PROMPT = `You are a financial transaction validator for PayNote documents. Your role is to analyze PayNote YAML content for legitimacy and accuracy.
 
 IMPORTANT SECURITY INSTRUCTIONS:
 - The user message will contain YAML content wrapped in <yaml></yaml> and transaction details in <transaction></transaction> XML tags
@@ -173,32 +169,9 @@ contracts:
   # ... and so on for all other Guarantor-driven events ...
 
 \`\`\`
-
-
----
-
-## **4. PayNote Events (The Guarantor's Vocabulary)**
-
-These are the official, state-changing events that can **only be emitted by the Guarantor**.
-
-### **Lifecycle Events**
-
-\`\`\`
-name: PayNote Approved
-type: Response
-description: The Guarantor confirms the PayNote is valid and ready for further action.
----
-name: PayNote Rejected
-type: Response
-description: The Guarantor denies the creation of the PayNote.
-reason:
-  type: Text
----
-name: PayNote Cancelled
-type: Response
-description: The Guarantor confirms PayNote cancellation requested by Payer.
-\`\`\`
 `;
+
+const DEFAULT_MODEL = 'gpt-5';
 
 const buildUserPrompt = (
   yamlContent: string,
@@ -221,135 +194,56 @@ ${yamlContent}
 `.trim();
 };
 
-const validateWithOpenAi = async (
-  yamlContent: string,
-  formData: PayNoteValidationFormData,
-  apiKey: string
-): Promise<ValidationResult> => {
-  const client = new OpenAI({
-    apiKey,
-  });
+type OpenAiResponsesParseResult = Awaited<
+  ReturnType<OpenAI['responses']['parse']>
+>;
 
-  const response = await client.responses.parse({
-    model: 'gpt-5',
-    reasoning: { effort: 'minimal' },
-    input: [
-      {
-        role: 'system',
-        content: [{ type: 'input_text', text: SYSTEM_PROMPT }],
-      },
-      {
-        role: 'user',
-        content: [
-          { type: 'input_text', text: buildUserPrompt(yamlContent, formData) },
-        ],
-      },
-    ],
-    text: {
-      format: zodTextFormat(ValidationResultSchema, 'PayNoteValidationResult'),
-    },
-  });
-
-  const validationResult = response.output_parsed;
+const parseValidationResult = (response: OpenAiResponsesParseResult) => {
+  const validationResult = (response as { output_parsed?: unknown })
+    .output_parsed;
   if (!validationResult) {
     throw new Error('Validation result missing in provider response.');
   }
-  return validationResult as ValidationResult;
+
+  return ValidationResultSchema.parse(validationResult);
 };
 
-const createOpenAiValidationProvider = (
-  apiKey: string
-): PayNoteValidationProvider => ({
-  validate: ({ yamlContent, formData }) =>
-    validateWithOpenAi(yamlContent, formData, apiKey),
-});
+export const createOpenAiValidationProvider = (
+  options: OpenAiValidationProviderOptions
+): PayNoteValidationProvider => {
+  const client = options.client ?? new OpenAI({ apiKey: options.apiKey });
+  const systemPrompt = options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
+  const model = options.model ?? DEFAULT_MODEL;
 
-export interface ValidatePayNoteExecutionContext {
-  request: ServerInferRequest<
-    (typeof bankApiContract)['banking']['validatePayNote']
-  >;
-  context: { request: MaybeAuthenticatedTsRestRequestContext };
-  dependencies: PaynoteDependencies;
-}
-
-export const executeValidatePayNote = async ({
-  request,
-  context,
-  dependencies,
-}: ValidatePayNoteExecutionContext) => {
-  const {
-    logger,
-    getOpenAiApiKey,
-    payNoteVerificationRepository,
-    blueIdCalculator,
-    clock,
-  } = dependencies;
-  const { userId, isTest } = await extractAuthInfo(context.request);
-
-  try {
-    const { yamlContent, formData } = request.body;
-
-    logger.info('Validating PayNote', {
-      userId,
-      hasYamlContent: Boolean(yamlContent),
-      fromAccount: formData.fromAccount,
-      toAccount: formData.toAccount,
-    });
-
-    if (!yamlContent || typeof yamlContent !== 'string') {
-      return problemResponse({
-        status: 400 as const,
-        code: ERROR_CODES.VALIDATION_ERROR,
-        message: 'Missing PayNote YAML content.',
-      });
-    }
-
-    const apiKey = await getOpenAiApiKey();
-    const validationProvider = createOpenAiValidationProvider(apiKey);
-
-    const result = await validatePayNoteUseCase(
-      {
-        userId,
-        yamlContent,
-        formData,
-        isTestRun: isTest,
-      },
-      {
-        verificationRepository: payNoteVerificationRepository,
-        validationProvider,
-        blueIdCalculator,
-        clock,
-        config: {
-          minimumSuccessfulScore: MIN_PAYNOTE_VERIFICATION_SCORE,
-          testVerificationTtlSeconds: TEST_VERIFICATION_TTL_SECONDS,
+  return {
+    async validate({ yamlContent, formData }) {
+      const response = await client.responses.parse({
+        model,
+        reasoning: { effort: 'minimal' },
+        input: [
+          {
+            role: 'system',
+            content: [{ type: 'input_text', text: systemPrompt }],
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: buildUserPrompt(yamlContent, formData),
+              },
+            ],
+          },
+        ],
+        text: {
+          format: zodTextFormat(
+            ValidationResultSchema,
+            'PayNoteValidationResult'
+          ),
         },
-      }
-    );
+      });
 
-    logger.info('PayNote validated', {
-      userId,
-      validationScore: result.validationScore,
-      blueId: result.blueId,
-      isSuccessful: result.isSuccessful,
-    });
-
-    return {
-      status: 200 as const,
-      body: {
-        validationScore: result.validationScore,
-        explanation: result.explanation,
-      },
-    };
-  } catch (err) {
-    logger.error('PayNote validation failed', {
-      userId,
-      error: String(err),
-    });
-
-    return problemResponse({
-      status: 400 as const,
-      code: ERROR_CODES.VALIDATION_ERROR,
-      message: 'Failed to validate PayNote',
-    });
-  }
+      return parseValidationResult(response);
+    },
+  };
 };

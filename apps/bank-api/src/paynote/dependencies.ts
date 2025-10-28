@@ -20,6 +20,7 @@ import {
   createBlueIdCalculator,
   createSystemClock,
   createRandomIdGenerator,
+  createOpenAiValidationProvider,
   DynamoPayNoteVerificationRepository,
   type PayNoteVerificationRepository,
   type BankingFacade,
@@ -27,6 +28,7 @@ import {
   type BlueIdCalculator,
   type ClockPort,
   type IdGeneratorPort,
+  type PayNoteValidationProvider,
 } from '@demo-bank-app/paynotes';
 
 export type PaynoteDependencies = {
@@ -41,6 +43,7 @@ export type PaynoteDependencies = {
   blueIdCalculator: BlueIdCalculator;
   clock: ClockPort;
   idGenerator: IdGeneratorPort;
+  getOpenAiValidationProvider: () => Promise<PayNoteValidationProvider>;
 };
 
 let cachedDependencies: PaynoteDependencies | null = null;
@@ -114,6 +117,20 @@ const initializeDependencies = (): PaynoteDependencies => {
   const clock = createSystemClock();
   const idGenerator = createRandomIdGenerator();
 
+  let cachedValidationProvider: PayNoteValidationProvider | null = null;
+  let cachedValidationApiKey: string | null = null;
+
+  const getOpenAiValidationProvider = async () => {
+    const apiKey = await getOpenAiApiKey();
+    if (cachedValidationProvider && cachedValidationApiKey === apiKey) {
+      return cachedValidationProvider;
+    }
+
+    cachedValidationProvider = createOpenAiValidationProvider({ apiKey });
+    cachedValidationApiKey = apiKey;
+    return cachedValidationProvider;
+  };
+
   return {
     logger,
     getOpenAiApiKey,
@@ -126,6 +143,7 @@ const initializeDependencies = (): PaynoteDependencies => {
     blueIdCalculator,
     clock,
     idGenerator,
+    getOpenAiValidationProvider,
   };
 };
 

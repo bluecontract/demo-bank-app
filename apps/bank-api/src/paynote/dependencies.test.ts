@@ -54,6 +54,7 @@ describe('paynote dependencies', () => {
     expect(first).toHaveProperty('logger', hoisted.loggerMock);
     expect(typeof first.getOpenAiApiKey).toBe('function');
     expect(typeof first.getMyOsCredentials).toBe('function');
+    expect(typeof first.getOpenAiValidationProvider).toBe('function');
   });
 
   it('re-initialises dependencies after reset', async () => {
