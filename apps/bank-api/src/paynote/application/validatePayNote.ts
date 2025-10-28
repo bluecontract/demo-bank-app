@@ -7,8 +7,6 @@ import {
   validatePayNote as validatePayNoteUseCase,
   type PayNoteValidationFormData,
   type PayNoteValidationProvider,
-  createBlueIdCalculator,
-  createSystemClock,
 } from '@demo-bank-app/paynotes';
 import { ERROR_CODES, problemResponse } from '../../shared/errors';
 import {
@@ -279,8 +277,13 @@ export const executeValidatePayNote = async ({
   context,
   dependencies,
 }: ValidatePayNoteExecutionContext) => {
-  const { logger, getOpenAiApiKey, payNoteVerificationRepository } =
-    dependencies;
+  const {
+    logger,
+    getOpenAiApiKey,
+    payNoteVerificationRepository,
+    blueIdCalculator,
+    clock,
+  } = dependencies;
   const { userId, isTest } = await extractAuthInfo(context.request);
 
   try {
@@ -314,8 +317,8 @@ export const executeValidatePayNote = async ({
       {
         verificationRepository: payNoteVerificationRepository,
         validationProvider,
-        blueIdCalculator: createBlueIdCalculator(),
-        clock: createSystemClock(),
+        blueIdCalculator,
+        clock,
         config: {
           minimumSuccessfulScore: MIN_PAYNOTE_VERIFICATION_SCORE,
           testVerificationTtlSeconds: TEST_VERIFICATION_TTL_SECONDS,

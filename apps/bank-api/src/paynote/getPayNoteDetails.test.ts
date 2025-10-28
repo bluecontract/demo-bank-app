@@ -10,7 +10,10 @@ import { Account, Money } from '@demo-bank-app/banking';
 import { MaybeAuthenticatedTsRestRequestContext } from '../auth/middleware';
 import { ERROR_CODES } from '../shared/errors';
 import { UnauthorizedRequestError } from '../auth/errors';
-import { createHttpMyOsGateway } from '@demo-bank-app/paynotes';
+import {
+  createHttpMyOsGateway,
+  createBlueIdCalculator,
+} from '@demo-bank-app/paynotes';
 
 const hoisted = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
@@ -128,6 +131,8 @@ describe('getPayNoteDetailsHandler', () => {
       captureHold: hoistedFacade.captureHoldMock,
     };
 
+    const blueIdCalculator = createBlueIdCalculator();
+
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       metrics,
@@ -136,6 +141,9 @@ describe('getPayNoteDetailsHandler', () => {
       holdRepository,
       myOsClient,
       bankingFacade,
+      blueIdCalculator,
+      clock: { now: () => new Date() },
+      idGenerator: { generate: vi.fn() },
     });
   });
 

@@ -54,6 +54,18 @@ describe('payNoteWebhookHandler', () => {
       logger,
       myOsClient,
       bankingFacade,
+      bankingRepository: {} as any,
+      holdRepository: {} as any,
+      getMyOsCredentials: vi.fn(),
+      getOpenAiApiKey: vi.fn(),
+      payNoteVerificationRepository: {} as any,
+      blueIdCalculator: {
+        fromYaml: vi.fn(),
+        fromObject: vi.fn(),
+        toReversedJson: (value: unknown) => value,
+      },
+      clock: { now: () => new Date() },
+      idGenerator: { generate: vi.fn() },
     });
   });
 

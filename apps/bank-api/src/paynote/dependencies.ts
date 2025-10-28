@@ -17,10 +17,16 @@ import {
 import {
   createBankingFacade,
   createHttpMyOsGateway,
+  createBlueIdCalculator,
+  createSystemClock,
+  createRandomIdGenerator,
   DynamoPayNoteVerificationRepository,
   type PayNoteVerificationRepository,
   type BankingFacade,
   type MyOsClient,
+  type BlueIdCalculator,
+  type ClockPort,
+  type IdGeneratorPort,
 } from '@demo-bank-app/paynotes';
 
 export type PaynoteDependencies = {
@@ -32,6 +38,9 @@ export type PaynoteDependencies = {
   holdRepository: HoldRepository;
   myOsClient: MyOsClient;
   bankingFacade: BankingFacade;
+  blueIdCalculator: BlueIdCalculator;
+  clock: ClockPort;
+  idGenerator: IdGeneratorPort;
 };
 
 let cachedDependencies: PaynoteDependencies | null = null;
@@ -101,6 +110,10 @@ const initializeDependencies = (): PaynoteDependencies => {
     logger,
   });
 
+  const blueIdCalculator = createBlueIdCalculator();
+  const clock = createSystemClock();
+  const idGenerator = createRandomIdGenerator();
+
   return {
     logger,
     getOpenAiApiKey,
@@ -110,6 +123,9 @@ const initializeDependencies = (): PaynoteDependencies => {
     holdRepository,
     myOsClient,
     bankingFacade,
+    blueIdCalculator,
+    clock,
+    idGenerator,
   };
 };
 

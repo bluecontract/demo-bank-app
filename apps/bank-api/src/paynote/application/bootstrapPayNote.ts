@@ -1,10 +1,6 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
-import {
-  bootstrapPayNote as bootstrapPayNoteUseCase,
-  createBlueIdCalculator,
-  createRandomIdGenerator,
-} from '@demo-bank-app/paynotes';
+import { bootstrapPayNote as bootstrapPayNoteUseCase } from '@demo-bank-app/paynotes';
 import { problemResponse, ERROR_CODES } from '../../shared/errors';
 import {
   extractAuthInfo,
@@ -28,7 +24,13 @@ export const executeBootstrapPayNote = async ({
   context,
   dependencies,
 }: BootstrapPayNoteExecutionContext) => {
-  const { logger, payNoteVerificationRepository, myOsClient } = dependencies;
+  const {
+    logger,
+    payNoteVerificationRepository,
+    myOsClient,
+    idGenerator,
+    blueIdCalculator,
+  } = dependencies;
 
   try {
     const { userId, userEmail } = await extractAuthInfo(context.request);
@@ -50,8 +52,8 @@ export const executeBootstrapPayNote = async ({
       {
         verificationRepository: payNoteVerificationRepository,
         myOsClient,
-        idGenerator: createRandomIdGenerator(),
-        blueIdCalculator: createBlueIdCalculator(),
+        idGenerator,
+        blueIdCalculator,
         minimumSuccessfulScore: MIN_PAYNOTE_VERIFICATION_SCORE,
       }
     );

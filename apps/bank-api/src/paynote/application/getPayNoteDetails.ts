@@ -1,11 +1,7 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { AccountNotFoundError } from '@demo-bank-app/banking';
-import {
-  getPayNoteDetails as getPayNoteDetailsUseCase,
-  createBlueIdCalculator,
-  createSystemClock,
-} from '@demo-bank-app/paynotes';
+import { getPayNoteDetails as getPayNoteDetailsUseCase } from '@demo-bank-app/paynotes';
 import { ERROR_CODES, problemResponse } from '../../shared/errors';
 import {
   extractAuthInfo,
@@ -26,7 +22,8 @@ export const executeGetPayNoteDetails = async ({
   context,
   dependencies,
 }: GetPayNoteDetailsExecutionContext) => {
-  const { logger, myOsClient, bankingFacade } = dependencies;
+  const { logger, myOsClient, bankingFacade, blueIdCalculator, clock } =
+    dependencies;
 
   const { accountNumber, myosEventId } = request.params;
 
@@ -47,8 +44,8 @@ export const executeGetPayNoteDetails = async ({
       {
         bankingFacade,
         myOsClient,
-        blueIdCalculator: createBlueIdCalculator(),
-        clock: createSystemClock(),
+        blueIdCalculator,
+        clock,
       }
     );
 

@@ -18,24 +18,6 @@ vi.mock('./dependencies', () => ({
   getDependencies: hoistedDeps.getDependenciesMock,
 }));
 
-vi.mock('@demo-bank-app/paynotes', async () => {
-  const actual = await vi.importActual<
-    typeof import('@demo-bank-app/paynotes')
-  >('@demo-bank-app/paynotes');
-
-  return {
-    ...actual,
-    createBlueIdCalculator: () => ({
-      fromYaml: vi.fn(),
-      fromObject: hoistedAdapters.calculateBlueIdFromObjectMock,
-      toReversedJson: vi.fn(),
-    }),
-    createRandomIdGenerator: () => ({
-      generate: hoistedAdapters.idGeneratorMock,
-    }),
-  };
-});
-
 vi.mock('../auth/middleware', () => ({
   extractAuthInfo: hoistedDeps.extractAuthInfoMock,
 }));
@@ -100,8 +82,19 @@ describe('bootstrapPayNoteHandler', () => {
     hoistedDeps.getDependenciesMock.mockResolvedValue({
       logger,
       getMyOsCredentials: hoistedAdapters.getCredentialsMock,
+      getOpenAiApiKey: vi.fn(),
       payNoteVerificationRepository: verificationRepository,
       myOsClient,
+      bankingRepository: {} as any,
+      holdRepository: {} as any,
+      bankingFacade: {} as any,
+      blueIdCalculator: {
+        fromYaml: vi.fn(),
+        fromObject: hoistedAdapters.calculateBlueIdFromObjectMock,
+        toReversedJson: vi.fn(),
+      },
+      clock: { now: () => new Date() },
+      idGenerator: { generate: hoistedAdapters.idGeneratorMock },
     });
 
     hoistedDeps.extractAuthInfoMock.mockResolvedValue({
