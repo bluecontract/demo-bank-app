@@ -4,7 +4,7 @@ import type {
   ClockPort,
   LogEntry,
   MyOsClient,
-} from './ports';
+} from '../ports';
 
 export interface GetPayNoteDetailsInput {
   accountNumber: string;

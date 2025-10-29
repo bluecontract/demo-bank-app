@@ -4,7 +4,7 @@ import type {
   PayNoteValidationFormData,
   PayNoteValidationProvider,
   PayNoteVerificationRepository,
-} from './ports';
+} from '../ports';
 
 export interface ValidatePayNoteInput {
   userId: string;

@@ -5,7 +5,7 @@ import type {
   MyOsClient,
   PayNoteVerificationRecord,
   PayNoteVerificationRepository,
-} from './ports';
+} from '../ports';
 
 export interface BootstrapPayNoteInput {
   userId: string;

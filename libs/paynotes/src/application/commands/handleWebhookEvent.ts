@@ -3,7 +3,7 @@ import type {
   LogEntry,
   MyOsClient,
   MyOsFetchEventResult,
-} from './ports';
+} from '../ports';
 
 const RESERVE_FUNDS_EVENT_NAME = 'Reserve Funds Requested';
 const CAPTURE_FUNDS_EVENT_NAME = 'Capture Funds Requested';
