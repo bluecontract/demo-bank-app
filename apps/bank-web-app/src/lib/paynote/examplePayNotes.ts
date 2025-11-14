@@ -99,7 +99,7 @@ payNoteInitialStateDescription:
   summary: |
     ## This is a direct payment of $250.00.
     This document authorizes a single, immediate transfer of funds.
-  description: |
+  details: |
     #### Participants
     * **Payer**: Initiates the request and funds the payment.
     * **Payee**: Receives payment once approval is granted.
@@ -157,7 +157,6 @@ payNoteInitialStateDescription:
     ## Transfer $50.00 after an approval step
     This document holds the funds until the designated approver authorizes payment.
   details: |
-
     #### Participants
     * **Payer**: Initiates the request and funds the payment.
     * **Approver**: Reviews and authorizes the disbursement.
