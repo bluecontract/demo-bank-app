@@ -82,15 +82,17 @@ describe('payNoteWebhookHandler', () => {
         },
         emitted: [
           {
-            type: { name: 'Reserve Funds and Capture Immediately Requested' },
+            type: {
+              name: 'PayNote/Reserve Funds and Capture Immediately Requested',
+            },
             amount: { value: 15000 },
           },
           {
-            type: { name: 'Capture Funds Requested' },
+            type: { name: 'PayNote/Capture Funds Requested' },
             amount: { value: 15000 },
           },
           {
-            type: { name: 'Reserve Funds Requested' },
+            type: { name: 'PayNote/Reserve Funds Requested' },
             amount: { value: 15000 },
           },
         ],

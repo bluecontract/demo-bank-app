@@ -36,12 +36,12 @@ describe('bootstrapPayNoteHandler', () => {
     payerAccountNumber: {},
     payeeAccountNumber: {},
     contracts: {
-      payerChannel: { type: 'MyOS Timeline Channel' },
+      payerChannel: { type: 'MyOS/MyOS Timeline Channel' },
       payeeChannel: {
-        type: 'MyOS Timeline Channel',
+        type: 'MyOS/MyOS Timeline Channel',
         email: 'payee@example.com',
       },
-      guarantorChannel: { type: 'MyOS Timeline Channel' },
+      guarantorChannel: { type: 'MyOS/MyOS Timeline Channel' },
     },
   });
 

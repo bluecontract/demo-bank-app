@@ -98,10 +98,9 @@
     "@demo-bank-app/shared-config": "*",
     "@demo-bank-app/banking": "*",
     "@demo-bank-app/shared-observability": "*",
-    "@blue-labs/language": "^1.37.0",
-    "@blue-repository/core-dev": "^0.22.0",
-    "@blue-repository/myos-dev": "^0.30.0",
-    "@blue-repository/pay-note": "^0.4.0",
+    "@blue-labs/language": "2.0.0-rc.22",
+    "@blue-labs/shared-utils": "2.0.0-rc.22",
+    "@blue-repository/types": "^0.2.0",
     "openai": "^6.3.0",
     "zod": "^3.25.67"
   }

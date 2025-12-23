@@ -5,10 +5,10 @@ import type {
   MyOsFetchEventResult,
 } from '../ports';
 
-const RESERVE_FUNDS_EVENT_NAME = 'Reserve Funds Requested';
-const CAPTURE_FUNDS_EVENT_NAME = 'Capture Funds Requested';
+const RESERVE_FUNDS_EVENT_NAME = 'PayNote/Reserve Funds Requested';
+const CAPTURE_FUNDS_EVENT_NAME = 'PayNote/Capture Funds Requested';
 const CAPTURE_IMMEDIATELY_EVENT_NAME =
-  'Reserve Funds and Capture Immediately Requested';
+  'PayNote/Reserve Funds and Capture Immediately Requested';
 
 export interface HandleWebhookEventInput {
   eventId: string;

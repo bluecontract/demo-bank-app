@@ -79,11 +79,11 @@ Every PayNote has three core roles, represented by channels in the document:
 
 - **Payer**: The party providing the funds or value. The Payer initiates the PayNote and authorizes the use of their resources.
 - **Payee**: The party intended to receive the funds or value. The Payee is often the one who triggers the final capture of funds.
-- **Guarantor**: The trusted entity that controls the underlying funds or value (e.g., a bank, a credit card processor, a platform like a restaurant for a voucher). The Guarantor is the ultimate source of truth; it is the only participant with the authority to emit events that formally change the PayNote's state (e.g., \`Funds Reserved\`, \`Funds Captured\`).
+- **Guarantor**: The trusted entity that controls the underlying funds or value (e.g., a bank, a credit card processor, a platform like a restaurant for a voucher). The Guarantor is the ultimate source of truth; it is the only participant with the authority to emit events that formally change the PayNote's state (e.g., \`PayNote/Funds Reserved\`, \`PayNote/Funds Captured\`).
 
 ### **The Event-Driven Lifecycle**
 
-A PayNote evolves through a series of states. Participants (Payer or Payee) trigger **Requests** (e.g., \`Capture Funds Requested\`), and the Guarantor responds by emitting definitive, strongly-typed **Events** (e.g., \`Funds Captured\` or \`Capture Declined\`). This creates a decoupled, asynchronous flow where all state changes are explicit, auditable facts recorded on a timeline.
+A PayNote evolves through a series of states. Participants (Payer or Payee) trigger **Requests** (e.g., \`PayNote/Capture Funds Requested\`), and the Guarantor responds by emitting definitive, strongly-typed **Events** (e.g., \`PayNote/Funds Captured\` or \`PayNote/Capture Declined\`). This creates a decoupled, asynchronous flow where all state changes are explicit, auditable facts recorded on a timeline.
 
 ### **Child PayNotes: Subdividing Value**
 
@@ -140,31 +140,31 @@ payNoteInitialStateDescription:
 # --- Participants & Contracts ---
 contracts:
   payerChannel:
-    type: MyOS Timeline
+    type: MyOS/MyOS Timeline
   payeeChannel:
-    type: MyOS Timeline
+    type: MyOS/MyOS Timeline
   guarantorChannel:
-    type: MyOS Timeline
+    type: MyOS/MyOS Timeline
 
   # --- Operations for the Guarantor to emit state-changing events ---
   # Each operation is restricted to the guarantorChannel. When called, it simply
   # triggers a corresponding event that all participants can observe.
 
   approvePayNote:
-    type: Operation
+    type: Conversation/Operation
     channel: guarantorChannel
-    # ... implementation triggers 'PayNote Approved' event ...
+    # ... implementation triggers 'PayNote/PayNote Approved' event ...
 
   rejectPayNote:
-    type: Operation
+    type: Conversation/Operation
     channel: guarantorChannel
-    # ... implementation triggers 'PayNote Rejected' event ...
+    # ... implementation triggers 'PayNote/PayNote Rejected' event ...
 
   specifySettlementAmount:
-    type: Operation
+    type: Conversation/Operation
     channel: guarantorChannel
     request: { type: Integer } # The final amount
-    # ... implementation triggers 'Settlement Amount Specified' event ...
+    # ... implementation triggers 'PayNote/Settlement Amount Specified' event ...
 
   # ... and so on for all other Guarantor-driven events ...
 

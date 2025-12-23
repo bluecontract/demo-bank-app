@@ -70,29 +70,29 @@ export function renderExamplePayNote(
 }
 
 const ONE_TIME_PAYMENT_YAML = `name: One time payment
-type: PayNote
+type: PayNote/PayNote
 currency: USD
 amount:
   total: 25000 # $250
 
 contracts:
   payerChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
   payeeChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
   guarantorChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
   initLifecycleChannel:
-    type: Lifecycle Event Channel
+    type: Core/Lifecycle Event Channel
     event:
-      type: Document Processing Initiated
+      type: Core/Document Processing Initiated
   bootstrap:
-    type: Sequential Workflow
+    type: Conversation/Sequential Workflow
     channel: initLifecycleChannel
     steps:
-      - type: Trigger Event
+      - type: Conversation/Trigger Event
         event:
-          type: Reserve Funds and Capture Immediately Requested
+          type: PayNote/Reserve Funds and Capture Immediately Requested
           amount: 25000
 
 payNoteInitialStateDescription:
@@ -110,46 +110,46 @@ payNoteInitialStateDescription:
 `;
 
 const ONE_TIME_PAYMENT_WITH_AUTHORIZATION_YAML = `name: One time payment with authorization
-type: PayNote
+type: PayNote/PayNote
 currency: USD
 amount:
   total: 5000 # $50
 
 contracts:
   payerChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
   payeeChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
   guarantorChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
   authorizationChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
     email: '{{AUTHORIZER_EMAIL}}'
   initLifecycleChannel:
-    type: Lifecycle Event Channel
+    type: Core/Lifecycle Event Channel
     event:
-      type: Document Processing Initiated
+      type: Core/Document Processing Initiated
   bootstrap:
-    type: Sequential Workflow
+    type: Conversation/Sequential Workflow
     channel: initLifecycleChannel
     steps:
-      - type: Trigger Event
+      - type: Conversation/Trigger Event
         event:
-          type: Reserve Funds Requested
+          type: PayNote/Reserve Funds Requested
           amount: 5000
 
   authorizePayment:
-    type: Operation
+    type: Conversation/Operation
     description: Approver must authorize before the funds are released to the payee.
     channel: authorizationChannel
   authorizePaymentImpl:
-    type: Sequential Workflow Operation
+    type: Conversation/Sequential Workflow Operation
     operation: authorizePayment
     steps:
       - name: RequestCapture
-        type: Trigger Event
+        type: Conversation/Trigger Event
         event:
-          type: Capture Funds Requested
+          type: PayNote/Capture Funds Requested
           amount: 5000
 
 payNoteInitialStateDescription:
@@ -171,47 +171,47 @@ payNoteInitialStateDescription:
 `;
 
 const ESCROW_PAYMENT_YAML = `name: Escrow Payment for Shipment
-type: PayNote
+type: PayNote/PayNote
 currency: USD
 amount:
   total: 12000 # $120
 
 contracts:
   payerChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
   payeeChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
   guarantorChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
   shipmentCompanyChannel:
-    type: MyOS Timeline Channel
+    type: MyOS/MyOS Timeline Channel
     email: '{{SHIPMENT_COMPANY_EMAIL}}'
 
   initLifecycleChannel:
-    type: Lifecycle Event Channel
+    type: Core/Lifecycle Event Channel
     event:
-      type: Document Processing Initiated
+      type: Core/Document Processing Initiated
   bootstrap:
-    type: Sequential Workflow
+    type: Conversation/Sequential Workflow
     channel: initLifecycleChannel
     steps:
-      - type: Trigger Event
+      - type: Conversation/Trigger Event
         event:
-          type: Reserve Funds Requested
+          type: PayNote/Reserve Funds Requested
           amount: 12000
 
   shipmentConfirmed:
-    type: Operation
+    type: Conversation/Operation
     description: Must be called by the Shipment Company to confirm delivery and trigger payment capture.
     channel: shipmentCompanyChannel
   shipmentConfirmedImpl:
-    type: Sequential Workflow Operation
+    type: Conversation/Sequential Workflow Operation
     operation: shipmentConfirmed
     steps:
       - name: RequestFinalCapture
-        type: Trigger Event
+        type: Conversation/Trigger Event
         event:
-          type: Capture Funds Requested
+          type: PayNote/Capture Funds Requested
           amount: 12000
 
 payNoteInitialStateDescription:

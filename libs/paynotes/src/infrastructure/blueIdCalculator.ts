@@ -1,11 +1,33 @@
 import { Blue } from '@blue-labs/language';
-import { repository as coreRepository } from '@blue-repository/core-dev';
-import { repository as myosRepository } from '@blue-repository/myos-dev';
-import { repository as payNoteRepository } from '@blue-repository/pay-note';
+import type { JsonValue } from '@blue-labs/shared-utils';
+import { repository } from '@blue-repository/types';
 import type { BlueIdCalculator } from '../application/ports';
 
+const buildBlueRepository = () => {
+  const packages = Object.values(repository.packages);
+
+  const blueIds = packages.reduce<Record<string, string>>((acc, pkg) => {
+    return { ...acc, ...pkg.aliases };
+  }, {});
+
+  const schemas = packages.flatMap(pkg => Object.values(pkg.schemas));
+
+  const contents = packages.reduce<Record<string, JsonValue>>((acc, pkg) => {
+    return { ...acc, ...pkg.contents };
+  }, {});
+
+  return {
+    name: repository.name,
+    repositoryVersions: repository.repositoryVersions,
+    packages: repository.packages,
+    blueIds,
+    schemas,
+    contents,
+  };
+};
+
 const blue = new Blue({
-  repositories: [coreRepository, myosRepository, payNoteRepository],
+  repositories: [buildBlueRepository()],
 });
 
 export const createBlueIdCalculator = (): BlueIdCalculator => ({
