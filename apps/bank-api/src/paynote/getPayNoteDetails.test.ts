@@ -10,9 +10,21 @@ import { Account, Money } from '@demo-bank-app/banking';
 import { MaybeAuthenticatedTsRestRequestContext } from '../auth/middleware';
 import { ERROR_CODES } from '../shared/errors';
 import { UnauthorizedRequestError } from '../auth/errors';
+import {
+  createHttpMyOsGateway,
+  createBlueIdCalculator,
+} from '@demo-bank-app/paynotes';
 
 const hoisted = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
+}));
+
+const hoistedFacade = vi.hoisted(() => ({
+  getAccountForUserMock: vi.fn(),
+  getAccountByNumberMock: vi.fn(),
+  transferFundsMock: vi.fn(),
+  reserveFundsMock: vi.fn(),
+  captureHoldMock: vi.fn(),
 }));
 
 vi.mock('./dependencies', () => ({
@@ -38,6 +50,7 @@ describe('getPayNoteDetailsHandler', () => {
   let bankingRepository: DynamoBankingRepository;
   let originalFetch: typeof global.fetch;
   let fetchMock: ReturnType<typeof vi.fn>;
+  const holdRepository = {};
 
   const baseAccount = new Account({
     id: 'acc-123',
@@ -79,6 +92,7 @@ describe('getPayNoteDetailsHandler', () => {
     getMyOsCredentials = vi.fn().mockResolvedValue({
       apiKey: 'api-key',
       baseUrl: 'https://myos.example.com',
+      accountId: 'acct-myos',
     });
 
     bankingRepository = {
@@ -86,11 +100,50 @@ describe('getPayNoteDetailsHandler', () => {
       getAccountById: vi.fn().mockResolvedValue(baseAccount),
     } as unknown as DynamoBankingRepository;
 
+    hoistedFacade.getAccountForUserMock.mockReset();
+    hoistedFacade.getAccountByNumberMock.mockReset();
+    hoistedFacade.transferFundsMock.mockReset();
+    hoistedFacade.reserveFundsMock.mockReset();
+    hoistedFacade.captureHoldMock.mockReset();
+
+    hoistedFacade.getAccountForUserMock.mockImplementation(
+      async (accountNumber: string, userId: string) => {
+        if (
+          accountNumber === baseAccount.accountNumber &&
+          userId === baseAccount.ownerUserId
+        ) {
+          return {
+            id: baseAccount.id,
+            accountNumber: baseAccount.accountNumber,
+            ownerUserId: baseAccount.ownerUserId,
+          };
+        }
+        return null;
+      }
+    );
+
+    const myOsClient = createHttpMyOsGateway(getMyOsCredentials);
+    const bankingFacade = {
+      getAccountByNumber: hoistedFacade.getAccountByNumberMock,
+      getAccountForUser: hoistedFacade.getAccountForUserMock,
+      transferFunds: hoistedFacade.transferFundsMock,
+      reserveFunds: hoistedFacade.reserveFundsMock,
+      captureHold: hoistedFacade.captureHoldMock,
+    };
+
+    const blueIdCalculator = createBlueIdCalculator();
+
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       metrics,
       getMyOsCredentials,
       bankingRepository,
+      holdRepository,
+      myOsClient,
+      bankingFacade,
+      blueIdCalculator,
+      clock: { now: () => new Date() },
+      idGenerator: { generate: vi.fn() },
     });
   });
 
@@ -123,6 +176,7 @@ describe('getPayNoteDetailsHandler', () => {
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue(payload),
+      text: vi.fn().mockResolvedValue(JSON.stringify(payload)),
     });
 
     const response = await getPayNoteDetailsHandler(
@@ -160,9 +214,14 @@ describe('getPayNoteDetailsHandler', () => {
     expect(response.body.triggerEvent).toMatchObject({
       actor: { value: 'payerChannel' },
     });
-    expect(logger.info).toHaveBeenCalledWith(
-      'PayNote details fetched successfully',
-      expect.objectContaining({ myosEventId })
+    const successLog = logger.info.mock.calls.find(
+      ([message]) => message === 'PayNote details fetched successfully'
+    );
+    expect(successLog?.[1]).toEqual(
+      expect.objectContaining({
+        myOsEventId: myosEventId,
+        hasDocument: true,
+      })
     );
   });
 
@@ -184,6 +243,7 @@ describe('getPayNoteDetailsHandler', () => {
       ok: true,
       status: 200,
       json: vi.fn().mockResolvedValue(payload),
+      text: vi.fn().mockResolvedValue(JSON.stringify(payload)),
     });
 
     const response = await getPayNoteDetailsHandler(
@@ -201,22 +261,7 @@ describe('getPayNoteDetailsHandler', () => {
   });
 
   it('returns 404 if account is not owned by the user', async () => {
-    const foreignAccount = new Account({
-      id: 'acc-999',
-      accountNumber: TEST_ACCOUNT_NUMBER,
-      name: 'Checking',
-      ownerUserId: 'someone-else',
-      status: 'ACTIVE',
-      currency: 'USD',
-      createdAt: new Date('2024-01-01T00:00:00.000Z'),
-      ledgerBalanceMinor: new Money(1_000_00),
-      availableBalanceMinor: new Money(1_000_00),
-      balanceVersion: 1,
-    });
-
-    vi.mocked(bankingRepository.getAccountById).mockResolvedValueOnce(
-      foreignAccount
-    );
+    hoistedFacade.getAccountForUserMock.mockResolvedValueOnce(null);
 
     const response = await getPayNoteDetailsHandler(
       {
@@ -282,7 +327,7 @@ describe('getPayNoteDetailsHandler', () => {
     });
     expect(logger.error).toHaveBeenCalledWith(
       'Failed to retrieve PayNote event from MyOS',
-      expect.objectContaining({ myosEventId: 'event-500' })
+      expect.objectContaining({ myOsEventId: 'event-500' })
     );
   });
 

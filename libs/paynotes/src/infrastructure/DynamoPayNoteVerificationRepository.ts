@@ -5,6 +5,11 @@ import {
   PutCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
+import type {
+  PayNoteVerificationRepository,
+  PayNoteVerificationRecord,
+  SavePayNoteVerificationInput,
+} from '../application/ports';
 
 const ENTITY_TYPE = 'PAYNOTE_VERIFICATION';
 
@@ -13,39 +18,11 @@ const TABLE_PREFIXES = {
   PAYNOTE_VERIFICATION: 'PAYNOTE_VERIFICATION#',
 } as const;
 
-export interface PayNoteVerificationRecord {
-  userId: string;
-  blueId: string;
-  validationScore: number;
-  explanation: string;
-  isSuccessful: boolean;
-  validatedAt: string;
-  ttl?: number;
-}
-
-export interface SavePayNoteVerificationInput {
-  userId: string;
-  blueId: string;
-  validationScore: number;
-  explanation: string;
-  isSuccessful: boolean;
-  validatedAt: string;
-  ttl?: number;
-}
-
 type DynamoPayNoteVerificationRepositoryConfig = {
   tableName: string;
   region: string;
   endpoint?: string;
 };
-
-export interface PayNoteVerificationRepository {
-  saveVerification(input: SavePayNoteVerificationInput): Promise<void>;
-  getVerification(params: {
-    userId: string;
-    blueId: string;
-  }): Promise<PayNoteVerificationRecord | null>;
-}
 
 export class DynamoPayNoteVerificationRepository
   implements PayNoteVerificationRepository
@@ -149,3 +126,9 @@ export class DynamoPayNoteVerificationRepository
     };
   }
 }
+
+export type {
+  PayNoteVerificationRepository,
+  PayNoteVerificationRecord,
+  SavePayNoteVerificationInput,
+} from '../application/ports';

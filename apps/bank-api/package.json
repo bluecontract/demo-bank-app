@@ -20,12 +20,9 @@
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/client-secrets-manager": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
-    "@blue-labs/language": "^1.37.0",
-    "@blue-repository/core-dev": "^0.22.0",
-    "@blue-repository/myos-dev": "^0.30.0",
-    "@blue-repository/pay-note": "^0.4.0",
     "@demo-bank-app/auth": "*",
     "@demo-bank-app/banking": "*",
+    "@demo-bank-app/paynotes": "*",
     "@demo-bank-app/shared-bank-api-contract": "*",
     "@demo-bank-app/shared-config": "*",
     "@demo-bank-app/shared-core": "*",
@@ -35,7 +32,6 @@
     "@types/aws-lambda": "^8.10.150",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "openai": "^6.3.0",
-    "zod": "^3.25.67"
+    "openai": "^6.3.0"
   }
 }

@@ -1,14 +1,13 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
+import { bootstrapPayNote as bootstrapPayNoteUseCase } from '@demo-bank-app/paynotes';
+import { problemResponse, ERROR_CODES } from '../shared/errors';
 import {
   extractAuthInfo,
-  MaybeAuthenticatedTsRestRequestContext,
+  type MaybeAuthenticatedTsRestRequestContext,
 } from '../auth/middleware';
 import { getDependencies } from './dependencies';
-import { ERROR_CODES, problemResponse } from '../shared/errors';
-import { calculateBlueIdFromObject } from './blueId';
 import { MIN_PAYNOTE_VERIFICATION_SCORE } from './constants';
-import { randomUUID } from 'crypto';
 
 export const bootstrapPayNoteHandler = async (
   request: ServerInferRequest<
@@ -18,8 +17,14 @@ export const bootstrapPayNoteHandler = async (
     request: MaybeAuthenticatedTsRestRequestContext;
   }
 ) => {
-  const { logger, getMyOsCredentials, payNoteVerificationRepository } =
-    await getDependencies();
+  const dependencies = await getDependencies();
+  const {
+    logger,
+    payNoteVerificationRepository,
+    myOsClient,
+    idGenerator,
+    blueIdCalculator,
+  } = dependencies;
 
   try {
     const { userId, userEmail } = await extractAuthInfo(context.request);
@@ -31,26 +36,29 @@ export const bootstrapPayNoteHandler = async (
       payNote,
     });
 
-    const blueId = calculateBlueIdFromObject(
-      payNote as Record<string, unknown>
+    const result = await bootstrapPayNoteUseCase(
+      {
+        userId,
+        userEmail: userEmail ?? '',
+        payNote,
+        formData,
+      },
+      {
+        verificationRepository: payNoteVerificationRepository,
+        myOsClient,
+        idGenerator,
+        blueIdCalculator,
+        minimumSuccessfulScore: MIN_PAYNOTE_VERIFICATION_SCORE,
+      }
     );
 
-    const verification = await payNoteVerificationRepository.getVerification({
-      userId,
-      blueId,
-    });
-
-    if (
-      !verification ||
-      !verification.isSuccessful ||
-      verification.validationScore < MIN_PAYNOTE_VERIFICATION_SCORE
-    ) {
+    if (result.type === 'verification-failed') {
       logger.error('PayNote bootstrap rejected due to missing verification', {
         userId,
         userEmail,
-        blueId,
-        hasVerification: Boolean(verification),
-        verificationScore: verification?.validationScore,
+        blueId: result.blueId,
+        hasVerification: Boolean(result.verification),
+        verificationScore: result.verification?.validationScore,
       });
 
       return problemResponse({
@@ -60,18 +68,7 @@ export const bootstrapPayNoteHandler = async (
       });
     }
 
-    payNote.payNoteBankId = {
-      type: 'Text',
-      value: randomUUID(),
-    };
-
-    if (formData.fromAccount) {
-      if (!payNote.payerAccountNumber) {
-        payNote.payerAccountNumber = {};
-      }
-      payNote.payerAccountNumber.type = 'Text';
-      payNote.payerAccountNumber.value = formData.fromAccount;
-    } else {
+    if (result.type === 'missing-from-account') {
       return problemResponse({
         status: 400 as const,
         code: ERROR_CODES.VALIDATION_ERROR,
@@ -79,84 +76,21 @@ export const bootstrapPayNoteHandler = async (
       });
     }
 
-    if (formData.toAccount) {
-      if (!payNote.payeeAccountNumber) {
-        payNote.payeeAccountNumber = {};
-      }
-      payNote.payeeAccountNumber.type = 'Text';
-      payNote.payeeAccountNumber.value = formData.toAccount;
-    }
-
-    const credentials = await getMyOsCredentials();
-
-    const contracts = (payNote.contracts ?? {}) as Record<
-      string,
-      { type?: string; email?: string; accountId?: string }
-    >;
-
-    const channelBindings: Record<
-      string,
-      { email?: string; accountId?: string }
-    > = {};
-
-    if (contracts.payerChannel) {
-      // set payer to current user by default if payerChannel exists in paynote
-      channelBindings.payerChannel = { email: userEmail };
-    }
-
-    Object.entries(contracts).forEach(([k, v]) => {
-      if (v?.type === 'MyOS Timeline Channel') {
-        if (v?.email) {
-          channelBindings[k] = {
-            email: v.email,
-          };
-        } else if (v?.accountId) {
-          channelBindings[k] = {
-            accountId: v.accountId,
-          };
-        } else if (!channelBindings[k]) {
-          // default all not specified to bank account
-          channelBindings[k] = {
-            accountId: credentials.accountId,
-          };
-        }
-      }
-    });
-
-    const payload = {
-      channelBindings,
-      document: payNote,
-    };
-
-    const bootstrapUrl = `${credentials.baseUrl}/documents/bootstrap`;
-
-    const response = await fetch(bootstrapUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: credentials.apiKey,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseBody = await response
-      .clone()
-      .json()
-      .catch(() => undefined);
+    const responseBody = result.response.body;
 
     logger.info('MyOS bootstrap response received', {
       userId,
       userEmail,
-      status: response.status,
-      ok: response.ok,
+      status: result.response.status,
+      ok: result.response.ok,
       responseBody,
     });
 
-    if (!response.ok) {
+    if (result.type === 'external-error') {
       logger.error('MyOS bootstrap request failed', {
         userId,
         userEmail,
-        status: response.status,
+        status: result.response.status,
         responseBody,
       });
 

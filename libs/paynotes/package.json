@@ -1,0 +1,108 @@
+{
+  "name": "@demo-bank-app/paynotes",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!**/*.tsbuildinfo"
+  ],
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "@nx/esbuild:esbuild",
+        "outputs": [
+          "{options.outputPath}"
+        ],
+        "options": {
+          "outputPath": "libs/paynotes/dist",
+          "main": "libs/paynotes/src/index.ts",
+          "tsConfig": "libs/paynotes/tsconfig.lib.json",
+          "format": [
+            "esm"
+          ],
+          "declarationRootDir": "libs/paynotes/src"
+        }
+      },
+      "test": {
+        "executor": "nx:run-commands",
+        "options": {
+          "command": "npx vitest run --config vitest.config.ts --exclude **/*.integration.test.ts",
+          "cwd": "libs/paynotes",
+          "env": {
+            "VITEST_EXCLUDE_INTEGRATION": "true"
+          }
+        },
+        "dependsOn": [
+          "^build"
+        ]
+      },
+      "test:integration": {
+        "executor": "nx:run-commands",
+        "options": {
+          "commands": [
+            "find src -name '*.integration.test.ts' -exec npx vitest run --config vitest.config.ts {} +"
+          ],
+          "cwd": "libs/paynotes",
+          "parallel": false
+        },
+        "dependsOn": [
+          "^build",
+          "localstack:serve"
+        ]
+      },
+      "test:integration:ci": {
+        "executor": "nx:run-commands",
+        "options": {
+          "commands": [
+            "find src -name '*.integration.test.ts' -exec npx vitest run --config vitest.config.ts {} +"
+          ],
+          "cwd": "libs/paynotes",
+          "parallel": false
+        },
+        "dependsOn": [
+          "^build"
+        ]
+      },
+      "lint": {
+        "executor": "@nx/eslint:lint",
+        "outputs": [
+          "{options.outputFile}"
+        ],
+        "options": {
+          "lintFilePatterns": [
+            "libs/paynotes/**/*.{ts,tsx,js,jsx}",
+            "libs/paynotes/package.json"
+          ]
+        },
+        "dependsOn": [
+          "typecheck"
+        ]
+      }
+    }
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.840.0",
+    "@aws-sdk/lib-dynamodb": "^3.840.0",
+    "@demo-bank-app/shared-config": "*",
+    "@demo-bank-app/banking": "*",
+    "@demo-bank-app/shared-observability": "*",
+    "@blue-labs/language": "^1.37.0",
+    "@blue-repository/core-dev": "^0.22.0",
+    "@blue-repository/myos-dev": "^0.30.0",
+    "@blue-repository/pay-note": "^0.4.0",
+    "openai": "^6.3.0",
+    "zod": "^3.25.67"
+  }
+}

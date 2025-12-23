@@ -69,7 +69,7 @@
     "@nx/js": "21.2.1",
     "@nx/node": "^21.2.1",
     "@nx/playwright": "21.2.1",
-    "@nx/react": "21.2.1",
+    "@nx/react": "^21.6.10",
     "@nx/vite": "21.2.1",
     "@nx/web": "21.2.1",
     "@playwright/test": "^1.36.0",
