@@ -14,12 +14,10 @@ const createVerificationRepository = (): PayNoteVerificationRepository => ({
 });
 
 const createMyOsClient = (): MyOsClient => {
-  const fetchEvent = vi
-    .fn<MyOsClient['fetchEvent']>()
-    .mockResolvedValue({
-      kind: 'success',
-      payload: {},
-    } as MyOsFetchEventResult);
+  const fetchEvent = vi.fn<MyOsClient['fetchEvent']>().mockResolvedValue({
+    kind: 'success',
+    payload: {},
+  } as MyOsFetchEventResult);
 
   return {
     getCredentials: vi.fn().mockResolvedValue({

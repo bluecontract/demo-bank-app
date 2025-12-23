@@ -156,7 +156,7 @@ Resources:
       Name: !Sub '/demo-bank-app/${Environment}/myos-credentials'
       Description: !Sub 'MyOS credentials for demo-bank-app ${Environment}'
       SecretString: |
-        {"apiKey":"","accountId":""}
+        {"apiKey":"","accountId":"","baseUrl":""}
       Tags:
         - Key: Environment
           Value: !Ref Environment
