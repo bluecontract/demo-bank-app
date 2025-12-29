@@ -12,6 +12,10 @@ export const payNoteWebhookHandler = async (
 
   const { id: eventId } = request.body ?? {};
 
+  logger.info('PayNote webhook received payload', {
+    payload: request.body,
+  });
+
   if (!eventId || typeof eventId !== 'string') {
     logger.error('PayNote webhook received payload without valid id', {
       payload: request.body,
