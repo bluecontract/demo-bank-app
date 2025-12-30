@@ -69,7 +69,7 @@ const buildChannelBindings = ({
   }
 
   Object.entries(contracts).forEach(([key, value]) => {
-    if (value?.type === 'MyOS Timeline Channel') {
+    if (value?.type === 'MyOS/MyOS Timeline Channel') {
       if (value.email) {
         channelBindings[key] = { email: value.email };
       } else if (value.accountId) {

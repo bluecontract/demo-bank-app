@@ -2037,7 +2037,7 @@ describe('Bank API Integration Tests', () => {
               payerAccountNumber: { value: userAccountNumber },
             },
             documentYaml: '---\npaynote: test',
-            emitted: [{ type: { name: 'Reserve Funds Requested' } }],
+            emitted: [{ type: { name: 'PayNote/Reserve Funds Requested' } }],
             triggeredBy: { actor: 'payerChannel' },
           },
         }),

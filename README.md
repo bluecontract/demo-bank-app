@@ -17,7 +17,7 @@ Everyone sees the same terms and same timeline.
 1. The web app collects the PayNote (YAML or parsed PDF), prompts for source/destination accounts, then calls `POST /v1/paynotes/bootstrap`.
 2. The bootstrap handler verifies the document, binds participants, and hands it to MyOS via `POST /documents/bootstrap`.
 3. MyOS processes the PayNote and calls back into `POST /v1/paynotes/webhook`; the handler retrieves the full payload with `GET /myos-events/{eventId}`.
-4. When capture events (for example `Capture Funds Requested` or `Reserve Funds and Capture Immediately Requested`) appear, the webhook performs the corresponding bank transfer and logs the result.
+4. When capture events (for example `PayNote/Capture Funds Requested` or `PayNote/Reserve Funds and Capture Immediately Requested`) appear, the webhook performs the corresponding bank transfer and logs the result.
 
 ## 🚀 Quick Start
 

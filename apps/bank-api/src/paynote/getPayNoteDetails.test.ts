@@ -167,7 +167,7 @@ describe('getPayNoteDetailsHandler', () => {
           payerAccountNumber: { value: TEST_ACCOUNT_NUMBER },
         },
         documentYaml: '---\npaynote',
-        emitted: [{ type: { name: 'Reserve Funds Requested' } }],
+        emitted: [{ type: { name: 'PayNote/Reserve Funds Requested' } }],
         triggeredBy: { actor: 'payerChannel' },
       },
     };

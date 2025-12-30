@@ -1,3 +1,5 @@
+import { Blue } from '@blue-labs/language';
+import { repository } from '@blue-repository/types';
 import type {
   BankingFacade,
   LogEntry,
@@ -5,10 +7,27 @@ import type {
   MyOsFetchEventResult,
 } from '../ports';
 
-const RESERVE_FUNDS_EVENT_NAME = 'Reserve Funds Requested';
-const CAPTURE_FUNDS_EVENT_NAME = 'Capture Funds Requested';
+const RESERVE_FUNDS_EVENT_NAME = 'PayNote/Reserve Funds Requested';
+const CAPTURE_FUNDS_EVENT_NAME = 'PayNote/Capture Funds Requested';
 const CAPTURE_IMMEDIATELY_EVENT_NAME =
-  'Reserve Funds and Capture Immediately Requested';
+  'PayNote/Reserve Funds and Capture Immediately Requested';
+
+const blue = new Blue({
+  repositories: [repository],
+});
+
+const resolveEventTypeAlias = (event: unknown): string | undefined => {
+  if (!event || typeof event !== 'object') {
+    return undefined;
+  }
+
+  try {
+    const node = blue.jsonValueToNode(event);
+    return blue.getTypeAlias(node.getType());
+  } catch {
+    return undefined;
+  }
+};
 
 export interface HandleWebhookEventInput {
   eventId: string;
@@ -220,8 +239,9 @@ export const handleWebhookEvent = async (
 
     for (const event of events) {
       const transferAmountMinor: number = event.amount?.value ?? 0;
+      const eventType = resolveEventTypeAlias(event) ?? event?.type?.name;
 
-      if (event?.type?.name === CAPTURE_IMMEDIATELY_EVENT_NAME) {
+      if (eventType === CAPTURE_IMMEDIATELY_EVENT_NAME) {
         logs.push({
           level: 'info',
           message: 'PayNote transfer triggered',
@@ -243,7 +263,7 @@ export const handleWebhookEvent = async (
           idempotencyKey: payNoteBankId,
           payNoteEventId: input.eventId,
         });
-      } else if (event?.type?.name === CAPTURE_FUNDS_EVENT_NAME) {
+      } else if (eventType === CAPTURE_FUNDS_EVENT_NAME) {
         logs.push({
           level: 'info',
           message: 'PayNote capture hold triggered',
@@ -263,7 +283,7 @@ export const handleWebhookEvent = async (
           counterpartyAccountNumber: payeeAccountNumber,
           payNoteEventId: input.eventId,
         });
-      } else if (event?.type?.name === RESERVE_FUNDS_EVENT_NAME) {
+      } else if (eventType === RESERVE_FUNDS_EVENT_NAME) {
         logs.push({
           level: 'info',
           message: 'PayNote reserve funds triggered',
@@ -291,7 +311,7 @@ export const handleWebhookEvent = async (
           message: 'PayNote webhook event ignored',
           context: {
             eventId: input.eventId,
-            eventType: event?.type?.name,
+            eventType,
             payerAccountNumber,
             payeeAccountNumber,
             transferAmountMinor,
