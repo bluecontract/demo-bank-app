@@ -157,11 +157,10 @@ describe('useCreateAccount', () => {
     });
 
     expect(onSuccess).toHaveBeenCalledTimes(1);
-    expect(onSuccess).toHaveBeenCalledWith(
-      mockCreatedAccount,
-      { name: 'My Savings Account' },
-      undefined
-    );
+    const [data, variables, context] = onSuccess.mock.calls[0] ?? [];
+    expect(data).toEqual(mockCreatedAccount);
+    expect(variables).toEqual({ name: 'My Savings Account' });
+    expect(context).toBeUndefined();
   });
 
   it('should support onError callback', async () => {
@@ -181,11 +180,10 @@ describe('useCreateAccount', () => {
     });
 
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(onError).toHaveBeenCalledWith(
-      mockError,
-      { name: 'My Savings Account' },
-      undefined
-    );
+    const [error, variables, context] = onError.mock.calls[0] ?? [];
+    expect(error).toEqual(mockError);
+    expect(variables).toEqual({ name: 'My Savings Account' });
+    expect(context).toBeUndefined();
   });
 
   it('should reset mutation state correctly', async () => {
