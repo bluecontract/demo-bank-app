@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 import { payNoteWebhookHandler } from './webhook';
 
 const hoistedDeps = vi.hoisted(() => ({
@@ -84,15 +85,25 @@ describe('payNoteWebhookHandler', () => {
           {
             type: {
               name: 'PayNote/Reserve Funds and Capture Immediately Requested',
+              blueId:
+                paynoteBlueIds[
+                  'PayNote/Reserve Funds and Capture Immediately Requested'
+                ],
             },
             amount: { value: 15000 },
           },
           {
-            type: { name: 'PayNote/Capture Funds Requested' },
+            type: {
+              name: 'PayNote/Capture Funds Requested',
+              blueId: paynoteBlueIds['PayNote/Capture Funds Requested'],
+            },
             amount: { value: 15000 },
           },
           {
-            type: { name: 'PayNote/Reserve Funds Requested' },
+            type: {
+              name: 'PayNote/Reserve Funds Requested',
+              blueId: paynoteBlueIds['PayNote/Reserve Funds Requested'],
+            },
             amount: { value: 15000 },
           },
         ],
@@ -157,7 +168,14 @@ describe('payNoteWebhookHandler', () => {
             payerAccountNumber: { value: '1111111111' },
             payeeAccountNumber: { value: '2222222222' },
           },
-          emitted: [{ type: { name: 'Some Other Event' } }],
+          emitted: [
+            {
+              type: {
+                name: 'PayNote/PayNote Cancelled',
+                blueId: paynoteBlueIds['PayNote/PayNote Cancelled'],
+              },
+            },
+          ],
         },
       },
     });
@@ -172,7 +190,7 @@ describe('payNoteWebhookHandler', () => {
     expect(hoistedAdapters.transferFundsMock).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith(
       'PayNote webhook event ignored',
-      expect.objectContaining({ eventType: 'Some Other Event' })
+      expect.objectContaining({ eventType: 'PayNote/PayNote Cancelled' })
     );
   });
 
