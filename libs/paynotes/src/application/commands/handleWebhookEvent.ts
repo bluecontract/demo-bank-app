@@ -1,5 +1,10 @@
 import { Blue } from '@blue-labs/language';
 import { repository } from '@blue-repository/types';
+import {
+  CaptureFundsRequestedSchema,
+  ReserveFundsAndCaptureImmediatelyRequestedSchema,
+  ReserveFundsRequestedSchema,
+} from '@blue-repository/types/packages/paynote/schemas';
 import type {
   BankingFacade,
   LogEntry,
@@ -16,17 +21,35 @@ const blue = new Blue({
   repositories: [repository],
 });
 
-const resolveEventTypeAlias = (event: unknown): string | undefined => {
+const resolveEventTypeLabel = (event: unknown): string | undefined => {
+  if (!event || typeof event !== 'object') {
+    return undefined;
+  }
+  const fallbackType = (event as { type?: { name?: unknown } }).type?.name;
+  return typeof fallbackType === 'string' ? fallbackType : undefined;
+};
+
+const resolveEventType = (event: unknown): string | undefined => {
   if (!event || typeof event !== 'object') {
     return undefined;
   }
 
   try {
     const node = blue.jsonValueToNode(event);
-    return blue.getTypeAlias(node.getType());
+    if (blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema)) {
+      return CAPTURE_IMMEDIATELY_EVENT_NAME;
+    }
+    if (blue.isTypeOf(node, CaptureFundsRequestedSchema)) {
+      return CAPTURE_FUNDS_EVENT_NAME;
+    }
+    if (blue.isTypeOf(node, ReserveFundsRequestedSchema)) {
+      return RESERVE_FUNDS_EVENT_NAME;
+    }
   } catch {
-    return undefined;
+    // ignore parse failures; the label fallback is handled separately
   }
+
+  return undefined;
 };
 
 export interface HandleWebhookEventInput {
@@ -239,7 +262,8 @@ export const handleWebhookEvent = async (
 
     for (const event of events) {
       const transferAmountMinor: number = event.amount?.value ?? 0;
-      const eventType = resolveEventTypeAlias(event) ?? event?.type?.name;
+      const eventType = resolveEventType(event);
+      const eventTypeLabel = eventType ?? resolveEventTypeLabel(event);
 
       if (eventType === CAPTURE_IMMEDIATELY_EVENT_NAME) {
         logs.push({
@@ -311,7 +335,7 @@ export const handleWebhookEvent = async (
           message: 'PayNote webhook event ignored',
           context: {
             eventId: input.eventId,
-            eventType,
+            eventType: eventTypeLabel,
             payerAccountNumber,
             payeeAccountNumber,
             transferAmountMinor,

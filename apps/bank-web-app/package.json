@@ -8,12 +8,12 @@
     "@demo-bank-app/shared-bank-api-contract": "*",
     "@tanstack/react-query": "^5.17.10",
     "@ts-rest/core": "^3.52.1",
+    "js-yaml": "^4.1.0",
     "lucide-react": "^0.545.0",
     "pdfjs-dist": "^5.4.296",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "react-markdown": "^10.1.0",
-    "react-router-dom": "6.29.0",
-    "js-yaml": "^4.1.0"
+    "react-router-dom": "6.30.3"
   }
 }
