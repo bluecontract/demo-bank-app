@@ -67,6 +67,13 @@ export interface HoldActivityRecord {
   currency: Hold['currency'];
   description?: string;
   counterpartyAccountNumber?: string;
+  cardId?: Hold['cardId'];
+  cardLast4?: Hold['cardLast4'];
+  merchantName?: Hold['merchantName'];
+  merchantStatementDescriptor?: Hold['merchantStatementDescriptor'];
+  merchantCategoryCode?: Hold['merchantCategoryCode'];
+  merchantCountry?: Hold['merchantCountry'];
+  processorChargeId?: Hold['processorChargeId'];
   eventId: string;
   event: HoldEvent;
 }

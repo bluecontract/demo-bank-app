@@ -14,6 +14,16 @@ import {
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 
 const toResponseItem = (item: ActivityItem) => {
+  const cardFields = {
+    cardId: item.cardId,
+    cardLast4: item.cardLast4,
+    merchantName: item.merchantName,
+    merchantStatementDescriptor: item.merchantStatementDescriptor,
+    merchantCategoryCode: item.merchantCategoryCode,
+    merchantCountry: item.merchantCountry,
+    processorChargeId: item.processorChargeId,
+  };
+
   switch (item.kind) {
     case 'POSTED_TRANSACTION':
       return {
@@ -28,6 +38,7 @@ const toResponseItem = (item: ActivityItem) => {
         type: item.type,
         status: item.status,
         counterpartyAccountNumber: item.counterpartyAccountNumber,
+        ...cardFields,
       } as const;
     case 'HOLD_CREATED':
       return {
@@ -40,6 +51,7 @@ const toResponseItem = (item: ActivityItem) => {
         counterpartyAccountNumber: item.counterpartyAccountNumber,
         createdByUserId: item.createdByUserId,
         idempotencyKeyHash: item.idempotencyKeyHash,
+        ...cardFields,
       } as const;
     case 'HOLD_RELEASED':
       return {
@@ -50,6 +62,7 @@ const toResponseItem = (item: ActivityItem) => {
         description: item.description,
         releasedAt: item.releasedAt,
         releaseReason: item.releaseReason,
+        ...cardFields,
       } as const;
     case 'HOLD_CAPTURED':
       return {
@@ -61,6 +74,7 @@ const toResponseItem = (item: ActivityItem) => {
         capturedAt: item.capturedAt,
         transactionId: item.transactionId,
         counterpartyAccountNumber: item.counterpartyAccountNumber,
+        ...cardFields,
       } as const;
     case 'HOLD_FAILED':
       return {
@@ -72,6 +86,7 @@ const toResponseItem = (item: ActivityItem) => {
         failedAt: item.failedAt,
         failureCode: item.failureCode,
         failureMessage: item.failureMessage,
+        ...cardFields,
       } as const;
     default: {
       const exhaustive: never = item;

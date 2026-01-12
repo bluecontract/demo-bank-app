@@ -2,6 +2,7 @@
 import { expect, type Page } from '@playwright/test';
 
 export const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:4200';
+export const DEFAULT_TEST_ORIGIN = 'https://app.example.com';
 
 // URL constants
 export const URLS = {

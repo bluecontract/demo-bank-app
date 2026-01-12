@@ -105,6 +105,10 @@ vi.mock('../../features/accounts/components', () => ({
   ),
 }));
 
+vi.mock('../../features/cards/components', () => ({
+  CardsPanel: vi.fn(() => <div data-testid="cards-panel">Cards Panel</div>),
+}));
+
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
 const mockUseAccounts = useAccounts as ReturnType<typeof vi.fn>;
 const mockUseCreateAccount = useCreateAccount as ReturnType<typeof vi.fn>;

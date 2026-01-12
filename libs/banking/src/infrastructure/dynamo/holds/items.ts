@@ -44,6 +44,13 @@ export interface HoldMetaItem {
   currency: Hold['currency'];
   status: HoldStatus;
   description?: string;
+  cardId?: string;
+  cardLast4?: string;
+  merchantName?: string;
+  merchantStatementDescriptor?: string;
+  merchantCategoryCode?: string;
+  merchantCountry?: string;
+  processorChargeId?: string;
   createdAt: string;
   expiresAt?: string;
   relatedTransactionId?: string;
@@ -66,6 +73,13 @@ export interface HoldEventItem {
   description?: string;
   payerAccountNumber: string;
   counterpartyAccountNumber?: string;
+  cardId?: string;
+  cardLast4?: string;
+  merchantName?: string;
+  merchantStatementDescriptor?: string;
+  merchantCategoryCode?: string;
+  merchantCountry?: string;
+  processorChargeId?: string;
   payload?: Record<string, unknown>;
 }
 
@@ -86,6 +100,13 @@ export function buildHoldMetaItem(hold: Hold): HoldMetaItem {
     currency: hold.currency,
     status: hold.status,
     description: hold.description,
+    cardId: hold.cardId,
+    cardLast4: hold.cardLast4,
+    merchantName: hold.merchantName,
+    merchantStatementDescriptor: hold.merchantStatementDescriptor,
+    merchantCategoryCode: hold.merchantCategoryCode,
+    merchantCountry: hold.merchantCountry,
+    processorChargeId: hold.processorChargeId,
     createdAt: hold.createdAt,
     expiresAt: hold.expiresAt,
     relatedTransactionId: hold.relatedTransactionId,
@@ -104,6 +125,13 @@ export function mapHoldMetaItemToHold(item: HoldMetaItem): Hold {
     currency: item.currency,
     status: item.status,
     description: item.description,
+    cardId: item.cardId,
+    cardLast4: item.cardLast4,
+    merchantName: item.merchantName,
+    merchantStatementDescriptor: item.merchantStatementDescriptor,
+    merchantCategoryCode: item.merchantCategoryCode,
+    merchantCountry: item.merchantCountry,
+    processorChargeId: item.processorChargeId,
     createdAt: item.createdAt,
     expiresAt: item.expiresAt,
     relatedTransactionId: item.relatedTransactionId,
@@ -150,6 +178,13 @@ export function buildHoldEventItem(
     description: hold.description,
     payerAccountNumber: hold.payerAccountNumber,
     counterpartyAccountNumber: hold.counterpartyAccountNumber,
+    cardId: hold.cardId,
+    cardLast4: hold.cardLast4,
+    merchantName: hold.merchantName,
+    merchantStatementDescriptor: hold.merchantStatementDescriptor,
+    merchantCategoryCode: hold.merchantCategoryCode,
+    merchantCountry: hold.merchantCountry,
+    processorChargeId: hold.processorChargeId,
     payload: holdEventPayload(event),
   };
 }

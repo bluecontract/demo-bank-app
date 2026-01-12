@@ -34,4 +34,11 @@ export interface TransactionResult {
   description: string;
   transactionIdempotencyKey?: string;
   createdAt: Date;
+  cardId?: string;
+  cardLast4?: string;
+  merchantName?: string;
+  merchantStatementDescriptor?: string;
+  merchantCategoryCode?: string;
+  merchantCountry?: string;
+  processorChargeId?: string;
 }

@@ -34,6 +34,19 @@ export type CreateAccountResponse = ClientInferResponseBody<
   201
 >;
 
+// Card types
+export type IssueCardResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['issueCard'],
+  201
+>;
+
+export type CardListResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['listCards'],
+  200
+>;
+
+export type CardSummary = CardListResponse['cards'][number];
+
 // Transfer types
 export type FundAccountResponse = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['fundAccount'],

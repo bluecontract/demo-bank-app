@@ -142,9 +142,12 @@
                   "email": {
                     "type": "string",
                     "format": "email"
+                  },
+                  "marketingEmailsOptIn": {
+                    "type": "boolean"
                   }
                 },
-                "required": ["email"]
+                "required": ["email", "marketingEmailsOptIn"]
               }
             }
           }
@@ -163,9 +166,12 @@
                     "email": {
                       "type": "string",
                       "format": "email"
+                    },
+                    "marketingEmailsOptIn": {
+                      "type": "boolean"
                     }
                   },
-                  "required": ["userId", "email"]
+                  "required": ["userId", "email", "marketingEmailsOptIn"]
                 }
               }
             }
@@ -320,9 +326,12 @@
                     "email": {
                       "type": "string",
                       "format": "email"
+                    },
+                    "marketingEmailsOptIn": {
+                      "type": "boolean"
                     }
                   },
-                  "required": ["userId", "email"]
+                  "required": ["userId", "email", "marketingEmailsOptIn"]
                 }
               }
             }
@@ -961,6 +970,617 @@
         }
       }
     },
+    "/v1/cards": {
+      "get": {
+        "summary": "List cards for a user or specific account",
+        "tags": ["banking"],
+        "parameters": [
+          {
+            "name": "accountId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "operationId": "listCards",
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cards": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "cardId": {
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "accountNumber": {
+                            "type": "string",
+                            "minLength": 10,
+                            "maxLength": 10
+                          },
+                          "cardholderName": {
+                            "type": "string"
+                          },
+                          "panLast4": {
+                            "type": "string",
+                            "minLength": 4,
+                            "maxLength": 4
+                          },
+                          "expiryMonth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 12
+                          },
+                          "expiryYear": {
+                            "type": "integer"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["ACTIVE", "BLOCKED", "CLOSED", "EXPIRED"]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": [
+                          "cardId",
+                          "accountId",
+                          "accountNumber",
+                          "cardholderName",
+                          "panLast4",
+                          "expiryMonth",
+                          "expiryYear",
+                          "status",
+                          "createdAt",
+                          "updatedAt"
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["cards"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Issue a new card for an account",
+        "tags": ["banking"],
+        "parameters": [],
+        "operationId": "issueCard",
+        "requestBody": {
+          "description": "Body",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accountId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "cardholderName": {
+                    "type": "string",
+                    "maxLength": 100
+                  }
+                },
+                "required": ["accountId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "201",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cardId": {
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "accountNumber": {
+                      "type": "string",
+                      "minLength": 10,
+                      "maxLength": 10
+                    },
+                    "cardholderName": {
+                      "type": "string"
+                    },
+                    "panLast4": {
+                      "type": "string",
+                      "minLength": 4,
+                      "maxLength": 4
+                    },
+                    "expiryMonth": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 12
+                    },
+                    "expiryYear": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["ACTIVE", "BLOCKED", "CLOSED", "EXPIRED"]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "pan": {
+                      "type": "string",
+                      "minLength": 16,
+                      "maxLength": 16
+                    },
+                    "cvc": {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 3
+                    }
+                  },
+                  "required": [
+                    "cardId",
+                    "accountId",
+                    "accountNumber",
+                    "cardholderName",
+                    "panLast4",
+                    "expiryMonth",
+                    "expiryYear",
+                    "status",
+                    "createdAt",
+                    "updatedAt",
+                    "pan",
+                    "cvc"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cards/{cardId}": {
+      "get": {
+        "summary": "Get a card by ID",
+        "tags": ["banking"],
+        "parameters": [
+          {
+            "name": "cardId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "operationId": "getCard",
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cardId": {
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "accountNumber": {
+                      "type": "string",
+                      "minLength": 10,
+                      "maxLength": 10
+                    },
+                    "cardholderName": {
+                      "type": "string"
+                    },
+                    "panLast4": {
+                      "type": "string",
+                      "minLength": 4,
+                      "maxLength": 4
+                    },
+                    "expiryMonth": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 12
+                    },
+                    "expiryYear": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["ACTIVE", "BLOCKED", "CLOSED", "EXPIRED"]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "cardId",
+                    "accountId",
+                    "accountNumber",
+                    "cardholderName",
+                    "panLast4",
+                    "expiryMonth",
+                    "expiryYear",
+                    "status",
+                    "createdAt",
+                    "updatedAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/accounts/{accountId}/funding": {
       "post": {
         "summary": "Fund a bank account",
@@ -1370,6 +1990,11 @@
                                 "type": "string",
                                 "enum": ["HOLD_CREATED"]
                               },
+                              "activityId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Stable activity identifier. Transactions use TXN#<transactionId>; holds use HOLD#<holdId>."
+                              },
                               "holdId": {
                                 "type": "string"
                               },
@@ -1391,10 +2016,32 @@
                               },
                               "idempotencyKeyHash": {
                                 "type": "string"
+                              },
+                              "cardId": {
+                                "type": "string"
+                              },
+                              "cardLast4": {
+                                "type": "string"
+                              },
+                              "merchantName": {
+                                "type": "string"
+                              },
+                              "merchantStatementDescriptor": {
+                                "type": "string"
+                              },
+                              "merchantCategoryCode": {
+                                "type": "string"
+                              },
+                              "merchantCountry": {
+                                "type": "string"
+                              },
+                              "processorChargeId": {
+                                "type": "string"
                               }
                             },
                             "required": [
                               "kind",
+                              "activityId",
                               "holdId",
                               "amountMinor",
                               "createdAt"
@@ -1406,6 +2053,11 @@
                               "kind": {
                                 "type": "string",
                                 "enum": ["HOLD_RELEASED"]
+                              },
+                              "activityId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Stable activity identifier. Transactions use TXN#<transactionId>; holds use HOLD#<holdId>."
                               },
                               "holdId": {
                                 "type": "string"
@@ -1422,10 +2074,32 @@
                               },
                               "releaseReason": {
                                 "type": "string"
+                              },
+                              "cardId": {
+                                "type": "string"
+                              },
+                              "cardLast4": {
+                                "type": "string"
+                              },
+                              "merchantName": {
+                                "type": "string"
+                              },
+                              "merchantStatementDescriptor": {
+                                "type": "string"
+                              },
+                              "merchantCategoryCode": {
+                                "type": "string"
+                              },
+                              "merchantCountry": {
+                                "type": "string"
+                              },
+                              "processorChargeId": {
+                                "type": "string"
                               }
                             },
                             "required": [
                               "kind",
+                              "activityId",
                               "holdId",
                               "amountMinor",
                               "releasedAt"
@@ -1437,6 +2111,11 @@
                               "kind": {
                                 "type": "string",
                                 "enum": ["HOLD_CAPTURED"]
+                              },
+                              "activityId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Stable activity identifier. Transactions use TXN#<transactionId>; holds use HOLD#<holdId>."
                               },
                               "holdId": {
                                 "type": "string"
@@ -1456,10 +2135,32 @@
                               },
                               "counterpartyAccountNumber": {
                                 "type": "string"
+                              },
+                              "cardId": {
+                                "type": "string"
+                              },
+                              "cardLast4": {
+                                "type": "string"
+                              },
+                              "merchantName": {
+                                "type": "string"
+                              },
+                              "merchantStatementDescriptor": {
+                                "type": "string"
+                              },
+                              "merchantCategoryCode": {
+                                "type": "string"
+                              },
+                              "merchantCountry": {
+                                "type": "string"
+                              },
+                              "processorChargeId": {
+                                "type": "string"
                               }
                             },
                             "required": [
                               "kind",
+                              "activityId",
                               "holdId",
                               "amountMinor",
                               "capturedAt",
@@ -1473,6 +2174,11 @@
                               "kind": {
                                 "type": "string",
                                 "enum": ["HOLD_FAILED"]
+                              },
+                              "activityId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Stable activity identifier. Transactions use TXN#<transactionId>; holds use HOLD#<holdId>."
                               },
                               "holdId": {
                                 "type": "string"
@@ -1498,10 +2204,32 @@
                               },
                               "failureMessage": {
                                 "type": "string"
+                              },
+                              "cardId": {
+                                "type": "string"
+                              },
+                              "cardLast4": {
+                                "type": "string"
+                              },
+                              "merchantName": {
+                                "type": "string"
+                              },
+                              "merchantStatementDescriptor": {
+                                "type": "string"
+                              },
+                              "merchantCategoryCode": {
+                                "type": "string"
+                              },
+                              "merchantCountry": {
+                                "type": "string"
+                              },
+                              "processorChargeId": {
+                                "type": "string"
                               }
                             },
                             "required": [
                               "kind",
+                              "activityId",
                               "holdId",
                               "amountMinor",
                               "failedAt",
@@ -1514,6 +2242,11 @@
                               "kind": {
                                 "type": "string",
                                 "enum": ["POSTED_TRANSACTION"]
+                              },
+                              "activityId": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Stable activity identifier. Transactions use TXN#<transactionId>; holds use HOLD#<holdId>."
                               },
                               "transactionId": {
                                 "type": "string"
@@ -1543,10 +2276,32 @@
                               },
                               "counterpartyAccountNumber": {
                                 "type": "string"
+                              },
+                              "cardId": {
+                                "type": "string"
+                              },
+                              "cardLast4": {
+                                "type": "string"
+                              },
+                              "merchantName": {
+                                "type": "string"
+                              },
+                              "merchantStatementDescriptor": {
+                                "type": "string"
+                              },
+                              "merchantCategoryCode": {
+                                "type": "string"
+                              },
+                              "merchantCountry": {
+                                "type": "string"
+                              },
+                              "processorChargeId": {
+                                "type": "string"
                               }
                             },
                             "required": [
                               "kind",
+                              "activityId",
                               "transactionId",
                               "amountMinor",
                               "postedAt",
@@ -1673,6 +2428,481 @@
                     }
                   },
                   "required": ["error", "message"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/activity/{accountNumber}/records/{activityId}": {
+      "get": {
+        "summary": "Get detail for a specific activity item",
+        "tags": ["banking"],
+        "parameters": [
+          {
+            "name": "accountNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10
+            }
+          },
+          {
+            "name": "activityId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getActivityDetail",
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["POSTED_TRANSACTION"]
+                        },
+                        "activityId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Stable activity identifier. Transactions use TXN#<transactionId>; holds use HOLD#<holdId>."
+                        },
+                        "transactionId": {
+                          "type": "string"
+                        },
+                        "amountMinor": {
+                          "type": "integer"
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "postedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "originHoldId": {
+                          "type": "string"
+                        },
+                        "side": {
+                          "type": "string",
+                          "enum": ["DEBIT", "CREDIT"]
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "counterpartyAccountNumber": {
+                          "type": "string"
+                        },
+                        "cardId": {
+                          "type": "string"
+                        },
+                        "cardLast4": {
+                          "type": "string"
+                        },
+                        "merchantName": {
+                          "type": "string"
+                        },
+                        "merchantStatementDescriptor": {
+                          "type": "string"
+                        },
+                        "merchantCategoryCode": {
+                          "type": "string"
+                        },
+                        "merchantCountry": {
+                          "type": "string"
+                        },
+                        "processorChargeId": {
+                          "type": "string"
+                        },
+                        "payNote": {
+                          "type": "object",
+                          "properties": {
+                            "myosEventId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["myosEventId"]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "activityId",
+                        "transactionId",
+                        "amountMinor",
+                        "postedAt",
+                        "side",
+                        "type",
+                        "status"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["HOLD"]
+                        },
+                        "activityId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Stable activity identifier. Transactions use TXN#<transactionId>; holds use HOLD#<holdId>."
+                        },
+                        "holdId": {
+                          "type": "string"
+                        },
+                        "amountMinor": {
+                          "type": "integer"
+                        },
+                        "currency": {
+                          "type": "string",
+                          "enum": ["USD"]
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "PENDING",
+                            "CAPTURED",
+                            "RELEASED",
+                            "EXPIRED",
+                            "FAILED"
+                          ]
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "releasedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "releaseReason": {
+                          "type": "string"
+                        },
+                        "capturedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "captureTransactionId": {
+                          "type": "string"
+                        },
+                        "failedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "failureCode": {
+                          "type": "string",
+                          "enum": [
+                            "INSUFFICIENT_FUNDS",
+                            "STATE_MISMATCH",
+                            "VALIDATION",
+                            "INTERNAL"
+                          ]
+                        },
+                        "failureMessage": {
+                          "type": "string"
+                        },
+                        "counterpartyAccountNumber": {
+                          "type": "string"
+                        },
+                        "cardId": {
+                          "type": "string"
+                        },
+                        "cardLast4": {
+                          "type": "string"
+                        },
+                        "merchantName": {
+                          "type": "string"
+                        },
+                        "merchantStatementDescriptor": {
+                          "type": "string"
+                        },
+                        "merchantCategoryCode": {
+                          "type": "string"
+                        },
+                        "merchantCountry": {
+                          "type": "string"
+                        },
+                        "processorChargeId": {
+                          "type": "string"
+                        },
+                        "timeline": {
+                          "type": "array",
+                          "items": {
+                            "discriminator": {
+                              "propertyName": "type"
+                            },
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": ["CREATED"]
+                                  },
+                                  "at": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  },
+                                  "createdByUserId": {
+                                    "type": "string"
+                                  },
+                                  "idempotencyKeyHash": {
+                                    "type": "string"
+                                  },
+                                  "payNoteEventId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["type", "at"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": ["CAPTURED"]
+                                  },
+                                  "at": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  },
+                                  "transactionId": {
+                                    "type": "string"
+                                  },
+                                  "counterpartyAccountNumber": {
+                                    "type": "string"
+                                  },
+                                  "payNoteEventId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["type", "at", "transactionId"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": ["RELEASED"]
+                                  },
+                                  "at": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  },
+                                  "payNoteEventId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["type", "at"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": ["FAILED"]
+                                  },
+                                  "at": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  },
+                                  "code": {
+                                    "type": "string",
+                                    "enum": [
+                                      "INSUFFICIENT_FUNDS",
+                                      "STATE_MISMATCH",
+                                      "VALIDATION",
+                                      "INTERNAL"
+                                    ]
+                                  },
+                                  "message": {
+                                    "type": "string"
+                                  },
+                                  "payNoteEventId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["type", "at", "code"]
+                              }
+                            ]
+                          }
+                        },
+                        "payNote": {
+                          "type": "object",
+                          "properties": {
+                            "myosEventId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["myosEventId"]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "activityId",
+                        "holdId",
+                        "amountMinor",
+                        "currency",
+                        "status",
+                        "createdAt",
+                        "timeline"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "501",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["message"]
                 }
               }
             }
@@ -1865,6 +3095,193 @@
                     }
                   },
                   "required": ["error", "message"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/activity/{accountNumber}/paynotes/{myosEventId}": {
+      "get": {
+        "summary": "Retrieve PayNote document and trigger payload for a given MyOS event",
+        "tags": ["banking"],
+        "parameters": [
+          {
+            "name": "accountNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 10,
+              "maxLength": 10
+            }
+          },
+          {
+            "name": "myosEventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getPayNoteDetails",
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "myosEventId": {
+                      "type": "string"
+                    },
+                    "documentYaml": {
+                      "type": "string"
+                    },
+                    "document": {
+                      "nullable": true
+                    },
+                    "transactionRequest": {
+                      "nullable": true
+                    },
+                    "triggerEvent": {
+                      "nullable": true
+                    },
+                    "fetchedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": ["myosEventId", "fetchedAt"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "501",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["message"]
                 }
               }
             }
@@ -2430,6 +3847,456 @@
           },
           "403": {
             "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/card-processor/authorizations": {
+      "post": {
+        "summary": "Authorize a card transaction (processor)",
+        "tags": ["banking"],
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "authorizeCard",
+        "requestBody": {
+          "description": "Body",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pan": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 16
+                  },
+                  "expiryMonth": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
+                  },
+                  "expiryYear": {
+                    "type": "integer"
+                  },
+                  "cvc": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 3
+                  },
+                  "amountMinor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": 0
+                  },
+                  "currency": {
+                    "type": "string",
+                    "enum": ["USD"]
+                  },
+                  "merchant": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 140
+                      },
+                      "statementDescriptor": {
+                        "type": "string",
+                        "maxLength": 140
+                      },
+                      "categoryCode": {
+                        "type": "string",
+                        "maxLength": 4
+                      },
+                      "country": {
+                        "type": "string",
+                        "maxLength": 2
+                      }
+                    },
+                    "required": ["name"]
+                  },
+                  "processorChargeId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 140
+                  }
+                },
+                "required": [
+                  "pan",
+                  "expiryMonth",
+                  "expiryYear",
+                  "cvc",
+                  "amountMinor",
+                  "currency",
+                  "merchant",
+                  "processorChargeId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["APPROVED", "DECLINED"]
+                    },
+                    "authorizationId": {
+                      "type": "string"
+                    },
+                    "cardId": {
+                      "type": "string"
+                    },
+                    "accountNumber": {
+                      "type": "string"
+                    },
+                    "declineCode": {
+                      "type": "string",
+                      "enum": [
+                        "card_not_found",
+                        "card_inactive",
+                        "expired_card",
+                        "invalid_cvc",
+                        "insufficient_funds",
+                        "invalid_amount",
+                        "invalid_currency"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["status"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/card-processor/authorizations/{authorizationId}/capture": {
+      "post": {
+        "summary": "Capture an authorized card transaction (processor)",
+        "tags": ["banking"],
+        "parameters": [
+          {
+            "name": "authorizationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "captureCardAuthorization",
+        "requestBody": {
+          "description": "Body",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amountMinor": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": ["amountMinor"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["CAPTURED"]
+                    },
+                    "authorizationId": {
+                      "type": "string"
+                    },
+                    "transactionId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["status", "authorizationId", "transactionId"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
             "content": {
               "application/json": {
                 "schema": {

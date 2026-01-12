@@ -122,6 +122,91 @@ export const TransactionDto = z.object({
   counterpartyAccountNumber: z.string(),
 });
 
+const CardStatusSchema = z.enum(['ACTIVE', 'BLOCKED', 'CLOSED', 'EXPIRED']);
+
+export const CardSummaryDto = z.object({
+  cardId: z.string(),
+  accountId: z.string().uuid(),
+  accountNumber: z.string().length(10),
+  cardholderName: z.string(),
+  panLast4: z.string().length(4),
+  expiryMonth: z.number().int().min(1).max(12),
+  expiryYear: z.number().int(),
+  status: CardStatusSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const IssueCardRequestDto = z.object({
+  accountId: z.string().uuid(),
+  cardholderName: createSanitizedOptionalStringSchema(
+    z.string().max(100).optional()
+  ),
+});
+
+export const IssueCardResponseDto = CardSummaryDto.extend({
+  pan: z.string().length(16),
+  cvc: z.string().length(3),
+});
+
+export const CardListResponseDto = z.object({
+  cards: z.array(CardSummaryDto),
+});
+
+export const CardMerchantDto = z.object({
+  name: createSanitizedStringSchema(z.string().min(1).max(140)),
+  statementDescriptor: createSanitizedOptionalStringSchema(
+    z.string().max(140).optional()
+  ),
+  categoryCode: createSanitizedOptionalStringSchema(
+    z.string().max(4).optional()
+  ),
+  country: createSanitizedOptionalStringSchema(z.string().max(2).optional()),
+});
+
+const CardDeclineCodeSchema = z.enum([
+  'card_not_found',
+  'card_inactive',
+  'expired_card',
+  'invalid_cvc',
+  'insufficient_funds',
+  'invalid_amount',
+  'invalid_currency',
+]);
+
+export const CardAuthorizationRequestDto = z.object({
+  pan: z.string().length(16),
+  expiryMonth: z.number().int().min(1).max(12),
+  expiryYear: z.number().int(),
+  cvc: z.string().length(3),
+  amountMinor: MoneyMinor.positive(),
+  currency: z.literal('USD'),
+  merchant: CardMerchantDto,
+  processorChargeId: z.string().min(1),
+  description: createSanitizedOptionalStringSchema(
+    z.string().max(140).optional()
+  ),
+});
+
+export const CardAuthorizationResponseDto = z.object({
+  status: z.enum(['APPROVED', 'DECLINED']),
+  authorizationId: z.string().optional(),
+  cardId: z.string().optional(),
+  accountNumber: z.string().optional(),
+  declineCode: CardDeclineCodeSchema.optional(),
+  message: z.string().optional(),
+});
+
+export const CardCaptureRequestDto = z.object({
+  amountMinor: MoneyMinor.positive(),
+});
+
+export const CardCaptureResponseDto = z.object({
+  status: z.literal('CAPTURED'),
+  authorizationId: z.string(),
+  transactionId: z.string(),
+});
+
 export const ActivityPostedTransactionDto = z.object({
   kind: z.literal('POSTED_TRANSACTION'),
   activityId: ActivityIdSchema,
@@ -134,6 +219,13 @@ export const ActivityPostedTransactionDto = z.object({
   type: z.string(),
   status: z.string(),
   counterpartyAccountNumber: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  merchantCategoryCode: z.string().optional(),
+  merchantCountry: z.string().optional(),
+  processorChargeId: z.string().optional(),
 });
 
 export const ActivityHoldCreatedDto = z.object({
@@ -146,6 +238,13 @@ export const ActivityHoldCreatedDto = z.object({
   counterpartyAccountNumber: z.string().optional(),
   createdByUserId: z.string().optional(),
   idempotencyKeyHash: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  merchantCategoryCode: z.string().optional(),
+  merchantCountry: z.string().optional(),
+  processorChargeId: z.string().optional(),
 });
 
 export const ActivityHoldReleasedDto = z.object({
@@ -156,6 +255,13 @@ export const ActivityHoldReleasedDto = z.object({
   description: createSanitizedOptionalStringSchema(z.string().optional()),
   releasedAt: z.string().datetime({ offset: true }),
   releaseReason: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  merchantCategoryCode: z.string().optional(),
+  merchantCountry: z.string().optional(),
+  processorChargeId: z.string().optional(),
 });
 
 export const ActivityHoldCapturedDto = z.object({
@@ -167,6 +273,13 @@ export const ActivityHoldCapturedDto = z.object({
   capturedAt: z.string().datetime({ offset: true }),
   transactionId: z.string(),
   counterpartyAccountNumber: z.string(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  merchantCategoryCode: z.string().optional(),
+  merchantCountry: z.string().optional(),
+  processorChargeId: z.string().optional(),
 });
 
 export const ActivityHoldFailedDto = z.object({
@@ -178,6 +291,13 @@ export const ActivityHoldFailedDto = z.object({
   failedAt: z.string().datetime({ offset: true }),
   failureCode: HoldFailureCodeSchema,
   failureMessage: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  merchantCategoryCode: z.string().optional(),
+  merchantCountry: z.string().optional(),
+  processorChargeId: z.string().optional(),
 });
 
 export const ActivityItemDto = z.discriminatedUnion('kind', [
@@ -205,6 +325,13 @@ const ActivityDetailPostedTransactionDto = z.object({
   type: z.string(),
   status: z.string(),
   counterpartyAccountNumber: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  merchantCategoryCode: z.string().optional(),
+  merchantCountry: z.string().optional(),
+  processorChargeId: z.string().optional(),
   payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
@@ -226,6 +353,13 @@ const ActivityDetailHoldDto = z.object({
   failureCode: HoldFailureCodeSchema.optional(),
   failureMessage: z.string().optional(),
   counterpartyAccountNumber: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  merchantCategoryCode: z.string().optional(),
+  merchantCountry: z.string().optional(),
+  processorChargeId: z.string().optional(),
   timeline: z.array(HoldTimelineEventSchema),
   payNote: ActivityPayNoteReferenceSchema.optional(),
 });

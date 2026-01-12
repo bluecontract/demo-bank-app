@@ -28,6 +28,10 @@ const mockRepository = {
   saveAccount: vi.fn(async (account: Account) => account),
 } as unknown as DynamoBankingRepository;
 
+const mockCardRepository = {} as any;
+const mockCardHasher = {} as any;
+const mockHoldRepository = {} as any;
+
 const mockAccountNumberGenerator = {
   generate: vi.fn(() => '1234567890'),
   counter: 0,
@@ -54,7 +58,12 @@ const mockMetrics = {
   setDefaultDimensions: vi.fn(),
 } as unknown as PowertoolsMetrics;
 
-const mockConfig = {};
+const mockConfig = {
+  cardConfig: {
+    cardBinPrefix: '123456',
+    cardProcessorToken: 'processor-token',
+  },
+};
 
 // Helper to generate a valid demoAuth JWT for tests
 const TEST_JWT_SECRET = 'test-secret';
@@ -72,6 +81,9 @@ describe('createAccountHandler', () => {
   beforeEach(() => {
     vi.spyOn(dependencies, 'getDependencies').mockResolvedValue({
       repository: mockRepository,
+      cardRepository: mockCardRepository,
+      cardHasher: mockCardHasher,
+      holdRepository: mockHoldRepository,
       accountNumberGenerator: mockAccountNumberGenerator,
       logger: mockLogger,
       metrics: mockMetrics,

@@ -10,6 +10,14 @@ import {
   IdempotencyKeyHeaderSchema,
   TransferReqDto,
   TransactionDto,
+  CardSummaryDto,
+  IssueCardRequestDto,
+  IssueCardResponseDto,
+  CardListResponseDto,
+  CardAuthorizationRequestDto,
+  CardAuthorizationResponseDto,
+  CardCaptureRequestDto,
+  CardCaptureResponseDto,
   ActivityResponseDto,
   ActivityDetailDto,
   PayNoteDetailsDto,
@@ -132,6 +140,40 @@ export const bankApiContract = c.router(
         pathParams: z.object({ accountId: z.string().uuid() }),
         responses: { 200: AccountDto, 404: ProblemDto },
         summary: 'Get a bank account by ID',
+      },
+
+      listCards: {
+        method: 'GET',
+        path: '/v1/cards',
+        query: z.object({
+          accountId: z.string().uuid().optional(),
+        }),
+        responses: {
+          200: CardListResponseDto,
+          403: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'List cards for a user or specific account',
+      },
+
+      issueCard: {
+        method: 'POST',
+        path: '/v1/cards',
+        body: IssueCardRequestDto,
+        responses: {
+          201: IssueCardResponseDto,
+          403: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Issue a new card for an account',
+      },
+
+      getCard: {
+        method: 'GET',
+        path: '/v1/cards/:cardId',
+        pathParams: z.object({ cardId: z.string().uuid() }),
+        responses: { 200: CardSummaryDto, 404: ProblemDto, 403: ProblemDto },
+        summary: 'Get a card by ID',
       },
 
       fundAccount: {
@@ -294,6 +336,34 @@ export const bankApiContract = c.router(
           200: z.object({ status: z.literal('ok') }),
         },
         summary: 'Webhook for PayNote events.',
+      },
+
+      authorizeCard: {
+        method: 'POST',
+        path: '/v1/card-processor/authorizations',
+        body: CardAuthorizationRequestDto,
+        headers: IdempotencyKeyHeaderSchema,
+        responses: {
+          200: CardAuthorizationResponseDto,
+          401: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Authorize a card transaction (processor)',
+      },
+
+      captureCardAuthorization: {
+        method: 'POST',
+        path: '/v1/card-processor/authorizations/:authorizationId/capture',
+        pathParams: z.object({ authorizationId: z.string() }),
+        body: CardCaptureRequestDto,
+        headers: IdempotencyKeyHeaderSchema,
+        responses: {
+          200: CardCaptureResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Capture an authorized card transaction (processor)',
       },
     },
   },

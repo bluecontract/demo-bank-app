@@ -639,6 +639,13 @@ export class DynamoBankingRepository implements BankingRepository {
         counterpartyAccountNumber: item.counterpartyAccountNumber,
         createdAt: new Date(item.createdAt),
         originHoldId: item.originHoldId,
+        cardId: item.cardId,
+        cardLast4: item.cardLast4,
+        merchantName: item.merchantName,
+        merchantStatementDescriptor: item.merchantStatementDescriptor,
+        merchantCategoryCode: item.merchantCategoryCode,
+        merchantCountry: item.merchantCountry,
+        processorChargeId: item.processorChargeId,
       }));
 
       return {
@@ -708,6 +715,13 @@ export class DynamoBankingRepository implements BankingRepository {
         createdAt: new Date(headerItem.createdAt),
         originHoldId: headerItem.originHoldId,
         payNoteEventId: headerItem.payNoteEventId,
+        cardId: headerItem.cardId,
+        cardLast4: headerItem.cardLast4,
+        merchantName: headerItem.merchantName,
+        merchantStatementDescriptor: headerItem.merchantStatementDescriptor,
+        merchantCategoryCode: headerItem.merchantCategoryCode,
+        merchantCountry: headerItem.merchantCountry,
+        processorChargeId: headerItem.processorChargeId,
       });
     } catch (error: unknown) {
       throw new RepositoryError(

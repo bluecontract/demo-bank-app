@@ -226,7 +226,7 @@ describe('Bank API Handler', () => {
         'access-control-allow-origin': 'https://app.example.com',
         'access-control-allow-methods': 'GET,POST,OPTIONS',
         'access-control-allow-headers':
-          'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,idempotency-key',
+          'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,Authorization,idempotency-key',
         vary: 'Origin',
       });
     });
@@ -249,7 +249,7 @@ describe('Bank API Handler', () => {
         'access-control-allow-origin': 'https://app.example.com',
         'access-control-allow-methods': 'GET,POST,OPTIONS',
         'access-control-allow-headers':
-          'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,idempotency-key',
+          'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,Authorization,idempotency-key',
         vary: 'Origin',
       });
     });

@@ -338,6 +338,13 @@ export class DynamoHoldRepository implements HoldRepository {
       currency: item.currency,
       description: item.description,
       counterpartyAccountNumber: item.counterpartyAccountNumber,
+      cardId: item.cardId,
+      cardLast4: item.cardLast4,
+      merchantName: item.merchantName,
+      merchantStatementDescriptor: item.merchantStatementDescriptor,
+      merchantCategoryCode: item.merchantCategoryCode,
+      merchantCountry: item.merchantCountry,
+      processorChargeId: item.processorChargeId,
       eventId: item.eventId,
       event: mapHoldEventItemToHoldEvent(item),
     }));

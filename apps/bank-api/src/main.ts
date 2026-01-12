@@ -19,6 +19,11 @@ import { transferMoneyHandler } from './banking/transferMoney';
 import { getTransactionHandler } from './banking/getTransaction';
 import { listAccountActivityHandler } from './banking/activity';
 import { getActivityDetailHandler } from './banking/getActivityDetail';
+import { issueCardHandler } from './banking/issueCard';
+import { listCardsHandler } from './banking/listCards';
+import { getCardHandler } from './banking/getCard';
+import { authorizeCardHandler } from './banking/authorizeCard';
+import { captureCardAuthorizationHandler } from './banking/captureCardAuthorization';
 import { validatePayNoteHandler } from './paynote/validatePayNote';
 import { parsePayNotePdfHandler } from './paynote/parsePayNotePdf';
 import { bootstrapPayNoteHandler } from './paynote/bootstrapPayNote';
@@ -54,6 +59,9 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       createAccount: createAccountHandler,
       listAccounts: listAccountsHandler,
       getAccount: getAccountHandler,
+      listCards: listCardsHandler,
+      issueCard: issueCardHandler,
+      getCard: getCardHandler,
       fundAccount: fundAccountHandler,
       transferMoney: transferMoneyHandler,
       listActivity: listAccountActivityHandler,
@@ -64,6 +72,8 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       parsePayNotePdf: parsePayNotePdfHandler,
       getPayNoteDetails: getPayNoteDetailsHandler,
       payNoteWebhook: payNoteWebhookHandler,
+      authorizeCard: authorizeCardHandler,
+      captureCardAuthorization: captureCardAuthorizationHandler,
     },
   }),
   {
@@ -75,6 +85,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
         'X-Amz-Date',
         'X-Api-Key',
         'X-Amz-Security-Token',
+        'Authorization',
         'idempotency-key',
       ],
       credentials: true,
@@ -92,6 +103,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
           { path: '/auth/signup', method: 'POST' },
           { path: '/auth/signin', method: 'POST' },
           { path: '/v1/paynotes/webhook', method: 'POST' },
+          { path: /^\/v1\/card-processor(\/.*)?$/, method: 'POST' },
         ],
       }),
     ],

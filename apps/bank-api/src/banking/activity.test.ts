@@ -33,7 +33,12 @@ const mockMetrics: PowertoolsMetrics = {
 
 const mockRepository = {} as DynamoBankingRepository;
 const mockHoldRepository = {} as DynamoHoldRepository;
-const mockConfig = {};
+const mockConfig = {
+  cardConfig: {
+    cardBinPrefix: '123456',
+    cardProcessorToken: 'processor-token',
+  },
+};
 
 const TEST_JWT_SECRET = 'test-secret';
 const TEST_USER_ID = 'user-1';
@@ -51,6 +56,8 @@ describe('listAccountActivityHandler', () => {
   beforeEach(() => {
     vi.spyOn(dependencies, 'getDependencies').mockResolvedValue({
       repository: mockRepository,
+      cardRepository: {} as any,
+      cardHasher: {} as any,
       holdRepository: mockHoldRepository,
       accountNumberGenerator: {} as any,
       logger: mockLogger,
@@ -125,6 +132,13 @@ describe('listAccountActivityHandler', () => {
           counterpartyAccountNumber: undefined,
           createdByUserId: undefined,
           idempotencyKeyHash: undefined,
+          cardId: undefined,
+          cardLast4: undefined,
+          merchantName: undefined,
+          merchantStatementDescriptor: undefined,
+          merchantCategoryCode: undefined,
+          merchantCountry: undefined,
+          processorChargeId: undefined,
         },
         {
           kind: 'HOLD_RELEASED',
@@ -134,6 +148,13 @@ describe('listAccountActivityHandler', () => {
           description: undefined,
           releasedAt: '2024-01-02T02:00:00.000Z',
           releaseReason: 'Customer request',
+          cardId: undefined,
+          cardLast4: undefined,
+          merchantName: undefined,
+          merchantStatementDescriptor: undefined,
+          merchantCategoryCode: undefined,
+          merchantCountry: undefined,
+          processorChargeId: undefined,
         },
         {
           kind: 'POSTED_TRANSACTION',
@@ -147,6 +168,13 @@ describe('listAccountActivityHandler', () => {
           type: 'FUNDING',
           status: 'POSTED',
           counterpartyAccountNumber: '9999999999',
+          cardId: undefined,
+          cardLast4: undefined,
+          merchantName: undefined,
+          merchantStatementDescriptor: undefined,
+          merchantCategoryCode: undefined,
+          merchantCountry: undefined,
+          processorChargeId: undefined,
         },
       ],
       nextCursor: 'cursor-token',

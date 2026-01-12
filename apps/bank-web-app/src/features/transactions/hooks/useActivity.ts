@@ -56,6 +56,8 @@ export function useActivity({
       }
     },
     enabled: !!accountNumber,
+    refetchInterval: accountNumber ? 5000 : false,
+    refetchIntervalInBackground: true,
     staleTime: 30 * 1000, // 30 seconds
     gcTime: 2 * 60 * 1000, // 2 minutes
     placeholderData: accountNumber

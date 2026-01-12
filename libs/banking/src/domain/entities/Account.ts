@@ -13,6 +13,11 @@ export const FUNDING_SOURCE = {
   ACCOUNT_NUMBER: '0000000000',
 };
 
+export const CARD_SETTLEMENT = {
+  ACCOUNT_ID: 'CARD_SETTLEMENT',
+  ACCOUNT_NUMBER: '9999999999',
+};
+
 export interface AccountProps {
   id: string;
   accountNumber: string;

@@ -19,6 +19,13 @@ export interface Hold {
   currency: 'USD';
   status: HoldStatus;
   description?: string;
+  cardId?: string;
+  cardLast4?: string;
+  merchantName?: string;
+  merchantStatementDescriptor?: string;
+  merchantCategoryCode?: string;
+  merchantCountry?: string;
+  processorChargeId?: string;
   createdAt: string;
   expiresAt?: string;
   relatedTransactionId?: string;

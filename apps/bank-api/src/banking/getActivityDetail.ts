@@ -40,6 +40,13 @@ const mapTransactionDetail = (
   type: transaction.type,
   status: transaction.status,
   counterpartyAccountNumber: posting.counterpartyAccountNumber,
+  cardId: transaction.cardId,
+  cardLast4: transaction.cardLast4,
+  merchantName: transaction.merchantName,
+  merchantStatementDescriptor: transaction.merchantStatementDescriptor,
+  merchantCategoryCode: transaction.merchantCategoryCode,
+  merchantCountry: transaction.merchantCountry,
+  processorChargeId: transaction.processorChargeId,
   ...(transaction.payNoteEventId
     ? { payNote: { myosEventId: transaction.payNoteEventId } }
     : {}),
@@ -110,6 +117,13 @@ const mapHoldDetail = (
     counterpartyAccountNumber:
       hold.counterpartyAccountNumber ??
       capturedEvent?.counterpartyAccountNumber,
+    cardId: hold.cardId,
+    cardLast4: hold.cardLast4,
+    merchantName: hold.merchantName,
+    merchantStatementDescriptor: hold.merchantStatementDescriptor,
+    merchantCategoryCode: hold.merchantCategoryCode,
+    merchantCountry: hold.merchantCountry,
+    processorChargeId: hold.processorChargeId,
     timeline: mapHoldTimeline(events),
   };
 };

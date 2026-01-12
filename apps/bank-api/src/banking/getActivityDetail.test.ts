@@ -45,7 +45,12 @@ const mockRepository = repositoryMock as unknown as DynamoBankingRepository;
 const mockHoldRepository =
   holdRepositoryMock as unknown as DynamoHoldRepository;
 
-const mockConfig = {};
+const mockConfig = {
+  cardConfig: {
+    cardBinPrefix: '123456',
+    cardProcessorToken: 'processor-token',
+  },
+};
 
 const TEST_JWT_SECRET = 'test-secret';
 const TEST_USER_ID = 'user-1';
@@ -78,6 +83,8 @@ describe('getActivityDetailHandler', () => {
 
     vi.spyOn(dependencies, 'getDependencies').mockResolvedValue({
       repository: mockRepository,
+      cardRepository: {} as any,
+      cardHasher: {} as any,
       holdRepository: mockHoldRepository,
       logger: mockLogger,
       metrics: mockMetrics,
@@ -145,6 +152,13 @@ describe('getActivityDetailHandler', () => {
       type: 'TRANSFER',
       status: 'POSTED',
       counterpartyAccountNumber: '0987654321',
+      cardId: undefined,
+      cardLast4: undefined,
+      merchantName: undefined,
+      merchantStatementDescriptor: undefined,
+      merchantCategoryCode: undefined,
+      merchantCountry: undefined,
+      processorChargeId: undefined,
     });
 
     expect(repositoryMock.getTransactionById).toHaveBeenCalledWith(
@@ -307,6 +321,13 @@ describe('getActivityDetailHandler', () => {
       failureCode: undefined,
       failureMessage: undefined,
       counterpartyAccountNumber: '1234567899',
+      cardId: undefined,
+      cardLast4: undefined,
+      merchantName: undefined,
+      merchantStatementDescriptor: undefined,
+      merchantCategoryCode: undefined,
+      merchantCountry: undefined,
+      processorChargeId: undefined,
       timeline: [
         {
           type: 'CREATED',

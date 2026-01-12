@@ -203,4 +203,30 @@ describe('TransactionDetails', () => {
     expect(screen.getByText('Payment number')).toBeInTheDocument();
     expect(screen.getByText('txn-123')).toBeInTheDocument();
   });
+
+  it('should render card purchase details when card metadata is present', () => {
+    const cardTransaction: Extract<
+      ActivityDetail,
+      { kind: 'POSTED_TRANSACTION' }
+    > = {
+      ...mockTransaction,
+      cardLast4: '4242',
+      merchantName: 'Demo Shop',
+      processorChargeId: 'ch_123',
+      originHoldId: 'hold-123',
+    };
+
+    render(
+      <TransactionDetails {...defaultProps} transaction={cardTransaction} />
+    );
+
+    expect(
+      screen.getByRole('heading', { name: 'Card purchase' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('Card Purchase')).toBeInTheDocument();
+    expect(screen.getByText('**** 4242')).toBeInTheDocument();
+    expect(screen.getByText('Demo Shop')).toBeInTheDocument();
+    expect(screen.getByText('ch_123')).toBeInTheDocument();
+    expect(screen.getByText('hold-123')).toBeInTheDocument();
+  });
 });

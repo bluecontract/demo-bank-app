@@ -193,6 +193,12 @@ Resources:
           LOG_LEVEL: INFO
           METRICS_NAMESPACE: !Sub 'DemoBlue/${Environment}'
           AWS_ENDPOINT_URL: '' # only for local development
+          CARD_PAN_SECRET: 'demo-bank-pan-secret'
+          CARD_CVC_SECRET: 'demo-bank-cvc-secret'
+          CARD_PROCESSOR_TOKEN: 'demo-bank-processor-token'
+          CARD_BIN_PREFIX: '123456'
+          CARD_SETTLEMENT_ACCOUNT_ID: 'CARD_SETTLEMENT'
+          CARD_SETTLEMENT_ACCOUNT_NUMBER: '9999999999'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BankTable
@@ -280,6 +286,36 @@ Resources:
           Properties:
             RestApiId: !Ref BankApi
             Path: /v1/accounts/{accountId}
+            Method: OPTIONS
+        ListCardsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/cards
+            Method: GET
+        IssueCardApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/cards
+            Method: POST
+        V1CardsOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/cards
+            Method: OPTIONS
+        GetCardApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/cards/{cardId}
+            Method: GET
+        GetCardOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/cards/{cardId}
             Method: OPTIONS
         ListAccountActivityApi:
           Type: Api
@@ -400,6 +436,30 @@ Resources:
           Properties:
             RestApiId: !Ref BankApi
             Path: /v1/paynotes/webhook
+            Method: OPTIONS
+        AuthorizeCardApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/card-processor/authorizations
+            Method: POST
+        AuthorizeCardOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/card-processor/authorizations
+            Method: OPTIONS
+        CaptureCardAuthorizationApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/card-processor/authorizations/{authorizationId}/capture
+            Method: POST
+        CaptureCardAuthorizationOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/card-processor/authorizations/{authorizationId}/capture
             Method: OPTIONS
   # ------------------------------------------------------------------
   # Seed the FUNDING_SOURCE account and its BALANCE row (idempotent)

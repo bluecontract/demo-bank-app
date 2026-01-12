@@ -74,6 +74,20 @@ export function TransactionDetailsModal({
     txnId: fallbackTransactionId ?? '',
   });
 
+  const fallbackCardFields =
+    selectedActivity?.kind === 'POSTED_TRANSACTION'
+      ? {
+          cardId: selectedActivity.cardId,
+          cardLast4: selectedActivity.cardLast4,
+          merchantName: selectedActivity.merchantName,
+          merchantStatementDescriptor:
+            selectedActivity.merchantStatementDescriptor,
+          merchantCategoryCode: selectedActivity.merchantCategoryCode,
+          merchantCountry: selectedActivity.merchantCountry,
+          processorChargeId: selectedActivity.processorChargeId,
+        }
+      : {};
+
   const fallbackActivityDetail: ActivityDetail | null = fallbackTransaction
     ? {
         kind: 'POSTED_TRANSACTION',
@@ -92,6 +106,7 @@ export function TransactionDetailsModal({
         status: fallbackTransaction.status,
         counterpartyAccountNumber:
           fallbackTransaction.counterpartyAccountNumber,
+        ...fallbackCardFields,
       }
     : null;
 

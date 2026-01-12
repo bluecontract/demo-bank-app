@@ -32,6 +32,13 @@ type HoldEventActivityItem =
       counterpartyAccountNumber?: string;
       createdByUserId?: string;
       idempotencyKeyHash?: string;
+      cardId?: string;
+      cardLast4?: string;
+      merchantName?: string;
+      merchantStatementDescriptor?: string;
+      merchantCategoryCode?: string;
+      merchantCountry?: string;
+      processorChargeId?: string;
     }
   | {
       kind: 'HOLD_RELEASED';
@@ -41,6 +48,13 @@ type HoldEventActivityItem =
       description?: string;
       releasedAt: string;
       releaseReason?: string;
+      cardId?: string;
+      cardLast4?: string;
+      merchantName?: string;
+      merchantStatementDescriptor?: string;
+      merchantCategoryCode?: string;
+      merchantCountry?: string;
+      processorChargeId?: string;
     }
   | {
       kind: 'HOLD_CAPTURED';
@@ -51,6 +65,13 @@ type HoldEventActivityItem =
       capturedAt: string;
       transactionId: string;
       counterpartyAccountNumber: string;
+      cardId?: string;
+      cardLast4?: string;
+      merchantName?: string;
+      merchantStatementDescriptor?: string;
+      merchantCategoryCode?: string;
+      merchantCountry?: string;
+      processorChargeId?: string;
     }
   | {
       kind: 'HOLD_FAILED';
@@ -61,6 +82,13 @@ type HoldEventActivityItem =
       failedAt: string;
       failureCode: HoldFailedCode;
       failureMessage?: string;
+      cardId?: string;
+      cardLast4?: string;
+      merchantName?: string;
+      merchantStatementDescriptor?: string;
+      merchantCategoryCode?: string;
+      merchantCountry?: string;
+      processorChargeId?: string;
     };
 
 type PostedTransactionActivityItem = {
@@ -75,6 +103,13 @@ type PostedTransactionActivityItem = {
   type: string;
   status: string;
   counterpartyAccountNumber?: string;
+  cardId?: string;
+  cardLast4?: string;
+  merchantName?: string;
+  merchantStatementDescriptor?: string;
+  merchantCategoryCode?: string;
+  merchantCountry?: string;
+  processorChargeId?: string;
 };
 
 export type ActivityItem =
@@ -134,6 +169,13 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       counterpartyAccountNumber: z.string().optional(),
       createdByUserId: z.string().optional(),
       idempotencyKeyHash: z.string().optional(),
+      cardId: z.string().optional(),
+      cardLast4: z.string().optional(),
+      merchantName: z.string().optional(),
+      merchantStatementDescriptor: z.string().optional(),
+      merchantCategoryCode: z.string().optional(),
+      merchantCountry: z.string().optional(),
+      processorChargeId: z.string().optional(),
     }),
     z.object({
       kind: z.literal('HOLD_RELEASED'),
@@ -143,6 +185,13 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       description: z.string().optional(),
       releasedAt: z.string(),
       releaseReason: z.string().optional(),
+      cardId: z.string().optional(),
+      cardLast4: z.string().optional(),
+      merchantName: z.string().optional(),
+      merchantStatementDescriptor: z.string().optional(),
+      merchantCategoryCode: z.string().optional(),
+      merchantCountry: z.string().optional(),
+      processorChargeId: z.string().optional(),
     }),
     z.object({
       kind: z.literal('HOLD_CAPTURED'),
@@ -153,6 +202,13 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       capturedAt: z.string(),
       transactionId: z.string(),
       counterpartyAccountNumber: z.string(),
+      cardId: z.string().optional(),
+      cardLast4: z.string().optional(),
+      merchantName: z.string().optional(),
+      merchantStatementDescriptor: z.string().optional(),
+      merchantCategoryCode: z.string().optional(),
+      merchantCountry: z.string().optional(),
+      processorChargeId: z.string().optional(),
     }),
     z.object({
       kind: z.literal('HOLD_FAILED'),
@@ -168,6 +224,13 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
         'INTERNAL',
       ]),
       failureMessage: z.string().optional(),
+      cardId: z.string().optional(),
+      cardLast4: z.string().optional(),
+      merchantName: z.string().optional(),
+      merchantStatementDescriptor: z.string().optional(),
+      merchantCategoryCode: z.string().optional(),
+      merchantCountry: z.string().optional(),
+      processorChargeId: z.string().optional(),
     }),
   ]);
 
@@ -184,6 +247,13 @@ const PostedTransactionActivityItemSchema: z.ZodType<PostedTransactionActivityIt
     type: z.string(),
     status: z.string(),
     counterpartyAccountNumber: z.string().optional(),
+    cardId: z.string().optional(),
+    cardLast4: z.string().optional(),
+    merchantName: z.string().optional(),
+    merchantStatementDescriptor: z.string().optional(),
+    merchantCategoryCode: z.string().optional(),
+    merchantCountry: z.string().optional(),
+    processorChargeId: z.string().optional(),
   });
 
 const HoldEventCursorItemSchema = z.object({
@@ -251,6 +321,16 @@ const clampLimit = (limit?: number): number => {
 const buildHoldEventFeedItem = (
   record: HoldActivityRecord
 ): HoldEventFeedItem => {
+  const cardMeta = {
+    cardId: record.cardId,
+    cardLast4: record.cardLast4,
+    merchantName: record.merchantName,
+    merchantStatementDescriptor: record.merchantStatementDescriptor,
+    merchantCategoryCode: record.merchantCategoryCode,
+    merchantCountry: record.merchantCountry,
+    processorChargeId: record.processorChargeId,
+  };
+
   const { event } = record;
   switch (event.type) {
     case 'CREATED':
@@ -270,6 +350,7 @@ const buildHoldEventFeedItem = (
           counterpartyAccountNumber: record.counterpartyAccountNumber,
           createdByUserId: event.createdByUserId,
           idempotencyKeyHash: event.idempotencyKeyHash,
+          ...cardMeta,
         },
       };
     case 'RELEASED':
@@ -287,6 +368,7 @@ const buildHoldEventFeedItem = (
           description: record.description,
           releasedAt: event.at,
           releaseReason: event.reason,
+          ...cardMeta,
         },
       };
     case 'CAPTURED': {
@@ -309,6 +391,7 @@ const buildHoldEventFeedItem = (
           capturedAt: event.at,
           transactionId: event.transactionId,
           counterpartyAccountNumber: counterparty,
+          ...cardMeta,
         },
       };
     }
@@ -328,6 +411,7 @@ const buildHoldEventFeedItem = (
           failedAt: event.at,
           failureCode: event.code,
           failureMessage: event.message,
+          ...cardMeta,
         },
       };
     default: {
@@ -347,6 +431,13 @@ const toTransactionFeedItem = (summary: {
   type: string;
   status: string;
   counterpartyAccountNumber?: string;
+  cardId?: string;
+  cardLast4?: string;
+  merchantName?: string;
+  merchantStatementDescriptor?: string;
+  merchantCategoryCode?: string;
+  merchantCountry?: string;
+  processorChargeId?: string;
 }): TransactionFeedItem => ({
   kind: 'POSTED_TRANSACTION',
   id: summary.transactionId,
@@ -364,6 +455,13 @@ const toTransactionFeedItem = (summary: {
     type: summary.type,
     status: summary.status,
     counterpartyAccountNumber: summary.counterpartyAccountNumber,
+    cardId: summary.cardId,
+    cardLast4: summary.cardLast4,
+    merchantName: summary.merchantName,
+    merchantStatementDescriptor: summary.merchantStatementDescriptor,
+    merchantCategoryCode: summary.merchantCategoryCode,
+    merchantCountry: summary.merchantCountry,
+    processorChargeId: summary.processorChargeId,
   },
 });
 
@@ -567,6 +665,13 @@ const listTransactionItems = async (
         type: summary.type,
         status: summary.status,
         counterpartyAccountNumber: summary.counterpartyAccountNumber,
+        cardId: summary.cardId,
+        cardLast4: summary.cardLast4,
+        merchantName: summary.merchantName,
+        merchantStatementDescriptor: summary.merchantStatementDescriptor,
+        merchantCategoryCode: summary.merchantCategoryCode,
+        merchantCountry: summary.merchantCountry,
+        processorChargeId: summary.processorChargeId,
       })
     ),
     nextToken: result.nextToken,

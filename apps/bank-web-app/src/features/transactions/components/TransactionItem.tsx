@@ -50,10 +50,38 @@ const formatCounterpartyLine = (
 
 const getHoldDirectionLabel = (): 'From' | 'To' => 'To';
 
+const formatCardLine = (last4?: string) =>
+  last4 ? `Card: **** ${last4}` : undefined;
+
+const formatChargeLine = (processorChargeId?: string) =>
+  processorChargeId ? `Charge: ${processorChargeId}` : undefined;
+
+const normalizeDescription = (description?: string, merchantName?: string) => {
+  if (!description) {
+    return undefined;
+  }
+  if (merchantName && description.trim() === merchantName.trim()) {
+    return undefined;
+  }
+  return description;
+};
+
 const buildVisualState = (item: ActivityItem): VisualState => {
+  const hasCardContext = Boolean(
+    item.cardLast4 || item.merchantName || item.processorChargeId
+  );
+
+  const cardSubtitleLines = [
+    formatCardLine(item.cardLast4),
+    formatChargeLine(item.processorChargeId),
+  ].filter((line): line is string => Boolean(line));
+
   if (item.kind === 'POSTED_TRANSACTION') {
     const isCredit = item.side === 'CREDIT';
     const amount = formatCurrency(item.amountMinor);
+    const title = hasCardContext
+      ? item.merchantName ?? 'Card Purchase'
+      : getTransactionTypeDisplay(item.type, item.side);
 
     return {
       badgeLabel:
@@ -71,9 +99,11 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       iconClasses: isCredit
         ? 'bg-green-100 text-green-600'
         : 'bg-red-100 text-red-600',
-      title: getTransactionTypeDisplay(item.type, item.side),
+      title,
       timestamp: item.postedAt,
-      subtitleLines: item.counterpartyAccountNumber
+      subtitleLines: hasCardContext
+        ? cardSubtitleLines
+        : item.counterpartyAccountNumber
         ? [
             formatCounterpartyLine(
               isCredit ? 'From' : 'To',
@@ -81,7 +111,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
             ),
           ]
         : [],
-      description: item.description,
+      description: normalizeDescription(item.description, item.merchantName),
       amountText: `${isCredit ? '+' : '-'}${amount}`,
       amountClass: isCredit ? 'text-green-600' : 'text-red-600',
       clickable: true,
@@ -95,7 +125,9 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       : undefined;
 
   const base = {
-    subtitleLines: counterpartyAccountNumber
+    subtitleLines: hasCardContext
+      ? cardSubtitleLines
+      : counterpartyAccountNumber
       ? [
           formatCounterpartyLine(
             getHoldDirectionLabel(),
@@ -103,7 +135,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
           ),
         ]
       : [],
-    description: item.description,
+    description: normalizeDescription(item.description, item.merchantName),
     amountText: formatCurrency(item.amountMinor),
   };
 
@@ -115,7 +147,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         badgeClass: 'bg-yellow-100 text-yellow-800',
         icon: '⏳',
         iconClasses: 'bg-yellow-50 text-yellow-700',
-        title: 'Hold Created',
+        title: item.merchantName ?? 'Hold Created',
         timestamp: item.createdAt,
         amountClass: 'text-yellow-700',
         clickable: true,
@@ -128,7 +160,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         badgeClass: 'bg-green-100 text-green-800',
         icon: '✔',
         iconClasses: 'bg-green-50 text-green-700',
-        title: 'Hold Captured',
+        title: item.merchantName ?? 'Hold Captured',
         timestamp: item.capturedAt,
         subtitleLines: item.transactionId
           ? [...base.subtitleLines, `txn: ${item.transactionId}`]
@@ -144,7 +176,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         badgeClass: 'bg-blue-100 text-blue-800',
         icon: '↺',
         iconClasses: 'bg-blue-50 text-blue-700',
-        title: 'Hold Released',
+        title: item.merchantName ?? 'Hold Released',
         timestamp: item.releasedAt,
         subtitleLines: item.releaseReason
           ? [...base.subtitleLines, `Reason: ${item.releaseReason}`]
@@ -160,7 +192,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         badgeClass: 'bg-red-100 text-red-800',
         icon: '✖',
         iconClasses: 'bg-red-50 text-red-700',
-        title: 'Hold Failed',
+        title: item.merchantName ?? 'Hold Failed',
         timestamp: item.failedAt,
         subtitleLines: [`Failure: ${item.failureCode}`],
         description: item.failureMessage ?? base.description,

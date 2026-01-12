@@ -147,7 +147,12 @@ export function HoldDetails({
   );
 
   const displayStatus = deriveStatus(hold);
-  const methodLabel = showPayNoteHelper
+  const isCardHold = Boolean(
+    hold.cardLast4 || hold.merchantName || hold.processorChargeId
+  );
+  const methodLabel = isCardHold
+    ? 'Card Authorization'
+    : showPayNoteHelper
     ? 'PayNote Transfer'
     : 'Standard Transfer';
 
@@ -158,6 +163,28 @@ export function HoldDetails({
     { label: 'Amount', value: formattedAmount },
     { label: 'Hold created', value: formatDateTime(hold.createdAt) },
   ];
+
+  if (isCardHold) {
+    detailRows.push({
+      label: 'Card',
+      value: hold.cardLast4 ? `**** ${hold.cardLast4}` : '—',
+    });
+    if (hold.merchantName) {
+      detailRows.push({ label: 'Merchant', value: hold.merchantName });
+    }
+    if (hold.merchantStatementDescriptor) {
+      detailRows.push({
+        label: 'Statement descriptor',
+        value: hold.merchantStatementDescriptor,
+      });
+    }
+    if (hold.processorChargeId) {
+      detailRows.push({
+        label: 'Processor charge',
+        value: hold.processorChargeId,
+      });
+    }
+  }
 
   if (hold.expiresAt) {
     detailRows.push({
@@ -264,7 +291,7 @@ export function HoldDetails({
           </div>
         )}
 
-        {showPayNoteHelper && (
+        {showPayNoteHelper && !isCardHold && (
           <div className="px-4 py-3 border-t border-gray-200">
             <p className="text-sm text-gray-700">
               This transaction is part of a PayNote transfer.{' '}
@@ -306,6 +333,12 @@ export function HoldDetails({
                         <div>From: {currentAccountDisplay}</div>
                         <div>To: {counterpartyDisplay}</div>
                         <div>Hold ID: {hold.holdId}</div>
+                        {hold.cardLast4 && (
+                          <div>Card: **** {hold.cardLast4}</div>
+                        )}
+                        {hold.merchantName && (
+                          <div>Merchant: {hold.merchantName}</div>
+                        )}
                       </>
                     )}
                     {event.type === 'CAPTURED' && (
@@ -324,6 +357,9 @@ export function HoldDetails({
                               isLoadingAccounts
                             )}
                           </div>
+                        )}
+                        {hold.processorChargeId && (
+                          <div>Charge: {hold.processorChargeId}</div>
                         )}
                       </>
                     )}

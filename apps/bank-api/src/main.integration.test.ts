@@ -21,6 +21,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import {
   DynamoHoldRepository,
+  CARD_SETTLEMENT,
   Money,
   Posting,
   Transaction,
@@ -56,9 +57,26 @@ const TEST_CONFIG = {
 let dynamoClient: DynamoDBClient;
 let documentClient: DynamoDBDocumentClient;
 let secretsManagerClient: SecretsManagerClient;
+let previousAwsProfile: string | undefined;
+let previousAccessKeyId: string | undefined;
+let previousSecretAccessKey: string | undefined;
+let previousRegion: string | undefined;
+let previousEndpointUrl: string | undefined;
 
 describe('Bank API Integration Tests', () => {
   beforeAll(async () => {
+    previousAwsProfile = process.env.AWS_PROFILE;
+    previousAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+    previousSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+    previousRegion = process.env.AWS_REGION;
+    previousEndpointUrl = process.env.AWS_ENDPOINT_URL;
+
+    delete process.env.AWS_PROFILE;
+    process.env.AWS_ACCESS_KEY_ID = 'test';
+    process.env.AWS_SECRET_ACCESS_KEY = 'test';
+    process.env.AWS_REGION = TEST_CONFIG.region;
+    process.env.AWS_ENDPOINT_URL = TEST_CONFIG.localstackEndpoint;
+
     dynamoClient = new DynamoDBClient({
       endpoint: TEST_CONFIG.localstackEndpoint,
       region: TEST_CONFIG.region,
@@ -92,6 +110,12 @@ describe('Bank API Integration Tests', () => {
     process.env.METRICS_NAMESPACE = 'IntegrationTest';
     process.env.AWS_REGION = TEST_CONFIG.region;
     process.env.AWS_ENDPOINT_URL = TEST_CONFIG.localstackEndpoint;
+    process.env.CARD_PAN_SECRET = 'integration-test-pan-secret';
+    process.env.CARD_CVC_SECRET = 'integration-test-cvc-secret';
+    process.env.CARD_PROCESSOR_TOKEN = 'integration-test-processor-token';
+    process.env.CARD_BIN_PREFIX = '123456';
+    process.env.CARD_SETTLEMENT_ACCOUNT_ID = CARD_SETTLEMENT.ACCOUNT_ID;
+    process.env.CARD_SETTLEMENT_ACCOUNT_NUMBER = CARD_SETTLEMENT.ACCOUNT_NUMBER;
 
     // Set LocalStack credentials for AWS SDK
     process.env.AWS_ACCESS_KEY_ID = 'test';
@@ -113,10 +137,42 @@ describe('Bank API Integration Tests', () => {
     delete process.env.SERVICE_NAME;
     delete process.env.LOG_LEVEL;
     delete process.env.METRICS_NAMESPACE;
-    delete process.env.AWS_REGION;
-    delete process.env.AWS_ENDPOINT_URL;
-    delete process.env.AWS_ACCESS_KEY_ID;
-    delete process.env.AWS_SECRET_ACCESS_KEY;
+    delete process.env.CARD_PAN_SECRET;
+    delete process.env.CARD_CVC_SECRET;
+    delete process.env.CARD_PROCESSOR_TOKEN;
+    delete process.env.CARD_BIN_PREFIX;
+    delete process.env.CARD_SETTLEMENT_ACCOUNT_ID;
+    delete process.env.CARD_SETTLEMENT_ACCOUNT_NUMBER;
+
+    if (previousAwsProfile === undefined) {
+      delete process.env.AWS_PROFILE;
+    } else {
+      process.env.AWS_PROFILE = previousAwsProfile;
+    }
+
+    if (previousAccessKeyId === undefined) {
+      delete process.env.AWS_ACCESS_KEY_ID;
+    } else {
+      process.env.AWS_ACCESS_KEY_ID = previousAccessKeyId;
+    }
+
+    if (previousSecretAccessKey === undefined) {
+      delete process.env.AWS_SECRET_ACCESS_KEY;
+    } else {
+      process.env.AWS_SECRET_ACCESS_KEY = previousSecretAccessKey;
+    }
+
+    if (previousRegion === undefined) {
+      delete process.env.AWS_REGION;
+    } else {
+      process.env.AWS_REGION = previousRegion;
+    }
+
+    if (previousEndpointUrl === undefined) {
+      delete process.env.AWS_ENDPOINT_URL;
+    } else {
+      process.env.AWS_ENDPOINT_URL = previousEndpointUrl;
+    }
   });
 
   describe('Preflight Requests', () => {
@@ -137,7 +193,7 @@ describe('Bank API Integration Tests', () => {
         expect(result.headers).toMatchObject({
           'access-control-allow-methods': 'GET,POST,OPTIONS',
           'access-control-allow-headers':
-            'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,idempotency-key',
+            'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,Authorization,idempotency-key',
         });
       }
     });
@@ -2005,6 +2061,257 @@ describe('Bank API Integration Tests', () => {
     });
   });
 
+  describe('Card Issuing Endpoint', () => {
+    let jwtCookie: string;
+    let accountId: string;
+    let accountNumber: string;
+    let issuedCard: {
+      cardId: string;
+      pan: string;
+      cvc: string;
+      panLast4: string;
+      expiryMonth: number;
+      expiryYear: number;
+    };
+
+    beforeAll(async () => {
+      const creds = await signupUniqueTestUser('card-issuer-user');
+      jwtCookie = creds.jwtCookie;
+
+      const account = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie,
+        body: { name: 'Card Issuer Account' },
+      });
+      expect(account.statusCode).toBe(201);
+      accountId = account.body.accountId;
+      accountNumber = account.body.accountNumber;
+
+      const funding = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${accountId}/funding`,
+        jwtCookie,
+        headers: {
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 5_000 },
+      });
+      expect(funding.statusCode).toBe(201);
+
+      const issue = await invokeApi({
+        method: 'POST',
+        path: '/v1/cards',
+        jwtCookie,
+        body: { accountId },
+      });
+      expect(issue.statusCode).toBe(201);
+      issuedCard = issue.body;
+    });
+
+    it('returns masked cards from list and get endpoints', async () => {
+      expect(issuedCard.pan).toMatch(/^123456/);
+      expect(issuedCard.cvc).toHaveLength(3);
+
+      const listResponse = await invokeApi({
+        method: 'GET',
+        path: `/v1/cards?accountId=${accountId}`,
+        jwtCookie,
+      });
+      expect(listResponse.statusCode).toBe(200);
+      const listedCard = listResponse.body.cards.find(
+        (item: any) => item.cardId === issuedCard.cardId
+      );
+      expect(listedCard).toBeDefined();
+      expect(listedCard.panLast4).toBe(issuedCard.panLast4);
+      expect(listedCard.pan).toBeUndefined();
+      expect(listedCard.cvc).toBeUndefined();
+
+      const getResponse = await invokeApi({
+        method: 'GET',
+        path: `/v1/cards/${issuedCard.cardId}`,
+        jwtCookie,
+      });
+      expect(getResponse.statusCode).toBe(200);
+      expect(getResponse.body.panLast4).toBe(issuedCard.panLast4);
+      expect(getResponse.body.pan).toBeUndefined();
+      expect(getResponse.body.cvc).toBeUndefined();
+    });
+
+    it('authorizes and captures card transactions via processor', async () => {
+      const processorChargeId = `ch_${crypto.randomUUID()}`;
+      const authorizationIdempotency = crypto.randomUUID();
+
+      const authResponse = await invokeApi({
+        method: 'POST',
+        path: '/v1/card-processor/authorizations',
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': authorizationIdempotency,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          pan: issuedCard.pan,
+          expiryMonth: issuedCard.expiryMonth,
+          expiryYear: issuedCard.expiryYear,
+          cvc: issuedCard.cvc,
+          amountMinor: 1_200,
+          currency: 'USD',
+          merchant: {
+            name: 'Demo Shop',
+            statementDescriptor: 'DEMO SHOP',
+            categoryCode: '5411',
+            country: 'US',
+          },
+          processorChargeId,
+        },
+      });
+
+      expect(authResponse.statusCode).toBe(200);
+      expect(authResponse.body.status).toBe('APPROVED');
+      expect(authResponse.body.authorizationId).toBeDefined();
+      const authorizationId = authResponse.body.authorizationId;
+
+      const retryResponse = await invokeApi({
+        method: 'POST',
+        path: '/v1/card-processor/authorizations',
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': authorizationIdempotency,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          pan: issuedCard.pan,
+          expiryMonth: issuedCard.expiryMonth,
+          expiryYear: issuedCard.expiryYear,
+          cvc: issuedCard.cvc,
+          amountMinor: 1_200,
+          currency: 'USD',
+          merchant: {
+            name: 'Demo Shop',
+            statementDescriptor: 'DEMO SHOP',
+            categoryCode: '5411',
+            country: 'US',
+          },
+          processorChargeId,
+        },
+      });
+
+      expect(retryResponse.statusCode).toBe(200);
+      expect(retryResponse.body.authorizationId).toBe(authorizationId);
+
+      const conflictResponse = await invokeApi({
+        method: 'POST',
+        path: '/v1/card-processor/authorizations',
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': authorizationIdempotency,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          pan: issuedCard.pan,
+          expiryMonth: issuedCard.expiryMonth,
+          expiryYear: issuedCard.expiryYear,
+          cvc: issuedCard.cvc,
+          amountMinor: 1_300,
+          currency: 'USD',
+          merchant: {
+            name: 'Demo Shop',
+            statementDescriptor: 'DEMO SHOP',
+            categoryCode: '5411',
+            country: 'US',
+          },
+          processorChargeId,
+        },
+      });
+
+      expect(conflictResponse.statusCode).toBe(409);
+      expect(conflictResponse.body.error).toBe('IDEMPOTENCY_CONFLICT');
+
+      const captureResponse = await invokeApi({
+        method: 'POST',
+        path: `/v1/card-processor/authorizations/${authorizationId}/capture`,
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 1_200 },
+      });
+
+      expect(captureResponse.statusCode).toBe(200);
+      expect(captureResponse.body.status).toBe('CAPTURED');
+
+      let activityResponse: Awaited<ReturnType<typeof invokeApi>> | null = null;
+      let lastResponse: Awaited<ReturnType<typeof invokeApi>> | null = null;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const response = await invokeApi({
+          method: 'GET',
+          path: `/v1/activity/${accountNumber}`,
+          jwtCookie,
+        });
+        lastResponse = response;
+        const items = Array.isArray(response.body?.items)
+          ? response.body.items
+          : [];
+        const cardItems = items.filter(
+          (item: any) => item.processorChargeId === processorChargeId
+        );
+        const hasHold = cardItems.some(
+          (item: any) =>
+            item.kind === 'HOLD_CREATED' &&
+            item.processorChargeId === processorChargeId
+        );
+        const hasCapture = cardItems.some(
+          (item: any) =>
+            item.kind === 'HOLD_CAPTURED' &&
+            item.processorChargeId === processorChargeId
+        );
+        const hasPosted = cardItems.some(
+          (item: any) =>
+            item.kind === 'POSTED_TRANSACTION' &&
+            item.processorChargeId === processorChargeId
+        );
+
+        if (hasHold && hasCapture && hasPosted) {
+          activityResponse = response;
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      const resolvedActivity = activityResponse ?? lastResponse;
+      expect(resolvedActivity).toBeDefined();
+      const cardItems = resolvedActivity?.body.items.filter(
+        (item: any) => item.processorChargeId === processorChargeId
+      );
+      expect(cardItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'HOLD_CREATED',
+            merchantName: 'Demo Shop',
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+          expect.objectContaining({
+            kind: 'HOLD_CAPTURED',
+            merchantName: 'Demo Shop',
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+          expect.objectContaining({
+            kind: 'POSTED_TRANSACTION',
+            merchantName: 'Demo Shop',
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+        ])
+      );
+    }, 20000);
+  });
+
   describe('PayNote Detail Endpoint', () => {
     let userJwtCookie: string;
     let userAccountNumber: string;
@@ -2353,6 +2660,55 @@ async function setupLocalStackResources(): Promise<void> {
           PK: { S: 'ACCOUNT_NUMBER#0000000000' },
           SK: { S: 'RESERVE' },
           accountId: { S: 'FUNDING_SOURCE' },
+        },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+
+    // CARD_SETTLEMENT META ROW
+    const cardSettlementCreatedAt = new Date().toISOString();
+    await dynamoClient.send(
+      new PutItemCommand({
+        TableName: TEST_CONFIG.tableName,
+        Item: {
+          PK: { S: `ACCOUNT#${CARD_SETTLEMENT.ACCOUNT_ID}` },
+          SK: { S: 'META' },
+          BANKING_GSI1PK: { S: 'USER#SYSTEM' },
+          BANKING_GSI1SK: { S: cardSettlementCreatedAt },
+          accountNumber: { S: CARD_SETTLEMENT.ACCOUNT_NUMBER },
+          name: { S: 'Card Settlement' },
+          ownerUserId: { S: 'SYSTEM' },
+          status: { S: 'ACTIVE' },
+          currency: { S: 'USD' },
+          createdAt: { S: cardSettlementCreatedAt },
+        },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+
+    // CARD_SETTLEMENT BALANCE ROW
+    await dynamoClient.send(
+      new PutItemCommand({
+        TableName: TEST_CONFIG.tableName,
+        Item: {
+          PK: { S: `ACCOUNT#${CARD_SETTLEMENT.ACCOUNT_ID}` },
+          SK: { S: 'BALANCE' },
+          ledgerBalanceMinor: { N: '0' },
+          availableBalanceMinor: { N: '0' },
+          version: { N: '0' },
+        },
+        ConditionExpression: 'attribute_not_exists(PK)',
+      })
+    );
+
+    // CARD_SETTLEMENT ACCOUNT NUMBER RESERVATION
+    await dynamoClient.send(
+      new PutItemCommand({
+        TableName: TEST_CONFIG.tableName,
+        Item: {
+          PK: { S: `ACCOUNT_NUMBER#${CARD_SETTLEMENT.ACCOUNT_NUMBER}` },
+          SK: { S: 'RESERVE' },
+          accountId: { S: CARD_SETTLEMENT.ACCOUNT_ID },
         },
         ConditionExpression: 'attribute_not_exists(PK)',
       })

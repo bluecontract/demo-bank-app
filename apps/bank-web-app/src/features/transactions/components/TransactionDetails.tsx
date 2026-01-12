@@ -72,7 +72,14 @@ export function TransactionDetails({
     ? getAccountNameByNumber(counterpartyAccountNumber)
     : '';
   const currentAccountName = getCurrentAccountName();
-  const methodLabel = showPayNoteHelper
+  const isCardTransaction = Boolean(
+    transaction.cardLast4 ||
+      transaction.merchantName ||
+      transaction.processorChargeId
+  );
+  const methodLabel = isCardTransaction
+    ? 'Card Purchase'
+    : showPayNoteHelper
     ? 'PayNote Transfer'
     : 'Standard Transfer';
 
@@ -105,22 +112,92 @@ export function TransactionDetails({
     return status.toLowerCase() === 'posted' ? 'Completed' : status;
   };
 
+  const detailRows: Array<{ label: string; value: string }> = [
+    {
+      label: 'Operation',
+      value: isCardTransaction
+        ? 'Card purchase'
+        : `${getTransactionDirection()} transfer`,
+    },
+    { label: 'Method', value: methodLabel },
+  ];
+
+  if (isCardTransaction) {
+    detailRows.push({
+      label: 'Card',
+      value: transaction.cardLast4 ? `**** ${transaction.cardLast4}` : '—',
+    });
+
+    if (transaction.merchantName) {
+      detailRows.push({ label: 'Merchant', value: transaction.merchantName });
+    }
+    if (transaction.merchantStatementDescriptor) {
+      detailRows.push({
+        label: 'Statement descriptor',
+        value: transaction.merchantStatementDescriptor,
+      });
+    }
+    if (transaction.processorChargeId) {
+      detailRows.push({
+        label: 'Processor charge',
+        value: transaction.processorChargeId,
+      });
+    }
+    if (transaction.originHoldId) {
+      detailRows.push({
+        label: 'Authorization',
+        value: transaction.originHoldId,
+      });
+    }
+  } else {
+    detailRows.push({
+      label: 'To account',
+      value: isCredit
+        ? formatAccountNumber(currentAccountNumber)
+        : counterpartyAccountNumber
+        ? formatAccountNumber(counterpartyAccountNumber)
+        : '—',
+    });
+    detailRows.push({
+      label: 'From account',
+      value: isCredit
+        ? counterpartyAccountNumber
+          ? formatAccountNumber(counterpartyAccountNumber)
+          : '—'
+        : formatAccountNumber(currentAccountNumber),
+    });
+  }
+
+  detailRows.push(
+    { label: 'Amount', value: formattedAmount },
+    { label: 'Payment creation date', value: formatDate(transaction.postedAt) },
+    { label: 'Payment number', value: transaction.transactionId }
+  );
+
   return (
     <div className="max-w-2xl mx-auto" data-testid={testId}>
       <Card className="p-0">
         <div className="px-4 py-3 border-b border-gray-200">
           <div className="mb-1">
             <h1 className="text-lg font-semibold text-gray-900">
-              {getTransactionDirection()} transfer
+              {isCardTransaction
+                ? 'Card purchase'
+                : `${getTransactionDirection()} transfer`}
             </h1>
           </div>
-          {counterpartyAccountNumber && (
+          {!isCardTransaction && counterpartyAccountNumber && (
             <p className="text-sm text-gray-600">
               {isCredit ? 'From' : 'To'}{' '}
               {formatAccountWithName(
                 counterpartyAccountNumber,
                 counterpartyAccountName
               )}
+            </p>
+          )}
+          {isCardTransaction && (
+            <p className="text-sm text-gray-600">
+              {transaction.merchantName ?? 'Card purchase'}
+              {transaction.cardLast4 ? ` • **** ${transaction.cardLast4}` : ''}
             </p>
           )}
         </div>
@@ -155,7 +232,7 @@ export function TransactionDetails({
           </div>
 
           <div className="text-sm text-gray-600">
-            {counterpartyAccountNumber && (
+            {!isCardTransaction && counterpartyAccountNumber && (
               <>
                 {isCredit ? 'To' : 'From'}:{' '}
                 {formatAccountWithName(
@@ -170,60 +247,12 @@ export function TransactionDetails({
 
         <div className="px-4 py-4">
           <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Operation</span>
-              <span className="text-sm text-gray-900">
-                {getTransactionDirection()} transfer
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Method</span>
-              <span className="text-sm text-gray-900">{methodLabel}</span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">To account</span>
-              <span className="text-sm text-gray-900">
-                {isCredit
-                  ? formatAccountNumber(currentAccountNumber)
-                  : counterpartyAccountNumber
-                  ? formatAccountNumber(counterpartyAccountNumber)
-                  : '—'}
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">From account</span>
-              <span className="text-sm text-gray-900">
-                {isCredit
-                  ? counterpartyAccountNumber
-                    ? formatAccountNumber(counterpartyAccountNumber)
-                    : '—'
-                  : formatAccountNumber(currentAccountNumber)}
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Amount</span>
-              <span className="text-sm text-gray-900">{formattedAmount}</span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">
-                Payment creation date
-              </span>
-              <span className="text-sm text-gray-900">
-                {formatDate(transaction.postedAt)}
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Payment number</span>
-              <span className="text-sm text-gray-900">
-                {transaction.transactionId}
-              </span>
-            </div>
+            {detailRows.map(row => (
+              <div key={row.label} className="flex justify-between">
+                <span className="text-sm text-gray-600">{row.label}</span>
+                <span className="text-sm text-gray-900">{row.value}</span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -240,7 +269,7 @@ export function TransactionDetails({
           </div>
         )}
 
-        {showPayNoteHelper && (
+        {showPayNoteHelper && !isCardTransaction && (
           <div className="px-4 py-3 border-t border-gray-200">
             <p className="text-sm text-gray-700">
               This transaction is part of a PayNote transfer.{' '}

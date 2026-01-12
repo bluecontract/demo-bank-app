@@ -9,6 +9,7 @@ import {
 } from '../../features/accounts/components';
 import { FundModal, TransactionHistory } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
+import { CardsPanel } from '../../features/cards/components';
 import { SpinnerWithText } from '../../ui/Spinner';
 
 type Account = {
@@ -114,7 +115,14 @@ export function DashboardPage() {
 
         {/* Transaction History Section - Full Width and Fill Height */}
         <div className="flex-1 px-4 pb-4 pt-2 flex flex-col min-h-0">
-          <TransactionHistory />
+          <div className="flex flex-col xl:flex-row gap-4 flex-1 min-h-0">
+            <div className="xl:w-1/3 flex flex-col min-h-0">
+              <CardsPanel />
+            </div>
+            <div className="flex-1 min-h-0">
+              <TransactionHistory />
+            </div>
+          </div>
         </div>
       </div>
 
