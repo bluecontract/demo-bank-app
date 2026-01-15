@@ -32,7 +32,7 @@ vi.mock('../../features/accounts/hooks/useCreateAccount', () => ({
 }));
 
 vi.mock('../../features/transfer', () => ({
-  FundModal: vi.fn(({ isOpen, onClose, accounts, defaultAccountId }) =>
+  FundModal: vi.fn(({ isOpen, onClose }) =>
     isOpen ? (
       <div data-testid="fund-modal">
         Fund Modal
@@ -51,13 +51,14 @@ vi.mock('../../features/dashboard/components', () => ({
   DashboardHeader: vi.fn(({ userEmail }) => (
     <div data-testid="dashboard-header">Dashboard Header - {userEmail}</div>
   )),
+  SidebarNav: vi.fn(() => <div data-testid="sidebar-nav">Sidebar Nav</div>),
 }));
 
 vi.mock('../../features/accounts/components', () => ({
-  HorizontalAccountsList: vi.fn(
+  AccountsSection: vi.fn(
     ({ accounts, onCreateAccount, onTransfer, isCreatingAccount }) => (
-      <div data-testid="horizontal-accounts-list">
-        Horizontal Accounts List - {accounts.length} accounts
+      <div data-testid="accounts-section">
+        Accounts Section - {accounts.length} accounts
         <button onClick={onCreateAccount} data-testid="create-account-btn">
           Create Account
         </button>
@@ -73,14 +74,6 @@ vi.mock('../../features/accounts/components', () => ({
       </div>
     )
   ),
-  AddAccountCard: vi.fn(({ onClick, isLoading }) => (
-    <div data-testid="add-account-card">
-      <button onClick={onClick} data-testid="add-account-btn">
-        Add Account
-      </button>
-      {isLoading && <div data-testid="loading">Loading...</div>}
-    </div>
-  )),
   AccountCreationModal: vi.fn(({ isOpen, onClose, onSuccess }) =>
     isOpen ? (
       <div data-testid="account-creation-modal">
@@ -107,6 +100,9 @@ vi.mock('../../features/accounts/components', () => ({
 
 vi.mock('../../features/cards/components', () => ({
   CardsPanel: vi.fn(() => <div data-testid="cards-panel">Cards Panel</div>),
+  CardSimulatorPanel: vi.fn(() => (
+    <div data-testid="card-simulator-panel">Card Simulator</div>
+  )),
 }));
 
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
@@ -171,15 +167,10 @@ describe('DashboardPage', () => {
     expect(screen.getByTestId('accounts-loading-spinner')).toBeInTheDocument();
     expect(screen.getByRole('status')).toBeInTheDocument();
 
-    const container = screen
+    const shell = screen
       .getByTestId('accounts-loading-spinner')
-      .closest('div');
-    expect(container?.parentElement).toHaveClass(
-      'h-screen',
-      'bg-gradient-to-br',
-      'from-green-400',
-      'to-yellow-400'
-    );
+      .closest('.app-shell');
+    expect(shell).toBeInTheDocument();
   });
 
   it('should render error state', () => {
@@ -195,15 +186,10 @@ describe('DashboardPage', () => {
       screen.getByText('Error loading accounts. Please try again.')
     ).toBeInTheDocument();
 
-    const container = screen
+    const shell = screen
       .getByText('Error loading accounts. Please try again.')
-      .closest('div');
-    expect(container?.parentElement).toHaveClass(
-      'h-screen',
-      'bg-gradient-to-br',
-      'from-green-400',
-      'to-yellow-400'
-    );
+      .closest('.app-shell');
+    expect(shell).toBeInTheDocument();
   });
 
   it('should render dashboard header with user name', () => {
@@ -218,9 +204,9 @@ describe('DashboardPage', () => {
   it('should render horizontal accounts list when accounts exist', () => {
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
-    expect(screen.getByTestId('horizontal-accounts-list')).toBeInTheDocument();
+    expect(screen.getByTestId('accounts-section')).toBeInTheDocument();
     expect(
-      screen.getByText('Horizontal Accounts List - 2 accounts')
+      screen.getByText('Accounts Section - 2 accounts')
     ).toBeInTheDocument();
   });
 
@@ -239,7 +225,7 @@ describe('DashboardPage', () => {
 
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
-    expect(screen.getByTestId('horizontal-accounts-list')).toBeInTheDocument();
+    expect(screen.getByTestId('accounts-section')).toBeInTheDocument();
     expect(screen.getByTestId('transaction-history')).toBeInTheDocument();
   });
 
@@ -295,10 +281,7 @@ describe('DashboardPage', () => {
     render(<DashboardPage />, { wrapper: createTestWrapper() });
 
     const mainContainer = screen.getByTestId('dashboard-main-container');
-    expect(mainContainer).toHaveClass('h-screen');
-    expect(mainContainer).toHaveClass('bg-gradient-to-br');
-    expect(mainContainer).toHaveClass('from-green-400');
-    expect(mainContainer).toHaveClass('to-yellow-400');
-    expect(mainContainer).toHaveClass('overflow-hidden');
+    expect(mainContainer).toHaveClass('app-shell');
+    expect(mainContainer).toHaveClass('flex');
   });
 });

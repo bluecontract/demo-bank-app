@@ -76,6 +76,8 @@ export async function issueCard(
       accountNumber: account.accountNumber,
       ownerUserId: account.ownerUserId,
       cardholderName,
+      pan,
+      cvc,
       panLast4: pan.slice(-4),
       panHash: cardHasher.hashPan(pan),
       cvcHash: cardHasher.hashCvc(cvc),

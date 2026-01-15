@@ -1078,6 +1078,14 @@ paths:
                   updatedAt:
                     type: string
                     format: date-time
+                  pan:
+                    type: string
+                    minLength: 16
+                    maxLength: 16
+                  cvc:
+                    type: string
+                    minLength: 3
+                    maxLength: 3
                 required:
                   - cardId
                   - accountId
@@ -1089,6 +1097,8 @@ paths:
                   - status
                   - createdAt
                   - updatedAt
+                  - pan
+                  - cvc
         '400':
           description: '400'
           content:

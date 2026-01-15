@@ -58,9 +58,11 @@ export function Avatar({
     xl: 'w-16 h-16 text-lg',
   };
 
-  const backgroundColorClass = name.trim() ? 'bg-green-500' : 'bg-gray-400';
+  const backgroundColorClass = name.trim()
+    ? 'bg-gradient-to-br from-emerald-400 via-teal-500 to-emerald-600'
+    : 'bg-gray-400';
 
-  const baseClasses = `${sizeClasses[size]} ${backgroundColorClass} rounded-full flex items-center justify-center text-white font-semibold`;
+  const baseClasses = `${sizeClasses[size]} ${backgroundColorClass} rounded-full flex items-center justify-center text-white font-semibold shadow-sm ring-2 ring-white/70`;
   const finalClasses = `${baseClasses} ${className}`.trim();
 
   const handleImageError = () => {

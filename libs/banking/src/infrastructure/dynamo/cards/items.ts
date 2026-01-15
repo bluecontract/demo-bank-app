@@ -22,6 +22,8 @@ export interface CardMetaItem {
   accountNumber: string;
   ownerUserId: string;
   cardholderName: string;
+  pan: string;
+  cvc: string;
   panLast4: string;
   panHash: string;
   cvcHash: string;
@@ -96,6 +98,8 @@ export function buildCardMetaItem(
     accountNumber: card.accountNumber,
     ownerUserId: card.ownerUserId,
     cardholderName: card.cardholderName,
+    pan: card.pan,
+    cvc: card.cvc,
     panLast4: card.panLast4,
     panHash: card.panHash,
     cvcHash: card.cvcHash,
@@ -158,6 +162,8 @@ export function mapCardMetaItemToCard(item: CardMetaItem): Card {
     accountNumber: item.accountNumber,
     ownerUserId: item.ownerUserId,
     cardholderName: item.cardholderName,
+    pan: item.pan,
+    cvc: item.cvc,
     panLast4: item.panLast4,
     panHash: item.panHash,
     cvcHash: item.cvcHash,

@@ -8,8 +8,9 @@
 
 Extend Demo Bank to issue cards tied to accounts and act as the issuer for BIN
 123456 cards, similar to a Synchrony-style store card program. Multiple cards
-per account are supported, raw PAN/CVC are never stored, and CVC verification is
-enforced. Authorization requests from the demo payment processor create holds.
+per account are supported, raw PAN/CVC are stored in the bank for demo access,
+and CVC verification is enforced. Authorization requests from the demo payment
+processor create holds.
 Captures post ledger transfers to a card settlement account and appear in the
 activity feed as both `HOLD_CAPTURED` and `POSTED_TRANSACTION` entries with
 merchant details. Card freeze/unfreeze is out of scope in v1.
@@ -36,6 +37,8 @@ interface Card {
   accountNumber: string;
   ownerUserId: string;
   cardholderName: string;
+  pan: string;
+  cvc: string;
   panLast4: string;
   panHash: string;
   cvcHash: string;
@@ -77,7 +80,7 @@ Notes:
 | ----------------------------------------------------------------- | --------------------------------------------------------------- |
 | IssueCard(accountId, cardholderName?)                             | Validates ownership, generates PAN, expiry, CVC, status ACTIVE. |
 | ListCards(userId, accountId?)                                     | Lists masked card info for the user.                            |
-| GetCard(cardId)                                                   | Returns masked card details (no CVC).                           |
+| GetCard(cardId)                                                   | Returns full card details (PAN/CVC) for the owning user.        |
 | AuthorizeCard(pan, exp, cvc, amount, merchant, processorChargeId) | Service auth, create hold, return authorizationId.              |
 | CaptureAuthorization(authorizationId, amount)                     | Service auth, capture hold to settlement transfer.              |
 
@@ -85,9 +88,9 @@ Notes:
 
 User endpoints (cookie auth):
 
-- `POST /v1/cards` issue a card (returns full PAN and CVC once).
+- `POST /v1/cards` issue a card (returns full PAN and CVC).
 - `GET /v1/cards?accountId=...` list cards (masked PAN only).
-- `GET /v1/cards/{cardId}` get card (masked PAN only).
+- `GET /v1/cards/{cardId}` get card (full PAN and CVC).
 
 Processor endpoints (service auth):
 
@@ -144,8 +147,9 @@ Processor endpoints (service auth):
 - Format: `123456` + 9 random digits + 1 Luhn check digit
 - Uniqueness: `CARD_PAN#<panHash>` lookup item created in the same transaction
   as the Card meta item. Condition `attribute_not_exists(PK)` prevents reuse.
-- Storage: PAN is hashed using HMAC-SHA256 with an env secret; only `panLast4`
-  is stored for display. CVC is generated at issuance and stored as a hash only.
+- Storage: PAN is stored in full for demo access and hashed using HMAC-SHA256
+  for lookup; `panLast4` is stored for display. CVC is stored in full for demo
+  access and also stored as a hash for verification.
 
 ## Authorization Flow (processor)
 
@@ -198,11 +202,11 @@ settlement account and links `originHoldId` to the authorization id.
 
 ## DynamoDB Schema Extensions
 
-| PK                   | SK                   | Item Type            | Attributes                                                                                                                                                                                   |
-| -------------------- | -------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CARD#<cardId>`      | `META`               | Card                 | accountId, accountNumber, ownerUserId, panLast4, panHash, cvcHash, expiryMonth, expiryYear, status, cardholderName, createdAt, updatedAt, CARD_GSI1PK, CARD_GSI1SK, CARD_GSI2PK, CARD_GSI2SK |
-| `CARD_PAN#<panHash>` | `LOOKUP`             | CardPanLookup        | cardId, accountId, ownerUserId, status                                                                                                                                                       |
-| `PROCESSOR#DEMO`     | `IDEMPOTENCY#<hash>` | ProcessorIdempotency | command, authorizationId, transactionId, createdAt, ttl                                                                                                                                      |
+| PK                   | SK                   | Item Type            | Attributes                                                                                                                                                                                             |
+| -------------------- | -------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CARD#<cardId>`      | `META`               | Card                 | accountId, accountNumber, ownerUserId, pan, cvc, panLast4, panHash, cvcHash, expiryMonth, expiryYear, status, cardholderName, createdAt, updatedAt, CARD_GSI1PK, CARD_GSI1SK, CARD_GSI2PK, CARD_GSI2SK |
+| `CARD_PAN#<panHash>` | `LOOKUP`             | CardPanLookup        | cardId, accountId, ownerUserId, status                                                                                                                                                                 |
+| `PROCESSOR#DEMO`     | `IDEMPOTENCY#<hash>` | ProcessorIdempotency | command, authorizationId, transactionId, createdAt, ttl                                                                                                                                                |
 
 Hold META and Hold EVENT items gain optional card fields:
 
@@ -236,8 +240,9 @@ Activity feed:
 UI:
 
 - Add a Cards panel in the account detail view.
-- Issue Card flow shows full PAN and CVC once, with a warning to copy it.
+- Issue Card flow shows full PAN and CVC; card details remain visible later.
 - Card list shows status, last4, expiry, and account linkage.
+- Card details modal shows full PAN and CVC.
 - Activity timeline renders card authorizations and captures with merchant name,
   amount, and card last4.
 
@@ -247,7 +252,8 @@ UI:
 - Processor endpoints require a dedicated service token
   (`Authorization: Bearer <processorToken>`). Store the token in env config.
 - Requests must include `Idempotency-Key` for authorization and capture.
-- PAN/CVC are never logged; store only masked PAN and HMAC hashes.
+- PAN/CVC are never logged; store masked PAN for lists and HMAC hashes for
+  lookup while persisting full values in the bank data store.
 
 ## Error Handling
 

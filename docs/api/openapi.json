@@ -1450,6 +1450,16 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "pan": {
+                      "type": "string",
+                      "minLength": 16,
+                      "maxLength": 16
+                    },
+                    "cvc": {
+                      "type": "string",
+                      "minLength": 3,
+                      "maxLength": 3
                     }
                   },
                   "required": [
@@ -1462,7 +1472,9 @@
                     "expiryYear",
                     "status",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "pan",
+                    "cvc"
                   ]
                 }
               }

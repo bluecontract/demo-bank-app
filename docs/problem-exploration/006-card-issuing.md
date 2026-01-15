@@ -41,8 +41,9 @@ bank is the issuer and settlement goes to an internal clearing account.
 
 ## Scenarios
 
-1. A signed-in user issues a card for an account and receives card details once
-   (PAN starts with 123456).
+1. A signed-in user issues a card for an account; card details are available
+   later in the card details view while lists remain masked (PAN starts with
+   123456).
 2. A demo checkout submits a card starting with 123456; the processor routes to
    the bank authorization API.
 3. The bank approves, creates a hold, and returns an authorization id; the
@@ -59,8 +60,9 @@ bank is the issuer and settlement goes to an internal clearing account.
 
 - Currency is USD only.
 - Card numbers must start with BIN 123456 and be Luhn valid.
-- PAN and CVC are never stored or logged; only masked and hashed values are
-  persisted.
+- PAN and CVC are stored in the bank data store for demo access; lists show
+  masked values and sensitive data is never logged. Hashes are still stored
+  for lookup and verification.
 - External processor calls must use service authentication (not end-user
   cookies).
 - Authorizations should use the existing holds flow to preserve balance

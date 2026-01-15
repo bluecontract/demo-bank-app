@@ -52,6 +52,8 @@ const mockCard = {
   accountNumber: '1234567890',
   ownerUserId: TEST_USER_ID,
   cardholderName: 'Test User',
+  pan: '1234567890124242',
+  cvc: '123',
   panLast4: '4242',
   panHash: 'hash',
   cvcHash: 'cvc-hash',
@@ -83,7 +85,7 @@ describe('getCardHandler', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns masked card details', async () => {
+  it('returns card details', async () => {
     const response = await getCardHandler(
       {
         params: { cardId: 'card-123' },
@@ -101,6 +103,8 @@ describe('getCardHandler', () => {
       accountId: 'acc-123',
       accountNumber: '1234567890',
       cardholderName: 'Test User',
+      pan: '1234567890124242',
+      cvc: '123',
       panLast4: '4242',
       expiryMonth: 12,
       expiryYear: 2030,

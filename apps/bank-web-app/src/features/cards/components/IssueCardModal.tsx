@@ -78,12 +78,12 @@ export function IssueCardModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+      className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
       onClick={handleBackdropClick}
       data-testid="issue-card-modal-backdrop"
     >
       <div
-        className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white/90 rounded-2xl shadow-xl border border-slate-200 backdrop-blur max-w-lg w-full max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
         data-testid="issue-card-modal-content"
         role="dialog"
@@ -93,10 +93,10 @@ export function IssueCardModal({
           {!issuedCard && (
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-lg font-semibold text-slate-900">
                   Issue a new card
                 </h3>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-slate-600 mt-1">
                   {accountName
                     ? `Linked to ${accountName}.`
                     : 'Select an account to continue.'}
@@ -106,7 +106,7 @@ export function IssueCardModal({
               <div>
                 <label
                   htmlFor="cardholderName"
-                  className="block text-sm font-medium text-gray-700"
+                  className="block text-sm font-medium text-slate-700"
                 >
                   Cardholder name (optional)
                 </label>
@@ -115,7 +115,7 @@ export function IssueCardModal({
                   type="text"
                   value={cardholderName}
                   onChange={event => setCardholderName(event.target.value)}
-                  className="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  className="mt-1 w-full px-3 py-2.5 border border-slate-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]"
                   placeholder="e.g., Taylor Jordan"
                   maxLength={100}
                 />
@@ -148,16 +148,17 @@ export function IssueCardModal({
           {issuedCard && (
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-lg font-semibold text-slate-900">
                   Card issued successfully
                 </h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  These details are shown once. Copy them now.
+                <p className="text-sm text-slate-600 mt-1">
+                  These details are saved to your account. You can view them
+                  later in the card details view.
                 </p>
               </div>
 
-              <div className="rounded-xl bg-gradient-to-br from-green-500 to-yellow-400 text-white p-5">
-                <div className="text-sm uppercase tracking-widest text-white/80">
+              <div className="rounded-2xl bg-gradient-to-br from-[#2bbe9c] to-[#f4b740] text-slate-900 p-5">
+                <div className="text-sm uppercase tracking-widest text-slate-900/70">
                   Demo Bank
                 </div>
                 <div className="mt-4 text-lg font-semibold">
@@ -171,7 +172,7 @@ export function IssueCardModal({
                 </div>
                 <div className="mt-4 flex items-center justify-between text-sm">
                   <div>
-                    <div className="text-white/70">Expiry</div>
+                    <div className="text-slate-900/70">Expiry</div>
                     <div
                       className="font-medium"
                       data-testid="issued-card-expiry"
@@ -183,7 +184,7 @@ export function IssueCardModal({
                     </div>
                   </div>
                   <div>
-                    <div className="text-white/70">CVC</div>
+                    <div className="text-slate-900/70">CVC</div>
                     <div className="font-medium" data-testid="issued-card-cvc">
                       {issuedCard.cvc}
                     </div>
@@ -191,9 +192,9 @@ export function IssueCardModal({
                 </div>
               </div>
 
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-                Store this card securely. For security, the full number and CVC
-                will not be shown again.
+              <div className="bg-amber-50/70 border border-amber-100 rounded-xl p-4 text-sm text-amber-700">
+                Card details are saved to your account for demo use. You can
+                revisit them from the card details view.
               </div>
 
               <div className="flex justify-end gap-3">

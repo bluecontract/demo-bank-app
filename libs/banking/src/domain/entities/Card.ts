@@ -13,6 +13,8 @@ export interface Card {
   accountNumber: string;
   ownerUserId: string;
   cardholderName: string;
+  pan: string;
+  cvc: string;
   panLast4: string;
   panHash: string;
   cvcHash: string;

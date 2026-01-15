@@ -15,16 +15,17 @@ export function Card({
   onClick,
   'data-testid': testId,
 }: CardProps) {
-  const baseClasses = 'p-6 rounded-lg transition-all duration-200';
+  const baseClasses = 'app-surface p-6 transition-all duration-200';
 
   const variantClasses = {
-    default: 'bg-white shadow-md',
-    gradient: 'bg-gradient-to-br from-green-400 to-yellow-400 shadow-lg',
-    dashed: 'bg-white border-2 border-dashed border-gray-300 shadow-sm',
+    default: '',
+    gradient:
+      'bg-gradient-to-br from-[#2bbe9c] via-[#a7f0d4] to-[#f4b740] text-slate-900 border-transparent',
+    dashed: 'bg-white/70 border-2 border-dashed border-slate-200 shadow-none',
   };
 
   const interactiveClasses = onClick
-    ? 'cursor-pointer hover:shadow-lg transform hover:-translate-y-1'
+    ? 'cursor-pointer hover:shadow-[var(--shadow-lift)] hover:-translate-y-1'
     : '';
 
   const finalClasses =

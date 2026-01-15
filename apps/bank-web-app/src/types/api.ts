@@ -47,6 +47,13 @@ export type CardListResponse = ClientInferResponseBody<
 
 export type CardSummary = CardListResponse['cards'][number];
 
+export type CardDetailsResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['getCard'],
+  200
+>;
+
+export type CardDetails = CardDetailsResponse;
+
 // Transfer types
 export type FundAccountResponse = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['fundAccount'],

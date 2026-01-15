@@ -119,12 +119,16 @@ export async function captureCardAuthorization(
   payerAccount.applyPosting(debit);
   settlementAccount.applyPosting(credit);
 
+  const capturedAt = clock();
+  const capturedAtIso = capturedAt.toISOString();
+
   const transactionId = transactionIdGenerator();
   const transaction = Transaction.createWithId(
     [debit, credit],
     {
       idempotencyKey: command.idempotencyKey,
       description: hold.description ?? 'Card purchase capture',
+      createdAt: capturedAt,
       originHoldId: hold.holdId,
       cardId: hold.cardId,
       cardLast4: hold.cardLast4,
@@ -136,8 +140,6 @@ export async function captureCardAuthorization(
     },
     transactionId
   );
-
-  const capturedAt = clock().toISOString();
   const idempotencyKeyHash = hashIdempotencyKey(command.idempotencyKey);
 
   const updatedHold = {
@@ -154,7 +156,7 @@ export async function captureCardAuthorization(
     counterpartyAccountBalanceVersion: settlementAccount.balanceVersion,
     hold: updatedHold,
     holdEvent: {
-      at: capturedAt,
+      at: capturedAtIso,
       type: 'CAPTURED',
       transactionId: transaction.id,
       counterpartyAccountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,

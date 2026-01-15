@@ -4,11 +4,15 @@ import { useAuth } from '../../../app/providers/AuthProvider';
 
 interface DashboardHeaderProps {
   userEmail: string;
+  title?: string;
+  description?: string;
   'data-testid'?: string;
 }
 
 export function DashboardHeader({
   userEmail,
+  title,
+  description,
   'data-testid': testId,
 }: DashboardHeaderProps) {
   const { signOut } = useAuth();
@@ -19,21 +23,28 @@ export function DashboardHeader({
 
   return (
     <header
-      className="flex justify-between items-center p-6"
+      className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between"
       data-testid={testId}
     >
-      {/* Left side - App name and welcome message */}
       <div>
-        <h1 className="text-4xl font-bold text-white">Demo Bank</h1>
-        <p className="text-lg text-white/80">Welcome back</p>
+        <p className="text-xs uppercase tracking-[0.35em] text-[color:var(--color-muted)]">
+          Demo Bank
+        </p>
+        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
+          {title ?? 'Welcome back'}
+        </h1>
+        <p className="mt-1 text-sm text-[color:var(--color-muted)]">
+          {description ??
+            'Your personal overview for accounts, cards, and activity.'}
+        </p>
       </div>
 
-      {/* Right side - User profile */}
-      <div className="flex items-center space-x-3">
-        <div className="text-right">
-          <p className="text-sm font-medium text-white">{userEmail}</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-sm text-slate-700">
+          <span className="font-medium">{userEmail}</span>
         </div>
-        <Dropdown trigger={<Avatar name={userEmail} size="xl" />} align="right">
+
+        <Dropdown trigger={<Avatar name={userEmail} size="lg" />} align="right">
           <DropdownItem
             onClick={handleSignOut}
             icon={

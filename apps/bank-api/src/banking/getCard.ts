@@ -40,6 +40,8 @@ export const getCardHandler = async (
         accountId: card.accountId,
         accountNumber: card.accountNumber,
         cardholderName: card.cardholderName,
+        pan: card.pan,
+        cvc: card.cvc,
         panLast4: card.panLast4,
         expiryMonth: card.expiryMonth,
         expiryYear: card.expiryYear,

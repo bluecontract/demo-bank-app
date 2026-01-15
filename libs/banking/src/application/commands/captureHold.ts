@@ -177,6 +177,9 @@ export async function captureHold(
       counterpartyAccountNumber: payerAccount.accountNumber,
     });
 
+    const capturedAt = clock();
+    const capturedAtIso = capturedAt.toISOString();
+
     const transactionId = transactionIdGenerator();
     const transaction = Transaction.createWithId(
       [debitPosting, creditPosting],
@@ -185,13 +188,12 @@ export async function captureHold(
         description:
           existingHold.description ??
           `Captured hold ${existingHold.holdId} to ${resolvedCounterparty}`,
+        createdAt: capturedAt,
         originHoldId: existingHold.holdId,
         payNoteEventId: cmd.payNoteEventId ?? existingHold.payNoteEventId,
       },
       transactionId
     );
-
-    const capturedAt = clock().toISOString();
     const idempotencyKeyHash = hashIdempotencyKey(cmd.idempotencyKey);
 
     const updatedHold: Hold = {
@@ -208,7 +210,7 @@ export async function captureHold(
       counterpartyAccountBalanceVersion: counterpartyAccount.balanceVersion,
       hold: updatedHold,
       holdEvent: {
-        at: capturedAt,
+        at: capturedAtIso,
         type: 'CAPTURED',
         transactionId: transaction.id,
         counterpartyAccountNumber: resolvedCounterparty,

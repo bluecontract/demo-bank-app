@@ -144,10 +144,12 @@ export const IssueCardRequestDto = z.object({
   ),
 });
 
-export const IssueCardResponseDto = CardSummaryDto.extend({
+export const CardDetailsDto = CardSummaryDto.extend({
   pan: z.string().length(16),
   cvc: z.string().length(3),
 });
+
+export const IssueCardResponseDto = CardDetailsDto;
 
 export const CardListResponseDto = z.object({
   cards: z.array(CardSummaryDto),

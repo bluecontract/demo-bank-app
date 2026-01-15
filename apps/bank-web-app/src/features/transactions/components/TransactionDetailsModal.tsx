@@ -287,14 +287,14 @@ export function TransactionDetailsModal({
       >
         <div className="p-3">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-slate-900">
               {activityDetail?.kind === 'HOLD'
                 ? 'Hold Details'
                 : 'Transaction Details'}
             </h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-slate-400 hover:text-slate-600 transition-colors"
               aria-label="Close modal"
             >
               <svg
@@ -323,10 +323,10 @@ export function TransactionDetailsModal({
                   ⚠️
                 </span>
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">
+              <h2 className="text-xl font-bold text-slate-900 mb-2">
                 Account Required
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-slate-600 mb-6">
                 Select an account to view activity details.
               </p>
               <Button onClick={onClose}>Close</Button>
@@ -336,7 +336,7 @@ export function TransactionDetailsModal({
           {accountNumber && isLoading && (
             <div className="p-8 text-center" data-testid="activity-loading">
               <Spinner size="lg" color="green" />
-              <p className="mt-4 text-gray-600">Loading activity details...</p>
+              <p className="mt-4 text-slate-600">Loading activity details...</p>
             </div>
           )}
 
@@ -347,10 +347,10 @@ export function TransactionDetailsModal({
                   ⚠️
                 </span>
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">
+              <h2 className="text-xl font-bold text-slate-900 mb-2">
                 Activity Not Found
               </h2>
-              <p className="text-gray-600 mb-4">{errorMessage}</p>
+              <p className="text-slate-600 mb-4">{errorMessage}</p>
               <Button onClick={onClose}>Close</Button>
             </div>
           )}
@@ -397,7 +397,7 @@ export function TransactionDetailsModal({
           {(resolvedTransaction ||
             holdDetail ||
             isTransactionDetailLoading) && (
-            <div className="mt-3 pt-2 border-t border-gray-200">
+            <div className="mt-3 pt-2 border-t border-slate-200">
               <Button onClick={onClose} variant="primary" className="w-full">
                 Close
               </Button>

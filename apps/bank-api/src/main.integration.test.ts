@@ -2110,7 +2110,7 @@ describe('Bank API Integration Tests', () => {
       issuedCard = issue.body;
     });
 
-    it('returns masked cards from list and get endpoints', async () => {
+    it('returns masked cards in list and full details in get', async () => {
       expect(issuedCard.pan).toMatch(/^123456/);
       expect(issuedCard.cvc).toHaveLength(3);
 
@@ -2135,8 +2135,8 @@ describe('Bank API Integration Tests', () => {
       });
       expect(getResponse.statusCode).toBe(200);
       expect(getResponse.body.panLast4).toBe(issuedCard.panLast4);
-      expect(getResponse.body.pan).toBeUndefined();
-      expect(getResponse.body.cvc).toBeUndefined();
+      expect(getResponse.body.pan).toBe(issuedCard.pan);
+      expect(getResponse.body.cvc).toBe(issuedCard.cvc);
     });
 
     it('authorizes and captures card transactions via processor', async () => {

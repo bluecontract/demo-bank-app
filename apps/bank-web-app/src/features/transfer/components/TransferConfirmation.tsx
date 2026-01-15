@@ -14,8 +14,8 @@ export function TransferConfirmation({
     >
       <div className="space-y-6">
         <div className="space-y-4">
-          <h1 className="text-3xl font-bold text-gray-900">Transfer</h1>
-          <h2 className="text-3xl font-bold text-gray-900">completed!</h2>
+          <h1 className="text-3xl font-semibold text-slate-900">Transfer</h1>
+          <h2 className="text-3xl font-semibold text-slate-900">completed!</h2>
         </div>
 
         <div
@@ -27,7 +27,7 @@ export function TransferConfirmation({
               width="80"
               height="80"
               viewBox="0 0 80 80"
-              className="text-green-500"
+              className="text-emerald-500"
             >
               {/* Outer circle with subtle background */}
               <circle
@@ -66,7 +66,8 @@ export function TransferConfirmation({
         <div className="pt-2">
           <Button
             onClick={onHomeClick}
-            className="bg-gradient-to-r from-green-500 to-yellow-400 hover:from-green-600 hover:to-yellow-500 text-white font-semibold py-2 px-8 rounded-full text-base shadow-lg hover:shadow-xl transition-all duration-200 min-w-[150px]"
+            variant="gradient"
+            className="rounded-full px-8 py-2 text-base shadow-md hover:shadow-lg min-w-[150px]"
           >
             Home
           </Button>

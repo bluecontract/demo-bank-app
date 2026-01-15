@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { CardsPanel } from './CardsPanel';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
 import { useCards } from '../hooks/useCards';
+import { useCardDetails } from '../hooks/useCardDetails';
 
 vi.mock('../../../app/providers/SelectedAccountProvider', () => ({
   useSelectedAccount: vi.fn(),
@@ -10,6 +11,10 @@ vi.mock('../../../app/providers/SelectedAccountProvider', () => ({
 
 vi.mock('../hooks/useCards', () => ({
   useCards: vi.fn(),
+}));
+
+vi.mock('../hooks/useCardDetails', () => ({
+  useCardDetails: vi.fn(),
 }));
 
 vi.mock('./IssueCardModal', () => ({
@@ -23,6 +28,12 @@ describe('CardsPanel', () => {
       data: [],
       isLoading: false,
       isError: false,
+    } as any);
+    (useCardDetails as any).mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
     } as any);
 
     render(<CardsPanel />);
@@ -59,6 +70,12 @@ describe('CardsPanel', () => {
       ],
       isLoading: false,
       isError: false,
+    } as any);
+    (useCardDetails as any).mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
     } as any);
 
     render(<CardsPanel />);

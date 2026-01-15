@@ -57,6 +57,8 @@ const mockIssuedCard = {
   accountNumber: '1234567890',
   ownerUserId: TEST_USER_ID,
   cardholderName: 'Test User',
+  pan: '1234567890124242',
+  cvc: '123',
   panLast4: '4242',
   panHash: 'hash',
   cvcHash: 'cvc-hash',

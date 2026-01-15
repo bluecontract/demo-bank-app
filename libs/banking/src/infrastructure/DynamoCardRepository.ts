@@ -209,6 +209,8 @@ export class DynamoCardRepository implements CardRepository {
       typeof record.accountNumber === 'string' &&
       typeof record.ownerUserId === 'string' &&
       typeof record.cardholderName === 'string' &&
+      typeof record.pan === 'string' &&
+      typeof record.cvc === 'string' &&
       typeof record.panLast4 === 'string' &&
       typeof record.panHash === 'string' &&
       typeof record.cvcHash === 'string' &&

@@ -94,11 +94,11 @@ export function HorizontalAccountsList({
       {showLeftArrow && (
         <button
           onClick={scrollLeft}
-          className="absolute left-4 top-1/2 transform -translate-y-1/2 z-10 bg-gradient-to-r from-green-400 to-yellow-400 shadow-lg rounded-full p-2 hover:shadow-xl transition-all"
+          className="absolute left-4 top-1/2 transform -translate-y-1/2 z-10 bg-white/90 border border-slate-200 shadow-sm rounded-full p-2 hover:shadow-md transition-all"
           data-testid="scroll-left-btn"
         >
           <svg
-            className="w-5 h-5 text-white"
+            className="w-5 h-5 text-slate-700"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -117,11 +117,11 @@ export function HorizontalAccountsList({
       {showRightArrow && (
         <button
           onClick={scrollRight}
-          className="absolute right-4 top-1/2 transform -translate-y-1/2 z-10 bg-gradient-to-r from-green-400 to-yellow-400 shadow-lg rounded-full p-2 hover:shadow-xl transition-all"
+          className="absolute right-4 top-1/2 transform -translate-y-1/2 z-10 bg-white/90 border border-slate-200 shadow-sm rounded-full p-2 hover:shadow-md transition-all"
           data-testid="scroll-right-btn"
         >
           <svg
-            className="w-5 h-5 text-white"
+            className="w-5 h-5 text-slate-700"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -139,7 +139,7 @@ export function HorizontalAccountsList({
       {/* Scrollable Container */}
       <div
         ref={scrollContainerRef}
-        className="flex gap-4 overflow-x-auto scrollbar-hide px-4 py-4"
+        className="flex gap-4 overflow-x-auto scrollbar-hide px-6 pb-6 pt-4"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         data-testid="accounts-scroll-container"
       >

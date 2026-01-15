@@ -13,12 +13,39 @@ import type { HoldFailedCode } from '../../domain/entities/Hold';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const SAME_SECOND_THRESHOLD_MS = 1000;
 
 type ActivityKind = 'HOLD_EVENT' | 'POSTED_TRANSACTION';
 
 const KIND_PRIORITY: Record<ActivityKind, number> = {
   POSTED_TRANSACTION: 0,
   HOLD_EVENT: 1,
+};
+
+const compareTimes = (a: string, b: string): number => {
+  const timeA = Date.parse(a);
+  const timeB = Date.parse(b);
+
+  if (Number.isNaN(timeA) || Number.isNaN(timeB)) {
+    if (a > b) {
+      return -1;
+    }
+    if (a < b) {
+      return 1;
+    }
+    return 0;
+  }
+
+  if (timeA === timeB) {
+    return 0;
+  }
+
+  const diff = timeA - timeB;
+  if (Math.abs(diff) < SAME_SECOND_THRESHOLD_MS) {
+    return 0;
+  }
+
+  return diff > 0 ? -1 : 1;
 };
 
 type HoldEventActivityItem =
@@ -416,7 +443,10 @@ const buildHoldEventFeedItem = (
       };
     default: {
       const exhaustive: never = event;
-      throw new Error(`Unhandled hold event type ${(exhaustive as any)?.type}`);
+      const eventRecord = exhaustive as Record<string, unknown>;
+      const eventType =
+        typeof eventRecord.type === 'string' ? eventRecord.type : 'unknown';
+      throw new Error(`Unhandled hold event type ${eventType}`);
     }
   }
 };
@@ -551,11 +581,9 @@ const encodeCursor = (cursor: {
 };
 
 const compareItems = (a: ActivityFeedItem, b: ActivityFeedItem): number => {
-  if (a.time > b.time) {
-    return -1;
-  }
-  if (a.time < b.time) {
-    return 1;
+  const timeOrder = compareTimes(a.time, b.time);
+  if (timeOrder !== 0) {
+    return timeOrder;
   }
 
   const priorityA = KIND_PRIORITY[a.kind];
@@ -581,11 +609,9 @@ const compareItemToMarker = (
   item: ActivityFeedItem,
   marker: ActivityCursorMarker
 ): number => {
-  if (item.time > marker.time) {
-    return -1;
-  }
-  if (item.time < marker.time) {
-    return 1;
+  const timeOrder = compareTimes(item.time, marker.time);
+  if (timeOrder !== 0) {
+    return timeOrder;
   }
 
   const priorityA = KIND_PRIORITY[item.kind];

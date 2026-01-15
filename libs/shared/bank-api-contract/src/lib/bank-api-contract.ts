@@ -10,7 +10,7 @@ import {
   IdempotencyKeyHeaderSchema,
   TransferReqDto,
   TransactionDto,
-  CardSummaryDto,
+  CardDetailsDto,
   IssueCardRequestDto,
   IssueCardResponseDto,
   CardListResponseDto,
@@ -172,7 +172,7 @@ export const bankApiContract = c.router(
         method: 'GET',
         path: '/v1/cards/:cardId',
         pathParams: z.object({ cardId: z.string().uuid() }),
-        responses: { 200: CardSummaryDto, 404: ProblemDto, 403: ProblemDto },
+        responses: { 200: CardDetailsDto, 404: ProblemDto, 403: ProblemDto },
         summary: 'Get a card by ID',
       },
 

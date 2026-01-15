@@ -10,12 +10,16 @@ import {
   AccountCreationModal,
   AccountsSection,
 } from '../../features/accounts/components';
-import { FundModal, TransactionHistory } from '../../features/transfer';
+import { FundModal } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
+import {
+  CardsPanel,
+  CardSimulatorPanel,
+} from '../../features/cards/components';
 import { SpinnerWithText } from '../../ui/Spinner';
 import type { Account } from '../../types/api';
 
-export function DashboardPage() {
+export function CardsPage() {
   const { user } = useAuth();
   const { data: accounts, isLoading, error } = useAccounts();
   const navigate = useNavigate();
@@ -87,12 +91,16 @@ export function DashboardPage() {
 
   return (
     <SelectedAccountProvider>
-      <div className="app-shell flex" data-testid="dashboard-main-container">
+      <div className="app-shell flex" data-testid="cards-main-container">
         <SidebarNav />
 
         <div className="flex-1 flex flex-col min-h-screen">
           <div className="px-6 pt-8 pb-4 lg:px-10">
-            <DashboardHeader userEmail={user?.email || 'Guest'} />
+            <DashboardHeader
+              userEmail={user?.email || 'Guest'}
+              title="Cards"
+              description="Issue cards, review status, and simulate transactions."
+            />
           </div>
 
           <main className="flex-1 px-6 pb-8 lg:px-10 flex flex-col gap-6 min-h-0">
@@ -103,20 +111,19 @@ export function DashboardPage() {
               onFund={handleFund}
             />
 
-            <section className="flex-1 min-h-0">
-              <TransactionHistory />
+            <section className="grid gap-6 lg:grid-cols-2">
+              <CardsPanel />
+              <CardSimulatorPanel />
             </section>
           </main>
         </div>
       </div>
 
-      {/* Account Creation Modal */}
       <AccountCreationModal
         isOpen={accountCreationModal.isOpen}
         onClose={closeAccountCreationModal}
       />
 
-      {/* Fund Modal */}
       <FundModal
         isOpen={fundModal.isOpen}
         onClose={closeFundModal}

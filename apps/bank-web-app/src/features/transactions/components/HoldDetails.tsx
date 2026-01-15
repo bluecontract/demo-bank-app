@@ -29,11 +29,11 @@ const statusStyles: Record<
   Extract<ActivityDetail, { kind: 'HOLD' }>['status'],
   string
 > = {
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  CAPTURED: 'bg-green-100 text-green-800',
-  RELEASED: 'bg-blue-100 text-blue-800',
-  EXPIRED: 'bg-gray-100 text-gray-800',
-  FAILED: 'bg-red-100 text-red-800',
+  PENDING: 'bg-amber-50 text-amber-700 border border-amber-100',
+  CAPTURED: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+  RELEASED: 'bg-sky-50 text-sky-700 border border-sky-100',
+  EXPIRED: 'bg-slate-100 text-slate-700 border border-slate-200',
+  FAILED: 'bg-rose-50 text-rose-700 border border-rose-100',
 };
 
 const timelineIcons: Record<
@@ -240,13 +240,13 @@ export function HoldDetails({
   return (
     <div className="max-w-2xl mx-auto" data-testid={testId}>
       <Card className="p-0">
-        <div className="px-4 py-3 border-b border-gray-200">
+        <div className="px-4 py-3 border-b border-slate-200">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">
+              <h1 className="text-lg font-semibold text-slate-900">
                 Hold overview
               </h1>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-slate-600 mt-1">
                 Hold ID: <span className="font-medium">{hold.holdId}</span>
               </p>
             </div>
@@ -258,11 +258,11 @@ export function HoldDetails({
           </div>
         </div>
 
-        <div className="px-4 py-4 bg-gray-50">
+        <div className="px-4 py-4 bg-white/70">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <span className="text-sm text-gray-600">Amount on hold</span>
-              <div className="text-3xl font-bold text-gray-900 mt-1">
+              <span className="text-sm text-slate-600">Amount on hold</span>
+              <div className="text-3xl font-bold text-slate-900 mt-1">
                 {formattedAmount}
               </div>
             </div>
@@ -271,20 +271,20 @@ export function HoldDetails({
           <dl className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {detailRows.map(row => (
               <div key={row.label}>
-                <dt className="text-sm text-gray-600">{row.label}</dt>
-                <dd className="text-sm text-gray-900 mt-1">{row.value}</dd>
+                <dt className="text-sm text-slate-600">{row.label}</dt>
+                <dd className="text-sm text-slate-900 mt-1">{row.value}</dd>
               </div>
             ))}
           </dl>
         </div>
 
         {hold.description && (
-          <div className="px-4 py-3 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-900 mb-1">
+          <div className="px-4 py-3 border-t border-slate-200">
+            <h3 className="text-sm font-medium text-slate-900 mb-1">
               Description
             </h3>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-sm text-gray-700 leading-relaxed">
+            <div className="bg-white/70 rounded-lg p-3">
+              <p className="text-sm text-slate-700 leading-relaxed">
                 {hold.description}
               </p>
             </div>
@@ -292,12 +292,12 @@ export function HoldDetails({
         )}
 
         {showPayNoteHelper && !isCardHold && (
-          <div className="px-4 py-3 border-t border-gray-200">
-            <p className="text-sm text-gray-700">
+          <div className="px-4 py-3 border-t border-slate-200">
+            <p className="text-sm text-slate-700">
               This transaction is part of a PayNote transfer.{' '}
               <button
                 type="button"
-                className="text-green-700 font-medium hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 rounded"
+                className="text-emerald-700 font-medium hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] rounded"
                 onClick={() => onViewPayNoteDetails?.()}
               >
                 See details
@@ -306,28 +306,28 @@ export function HoldDetails({
           </div>
         )}
 
-        <div className="px-4 py-4 border-t border-gray-200">
-          <h3 className="text-sm font-medium text-gray-900">Timeline</h3>
+        <div className="px-4 py-4 border-t border-slate-200">
+          <h3 className="text-sm font-medium text-slate-900">Timeline</h3>
           <ol className="mt-3 space-y-3">
             {timeline.map(event => (
               <li
                 key={`${event.type}-${event.at}`}
                 className="flex items-start gap-3"
               >
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-lg">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-lg">
                   {timelineIcons[event.type]}
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-gray-900">
+                  <div className="text-sm font-medium text-slate-900">
                     {event.type === 'CREATED' && 'Hold placed'}
                     {event.type === 'CAPTURED' && 'Hold captured'}
                     {event.type === 'RELEASED' && 'Hold released'}
                     {event.type === 'FAILED' && 'Hold failed'}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-slate-500">
                     {formatDateTime(event.at)}
                   </div>
-                  <div className="text-sm text-gray-600 mt-1 space-y-1">
+                  <div className="text-sm text-slate-600 mt-1 space-y-1">
                     {event.type === 'CREATED' && (
                       <>
                         <div>From: {currentAccountDisplay}</div>

@@ -14,9 +14,9 @@ describe('Button', () => {
 
     const button = screen.getByTestId('button');
     expect(button).toHaveClass(
-      'bg-green-600',
+      'bg-[var(--color-primary)]',
       'text-white',
-      'hover:bg-green-700'
+      'hover:bg-[var(--color-primary-600)]'
     );
   });
 
@@ -29,9 +29,10 @@ describe('Button', () => {
 
     const button = screen.getByTestId('button');
     expect(button).toHaveClass(
-      'bg-gray-200',
-      'text-gray-900',
-      'hover:bg-gray-300'
+      'bg-white',
+      'border',
+      'border-slate-200',
+      'text-slate-700'
     );
   });
 
@@ -44,10 +45,9 @@ describe('Button', () => {
 
     const button = screen.getByTestId('button');
     expect(button).toHaveClass(
-      'border-2',
-      'border-green-600',
-      'text-green-600',
-      'hover:bg-green-50'
+      'border',
+      'border-[var(--color-primary)]',
+      'text-[var(--color-primary)]'
     );
   });
 

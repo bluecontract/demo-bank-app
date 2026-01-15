@@ -475,7 +475,7 @@ test.describe('Banking Core Flows', () => {
     await waitForModalToClose(page, 'modal-content');
 
     // Wait for activity list to render mocked hold
-    const holdRow = page.getByTestId('activity-item-hold-hold-123');
+    const holdRow = page.getByTestId('activity-item-hold_created-hold-123');
     await expect(holdRow).toBeVisible();
 
     await holdRow.click();

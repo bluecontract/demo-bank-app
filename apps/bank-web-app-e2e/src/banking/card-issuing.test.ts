@@ -46,6 +46,11 @@ test.describe('Card Issuing Flow', () => {
     await page.click('text=Home');
     await waitForModalToClose(page, 'modal-content');
 
+    await page.getByRole('link', { name: 'Cards' }).click();
+    await page.waitForURL('**/cards', {
+      timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+    });
+
     await page.getByRole('button', { name: 'Issue Card' }).click();
     await waitForModalToOpen(page, 'issue-card-modal-content');
 
@@ -128,6 +133,11 @@ test.describe('Card Issuing Flow', () => {
     );
 
     expect(captureResponse.ok()).toBeTruthy();
+
+    await page.getByRole('link', { name: 'Overview' }).click();
+    await page.waitForURL('**/dashboard', {
+      timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+    });
 
     const history = page.getByTestId('transaction-history-list');
     await expect(history.getByText('Demo Shop').first()).toBeVisible({

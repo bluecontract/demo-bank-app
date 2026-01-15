@@ -29,6 +29,7 @@ export interface TransactionProps {
 export interface TransactionMeta {
   description: string;
   idempotencyKey?: string;
+  createdAt?: Date;
   originHoldId?: string;
   payNoteEventId?: string;
   cardId?: string;
@@ -135,7 +136,7 @@ export class Transaction {
       postings,
       description: meta.description,
       transactionIdempotencyKey: meta.idempotencyKey,
-      createdAt: new Date(),
+      createdAt: meta.createdAt ?? new Date(),
       originHoldId: meta.originHoldId,
       payNoteEventId: meta.payNoteEventId,
       cardId: meta.cardId,
