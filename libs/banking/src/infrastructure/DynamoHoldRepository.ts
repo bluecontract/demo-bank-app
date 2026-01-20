@@ -21,6 +21,8 @@ import type {
   HoldActivityRecord,
 } from '../application/HoldRepository';
 import type { Hold, HoldEvent } from '../domain/entities/Hold';
+import type { CardTransactionDetails } from '../domain/valueObjects/CardTransactionDetails';
+import { buildCardTransactionDetailsKey } from '../domain/valueObjects/CardTransactionDetails';
 import {
   buildHoldMetaItem,
   buildHoldEventItem,
@@ -70,6 +72,19 @@ interface AccountBalanceItem {
   version: number;
 }
 
+const CARD_TRANSACTION_PREFIX = 'CARD_TXN#';
+const CARD_TRANSACTION_SORT_KEY = 'META';
+
+interface CardTransactionLookupItem {
+  PK: string;
+  SK: typeof CARD_TRANSACTION_SORT_KEY;
+  holdId: string;
+  payerAccountNumber: string;
+  createdAt: string;
+  cardTransactionDetails: CardTransactionDetails;
+  processorChargeId?: string;
+}
+
 export interface DynamoHoldRepositoryConfig {
   tableName: string;
   region: string;
@@ -102,6 +117,125 @@ export class DynamoHoldRepository implements HoldRepository {
     this.tableName = config.tableName;
     this.logger = config.logger;
     this.metrics = config.metrics;
+  }
+
+  private buildCardTransactionLookupItem(
+    hold: Hold
+  ): CardTransactionLookupItem | null {
+    if (!hold.cardTransactionDetails) {
+      return null;
+    }
+
+    const key = buildCardTransactionDetailsKey(hold.cardTransactionDetails);
+
+    return {
+      PK: `${CARD_TRANSACTION_PREFIX}${key}`,
+      SK: CARD_TRANSACTION_SORT_KEY,
+      holdId: hold.holdId,
+      payerAccountNumber: hold.payerAccountNumber,
+      createdAt: hold.createdAt,
+      cardTransactionDetails: hold.cardTransactionDetails,
+      ...(hold.processorChargeId
+        ? { processorChargeId: hold.processorChargeId }
+        : {}),
+    };
+  }
+
+  async getHoldByCardTransactionDetails(
+    details: CardTransactionDetails | undefined
+  ): Promise<Hold | null> {
+    if (!details) {
+      return null;
+    }
+
+    const key = buildCardTransactionDetailsKey(details);
+    const response = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: `${CARD_TRANSACTION_PREFIX}${key}`,
+          SK: CARD_TRANSACTION_SORT_KEY,
+        },
+      })
+    );
+
+    if (!response.Item) {
+      return null;
+    }
+
+    const { holdId } = response.Item as { holdId?: string };
+    if (!holdId) {
+      return null;
+    }
+
+    return this.getHold(holdId);
+  }
+
+  async ensureCardTransactionMapping(hold: Hold): Promise<void> {
+    const item = this.buildCardTransactionLookupItem(hold);
+    if (!item) {
+      return;
+    }
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: item,
+        ConditionExpression: 'attribute_not_exists(PK) OR holdId = :holdId',
+        ExpressionAttributeValues: {
+          ':holdId': hold.holdId,
+        },
+      })
+    );
+  }
+
+  async disableHoldCapture(holdId: Hold['holdId']): Promise<Hold | null> {
+    const hold = await this.getHold(holdId);
+    if (!hold) {
+      return null;
+    }
+
+    if (hold.captureDisabled || hold.status !== 'PENDING') {
+      return hold;
+    }
+
+    try {
+      await this.client.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Update: {
+                TableName: this.tableName,
+                Key: {
+                  PK: buildHoldPartitionKey(holdId),
+                  SK: SORT_KEYS.META,
+                },
+                UpdateExpression: 'SET captureDisabled = :captureDisabled',
+                ConditionExpression: '#status = :pendingStatus',
+                ExpressionAttributeNames: {
+                  '#status': 'status',
+                },
+                ExpressionAttributeValues: {
+                  ':captureDisabled': true,
+                  ':pendingStatus': 'PENDING',
+                },
+              },
+            },
+          ],
+        })
+      );
+    } catch (error) {
+      if (
+        error instanceof TransactionCanceledException &&
+        error.CancellationReasons?.[0]?.Code ===
+          DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED
+      ) {
+        return hold;
+      }
+      throw error;
+    }
+
+    return { ...hold, captureDisabled: true };
   }
 
   async reserveHold(request: ReserveHoldRequest): Promise<ReserveHoldResult> {
@@ -342,8 +476,6 @@ export class DynamoHoldRepository implements HoldRepository {
       cardLast4: item.cardLast4,
       merchantName: item.merchantName,
       merchantStatementDescriptor: item.merchantStatementDescriptor,
-      merchantCategoryCode: item.merchantCategoryCode,
-      merchantCountry: item.merchantCountry,
       processorChargeId: item.processorChargeId,
       eventId: item.eventId,
       event: mapHoldEventItemToHoldEvent(item),

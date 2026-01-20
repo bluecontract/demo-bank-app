@@ -269,7 +269,7 @@ export function TransactionDetails({
           </div>
         )}
 
-        {showPayNoteHelper && !isCardTransaction && (
+        {showPayNoteHelper && (
           <div className="px-4 py-3 border-t border-slate-200">
             <p className="text-sm text-slate-700">
               This transaction is part of a PayNote transfer.{' '}

@@ -11,7 +11,7 @@ export type PayNoteDetails = ClientInferResponseBody<
 
 interface UsePayNoteDetailsOptions {
   accountNumber: string | null | undefined;
-  myosEventId: string | null | undefined;
+  payNoteDocumentId: string | null | undefined;
   enabled?: boolean;
 }
 
@@ -27,27 +27,27 @@ const makeError = (message: string, status?: number): PayNoteDetailsError => {
 
 export function usePayNoteDetails({
   accountNumber,
-  myosEventId,
+  payNoteDocumentId,
   enabled = true,
 }: UsePayNoteDetailsOptions) {
   const { handleAuthError } = useAuthErrorHandler();
 
   return useQuery<PayNoteDetails, PayNoteDetailsError>({
-    queryKey: ['paynote-details', accountNumber, myosEventId],
+    queryKey: ['paynote-details', accountNumber, payNoteDocumentId],
     queryFn: async (): Promise<PayNoteDetails> => {
       if (!accountNumber) {
         throw makeError('Account number is required');
       }
 
-      if (!myosEventId) {
-        throw makeError('PayNote event id is required');
+      if (!payNoteDocumentId) {
+        throw makeError('PayNote document id is required');
       }
 
       try {
         const response = await apiClient.banking.getPayNoteDetails({
           params: {
             accountNumber,
-            myosEventId,
+            payNoteDocumentId,
           },
           overrideClientOptions: { credentials: 'include' },
         });
@@ -80,7 +80,7 @@ export function usePayNoteDetails({
         throw makeError('Failed to fetch PayNote details');
       }
     },
-    enabled: enabled && !!accountNumber && !!myosEventId,
+    enabled: enabled && !!accountNumber && !!payNoteDocumentId,
     staleTime: Infinity,
     gcTime: 10 * 60 * 1000,
     retry: (failureCount, error) => {

@@ -16,13 +16,11 @@ export interface TransactionProps {
   transactionIdempotencyKey?: string;
   createdAt: Date;
   originHoldId?: string;
-  payNoteEventId?: string;
+  payNoteDocumentId?: string;
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
   merchantStatementDescriptor?: string;
-  merchantCategoryCode?: string;
-  merchantCountry?: string;
   processorChargeId?: string;
 }
 
@@ -31,13 +29,11 @@ export interface TransactionMeta {
   idempotencyKey?: string;
   createdAt?: Date;
   originHoldId?: string;
-  payNoteEventId?: string;
+  payNoteDocumentId?: string;
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
   merchantStatementDescriptor?: string;
-  merchantCategoryCode?: string;
-  merchantCountry?: string;
   processorChargeId?: string;
 }
 
@@ -54,13 +50,11 @@ export class Transaction {
   readonly transactionIdempotencyKey?: string;
   readonly createdAt: Date;
   readonly originHoldId?: string;
-  readonly payNoteEventId?: string;
+  readonly payNoteDocumentId?: string;
   readonly cardId?: string;
   readonly cardLast4?: string;
   readonly merchantName?: string;
   readonly merchantStatementDescriptor?: string;
-  readonly merchantCategoryCode?: string;
-  readonly merchantCountry?: string;
   readonly processorChargeId?: string;
 
   constructor(props: TransactionProps) {
@@ -83,13 +77,11 @@ export class Transaction {
     this.transactionIdempotencyKey = props.transactionIdempotencyKey;
     this.createdAt = props.createdAt;
     this.originHoldId = props.originHoldId;
-    this.payNoteEventId = props.payNoteEventId;
+    this.payNoteDocumentId = props.payNoteDocumentId;
     this.cardId = props.cardId;
     this.cardLast4 = props.cardLast4;
     this.merchantName = props.merchantName;
     this.merchantStatementDescriptor = props.merchantStatementDescriptor;
-    this.merchantCategoryCode = props.merchantCategoryCode;
-    this.merchantCountry = props.merchantCountry;
     this.processorChargeId = props.processorChargeId;
 
     this.validateDoubleEntry();
@@ -138,13 +130,11 @@ export class Transaction {
       transactionIdempotencyKey: meta.idempotencyKey,
       createdAt: meta.createdAt ?? new Date(),
       originHoldId: meta.originHoldId,
-      payNoteEventId: meta.payNoteEventId,
+      payNoteDocumentId: meta.payNoteDocumentId,
       cardId: meta.cardId,
       cardLast4: meta.cardLast4,
       merchantName: meta.merchantName,
       merchantStatementDescriptor: meta.merchantStatementDescriptor,
-      merchantCategoryCode: meta.merchantCategoryCode,
-      merchantCountry: meta.merchantCountry,
       processorChargeId: meta.processorChargeId,
     });
   }
@@ -181,13 +171,11 @@ export class Transaction {
       this.transactionIdempotencyKey !== other.transactionIdempotencyKey ||
       this.createdAt.getTime() !== other.createdAt.getTime() ||
       this.originHoldId !== other.originHoldId ||
-      this.payNoteEventId !== other.payNoteEventId ||
+      this.payNoteDocumentId !== other.payNoteDocumentId ||
       this.cardId !== other.cardId ||
       this.cardLast4 !== other.cardLast4 ||
       this.merchantName !== other.merchantName ||
       this.merchantStatementDescriptor !== other.merchantStatementDescriptor ||
-      this.merchantCategoryCode !== other.merchantCategoryCode ||
-      this.merchantCountry !== other.merchantCountry ||
       this.processorChargeId !== other.processorChargeId ||
       this.postings.length !== other.postings.length
     ) {

@@ -38,7 +38,5 @@ export interface TransactionResult {
   cardLast4?: string;
   merchantName?: string;
   merchantStatementDescriptor?: string;
-  merchantCategoryCode?: string;
-  merchantCountry?: string;
   processorChargeId?: string;
 }

@@ -11,6 +11,8 @@ export type HoldFailedCode =
   | 'VALIDATION'
   | 'INTERNAL';
 
+import type { CardTransactionDetails } from '../valueObjects/CardTransactionDetails';
+
 export interface Hold {
   holdId: string;
   payerAccountNumber: string;
@@ -23,15 +25,15 @@ export interface Hold {
   cardLast4?: string;
   merchantName?: string;
   merchantStatementDescriptor?: string;
-  merchantCategoryCode?: string;
-  merchantCountry?: string;
   processorChargeId?: string;
+  cardTransactionDetails?: CardTransactionDetails;
+  captureDisabled?: boolean;
   createdAt: string;
   expiresAt?: string;
   relatedTransactionId?: string;
   releasedAt?: string;
   releaseReason?: string;
-  payNoteEventId?: string;
+  payNoteDocumentId?: string;
 }
 
 export type HoldEvent =
@@ -40,25 +42,25 @@ export type HoldEvent =
       type: 'CREATED';
       createdByUserId?: string;
       idempotencyKeyHash?: string;
-      payNoteEventId?: string;
+      payNoteDocumentId?: string;
     }
   | {
       at: string;
       type: 'CAPTURED';
       transactionId: string;
       counterpartyAccountNumber: string;
-      payNoteEventId?: string;
+      payNoteDocumentId?: string;
     }
   | {
       at: string;
       type: 'RELEASED';
       reason?: string;
-      payNoteEventId?: string;
+      payNoteDocumentId?: string;
     }
   | {
       at: string;
       type: 'FAILED';
       code: HoldFailedCode;
       message?: string;
-      payNoteEventId?: string;
+      payNoteDocumentId?: string;
     };

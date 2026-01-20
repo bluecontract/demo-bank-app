@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createHash } from 'crypto';
 import { handler } from './main';
 import type {
@@ -27,6 +27,7 @@ import {
   Transaction,
   type Hold,
 } from '@demo-bank-app/banking';
+import { DynamoPayNoteRepository } from '@demo-bank-app/paynotes';
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import {
@@ -1535,6 +1536,8 @@ describe('Bank API Integration Tests', () => {
       });
       expect(fundingResult.statusCode).toBe(201);
       const fundingTxnId = fundingResult.body.txnId;
+      // Ensure transaction timestamps are far enough apart to avoid same-second ordering rules.
+      await new Promise(resolve => setTimeout(resolve, 2500));
 
       const destinationAccount = await invokeApi({
         method: 'POST',
@@ -2161,8 +2164,6 @@ describe('Bank API Integration Tests', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
-            categoryCode: '5411',
-            country: 'US',
           },
           processorChargeId,
         },
@@ -2191,8 +2192,6 @@ describe('Bank API Integration Tests', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
-            categoryCode: '5411',
-            country: 'US',
           },
           processorChargeId,
         },
@@ -2219,8 +2218,6 @@ describe('Bank API Integration Tests', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
-            categoryCode: '5411',
-            country: 'US',
           },
           processorChargeId,
         },
@@ -2313,12 +2310,13 @@ describe('Bank API Integration Tests', () => {
   });
 
   describe('PayNote Detail Endpoint', () => {
+    let userId: string;
     let userJwtCookie: string;
     let userAccountNumber: string;
-    let fetchSpy: ReturnType<typeof vi.spyOn>;
 
     beforeAll(async () => {
       const creds = await signupUniqueTestUser('paynote-detail-user');
+      userId = creds.userId;
       userJwtCookie = creds.jwtCookie;
 
       const account = await invokeApi({
@@ -2331,61 +2329,47 @@ describe('Bank API Integration Tests', () => {
       userAccountNumber = account.body.accountNumber;
     });
 
-    it('returns PayNote details when MyOS responds successfully', async () => {
-      const eventId = 'event-success-123';
-      const originalFetch = global.fetch;
-      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
-          id: eventId,
-          object: {
-            document: {
-              payerAccountNumber: { value: userAccountNumber },
-            },
-            documentYaml: '---\npaynote: test',
-            emitted: [{ type: { name: 'PayNote/Reserve Funds Requested' } }],
-            triggeredBy: { actor: 'payerChannel' },
-          },
-        }),
-      } as unknown as Response);
+    it('returns PayNote details when record exists', async () => {
+      const payNoteDocumentId = 'paynote-doc-123';
+      const payNoteRepository = new DynamoPayNoteRepository({
+        tableName: TEST_CONFIG.tableName,
+        region: TEST_CONFIG.region,
+        endpoint: TEST_CONFIG.localstackEndpoint,
+      });
+
+      await payNoteRepository.savePayNote({
+        payNoteDocumentId,
+        accountNumber: userAccountNumber,
+        userId,
+        document: {
+          payerAccountNumber: { value: userAccountNumber },
+        },
+        transactionRequest: [
+          { type: { name: 'PayNote/Reserve Funds Requested' } },
+        ],
+        triggerEvent: { actor: 'payerChannel' },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
 
       const response = await invokeApi({
         method: 'GET',
-        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
+        path: `/v1/activity/${userAccountNumber}/paynotes/${payNoteDocumentId}`,
         jwtCookie: userJwtCookie,
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.body.myosEventId).toBe(eventId);
+      expect(response.body.payNoteDocumentId).toBe(payNoteDocumentId);
       expect(typeof response.body.fetchedAt).toBe('string');
       expect(response.body.document?.payerAccountNumber?.value).toBe(
         userAccountNumber
       );
-      expect(
-        Array.isArray(response.body.transactionRequest?.items) &&
-          response.body.transactionRequest.items.length > 0
-      ).toBe(true);
-      expect(response.body.triggerEvent).toMatchObject({
-        actor: { value: 'payerChannel' },
-      });
-
-      fetchSpy.mockRestore();
-      global.fetch = originalFetch;
     });
 
-    it('returns 404 when MyOS event is missing', async () => {
-      const eventId = 'event-missing-404';
-      const originalFetch = global.fetch;
-      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
-        ok: false,
-        status: 404,
-        text: vi.fn().mockResolvedValue('not found'),
-      } as unknown as Response);
-
+    it('returns 404 when PayNote record is missing', async () => {
       const response = await invokeApi({
         method: 'GET',
-        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
+        path: `/v1/activity/${userAccountNumber}/paynotes/missing-doc`,
         jwtCookie: userJwtCookie,
       });
 
@@ -2393,30 +2377,32 @@ describe('Bank API Integration Tests', () => {
       expect(response.body).toMatchObject({
         error: ERROR_CODES.PAYNOTE_NOT_FOUND,
       });
-      fetchSpy.mockRestore();
-      global.fetch = originalFetch;
     });
 
-    it('returns 404 when MyOS event document does not match account', async () => {
-      const eventId = 'event-wrong-account';
-      const originalFetch = global.fetch;
-      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: vi.fn().mockResolvedValue({
-          id: eventId,
-          object: {
-            document: {
-              payerAccountNumber: { value: '9999999999' },
-            },
-            emitted: [],
-          },
-        }),
-      } as unknown as Response);
+    it('returns 404 when PayNote record belongs to another account', async () => {
+      const payNoteDocumentId = 'paynote-doc-foreign';
+      const payNoteRepository = new DynamoPayNoteRepository({
+        tableName: TEST_CONFIG.tableName,
+        region: TEST_CONFIG.region,
+        endpoint: TEST_CONFIG.localstackEndpoint,
+      });
+
+      await payNoteRepository.savePayNote({
+        payNoteDocumentId,
+        accountNumber: '9999999999',
+        userId: 'other-user',
+        document: {
+          payerAccountNumber: { value: '9999999999' },
+        },
+        transactionRequest: [],
+        triggerEvent: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
 
       const response = await invokeApi({
         method: 'GET',
-        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
+        path: `/v1/activity/${userAccountNumber}/paynotes/${payNoteDocumentId}`,
         jwtCookie: userJwtCookie,
       });
 
@@ -2424,32 +2410,6 @@ describe('Bank API Integration Tests', () => {
       expect(response.body).toMatchObject({
         error: ERROR_CODES.PAYNOTE_NOT_FOUND,
       });
-      fetchSpy.mockRestore();
-      global.fetch = originalFetch;
-    });
-
-    it('returns 500 when MyOS call fails with server error', async () => {
-      const eventId = 'event-server-error';
-      const originalFetch = global.fetch;
-      fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
-        ok: false,
-        status: 500,
-        text: vi.fn().mockResolvedValue('server failure'),
-      } as unknown as Response);
-
-      const response = await invokeApi({
-        method: 'GET',
-        path: `/v1/activity/${userAccountNumber}/paynotes/${eventId}`,
-        jwtCookie: userJwtCookie,
-      });
-
-      expect(response.statusCode).toBe(500);
-      expect(response.body).toMatchObject({
-        error: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
-        detail: 'server failure',
-      });
-      fetchSpy.mockRestore();
-      global.fetch = originalFetch;
     });
   });
 });

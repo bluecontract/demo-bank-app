@@ -1,13 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
+import { PAYNOTE_DELIVERY_BLUE_ID } from '@demo-bank-app/paynotes';
 import { payNoteWebhookHandler } from './webhook';
 
 const hoistedDeps = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
 }));
 
+const hoistedPaynotes = vi.hoisted(() => ({
+  handlePayNoteDeliveryWebhookEventMock: vi.fn(),
+}));
+
 const hoistedAdapters = vi.hoisted(() => ({
   fetchEventImpl: vi.fn(),
+  fetchDocumentImpl: vi.fn(),
   getAccountByNumberImpl: vi.fn(),
   transferFundsMock: vi.fn(),
   reserveFundsMock: vi.fn(),
@@ -17,6 +23,17 @@ const hoistedAdapters = vi.hoisted(() => ({
 vi.mock('./dependencies', () => ({
   getDependencies: hoistedDeps.getDependenciesMock,
 }));
+
+vi.mock('@demo-bank-app/paynotes', async () => {
+  const actual = await vi.importActual<
+    typeof import('@demo-bank-app/paynotes')
+  >('@demo-bank-app/paynotes');
+  return {
+    ...actual,
+    handlePayNoteDeliveryWebhookEvent:
+      hoistedPaynotes.handlePayNoteDeliveryWebhookEventMock,
+  };
+});
 
 describe('payNoteWebhookHandler', () => {
   const logger = {
@@ -31,15 +48,28 @@ describe('payNoteWebhookHandler', () => {
     logger.error.mockReset();
     logger.warn.mockReset();
     hoistedAdapters.fetchEventImpl.mockReset();
+    hoistedAdapters.fetchDocumentImpl.mockReset();
     hoistedAdapters.getAccountByNumberImpl.mockReset();
     hoistedAdapters.transferFundsMock.mockReset();
     hoistedAdapters.reserveFundsMock.mockReset();
     hoistedAdapters.captureHoldMock.mockReset();
+    hoistedPaynotes.handlePayNoteDeliveryWebhookEventMock.mockReset();
+    hoistedPaynotes.handlePayNoteDeliveryWebhookEventMock.mockResolvedValue({
+      handled: false,
+      logs: [],
+    });
+
+    hoistedAdapters.fetchDocumentImpl.mockResolvedValue({
+      kind: 'success',
+      document: { documentId: 'doc-default', sessionId: 'session-default' },
+    });
 
     const myOsClient = {
       getCredentials: vi.fn(),
       bootstrapDocument: vi.fn(),
       fetchEvent: (eventId: string) => hoistedAdapters.fetchEventImpl(eventId),
+      fetchDocument: (sessionId: string) =>
+        hoistedAdapters.fetchDocumentImpl(sessionId),
     };
 
     const bankingFacade = {
@@ -55,8 +85,36 @@ describe('payNoteWebhookHandler', () => {
       logger,
       myOsClient,
       bankingFacade,
-      bankingRepository: {} as any,
-      holdRepository: {} as any,
+      payNoteRepository: {
+        getPayNote: vi.fn(),
+        getPayNoteBySessionId: vi.fn(),
+        savePayNote: vi.fn(),
+      },
+      payNoteDeliveryRepository: {
+        markEventProcessed: vi.fn(),
+        getDelivery: vi.fn(),
+        getDeliveryByDocumentId: vi.fn(),
+        getDeliveryBySessionId: vi.fn(),
+        getDeliveryByBootstrapSessionId: vi.fn(),
+        getDeliveryByPayNoteDocumentId: vi.fn(),
+        getDeliveryByCardTransactionDetails: vi.fn(),
+        saveDelivery: vi.fn(),
+        listDeliveriesByUserId: vi.fn(),
+      },
+      payNoteBootstrapRepository: {
+        getBootstrapBySessionId: vi.fn(),
+        saveBootstrap: vi.fn(),
+      },
+      bankingRepository: {
+        getAccountIdByNumber: vi.fn(),
+        getAccountById: vi.fn(),
+      },
+      holdRepository: {
+        getHoldByCardTransactionDetails: vi.fn(),
+        disableHoldCapture: vi.fn(),
+        getHold: vi.fn(),
+        putHoldMeta: vi.fn(),
+      },
       getMyOsCredentials: vi.fn(),
       getOpenAiApiKey: vi.fn(),
       payNoteVerificationRepository: {} as any,
@@ -74,8 +132,9 @@ describe('payNoteWebhookHandler', () => {
     const payload = {
       id: 'event-123',
       object: {
+        sessionId: 'session-1',
         document: {
-          payNoteBankId: { value: 'bank-note-789' },
+          type: { blueId: paynoteBlueIds['PayNote/PayNote'] },
           payerAccountNumber: { value: '9559276001' },
           payeeAccountNumber: { value: '9595234002' },
           amount: { total: { value: 16000 } },
@@ -114,6 +173,10 @@ describe('payNoteWebhookHandler', () => {
       kind: 'success',
       payload,
     });
+    hoistedAdapters.fetchDocumentImpl.mockResolvedValue({
+      kind: 'success',
+      document: { documentId: 'doc-123', sessionId: 'session-1' },
+    });
     hoistedAdapters.getAccountByNumberImpl.mockResolvedValue({
       id: 'acct-123',
       accountNumber: '9559276001',
@@ -132,24 +195,24 @@ describe('payNoteWebhookHandler', () => {
       amountMinor: 15000,
       description: 'Invoice Q3',
       userId: 'user-456',
-      idempotencyKey: 'bank-note-789',
-      payNoteEventId: 'event-123',
+      idempotencyKey: 'doc-123',
+      payNoteDocumentId: 'doc-123',
     });
     expect(hoistedAdapters.captureHoldMock).toHaveBeenCalledWith({
-      holdId: 'bank-note-789',
+      holdId: 'doc-123',
       userId: 'user-456',
-      idempotencyKey: 'bank-note-789',
+      idempotencyKey: 'doc-123',
       counterpartyAccountNumber: '9595234002',
-      payNoteEventId: 'event-123',
+      payNoteDocumentId: 'doc-123',
     });
     expect(hoistedAdapters.reserveFundsMock).toHaveBeenCalledWith({
-      holdId: 'bank-note-789',
+      holdId: 'doc-123',
       payerAccountNumber: '9559276001',
       amountMinor: 15000,
       counterpartyAccountNumber: '9595234002',
       userId: 'user-456',
-      idempotencyKey: 'bank-note-789',
-      payNoteEventId: 'event-123',
+      idempotencyKey: 'doc-123',
+      payNoteDocumentId: 'doc-123',
     });
     expect(logger.info).toHaveBeenCalledWith(
       'PayNote transfer triggered',
@@ -163,8 +226,9 @@ describe('payNoteWebhookHandler', () => {
       payload: {
         id: 'event-456',
         object: {
+          sessionId: 'session-2',
           document: {
-            payNoteBankId: { value: 'bank-note-456' },
+            type: { blueId: paynoteBlueIds['PayNote/PayNote'] },
             payerAccountNumber: { value: '1111111111' },
             payeeAccountNumber: { value: '2222222222' },
           },
@@ -225,5 +289,24 @@ describe('payNoteWebhookHandler', () => {
       'Failed to download PayNote event from MyOS',
       expect.objectContaining({ eventId: 'event-999', status: 503 })
     );
+  });
+
+  it('short-circuits when PayNote Delivery handler processes the event', async () => {
+    hoistedPaynotes.handlePayNoteDeliveryWebhookEventMock.mockResolvedValue({
+      handled: true,
+      logs: [],
+    });
+
+    const response = await payNoteWebhookHandler({
+      body: {
+        id: 'event-delivery',
+        object: { document: { type: { blueId: PAYNOTE_DELIVERY_BLUE_ID } } },
+      },
+    } as any);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ status: 'ok' });
+    expect(hoistedAdapters.transferFundsMock).not.toHaveBeenCalled();
+    expect(hoistedAdapters.fetchEventImpl).not.toHaveBeenCalled();
   });
 });

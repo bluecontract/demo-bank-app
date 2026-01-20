@@ -10,10 +10,6 @@ import { Account, Money } from '@demo-bank-app/banking';
 import { MaybeAuthenticatedTsRestRequestContext } from '../auth/middleware';
 import { ERROR_CODES } from '../shared/errors';
 import { UnauthorizedRequestError } from '../auth/errors';
-import {
-  createHttpMyOsGateway,
-  createBlueIdCalculator,
-} from '@demo-bank-app/paynotes';
 
 const hoisted = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
@@ -21,10 +17,11 @@ const hoisted = vi.hoisted(() => ({
 
 const hoistedFacade = vi.hoisted(() => ({
   getAccountForUserMock: vi.fn(),
-  getAccountByNumberMock: vi.fn(),
-  transferFundsMock: vi.fn(),
-  reserveFundsMock: vi.fn(),
-  captureHoldMock: vi.fn(),
+}));
+
+const hoistedRepositories = vi.hoisted(() => ({
+  getPayNoteMock: vi.fn(),
+  getDeliveryByDocumentIdMock: vi.fn(),
 }));
 
 vi.mock('./dependencies', () => ({
@@ -46,10 +43,7 @@ const setAuthHeader = (headers: Headers, token = createTestJwt()) => {
 describe('getPayNoteDetailsHandler', () => {
   let logger: PowertoolsLogger;
   let metrics: PowertoolsMetrics;
-  let getMyOsCredentials: ReturnType<typeof vi.fn>;
   let bankingRepository: DynamoBankingRepository;
-  let originalFetch: typeof global.fetch;
-  let fetchMock: ReturnType<typeof vi.fn>;
   const holdRepository = {};
 
   const baseAccount = new Account({
@@ -69,10 +63,6 @@ describe('getPayNoteDetailsHandler', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-02-01T12:00:00.000Z'));
 
-    originalFetch = global.fetch;
-    fetchMock = vi.fn();
-    global.fetch = fetchMock as unknown as typeof fetch;
-
     logger = {
       info: vi.fn(),
       warn: vi.fn(),
@@ -89,22 +79,14 @@ describe('getPayNoteDetailsHandler', () => {
       setDefaultDimensions: vi.fn(),
     } as unknown as PowertoolsMetrics;
 
-    getMyOsCredentials = vi.fn().mockResolvedValue({
-      apiKey: 'api-key',
-      baseUrl: 'https://myos.example.com',
-      accountId: 'acct-myos',
-    });
-
     bankingRepository = {
       getAccountIdByNumber: vi.fn().mockResolvedValue(baseAccount.id),
       getAccountById: vi.fn().mockResolvedValue(baseAccount),
     } as unknown as DynamoBankingRepository;
 
     hoistedFacade.getAccountForUserMock.mockReset();
-    hoistedFacade.getAccountByNumberMock.mockReset();
-    hoistedFacade.transferFundsMock.mockReset();
-    hoistedFacade.reserveFundsMock.mockReset();
-    hoistedFacade.captureHoldMock.mockReset();
+    hoistedRepositories.getPayNoteMock.mockReset();
+    hoistedRepositories.getDeliveryByDocumentIdMock.mockReset();
 
     hoistedFacade.getAccountForUserMock.mockImplementation(
       async (accountNumber: string, userId: string) => {
@@ -122,34 +104,53 @@ describe('getPayNoteDetailsHandler', () => {
       }
     );
 
-    const myOsClient = createHttpMyOsGateway(getMyOsCredentials);
     const bankingFacade = {
-      getAccountByNumber: hoistedFacade.getAccountByNumberMock,
+      getAccountByNumber: vi.fn(),
       getAccountForUser: hoistedFacade.getAccountForUserMock,
-      transferFunds: hoistedFacade.transferFundsMock,
-      reserveFunds: hoistedFacade.reserveFundsMock,
-      captureHold: hoistedFacade.captureHoldMock,
+      transferFunds: vi.fn(),
+      reserveFunds: vi.fn(),
+      captureHold: vi.fn(),
     };
 
-    const blueIdCalculator = createBlueIdCalculator();
+    const payNoteRepository = {
+      getPayNote: hoistedRepositories.getPayNoteMock,
+      getPayNoteBySessionId: vi.fn(),
+      savePayNote: vi.fn(),
+    };
+
+    const payNoteDeliveryRepository = {
+      markEventProcessed: vi.fn(),
+      getDelivery: vi.fn(),
+      getDeliveryByDocumentId: hoistedRepositories.getDeliveryByDocumentIdMock,
+      getDeliveryBySessionId: vi.fn(),
+      getDeliveryByBootstrapSessionId: vi.fn(),
+      getDeliveryByPayNoteDocumentId: vi.fn(),
+      getDeliveryByCardTransactionDetails: vi.fn(),
+      saveDelivery: vi.fn(),
+      listDeliveriesByUserId: vi.fn(),
+    };
+
+    const blueIdCalculator = {
+      fromObject: vi.fn(),
+      fromYaml: vi.fn(),
+      toReversedJson: (value: unknown) => value,
+    };
 
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       metrics,
-      getMyOsCredentials,
       bankingRepository,
       holdRepository,
-      myOsClient,
       bankingFacade,
+      payNoteRepository,
+      payNoteDeliveryRepository,
       blueIdCalculator,
       clock: { now: () => new Date() },
-      idGenerator: { generate: vi.fn() },
     });
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    global.fetch = originalFetch;
     vi.restoreAllMocks();
   });
 
@@ -158,48 +159,35 @@ describe('getPayNoteDetailsHandler', () => {
       headers: setAuthHeader(new Headers()),
     } as unknown as MaybeAuthenticatedTsRestRequestContext);
 
-  it('returns PayNote details when MyOS lookup succeeds', async () => {
-    const myosEventId = 'event-123';
-    const payload = {
-      id: myosEventId,
-      object: {
-        document: {
-          payerAccountNumber: { value: TEST_ACCOUNT_NUMBER },
-        },
-        documentYaml: '---\npaynote',
-        emitted: [{ type: { name: 'PayNote/Reserve Funds Requested' } }],
-        triggeredBy: { actor: 'payerChannel' },
-      },
-    };
+  it('returns PayNote details when record exists', async () => {
+    const payNoteDocumentId = 'doc-123';
 
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: vi.fn().mockResolvedValue(payload),
-      text: vi.fn().mockResolvedValue(JSON.stringify(payload)),
+    hoistedRepositories.getPayNoteMock.mockResolvedValue({
+      payNoteDocumentId,
+      sessionIds: ['session-1'],
+      accountNumber: TEST_ACCOUNT_NUMBER,
+      userId: TEST_USER_ID,
+      document: {
+        payerAccountNumber: { value: TEST_ACCOUNT_NUMBER },
+      },
+      transactionRequest: [
+        { type: { name: 'PayNote/Reserve Funds Requested' } },
+      ],
+      triggerEvent: { actor: 'payerChannel' },
+      createdAt: new Date('2024-01-01T00:00:00.000Z').toISOString(),
+      updatedAt: new Date('2024-01-02T00:00:00.000Z').toISOString(),
     });
 
     const response = await getPayNoteDetailsHandler(
       {
-        params: { accountNumber: TEST_ACCOUNT_NUMBER, myosEventId },
+        params: { accountNumber: TEST_ACCOUNT_NUMBER, payNoteDocumentId },
       } as any,
       { request: createRequestContext() }
     );
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://myos.example.com/myos-events/event-123',
-      expect.objectContaining({
-        method: 'GET',
-        headers: {
-          Authorization: 'api-key',
-          'Content-Type': 'application/json',
-        },
-      })
-    );
-
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
-      myosEventId,
+      payNoteDocumentId,
       document: {
         payerAccountNumber: {
           value: TEST_ACCOUNT_NUMBER,
@@ -208,56 +196,15 @@ describe('getPayNoteDetailsHandler', () => {
       fetchedAt: '2024-02-01T12:00:00.000Z',
     });
 
-    expect(response.body.document?.payerAccountNumber?.type).toBeDefined();
-    expect(Array.isArray(response.body.transactionRequest?.items)).toBe(true);
-    expect(response.body.transactionRequest?.items?.length).toBeGreaterThan(0);
-    expect(response.body.triggerEvent).toMatchObject({
-      actor: { value: 'payerChannel' },
-    });
     const successLog = logger.info.mock.calls.find(
       ([message]) => message === 'PayNote details fetched successfully'
     );
     expect(successLog?.[1]).toEqual(
       expect.objectContaining({
-        myOsEventId: myosEventId,
+        payNoteDocumentId,
         hasDocument: true,
       })
     );
-  });
-
-  it('returns document object when documentYaml is missing', async () => {
-    const myosEventId = 'event-serialize';
-    const payload = {
-      id: myosEventId,
-      object: {
-        document: {
-          payerAccountNumber: { value: TEST_ACCOUNT_NUMBER },
-          payeeAccountNumber: { value: '0987654321' },
-        },
-        emitted: [],
-        triggeredBy: null,
-      },
-    };
-
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: vi.fn().mockResolvedValue(payload),
-      text: vi.fn().mockResolvedValue(JSON.stringify(payload)),
-    });
-
-    const response = await getPayNoteDetailsHandler(
-      {
-        params: { accountNumber: TEST_ACCOUNT_NUMBER, myosEventId },
-      } as any,
-      { request: createRequestContext() }
-    );
-
-    expect(response.status).toBe(200);
-    expect(response.body.document).toMatchObject({
-      payerAccountNumber: { value: TEST_ACCOUNT_NUMBER },
-      payeeAccountNumber: { value: '0987654321' },
-    });
   });
 
   it('returns 404 if account is not owned by the user', async () => {
@@ -267,7 +214,7 @@ describe('getPayNoteDetailsHandler', () => {
       {
         params: {
           accountNumber: TEST_ACCOUNT_NUMBER,
-          myosEventId: 'event-123',
+          payNoteDocumentId: 'doc-123',
         },
       } as any,
       { request: createRequestContext() }
@@ -277,21 +224,16 @@ describe('getPayNoteDetailsHandler', () => {
     expect(response.body).toMatchObject({
       error: ERROR_CODES.ACCOUNT_NOT_FOUND,
     });
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('returns 404 when MyOS reports missing event', async () => {
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 404,
-      text: vi.fn().mockResolvedValue('not found'),
-    });
+  it('returns 404 when paynote record is missing', async () => {
+    hoistedRepositories.getPayNoteMock.mockResolvedValueOnce(null);
 
     const response = await getPayNoteDetailsHandler(
       {
         params: {
           accountNumber: TEST_ACCOUNT_NUMBER,
-          myosEventId: 'event-404',
+          payNoteDocumentId: 'doc-404',
         },
       } as any,
       { request: createRequestContext() }
@@ -303,41 +245,13 @@ describe('getPayNoteDetailsHandler', () => {
     });
   });
 
-  it('returns 500 when MyOS request fails unexpectedly', async () => {
-    fetchMock.mockResolvedValue({
-      ok: false,
-      status: 500,
-      text: vi.fn().mockResolvedValue('server error'),
-    });
-
-    const response = await getPayNoteDetailsHandler(
-      {
-        params: {
-          accountNumber: TEST_ACCOUNT_NUMBER,
-          myosEventId: 'event-500',
-        },
-      } as any,
-      { request: createRequestContext() }
-    );
-
-    expect(response.status).toBe(500);
-    expect(response.body).toMatchObject({
-      error: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
-      detail: 'server error',
-    });
-    expect(logger.error).toHaveBeenCalledWith(
-      'Failed to retrieve PayNote event from MyOS',
-      expect.objectContaining({ myOsEventId: 'event-500' })
-    );
-  });
-
   it('throws when authentication is missing', async () => {
     await expect(
       getPayNoteDetailsHandler(
         {
           params: {
             accountNumber: TEST_ACCOUNT_NUMBER,
-            myosEventId: 'event-123',
+            payNoteDocumentId: 'doc-123',
           },
         } as any,
         {

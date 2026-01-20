@@ -48,6 +48,14 @@ export class HoldNotPendingError extends AppError {
   }
 }
 
+export class HoldCaptureDisabledError extends AppError {
+  readonly code = 'HOLD_CAPTURE_DISABLED';
+
+  constructor(holdId: string) {
+    super(`Hold ${holdId} capture is disabled`);
+  }
+}
+
 export class HoldCounterpartyMismatchError extends AppError {
   readonly code = 'HOLD_COUNTERPARTY_MISMATCH';
 

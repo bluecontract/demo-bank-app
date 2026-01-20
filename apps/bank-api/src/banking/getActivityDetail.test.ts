@@ -156,8 +156,6 @@ describe('getActivityDetailHandler', () => {
       cardLast4: undefined,
       merchantName: undefined,
       merchantStatementDescriptor: undefined,
-      merchantCategoryCode: undefined,
-      merchantCountry: undefined,
       processorChargeId: undefined,
     });
 
@@ -182,7 +180,7 @@ describe('getActivityDetailHandler', () => {
       description: 'PayNote transfer',
       createdAt: new Date('2024-01-10T00:00:00.000Z'),
       postings: [mockPosting],
-      payNoteEventId: 'event-abc',
+      payNoteDocumentId: 'doc-abc',
     } as any;
 
     vi.mocked(repositoryMock.getTransactionById).mockResolvedValue(
@@ -206,7 +204,7 @@ describe('getActivityDetailHandler', () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       kind: 'POSTED_TRANSACTION',
-      payNote: { myosEventId: 'event-abc' },
+      payNote: { payNoteDocumentId: 'doc-abc' },
     });
   });
 
@@ -325,8 +323,6 @@ describe('getActivityDetailHandler', () => {
       cardLast4: undefined,
       merchantName: undefined,
       merchantStatementDescriptor: undefined,
-      merchantCategoryCode: undefined,
-      merchantCountry: undefined,
       processorChargeId: undefined,
       timeline: [
         {
@@ -334,14 +330,14 @@ describe('getActivityDetailHandler', () => {
           at: '2024-01-03T10:00:00.000Z',
           createdByUserId: 'system',
           idempotencyKeyHash: 'hash-1',
-          payNoteEventId: undefined,
+          payNoteDocumentId: undefined,
         },
         {
           type: 'CAPTURED',
           at: '2024-01-04T09:00:00.000Z',
           transactionId: 'txn-555',
           counterpartyAccountNumber: '1234567899',
-          payNoteEventId: undefined,
+          payNoteDocumentId: undefined,
         },
       ],
     });
@@ -354,7 +350,7 @@ describe('getActivityDetailHandler', () => {
       {
         type: 'CREATED',
         at: '2024-01-02T00:00:00.000Z',
-        payNoteEventId: 'event-hold-123',
+        payNoteDocumentId: 'doc-hold-123',
       },
     ];
 
@@ -366,7 +362,7 @@ describe('getActivityDetailHandler', () => {
       status: 'PENDING' as const,
       description: 'PayNote hold',
       createdAt: '2024-01-02T00:00:00.000Z',
-      payNoteEventId: 'event-hold-123',
+      payNoteDocumentId: 'doc-hold-123',
     });
 
     vi.mocked(holdRepositoryMock.listHoldEvents).mockResolvedValue(events);
@@ -387,12 +383,14 @@ describe('getActivityDetailHandler', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.kind).toBe('HOLD');
-    expect(response.body.payNote).toBeUndefined();
+    expect(response.body.payNote).toEqual({
+      payNoteDocumentId: 'doc-hold-123',
+    });
     expect(response.body.timeline).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'CREATED',
-          payNoteEventId: 'event-hold-123',
+          payNoteDocumentId: 'doc-hold-123',
         }),
       ])
     );

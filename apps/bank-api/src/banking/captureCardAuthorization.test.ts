@@ -130,6 +130,22 @@ describe('captureCardAuthorizationHandler', () => {
     });
   });
 
+  it('maps HoldCaptureDisabledError to 409', async () => {
+    vi.spyOn(banking, 'captureCardAuthorization').mockRejectedValueOnce(
+      new banking.HoldCaptureDisabledError('hold-123')
+    );
+
+    const response = await captureCardAuthorizationHandler(baseRequest as any, {
+      request: { headers: authHeaders },
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({
+      error: ERROR_CODES.AUTHORIZATION_CAPTURE_DISABLED,
+      message: 'Hold hold-123 capture is disabled',
+    });
+  });
+
   it('maps IdempotencyConflictError to 409', async () => {
     vi.spyOn(banking, 'captureCardAuthorization').mockRejectedValueOnce(
       new banking.IdempotencyConflictError('conflict')

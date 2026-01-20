@@ -96,8 +96,6 @@ export async function getTransaction(
       cardLast4: transaction.cardLast4,
       merchantName: transaction.merchantName,
       merchantStatementDescriptor: transaction.merchantStatementDescriptor,
-      merchantCategoryCode: transaction.merchantCategoryCode,
-      merchantCountry: transaction.merchantCountry,
       processorChargeId: transaction.processorChargeId,
     };
   } catch (error: unknown) {

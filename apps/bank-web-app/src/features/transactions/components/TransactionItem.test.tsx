@@ -166,4 +166,17 @@ describe('TransactionItem', () => {
     expect(screen.getByText('Charge: ch_123')).toBeInTheDocument();
     expect(screen.queryByText('To: 999 999 9999')).not.toBeInTheDocument();
   });
+
+  it('renders a PayNote badge when paynote metadata is present', () => {
+    const payNoteTransaction: ActivityItem = {
+      ...debitTransaction,
+      payNote: { payNoteDocumentId: 'doc-paynote-1' },
+    };
+
+    render(
+      <TransactionItem item={payNoteTransaction} onActivitySelect={vi.fn()} />
+    );
+
+    expect(screen.getByText('PAYNOTE')).toBeInTheDocument();
+  });
 });

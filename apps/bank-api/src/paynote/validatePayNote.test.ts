@@ -42,6 +42,15 @@ describe('validatePayNoteHandler', () => {
       logger,
       getOpenAiValidationProvider,
       payNoteVerificationRepository: verificationRepository,
+      payNoteRepository: {
+        getPayNote: vi.fn(),
+        getPayNoteBySessionId: vi.fn(),
+        savePayNote: vi.fn(),
+      },
+      payNoteBootstrapRepository: {
+        getBootstrapBySessionId: vi.fn(),
+        saveBootstrap: vi.fn(),
+      },
       bankingRepository: {} as any,
       holdRepository: {} as any,
       bankingFacade: {} as any,

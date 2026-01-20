@@ -31,6 +31,8 @@ const getTransactionTypeDisplay = (
 type VisualState = {
   badgeLabel: string;
   badgeClass: string;
+  payNoteBadgeLabel?: string;
+  payNoteBadgeClass?: string;
   icon: string;
   iconClasses: string;
   title: string;
@@ -70,6 +72,13 @@ const buildVisualState = (item: ActivityItem): VisualState => {
   const hasCardContext = Boolean(
     item.cardLast4 || item.merchantName || item.processorChargeId
   );
+  const hasPayNote = Boolean(item.payNote?.payNoteDocumentId);
+  const payNoteBadge = hasPayNote
+    ? {
+        payNoteBadgeLabel: 'PAYNOTE',
+        payNoteBadgeClass: 'bg-cyan-50 text-cyan-700 border border-cyan-100',
+      }
+    : {};
 
   const cardSubtitleLines = [
     formatCardLine(item.cardLast4),
@@ -96,6 +105,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
           failed: 'bg-rose-50 text-rose-700 border border-rose-100',
         }[item.status.toLowerCase()] ??
         'bg-slate-100 text-slate-700 border border-slate-200',
+      ...payNoteBadge,
       icon: isCredit ? '↓' : '↑',
       iconClasses: isCredit
         ? 'bg-emerald-50 text-emerald-600'
@@ -146,6 +156,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         ...base,
         badgeLabel: 'HOLD PLACED',
         badgeClass: 'bg-amber-50 text-amber-700 border border-amber-100',
+        ...payNoteBadge,
         icon: '⏳',
         iconClasses: 'bg-amber-50 text-amber-700',
         title: item.merchantName ?? 'Hold Created',
@@ -159,6 +170,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         ...base,
         badgeLabel: 'HOLD CAPTURED',
         badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+        ...payNoteBadge,
         icon: '✔',
         iconClasses: 'bg-emerald-50 text-emerald-700',
         title: item.merchantName ?? 'Hold Captured',
@@ -175,6 +187,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         ...base,
         badgeLabel: 'HOLD RELEASED',
         badgeClass: 'bg-sky-50 text-sky-700 border border-sky-100',
+        ...payNoteBadge,
         icon: '↺',
         iconClasses: 'bg-sky-50 text-sky-700',
         title: item.merchantName ?? 'Hold Released',
@@ -191,6 +204,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         ...base,
         badgeLabel: 'HOLD FAILED',
         badgeClass: 'bg-rose-50 text-rose-700 border border-rose-100',
+        ...payNoteBadge,
         icon: '✖',
         iconClasses: 'bg-rose-50 text-rose-700',
         title: item.merchantName ?? 'Hold Failed',
@@ -246,6 +260,13 @@ export function TransactionItem({
               >
                 {visualState.badgeLabel}
               </span>
+              {visualState.payNoteBadgeLabel && (
+                <span
+                  className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold ${visualState.payNoteBadgeClass}`}
+                >
+                  {visualState.payNoteBadgeLabel}
+                </span>
+              )}
             </div>
             <div className="text-xs text-slate-500 truncate">
               {formatDate(visualState.timestamp)}

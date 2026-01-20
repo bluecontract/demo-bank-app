@@ -7,6 +7,7 @@ import { Money } from '../../domain/valueObjects/Money';
 import {
   HoldNotFoundError,
   HoldNotPendingError,
+  HoldCaptureDisabledError,
   IdempotencyConflictError,
 } from '../errors';
 import { CARD_SETTLEMENT } from '../../domain/entities/Account';
@@ -162,5 +163,30 @@ describe('captureCardAuthorization', () => {
         { bankingRepository, holdRepository }
       )
     ).rejects.toBeInstanceOf(HoldNotPendingError);
+  });
+
+  it('throws when capture is disabled', async () => {
+    const bankingRepository = {
+      getAccountIdByNumber: vi.fn(),
+      getAccountById: vi.fn(),
+    } as unknown as BankingRepository;
+    const holdRepository = {
+      getHold: vi.fn().mockResolvedValue({
+        holdId: 'hold-1',
+        payerAccountNumber: '1234567890',
+        amountMinor: 500,
+        currency: 'USD',
+        status: 'PENDING',
+        captureDisabled: true,
+        createdAt: '2025-01-01T00:00:00.000Z',
+      }),
+    } as unknown as HoldRepository;
+
+    await expect(
+      captureCardAuthorization(
+        { authorizationId: 'hold-1', amountMinor: 500, idempotencyKey: 'idem' },
+        { bankingRepository, holdRepository }
+      )
+    ).rejects.toBeInstanceOf(HoldCaptureDisabledError);
   });
 });

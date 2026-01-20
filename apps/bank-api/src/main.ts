@@ -29,6 +29,9 @@ import { parsePayNotePdfHandler } from './paynote/parsePayNotePdf';
 import { bootstrapPayNoteHandler } from './paynote/bootstrapPayNote';
 import { payNoteWebhookHandler } from './paynote/webhook';
 import { getPayNoteDetailsHandler } from './paynote/getPayNoteDetails';
+import { listPayNoteDeliveriesHandler } from './paynote/listPayNoteDeliveries';
+import { getPayNoteDeliveryHandler } from './paynote/getPayNoteDelivery';
+import { runContractOperationHandler } from './contracts/runContractOperation';
 
 const metrics = getMetrics();
 const logger = getLogger();
@@ -72,6 +75,9 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       parsePayNotePdf: parsePayNotePdfHandler,
       getPayNoteDetails: getPayNoteDetailsHandler,
       payNoteWebhook: payNoteWebhookHandler,
+      listPayNoteDeliveries: listPayNoteDeliveriesHandler,
+      getPayNoteDelivery: getPayNoteDeliveryHandler,
+      runContractOperation: runContractOperationHandler,
       authorizeCard: authorizeCardHandler,
       captureCardAuthorization: captureCardAuthorizationHandler,
     },

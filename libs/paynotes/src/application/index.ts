@@ -2,4 +2,8 @@ export * from './ports';
 export * from './commands/bootstrapPayNote';
 export * from './commands/validatePayNote';
 export * from './commands/handleWebhookEvent';
+export * from './commands/handlePayNoteDeliveryWebhookEvent';
+export * from './commands/handlePayNoteBootstrapWebhookEvent';
 export * from './queries/getPayNoteDetails';
+export * from './payNoteDelivery/blueUtils';
+export * from './payNoteDelivery/schema';

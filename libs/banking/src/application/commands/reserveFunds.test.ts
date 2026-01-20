@@ -57,7 +57,7 @@ describe('reserveFunds', () => {
     amountMinor: 5_000,
     description: 'Test hold',
     counterpartyAccountNumber: '5555555555',
-    payNoteEventId: 'event-created',
+    payNoteDocumentId: 'doc-created',
   };
 
   beforeEach(() => {
@@ -95,7 +95,7 @@ describe('reserveFunds', () => {
     expect(hold.status).toBe('PENDING');
     expect(hold.createdAt).toBe('2024-01-02T00:00:00.000Z');
     expect(hold.amountMinor).toBe(command.amountMinor);
-    expect(hold.payNoteEventId).toBe(command.payNoteEventId);
+    expect(hold.payNoteDocumentId).toBe(command.payNoteDocumentId);
 
     expect(holdRepositoryMock.reserveHold).toHaveBeenCalledTimes(1);
     const request = vi.mocked(holdRepositoryMock.reserveHold!).mock.calls[0][0];
@@ -105,7 +105,7 @@ describe('reserveFunds', () => {
     expect(request.holdEvent.idempotencyKeyHash).toBe(
       hashIdempotencyKey(command.idempotencyKey)
     );
-    expect(request.holdEvent.payNoteEventId).toBe(command.payNoteEventId);
+    expect(request.holdEvent.payNoteDocumentId).toBe(command.payNoteDocumentId);
   });
 
   it('uses provided hold id when supplied', async () => {

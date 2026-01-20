@@ -1,25 +1,31 @@
-import { Blue } from '@blue-labs/language';
-import { repository } from '@blue-repository/types';
+import type { BlueNode } from '@blue-labs/language';
 import {
   CaptureFundsRequestedSchema,
+  PayNoteSchema,
   ReserveFundsAndCaptureImmediatelyRequestedSchema,
   ReserveFundsRequestedSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
 import type {
   BankingFacade,
+  ClockPort,
   LogEntry,
   MyOsClient,
+  MyOsFetchDocumentResult,
   MyOsFetchEventResult,
+  PayNoteDeliveryRepository,
+  PayNoteRecord,
+  PayNoteRepository,
 } from '../ports';
+import { blue } from '../../blue';
 
 const RESERVE_FUNDS_EVENT_NAME = 'PayNote/Reserve Funds Requested';
 const CAPTURE_FUNDS_EVENT_NAME = 'PayNote/Capture Funds Requested';
 const CAPTURE_IMMEDIATELY_EVENT_NAME =
   'PayNote/Reserve Funds and Capture Immediately Requested';
 
-const blue = new Blue({
-  repositories: [repository],
-});
+const isTraceEnabled =
+  process.env.PAYNOTE_WEBHOOK_TRACE === '1' ||
+  (process.env.LOG_LEVEL ?? '').toUpperCase() === 'DEBUG';
 
 const resolveEventTypeLabel = (event: unknown): string | undefined => {
   if (!event || typeof event !== 'object') {
@@ -52,13 +58,71 @@ const resolveEventType = (event: unknown): string | undefined => {
   return undefined;
 };
 
+const toBlueNode = (value: unknown): BlueNode | null => {
+  if (!value) {
+    return null;
+  }
+  try {
+    return blue.jsonValueToNode(value);
+  } catch {
+    return null;
+  }
+};
+
+const parsePayNoteDocument = (value: unknown) => {
+  const node = toBlueNode(value);
+  if (
+    !node ||
+    !blue.isTypeOf(node, PayNoteSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    return null;
+  }
+  return {
+    node,
+    output: blue.nodeToSchemaOutput(node, PayNoteSchema),
+  };
+};
+
+const getString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const getRecordString = (
+  record: Record<string, unknown> | undefined,
+  key: string
+): string | undefined => {
+  return record ? getString(record[key]) : undefined;
+};
+
+const mergeSessionIds = (
+  existing: string[] | undefined,
+  next: string | undefined
+): string[] | undefined => {
+  if (!next) {
+    return existing;
+  }
+  const set = new Set(existing ?? []);
+  set.add(next);
+  return Array.from(set);
+};
+
 export interface HandleWebhookEventInput {
   eventId: string;
+  eventPayload?: unknown;
 }
 
 export interface HandleWebhookEventDependencies {
   myOsClient: MyOsClient;
   bankingFacade: BankingFacade;
+  payNoteRepository: PayNoteRepository;
+  payNoteDeliveryRepository: PayNoteDeliveryRepository;
+  clock: ClockPort;
 }
 
 export interface HandleWebhookEventResult {
@@ -74,6 +138,17 @@ const logAndReturn = (
 ) => {
   logs.push({ level, message, context });
   return message;
+};
+
+const trace = (
+  logs: LogEntry[],
+  message: string,
+  context?: Record<string, unknown>
+) => {
+  if (!isTraceEnabled) {
+    return;
+  }
+  logs.push({ level: 'info', message, context });
 };
 
 const mapFetchEventError = (
@@ -142,34 +217,100 @@ const mapFetchEventError = (
   }
 };
 
+const mapFetchDocumentError = (
+  result: MyOsFetchDocumentResult,
+  sessionId: string,
+  logs: LogEntry[]
+): void => {
+  switch (result.kind) {
+    case 'not-found':
+      logs.push({
+        level: 'error',
+        message: 'Failed to resolve PayNote document from MyOS',
+        context: { sessionId, status: result.status },
+      });
+      return;
+    case 'http-error':
+      logs.push({
+        level: 'error',
+        message: 'Failed to resolve PayNote document from MyOS',
+        context: {
+          sessionId,
+          status: result.status,
+          statusText: result.statusText,
+        },
+      });
+      return;
+    case 'parse-error':
+      logs.push({
+        level: 'error',
+        message: 'Failed to parse PayNote document response from MyOS',
+        context: {
+          sessionId,
+          error:
+            result.error instanceof Error
+              ? result.error.message
+              : String(result.error),
+        },
+      });
+      return;
+    case 'network-error':
+      logs.push({
+        level: 'error',
+        message: 'Unexpected error while resolving PayNote document',
+        context: {
+          sessionId,
+          error:
+            result.error instanceof Error
+              ? result.error.message
+              : String(result.error),
+        },
+      });
+      return;
+    default:
+      return;
+  }
+};
+
 export const handleWebhookEvent = async (
   input: HandleWebhookEventInput,
   deps: HandleWebhookEventDependencies
 ): Promise<HandleWebhookEventResult> => {
   const logs: LogEntry[] = [];
+  trace(logs, 'PayNote webhook processing', {
+    eventId: input.eventId,
+    hasPayload: Boolean(input.eventPayload),
+  });
 
-  const eventResult = await deps.myOsClient.fetchEvent(input.eventId);
-  if (eventResult.kind !== 'success') {
-    return mapFetchEventError(eventResult, input.eventId, logs);
+  const resolvedPayload = input.eventPayload;
+  if (!resolvedPayload) {
+    const eventResult = await deps.myOsClient.fetchEvent(input.eventId);
+    if (eventResult.kind !== 'success') {
+      return mapFetchEventError(eventResult, input.eventId, logs);
+    }
+    trace(logs, 'Fetched PayNote event payload from MyOS', {
+      eventId: input.eventId,
+    });
+    return handleWebhookEvent(
+      { eventId: input.eventId, eventPayload: eventResult.payload },
+      deps
+    );
   }
 
-  const eventPayload = eventResult.payload as {
+  const eventPayload = resolvedPayload as {
     object?: {
-      document?: {
-        payNoteBankId?: { value?: string };
-        payerAccountNumber?: { value?: string };
-        payeeAccountNumber?: { value?: string };
-        amount?: { total?: { value?: number } };
-        name?: string;
-      };
+      sessionId?: string;
+      document?: Record<string, unknown>;
       emitted?: Array<{
         type?: { name?: string };
         amount?: { value?: number };
       }>;
+      triggeredBy?: unknown;
     };
   };
 
-  const document = eventPayload?.object?.document;
+  const eventObject = eventPayload?.object;
+  const document = eventObject?.document;
 
   if (!document) {
     const note = logAndReturn(
@@ -181,37 +322,143 @@ export const handleWebhookEvent = async (
     return { note, logs };
   }
 
-  const payNoteBankId = document.payNoteBankId?.value;
-  const payerAccountNumber = document.payerAccountNumber?.value;
-  const payeeAccountNumber = document.payeeAccountNumber?.value;
-  const transferDescription = document.name || 'PayNote transfer';
+  const sessionId =
+    typeof eventObject?.sessionId === 'string'
+      ? eventObject.sessionId
+      : undefined;
 
-  if (!payNoteBankId) {
+  if (!sessionId) {
     const note = logAndReturn(
       logs,
       'error',
-      'PayNote event missing payNoteBankId',
+      'PayNote event missing session id',
+      { eventId: input.eventId }
+    );
+    return { note, logs };
+  }
+
+  trace(logs, 'Resolved PayNote session id', {
+    eventId: input.eventId,
+    sessionId,
+  });
+
+  const payNoteRecord = await deps.payNoteRepository.getPayNoteBySessionId(
+    sessionId
+  );
+  let payNoteDocumentId = payNoteRecord?.payNoteDocumentId;
+  let resolvedDocument: Record<string, unknown> | undefined;
+
+  if (!payNoteDocumentId) {
+    const documentResult = await deps.myOsClient.fetchDocument(sessionId);
+    if (documentResult.kind !== 'success') {
+      mapFetchDocumentError(documentResult, sessionId, logs);
+      return { note: 'Failed to resolve PayNote document id', logs };
+    }
+
+    payNoteDocumentId = documentResult.document.documentId;
+    resolvedDocument = documentResult.document.document;
+    trace(logs, 'Resolved PayNote document id from MyOS', {
+      eventId: input.eventId,
+      sessionId,
+      payNoteDocumentId,
+    });
+  }
+
+  if (!payNoteDocumentId) {
+    const note = logAndReturn(
+      logs,
+      'error',
+      'PayNote document id missing after resolution',
+      { eventId: input.eventId, sessionId }
+    );
+    return { note, logs };
+  }
+
+  const now = deps.clock.now().toISOString();
+  const existingRecord =
+    payNoteRecord ??
+    (await deps.payNoteRepository.getPayNote(payNoteDocumentId));
+
+  const deliveryRecord =
+    existingRecord?.deliveryId != null
+      ? await deps.payNoteDeliveryRepository.getDelivery(
+          existingRecord.deliveryId
+        )
+      : await deps.payNoteDeliveryRepository.getDeliveryByPayNoteDocumentId(
+          payNoteDocumentId
+        );
+
+  trace(logs, 'Resolved PayNote delivery linkage', {
+    eventId: input.eventId,
+    payNoteDocumentId,
+    hasPayNoteRecord: Boolean(existingRecord),
+    deliveryId: deliveryRecord?.deliveryId ?? null,
+  });
+
+  const payNoteParsed =
+    parsePayNoteDocument(document) ??
+    (resolvedDocument ? parsePayNoteDocument(resolvedDocument) : null);
+  if (!payNoteParsed) {
+    const note = logAndReturn(
+      logs,
+      'error',
+      'PayNote webhook document is not a PayNote',
+      { eventId: input.eventId, sessionId }
+    );
+    return { note, logs };
+  }
+
+  const payNoteSimple = blue.nodeToJson(payNoteParsed.node, 'simple') as
+    | Record<string, unknown>
+    | undefined;
+  const payerAccountNumber =
+    existingRecord?.payerAccountNumber ??
+    deliveryRecord?.accountNumber ??
+    getRecordString(payNoteSimple, 'payerAccountNumber');
+  const payeeAccountNumber =
+    existingRecord?.payeeAccountNumber ??
+    getRecordString(payNoteSimple, 'payeeAccountNumber');
+
+  const updatedRecord: PayNoteRecord = {
+    payNoteDocumentId,
+    sessionIds: mergeSessionIds(existingRecord?.sessionIds, sessionId),
+    deliveryId: existingRecord?.deliveryId ?? deliveryRecord?.deliveryId,
+    accountNumber:
+      existingRecord?.accountNumber ??
+      deliveryRecord?.accountNumber ??
+      payerAccountNumber,
+    userId: existingRecord?.userId ?? deliveryRecord?.userId,
+    holdId: existingRecord?.holdId ?? deliveryRecord?.holdId,
+    transactionId:
+      existingRecord?.transactionId ?? deliveryRecord?.transactionId,
+    payerAccountNumber,
+    payeeAccountNumber,
+    document: document ?? resolvedDocument ?? existingRecord?.document,
+    transactionRequest:
+      eventObject?.emitted ?? existingRecord?.transactionRequest ?? null,
+    triggerEvent:
+      eventObject?.triggeredBy ?? existingRecord?.triggerEvent ?? null,
+    createdAt: existingRecord?.createdAt ?? now,
+    updatedAt: now,
+  };
+
+  await deps.payNoteRepository.savePayNote(updatedRecord);
+
+  if (!payerAccountNumber) {
+    const note = logAndReturn(
+      logs,
+      'error',
+      'PayNote event missing payer account mapping',
       {
         eventId: input.eventId,
-        payNoteBankId,
+        payNoteDocumentId,
       }
     );
     return { note, logs };
   }
 
-  if (!payerAccountNumber || !payeeAccountNumber) {
-    const note = logAndReturn(
-      logs,
-      'error',
-      'PayNote event missing account numbers',
-      {
-        eventId: input.eventId,
-        payerAccountNumber,
-        payeeAccountNumber,
-      }
-    );
-    return { note, logs };
-  }
+  const transferDescription =
+    getString(payNoteParsed.output.name) ?? 'PayNote transfer';
 
   try {
     const account = await deps.bankingFacade.getAccountByNumber(
@@ -244,8 +491,17 @@ export const handleWebhookEvent = async (
       return { note, logs };
     }
 
+    if (!updatedRecord.userId || !updatedRecord.accountNumber) {
+      updatedRecord.userId = account.ownerUserId;
+      updatedRecord.accountNumber = account.accountNumber;
+      await deps.payNoteRepository.savePayNote({
+        ...updatedRecord,
+        updatedAt: deps.clock.now().toISOString(),
+      });
+    }
+
     const events =
-      eventPayload?.object?.emitted ??
+      eventObject?.emitted ??
       ([] as Array<{ type?: { name?: string }; amount?: { value?: number } }>);
 
     logs.push({
@@ -254,7 +510,7 @@ export const handleWebhookEvent = async (
       context: {
         eventId: input.eventId,
         events,
-        payNoteBankId,
+        payNoteDocumentId,
         payerAccountNumber,
         payeeAccountNumber,
       },
@@ -266,6 +522,18 @@ export const handleWebhookEvent = async (
       const eventTypeLabel = eventType ?? resolveEventTypeLabel(event);
 
       if (eventType === CAPTURE_IMMEDIATELY_EVENT_NAME) {
+        if (!payeeAccountNumber) {
+          logs.push({
+            level: 'warn',
+            message: 'PayNote transfer missing counterparty account number',
+            context: {
+              eventId: input.eventId,
+              payNoteDocumentId,
+            },
+          });
+          continue;
+        }
+
         logs.push({
           level: 'info',
           message: 'PayNote transfer triggered',
@@ -284,8 +552,8 @@ export const handleWebhookEvent = async (
           amountMinor: transferAmountMinor,
           description: transferDescription,
           userId: account.ownerUserId,
-          idempotencyKey: payNoteBankId,
-          payNoteEventId: input.eventId,
+          idempotencyKey: payNoteDocumentId,
+          payNoteDocumentId,
         });
       } else if (eventType === CAPTURE_FUNDS_EVENT_NAME) {
         logs.push({
@@ -301,11 +569,11 @@ export const handleWebhookEvent = async (
         });
 
         await deps.bankingFacade.captureHold({
-          holdId: payNoteBankId,
+          holdId: payNoteDocumentId,
           userId: account.ownerUserId,
-          idempotencyKey: payNoteBankId,
+          idempotencyKey: payNoteDocumentId,
           counterpartyAccountNumber: payeeAccountNumber,
-          payNoteEventId: input.eventId,
+          payNoteDocumentId,
         });
       } else if (eventType === RESERVE_FUNDS_EVENT_NAME) {
         logs.push({
@@ -321,13 +589,13 @@ export const handleWebhookEvent = async (
         });
 
         await deps.bankingFacade.reserveFunds({
-          holdId: payNoteBankId,
+          holdId: payNoteDocumentId,
           payerAccountNumber,
           amountMinor: transferAmountMinor,
           counterpartyAccountNumber: payeeAccountNumber,
           userId: account.ownerUserId,
-          idempotencyKey: payNoteBankId,
-          payNoteEventId: input.eventId,
+          idempotencyKey: payNoteDocumentId,
+          payNoteDocumentId,
         });
       } else {
         logs.push({

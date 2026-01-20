@@ -19,10 +19,11 @@ const toResponseItem = (item: ActivityItem) => {
     cardLast4: item.cardLast4,
     merchantName: item.merchantName,
     merchantStatementDescriptor: item.merchantStatementDescriptor,
-    merchantCategoryCode: item.merchantCategoryCode,
-    merchantCountry: item.merchantCountry,
     processorChargeId: item.processorChargeId,
   };
+  const payNoteFields = item.payNoteDocumentId
+    ? { payNote: { payNoteDocumentId: item.payNoteDocumentId } }
+    : {};
 
   switch (item.kind) {
     case 'POSTED_TRANSACTION':
@@ -38,6 +39,7 @@ const toResponseItem = (item: ActivityItem) => {
         type: item.type,
         status: item.status,
         counterpartyAccountNumber: item.counterpartyAccountNumber,
+        ...payNoteFields,
         ...cardFields,
       } as const;
     case 'HOLD_CREATED':
@@ -51,6 +53,7 @@ const toResponseItem = (item: ActivityItem) => {
         counterpartyAccountNumber: item.counterpartyAccountNumber,
         createdByUserId: item.createdByUserId,
         idempotencyKeyHash: item.idempotencyKeyHash,
+        ...payNoteFields,
         ...cardFields,
       } as const;
     case 'HOLD_RELEASED':
@@ -62,6 +65,7 @@ const toResponseItem = (item: ActivityItem) => {
         description: item.description,
         releasedAt: item.releasedAt,
         releaseReason: item.releaseReason,
+        ...payNoteFields,
         ...cardFields,
       } as const;
     case 'HOLD_CAPTURED':
@@ -74,6 +78,7 @@ const toResponseItem = (item: ActivityItem) => {
         capturedAt: item.capturedAt,
         transactionId: item.transactionId,
         counterpartyAccountNumber: item.counterpartyAccountNumber,
+        ...payNoteFields,
         ...cardFields,
       } as const;
     case 'HOLD_FAILED':
@@ -86,6 +91,7 @@ const toResponseItem = (item: ActivityItem) => {
         failedAt: item.failedAt,
         failureCode: item.failureCode,
         failureMessage: item.failureMessage,
+        ...payNoteFields,
         ...cardFields,
       } as const;
     default: {

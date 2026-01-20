@@ -6,3 +6,5 @@ export * from './application';
 
 // Infrastructure layer
 export * from './infrastructure';
+
+export { blue } from './blue';

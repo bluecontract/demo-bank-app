@@ -52,8 +52,6 @@ interface Card {
 interface CardMerchant {
   name: string;
   statementDescriptor?: string;
-  categoryCode?: string;
-  country?: string;
 }
 
 interface CardAuthMetadata {
@@ -70,9 +68,8 @@ Notes:
   records receive extra metadata fields for card context (cardId, cardLast4,
   merchant fields, processorChargeId, authorizationId).
 - Merchant metadata represents what an issuer typically receives from the
-  network/acquirer (merchant name, descriptor, MCC, country). For the demo, the
-  processor supplies these values so the bank can surface realistic activity
-  lines.
+  network/acquirer (merchant name and descriptor). For the demo, the processor
+  supplies these values so the bank can surface realistic activity lines.
 
 ## Commands and Queries
 
@@ -109,9 +106,7 @@ Processor endpoints (service auth):
   "currency": "USD",
   "merchant": {
     "name": "Demo Shop",
-    "statementDescriptor": "DEMO SHOP",
-    "categoryCode": "5411",
-    "country": "US"
+    "statementDescriptor": "DEMO SHOP"
   },
   "processorChargeId": "ch_123"
 }
@@ -211,7 +206,7 @@ settlement account and links `originHoldId` to the authorization id.
 Hold META and Hold EVENT items gain optional card fields:
 
 - `cardId`, `cardLast4`, `merchantName`, `statementDescriptor`,
-  `merchantCategoryCode`, `processorChargeId`.
+  `processorChargeId`.
 
 Transaction header gains optional card fields:
 

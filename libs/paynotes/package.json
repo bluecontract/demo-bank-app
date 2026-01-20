@@ -95,12 +95,11 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
-    "@demo-bank-app/shared-config": "*",
+    "@blue-labs/language": "3.3.1",
+    "@blue-repository/types": "0.6.0",
     "@demo-bank-app/banking": "*",
+    "@demo-bank-app/shared-config": "*",
     "@demo-bank-app/shared-observability": "*",
-    "@blue-labs/language": "2.0.0-rc.22",
-    "@blue-labs/shared-utils": "2.0.0-rc.22",
-    "@blue-repository/types": "^0.4.0",
     "openai": "^6.3.0",
     "zod": "^3.25.67"
   }

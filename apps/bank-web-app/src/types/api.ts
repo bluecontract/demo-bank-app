@@ -80,5 +80,23 @@ export type ActivityFeed = ClientInferResponseBody<
 
 export type ActivityFeedItem = ActivityFeed['items'][number];
 
+// PayNote Delivery types
+export type PayNoteDeliveryList = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['listPayNoteDeliveries'],
+  200
+>;
+
+export type PayNoteDeliverySummary = PayNoteDeliveryList['items'][number];
+
+export type PayNoteDeliveryDetails = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['getPayNoteDelivery'],
+  200
+>;
+
+export type ContractOperationResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['runContractOperation'],
+  200
+>;
+
 // Re-export commonly used types
 export type { Transaction as TransactionItem };

@@ -2041,14 +2041,17 @@
                               "merchantStatementDescriptor": {
                                 "type": "string"
                               },
-                              "merchantCategoryCode": {
-                                "type": "string"
-                              },
-                              "merchantCountry": {
-                                "type": "string"
-                              },
                               "processorChargeId": {
                                 "type": "string"
+                              },
+                              "payNote": {
+                                "type": "object",
+                                "properties": {
+                                  "payNoteDocumentId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["payNoteDocumentId"]
                               }
                             },
                             "required": [
@@ -2099,14 +2102,17 @@
                               "merchantStatementDescriptor": {
                                 "type": "string"
                               },
-                              "merchantCategoryCode": {
-                                "type": "string"
-                              },
-                              "merchantCountry": {
-                                "type": "string"
-                              },
                               "processorChargeId": {
                                 "type": "string"
+                              },
+                              "payNote": {
+                                "type": "object",
+                                "properties": {
+                                  "payNoteDocumentId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["payNoteDocumentId"]
                               }
                             },
                             "required": [
@@ -2160,14 +2166,17 @@
                               "merchantStatementDescriptor": {
                                 "type": "string"
                               },
-                              "merchantCategoryCode": {
-                                "type": "string"
-                              },
-                              "merchantCountry": {
-                                "type": "string"
-                              },
                               "processorChargeId": {
                                 "type": "string"
+                              },
+                              "payNote": {
+                                "type": "object",
+                                "properties": {
+                                  "payNoteDocumentId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["payNoteDocumentId"]
                               }
                             },
                             "required": [
@@ -2229,14 +2238,17 @@
                               "merchantStatementDescriptor": {
                                 "type": "string"
                               },
-                              "merchantCategoryCode": {
-                                "type": "string"
-                              },
-                              "merchantCountry": {
-                                "type": "string"
-                              },
                               "processorChargeId": {
                                 "type": "string"
+                              },
+                              "payNote": {
+                                "type": "object",
+                                "properties": {
+                                  "payNoteDocumentId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["payNoteDocumentId"]
                               }
                             },
                             "required": [
@@ -2301,14 +2313,17 @@
                               "merchantStatementDescriptor": {
                                 "type": "string"
                               },
-                              "merchantCategoryCode": {
-                                "type": "string"
-                              },
-                              "merchantCountry": {
-                                "type": "string"
-                              },
                               "processorChargeId": {
                                 "type": "string"
+                              },
+                              "payNote": {
+                                "type": "object",
+                                "properties": {
+                                  "payNoteDocumentId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["payNoteDocumentId"]
                               }
                             },
                             "required": [
@@ -2535,23 +2550,17 @@
                         "merchantStatementDescriptor": {
                           "type": "string"
                         },
-                        "merchantCategoryCode": {
-                          "type": "string"
-                        },
-                        "merchantCountry": {
-                          "type": "string"
-                        },
                         "processorChargeId": {
                           "type": "string"
                         },
                         "payNote": {
                           "type": "object",
                           "properties": {
-                            "myosEventId": {
+                            "payNoteDocumentId": {
                               "type": "string"
                             }
                           },
-                          "required": ["myosEventId"]
+                          "required": ["payNoteDocumentId"]
                         }
                       },
                       "required": [
@@ -2653,12 +2662,6 @@
                         "merchantStatementDescriptor": {
                           "type": "string"
                         },
-                        "merchantCategoryCode": {
-                          "type": "string"
-                        },
-                        "merchantCountry": {
-                          "type": "string"
-                        },
                         "processorChargeId": {
                           "type": "string"
                         },
@@ -2686,7 +2689,7 @@
                                   "idempotencyKeyHash": {
                                     "type": "string"
                                   },
-                                  "payNoteEventId": {
+                                  "payNoteDocumentId": {
                                     "type": "string"
                                   }
                                 },
@@ -2709,7 +2712,7 @@
                                   "counterpartyAccountNumber": {
                                     "type": "string"
                                   },
-                                  "payNoteEventId": {
+                                  "payNoteDocumentId": {
                                     "type": "string"
                                   }
                                 },
@@ -2729,7 +2732,7 @@
                                   "reason": {
                                     "type": "string"
                                   },
-                                  "payNoteEventId": {
+                                  "payNoteDocumentId": {
                                     "type": "string"
                                   }
                                 },
@@ -2758,7 +2761,7 @@
                                   "message": {
                                     "type": "string"
                                   },
-                                  "payNoteEventId": {
+                                  "payNoteDocumentId": {
                                     "type": "string"
                                   }
                                 },
@@ -2770,11 +2773,11 @@
                         "payNote": {
                           "type": "object",
                           "properties": {
-                            "myosEventId": {
+                            "payNoteDocumentId": {
                               "type": "string"
                             }
                           },
-                          "required": ["myosEventId"]
+                          "required": ["payNoteDocumentId"]
                         }
                       },
                       "required": [
@@ -3114,9 +3117,9 @@
         }
       }
     },
-    "/v1/activity/{accountNumber}/paynotes/{myosEventId}": {
+    "/v1/activity/{accountNumber}/paynotes/{payNoteDocumentId}": {
       "get": {
-        "summary": "Retrieve PayNote document and trigger payload for a given MyOS event",
+        "summary": "Retrieve PayNote details for a given PayNote document id",
         "tags": ["banking"],
         "parameters": [
           {
@@ -3130,7 +3133,7 @@
             }
           },
           {
-            "name": "myosEventId",
+            "name": "payNoteDocumentId",
             "in": "path",
             "required": true,
             "schema": {
@@ -3147,7 +3150,7 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "myosEventId": {
+                    "payNoteDocumentId": {
                       "type": "string"
                     },
                     "documentYaml": {
@@ -3167,7 +3170,7 @@
                       "format": "date-time"
                     }
                   },
-                  "required": ["myosEventId", "fetchedAt"]
+                  "required": ["payNoteDocumentId", "fetchedAt"]
                 }
               }
             }
@@ -3904,6 +3907,567 @@
         }
       }
     },
+    "/v1/paynotes/deliveries": {
+      "get": {
+        "summary": "List PayNote deliveries identified for the current user.",
+        "tags": ["banking"],
+        "parameters": [],
+        "operationId": "listPayNoteDeliveries",
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "deliveryId": {
+                            "type": "string"
+                          },
+                          "deliverySessionId": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "amountMinor": {
+                            "type": "integer"
+                          },
+                          "currency": {
+                            "type": "string"
+                          },
+                          "deliveryStatus": {
+                            "type": "string"
+                          },
+                          "transactionIdentificationStatus": {
+                            "type": "string"
+                          },
+                          "clientDecisionStatus": {
+                            "type": "string"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        },
+                        "required": ["deliveryId", "createdAt", "updatedAt"]
+                      }
+                    }
+                  },
+                  "required": ["items"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/paynotes/deliveries/{deliveryId}": {
+      "get": {
+        "summary": "Get PayNote Delivery details for the current user.",
+        "tags": ["banking"],
+        "parameters": [
+          {
+            "name": "deliveryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getPayNoteDelivery",
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deliveryId": {
+                      "type": "string"
+                    },
+                    "deliverySessionId": {
+                      "type": "string"
+                    },
+                    "deliveryStatus": {
+                      "type": "string"
+                    },
+                    "transactionIdentificationStatus": {
+                      "type": "string"
+                    },
+                    "clientDecisionStatus": {
+                      "type": "string"
+                    },
+                    "cardTransactionDetails": {
+                      "type": "object",
+                      "properties": {
+                        "retrievalReferenceNumber": {
+                          "type": "string"
+                        },
+                        "systemTraceAuditNumber": {
+                          "type": "string"
+                        },
+                        "transmissionDateTime": {
+                          "type": "string"
+                        },
+                        "authorizationCode": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "retrievalReferenceNumber",
+                        "systemTraceAuditNumber",
+                        "transmissionDateTime",
+                        "authorizationCode"
+                      ]
+                    },
+                    "payNote": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "amountMinor": {
+                          "type": "integer"
+                        },
+                        "currency": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "deliveryDocument": {
+                      "nullable": true
+                    },
+                    "payNoteDocument": {
+                      "nullable": true
+                    },
+                    "accountNumber": {
+                      "type": "string"
+                    },
+                    "holdId": {
+                      "type": "string"
+                    },
+                    "transactionId": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "updatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": ["deliveryId", "createdAt", "updatedAt"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/contracts/{sessionId}/{operation}": {
+      "post": {
+        "summary": "Run a MyOS document operation on a contract session.",
+        "tags": ["banking"],
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "runContractOperation",
+        "requestBody": {
+          "description": "Body",
+          "content": {
+            "application/json": {
+              "schema": {
+                "nullable": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["ok"]
+                    },
+                    "myosStatus": {
+                      "type": "integer"
+                    },
+                    "body": {
+                      "nullable": true
+                    }
+                  },
+                  "required": ["status", "myosStatus"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "400",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "401",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "403",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "404",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "409",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "500",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error", "message"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/card-processor/authorizations": {
       "post": {
         "summary": "Authorize a card transaction (processor)",
@@ -3964,14 +4528,6 @@
                       "statementDescriptor": {
                         "type": "string",
                         "maxLength": 140
-                      },
-                      "categoryCode": {
-                        "type": "string",
-                        "maxLength": 4
-                      },
-                      "country": {
-                        "type": "string",
-                        "maxLength": 2
                       }
                     },
                     "required": ["name"]
@@ -4019,6 +4575,29 @@
                     },
                     "accountNumber": {
                       "type": "string"
+                    },
+                    "cardTransactionDetails": {
+                      "type": "object",
+                      "properties": {
+                        "retrievalReferenceNumber": {
+                          "type": "string"
+                        },
+                        "systemTraceAuditNumber": {
+                          "type": "string"
+                        },
+                        "transmissionDateTime": {
+                          "type": "string"
+                        },
+                        "authorizationCode": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "retrievalReferenceNumber",
+                        "systemTraceAuditNumber",
+                        "transmissionDateTime",
+                        "authorizationCode"
+                      ]
                     },
                     "declineCode": {
                       "type": "string",

@@ -22,7 +22,7 @@ describe('Hold Dynamo item mappers', () => {
     relatedTransactionId: 'txn-789',
     releasedAt: '2024-01-05T00:00:00.000Z',
     releaseReason: 'Cancelled',
-    payNoteEventId: 'event-123',
+    payNoteDocumentId: 'doc-123',
   };
 
   it('should round-trip hold meta items', () => {
@@ -44,7 +44,7 @@ describe('Hold Dynamo item mappers', () => {
       relatedTransactionId: 'txn-789',
       releasedAt: '2024-01-05T00:00:00.000Z',
       releaseReason: 'Cancelled',
-      payNoteEventId: 'event-123',
+      payNoteDocumentId: 'doc-123',
     });
 
     const mappedHold = mapHoldMetaItemToHold(item);
@@ -57,7 +57,7 @@ describe('Hold Dynamo item mappers', () => {
       type: 'CAPTURED',
       transactionId: 'txn-123',
       counterpartyAccountNumber: 'ACC-200',
-      payNoteEventId: 'paynote-capture',
+      payNoteDocumentId: 'paynote-capture',
     };
     const eventId = 'event-abc';
 
@@ -79,7 +79,7 @@ describe('Hold Dynamo item mappers', () => {
       payload: {
         transactionId: 'txn-123',
         counterpartyAccountNumber: 'ACC-200',
-        payNoteEventId: 'paynote-capture',
+        payNoteDocumentId: 'paynote-capture',
       },
     });
 
@@ -98,7 +98,7 @@ describe('Hold Dynamo item mappers', () => {
       type: 'CREATED',
       createdByUserId: 'user-999',
       idempotencyKeyHash: 'hash-123',
-      payNoteEventId: 'paynote-created',
+      payNoteDocumentId: 'paynote-created',
     };
     const item = buildHoldEventItem(hold, event, {
       eventId: 'event-def',
@@ -107,7 +107,7 @@ describe('Hold Dynamo item mappers', () => {
     expect(item.payload).toEqual({
       createdByUserId: 'user-999',
       idempotencyKeyHash: 'hash-123',
-      payNoteEventId: 'paynote-created',
+      payNoteDocumentId: 'paynote-created',
     });
     expect(mapHoldEventItemToHoldEvent(item)).toEqual(event);
   });
@@ -118,7 +118,7 @@ describe('Hold Dynamo item mappers', () => {
       type: 'FAILED',
       code: 'VALIDATION',
       message: 'Invalid amount',
-      payNoteEventId: 'paynote-failed',
+      payNoteDocumentId: 'paynote-failed',
     };
 
     const item = buildHoldEventItem(hold, event, {
@@ -128,7 +128,7 @@ describe('Hold Dynamo item mappers', () => {
     expect(item.payload).toEqual({
       code: 'VALIDATION',
       message: 'Invalid amount',
-      payNoteEventId: 'paynote-failed',
+      payNoteDocumentId: 'paynote-failed',
     });
     expect(mapHoldEventItemToHoldEvent(item)).toEqual(event);
   });

@@ -22,7 +22,11 @@ const KIND_PRIORITY: Record<ActivityKind, number> = {
   HOLD_EVENT: 1,
 };
 
-const compareTimes = (a: string, b: string): number => {
+const compareTimes = (
+  a: string,
+  b: string,
+  allowSameSecond: boolean
+): number => {
   const timeA = Date.parse(a);
   const timeB = Date.parse(b);
 
@@ -41,7 +45,7 @@ const compareTimes = (a: string, b: string): number => {
   }
 
   const diff = timeA - timeB;
-  if (Math.abs(diff) < SAME_SECOND_THRESHOLD_MS) {
+  if (allowSameSecond && Math.abs(diff) < SAME_SECOND_THRESHOLD_MS) {
     return 0;
   }
 
@@ -59,12 +63,11 @@ type HoldEventActivityItem =
       counterpartyAccountNumber?: string;
       createdByUserId?: string;
       idempotencyKeyHash?: string;
+      payNoteDocumentId?: string;
       cardId?: string;
       cardLast4?: string;
       merchantName?: string;
       merchantStatementDescriptor?: string;
-      merchantCategoryCode?: string;
-      merchantCountry?: string;
       processorChargeId?: string;
     }
   | {
@@ -75,12 +78,11 @@ type HoldEventActivityItem =
       description?: string;
       releasedAt: string;
       releaseReason?: string;
+      payNoteDocumentId?: string;
       cardId?: string;
       cardLast4?: string;
       merchantName?: string;
       merchantStatementDescriptor?: string;
-      merchantCategoryCode?: string;
-      merchantCountry?: string;
       processorChargeId?: string;
     }
   | {
@@ -92,12 +94,11 @@ type HoldEventActivityItem =
       capturedAt: string;
       transactionId: string;
       counterpartyAccountNumber: string;
+      payNoteDocumentId?: string;
       cardId?: string;
       cardLast4?: string;
       merchantName?: string;
       merchantStatementDescriptor?: string;
-      merchantCategoryCode?: string;
-      merchantCountry?: string;
       processorChargeId?: string;
     }
   | {
@@ -109,12 +110,11 @@ type HoldEventActivityItem =
       failedAt: string;
       failureCode: HoldFailedCode;
       failureMessage?: string;
+      payNoteDocumentId?: string;
       cardId?: string;
       cardLast4?: string;
       merchantName?: string;
       merchantStatementDescriptor?: string;
-      merchantCategoryCode?: string;
-      merchantCountry?: string;
       processorChargeId?: string;
     };
 
@@ -130,12 +130,11 @@ type PostedTransactionActivityItem = {
   type: string;
   status: string;
   counterpartyAccountNumber?: string;
+  payNoteDocumentId?: string;
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
   merchantStatementDescriptor?: string;
-  merchantCategoryCode?: string;
-  merchantCountry?: string;
   processorChargeId?: string;
 };
 
@@ -196,12 +195,11 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       counterpartyAccountNumber: z.string().optional(),
       createdByUserId: z.string().optional(),
       idempotencyKeyHash: z.string().optional(),
+      payNoteDocumentId: z.string().optional(),
       cardId: z.string().optional(),
       cardLast4: z.string().optional(),
       merchantName: z.string().optional(),
       merchantStatementDescriptor: z.string().optional(),
-      merchantCategoryCode: z.string().optional(),
-      merchantCountry: z.string().optional(),
       processorChargeId: z.string().optional(),
     }),
     z.object({
@@ -212,12 +210,11 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       description: z.string().optional(),
       releasedAt: z.string(),
       releaseReason: z.string().optional(),
+      payNoteDocumentId: z.string().optional(),
       cardId: z.string().optional(),
       cardLast4: z.string().optional(),
       merchantName: z.string().optional(),
       merchantStatementDescriptor: z.string().optional(),
-      merchantCategoryCode: z.string().optional(),
-      merchantCountry: z.string().optional(),
       processorChargeId: z.string().optional(),
     }),
     z.object({
@@ -229,12 +226,11 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       capturedAt: z.string(),
       transactionId: z.string(),
       counterpartyAccountNumber: z.string(),
+      payNoteDocumentId: z.string().optional(),
       cardId: z.string().optional(),
       cardLast4: z.string().optional(),
       merchantName: z.string().optional(),
       merchantStatementDescriptor: z.string().optional(),
-      merchantCategoryCode: z.string().optional(),
-      merchantCountry: z.string().optional(),
       processorChargeId: z.string().optional(),
     }),
     z.object({
@@ -251,12 +247,11 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
         'INTERNAL',
       ]),
       failureMessage: z.string().optional(),
+      payNoteDocumentId: z.string().optional(),
       cardId: z.string().optional(),
       cardLast4: z.string().optional(),
       merchantName: z.string().optional(),
       merchantStatementDescriptor: z.string().optional(),
-      merchantCategoryCode: z.string().optional(),
-      merchantCountry: z.string().optional(),
       processorChargeId: z.string().optional(),
     }),
   ]);
@@ -274,12 +269,11 @@ const PostedTransactionActivityItemSchema: z.ZodType<PostedTransactionActivityIt
     type: z.string(),
     status: z.string(),
     counterpartyAccountNumber: z.string().optional(),
+    payNoteDocumentId: z.string().optional(),
     cardId: z.string().optional(),
     cardLast4: z.string().optional(),
     merchantName: z.string().optional(),
     merchantStatementDescriptor: z.string().optional(),
-    merchantCategoryCode: z.string().optional(),
-    merchantCountry: z.string().optional(),
     processorChargeId: z.string().optional(),
   });
 
@@ -346,19 +340,23 @@ const clampLimit = (limit?: number): number => {
 };
 
 const buildHoldEventFeedItem = (
-  record: HoldActivityRecord
+  record: HoldActivityRecord,
+  holdPayNoteDocumentId?: string
 ): HoldEventFeedItem => {
   const cardMeta = {
     cardId: record.cardId,
     cardLast4: record.cardLast4,
     merchantName: record.merchantName,
     merchantStatementDescriptor: record.merchantStatementDescriptor,
-    merchantCategoryCode: record.merchantCategoryCode,
-    merchantCountry: record.merchantCountry,
     processorChargeId: record.processorChargeId,
   };
 
   const { event } = record;
+  const resolvedPayNoteDocumentId =
+    event.payNoteDocumentId ?? holdPayNoteDocumentId;
+  const payNoteFields = resolvedPayNoteDocumentId
+    ? { payNoteDocumentId: resolvedPayNoteDocumentId }
+    : {};
   switch (event.type) {
     case 'CREATED':
       return {
@@ -377,6 +375,7 @@ const buildHoldEventFeedItem = (
           counterpartyAccountNumber: record.counterpartyAccountNumber,
           createdByUserId: event.createdByUserId,
           idempotencyKeyHash: event.idempotencyKeyHash,
+          ...payNoteFields,
           ...cardMeta,
         },
       };
@@ -395,6 +394,7 @@ const buildHoldEventFeedItem = (
           description: record.description,
           releasedAt: event.at,
           releaseReason: event.reason,
+          ...payNoteFields,
           ...cardMeta,
         },
       };
@@ -418,6 +418,7 @@ const buildHoldEventFeedItem = (
           capturedAt: event.at,
           transactionId: event.transactionId,
           counterpartyAccountNumber: counterparty,
+          ...payNoteFields,
           ...cardMeta,
         },
       };
@@ -438,6 +439,7 @@ const buildHoldEventFeedItem = (
           failedAt: event.at,
           failureCode: event.code,
           failureMessage: event.message,
+          ...payNoteFields,
           ...cardMeta,
         },
       };
@@ -461,12 +463,11 @@ const toTransactionFeedItem = (summary: {
   type: string;
   status: string;
   counterpartyAccountNumber?: string;
+  payNoteDocumentId?: string;
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
   merchantStatementDescriptor?: string;
-  merchantCategoryCode?: string;
-  merchantCountry?: string;
   processorChargeId?: string;
 }): TransactionFeedItem => ({
   kind: 'POSTED_TRANSACTION',
@@ -485,12 +486,13 @@ const toTransactionFeedItem = (summary: {
     type: summary.type,
     status: summary.status,
     counterpartyAccountNumber: summary.counterpartyAccountNumber,
+    ...(summary.payNoteDocumentId
+      ? { payNoteDocumentId: summary.payNoteDocumentId }
+      : {}),
     cardId: summary.cardId,
     cardLast4: summary.cardLast4,
     merchantName: summary.merchantName,
     merchantStatementDescriptor: summary.merchantStatementDescriptor,
-    merchantCategoryCode: summary.merchantCategoryCode,
-    merchantCountry: summary.merchantCountry,
     processorChargeId: summary.processorChargeId,
   },
 });
@@ -581,7 +583,7 @@ const encodeCursor = (cursor: {
 };
 
 const compareItems = (a: ActivityFeedItem, b: ActivityFeedItem): number => {
-  const timeOrder = compareTimes(a.time, b.time);
+  const timeOrder = compareTimes(a.time, b.time, a.kind !== b.kind);
   if (timeOrder !== 0) {
     return timeOrder;
   }
@@ -609,7 +611,11 @@ const compareItemToMarker = (
   item: ActivityFeedItem,
   marker: ActivityCursorMarker
 ): number => {
-  const timeOrder = compareTimes(item.time, marker.time);
+  const timeOrder = compareTimes(
+    item.time,
+    marker.time,
+    item.kind !== marker.kind
+  );
   if (timeOrder !== 0) {
     return timeOrder;
   }
@@ -662,8 +668,18 @@ const listHoldEventItems = async (
     }
   );
 
+  const holdIds = Array.from(new Set(result.items.map(item => item.holdId)));
+  const holds = await Promise.all(
+    holdIds.map(holdId => holdRepository.getHold(holdId))
+  );
+  const holdPayNoteMap = new Map(
+    holdIds.map((holdId, index) => [holdId, holds[index]?.payNoteDocumentId])
+  );
+
   return {
-    items: result.items.map(buildHoldEventFeedItem),
+    items: result.items.map(record =>
+      buildHoldEventFeedItem(record, holdPayNoteMap.get(record.holdId))
+    ),
     nextToken: result.nextToken,
     hasMore: result.hasMore,
   };
@@ -691,12 +707,11 @@ const listTransactionItems = async (
         type: summary.type,
         status: summary.status,
         counterpartyAccountNumber: summary.counterpartyAccountNumber,
+        payNoteDocumentId: summary.payNoteDocumentId,
         cardId: summary.cardId,
         cardLast4: summary.cardLast4,
         merchantName: summary.merchantName,
         merchantStatementDescriptor: summary.merchantStatementDescriptor,
-        merchantCategoryCode: summary.merchantCategoryCode,
-        merchantCountry: summary.merchantCountry,
         processorChargeId: summary.processorChargeId,
       })
     ),

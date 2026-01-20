@@ -21,6 +21,9 @@ import {
   ActivityResponseDto,
   ActivityDetailDto,
   PayNoteDetailsDto,
+  PayNoteDeliveryListResponseDto,
+  PayNoteDeliveryDetailsDto,
+  ContractOperationResponseDto,
   NotImplementedResponseDto,
 } from './schemas';
 
@@ -249,18 +252,17 @@ export const bankApiContract = c.router(
 
       getPayNoteDetails: {
         method: 'GET',
-        path: '/v1/activity/:accountNumber/paynotes/:myosEventId',
+        path: '/v1/activity/:accountNumber/paynotes/:payNoteDocumentId',
         pathParams: z.object({
           accountNumber: z.string().length(10),
-          myosEventId: z.string(),
+          payNoteDocumentId: z.string(),
         }),
         responses: {
           200: PayNoteDetailsDto,
           404: ProblemDto,
           501: NotImplementedResponseDto,
         },
-        summary:
-          'Retrieve PayNote document and trigger payload for a given MyOS event',
+        summary: 'Retrieve PayNote details for a given PayNote document id',
       },
 
       validatePayNote: {
@@ -336,6 +338,45 @@ export const bankApiContract = c.router(
           200: z.object({ status: z.literal('ok') }),
         },
         summary: 'Webhook for PayNote events.',
+      },
+
+      listPayNoteDeliveries: {
+        method: 'GET',
+        path: '/v1/paynotes/deliveries',
+        responses: {
+          200: PayNoteDeliveryListResponseDto,
+          401: ProblemDto,
+        },
+        summary: 'List PayNote deliveries identified for the current user.',
+      },
+
+      getPayNoteDelivery: {
+        method: 'GET',
+        path: '/v1/paynotes/deliveries/:deliveryId',
+        pathParams: z.object({ deliveryId: z.string() }),
+        responses: {
+          200: PayNoteDeliveryDetailsDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Get PayNote Delivery details for the current user.',
+      },
+
+      runContractOperation: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/:operation',
+        pathParams: z.object({
+          sessionId: z.string(),
+          operation: z.string(),
+        }),
+        body: z.unknown().optional(),
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Run a MyOS document operation on a contract session.',
       },
 
       authorizeCard: {

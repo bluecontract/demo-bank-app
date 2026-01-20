@@ -106,8 +106,6 @@ test.describe('Card Issuing Flow', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
-            categoryCode: '5411',
-            country: 'US',
           },
           processorChargeId,
         },

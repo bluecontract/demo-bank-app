@@ -99,6 +99,7 @@ export const authorizeCardHandler = async (
         authorizationId: result.hold.holdId,
         cardId: result.card.cardId,
         accountNumber: result.card.accountNumber,
+        cardTransactionDetails: result.hold.cardTransactionDetails,
       },
     };
   } catch (error) {

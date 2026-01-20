@@ -1,8 +1,9 @@
 import type {
   BlueIdCalculator,
-  IdGeneratorPort,
+  ClockPort,
   MyOsBootstrapResponse,
   MyOsClient,
+  PayNoteBootstrapRepository,
   PayNoteVerificationRecord,
   PayNoteVerificationRepository,
 } from '../ports';
@@ -10,7 +11,7 @@ import type {
 export interface BootstrapPayNoteInput {
   userId: string;
   userEmail: string;
-  payNote: Record<string, any>;
+  payNote: Record<string, unknown>;
   formData: {
     fromAccount?: string;
     toAccount?: string;
@@ -20,8 +21,9 @@ export interface BootstrapPayNoteInput {
 export interface BootstrapPayNoteDependencies {
   verificationRepository: PayNoteVerificationRepository;
   myOsClient: MyOsClient;
-  idGenerator: IdGeneratorPort;
   blueIdCalculator: BlueIdCalculator;
+  payNoteBootstrapRepository: PayNoteBootstrapRepository;
+  clock: ClockPort;
   minimumSuccessfulScore: number;
 }
 
@@ -37,12 +39,11 @@ export type BootstrapPayNoteResult =
   | {
       type: 'external-error';
       response: MyOsBootstrapResponse;
-      payNoteBankId: string;
     }
   | {
       type: 'success';
       response: MyOsBootstrapResponse;
-      payNoteBankId: string;
+      bootstrapSessionId?: string;
     };
 
 const buildChannelBindings = ({
@@ -50,7 +51,7 @@ const buildChannelBindings = ({
   userEmail,
   myOsAccountId,
 }: {
-  payNote: Record<string, any>;
+  payNote: Record<string, unknown>;
   userEmail: string;
   myOsAccountId: string;
 }): Record<string, { email?: string; accountId?: string }> => {
@@ -83,6 +84,13 @@ const buildChannelBindings = ({
   return channelBindings;
 };
 
+const extractBootstrapSessionId = (
+  response: MyOsBootstrapResponse
+): string | undefined => {
+  const body = response.body as { sessionId?: unknown } | undefined;
+  return typeof body?.sessionId === 'string' ? body.sessionId : undefined;
+};
+
 export const bootstrapPayNote = async (
   input: BootstrapPayNoteInput,
   deps: BootstrapPayNoteDependencies
@@ -108,31 +116,11 @@ export const bootstrapPayNote = async (
     };
   }
 
-  const payNoteBankId = deps.idGenerator.generate();
-
-  input.payNote.payNoteBankId = {
-    type: 'Text',
-    value: payNoteBankId,
-  };
-
-  if (input.formData.fromAccount) {
-    if (!input.payNote.payerAccountNumber) {
-      input.payNote.payerAccountNumber = {};
-    }
-    input.payNote.payerAccountNumber.type = 'Text';
-    input.payNote.payerAccountNumber.value = input.formData.fromAccount;
-  } else {
+  const payerAccountNumber = input.formData.fromAccount;
+  if (!payerAccountNumber) {
     return {
       type: 'missing-from-account',
     };
-  }
-
-  if (input.formData.toAccount) {
-    if (!input.payNote.payeeAccountNumber) {
-      input.payNote.payeeAccountNumber = {};
-    }
-    input.payNote.payeeAccountNumber.type = 'Text';
-    input.payNote.payeeAccountNumber.value = input.formData.toAccount;
   }
 
   const credentials = await deps.myOsClient.getCredentials();
@@ -155,13 +143,25 @@ export const bootstrapPayNote = async (
     return {
       type: 'external-error',
       response,
-      payNoteBankId,
     };
+  }
+
+  const bootstrapSessionId = extractBootstrapSessionId(response);
+
+  if (bootstrapSessionId) {
+    await deps.payNoteBootstrapRepository.saveBootstrap({
+      bootstrapSessionId,
+      userId: input.userId,
+      accountNumber: payerAccountNumber,
+      payerAccountNumber,
+      payeeAccountNumber: input.formData.toAccount,
+      createdAt: deps.clock.now().toISOString(),
+    });
   }
 
   return {
     type: 'success',
     response,
-    payNoteBankId,
+    bootstrapSessionId,
   };
 };

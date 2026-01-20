@@ -5,6 +5,7 @@ import type {
   HoldStatus,
   HoldFailedCode,
 } from '../../../domain/entities/Hold';
+import type { CardTransactionDetails } from '../../../domain/valueObjects/CardTransactionDetails';
 
 const HOLD_TABLE_PREFIXES = {
   HOLD: 'HOLD#',
@@ -48,15 +49,15 @@ export interface HoldMetaItem {
   cardLast4?: string;
   merchantName?: string;
   merchantStatementDescriptor?: string;
-  merchantCategoryCode?: string;
-  merchantCountry?: string;
   processorChargeId?: string;
+  cardTransactionDetails?: CardTransactionDetails;
+  captureDisabled?: boolean;
   createdAt: string;
   expiresAt?: string;
   relatedTransactionId?: string;
   releasedAt?: string;
   releaseReason?: string;
-  payNoteEventId?: string;
+  payNoteDocumentId?: string;
 }
 
 export interface HoldEventItem {
@@ -77,9 +78,9 @@ export interface HoldEventItem {
   cardLast4?: string;
   merchantName?: string;
   merchantStatementDescriptor?: string;
-  merchantCategoryCode?: string;
-  merchantCountry?: string;
   processorChargeId?: string;
+  cardTransactionDetails?: CardTransactionDetails;
+  captureDisabled?: boolean;
   payload?: Record<string, unknown>;
 }
 
@@ -104,15 +105,15 @@ export function buildHoldMetaItem(hold: Hold): HoldMetaItem {
     cardLast4: hold.cardLast4,
     merchantName: hold.merchantName,
     merchantStatementDescriptor: hold.merchantStatementDescriptor,
-    merchantCategoryCode: hold.merchantCategoryCode,
-    merchantCountry: hold.merchantCountry,
     processorChargeId: hold.processorChargeId,
+    cardTransactionDetails: hold.cardTransactionDetails,
+    captureDisabled: hold.captureDisabled,
     createdAt: hold.createdAt,
     expiresAt: hold.expiresAt,
     relatedTransactionId: hold.relatedTransactionId,
     releasedAt: hold.releasedAt,
     releaseReason: hold.releaseReason,
-    payNoteEventId: hold.payNoteEventId,
+    payNoteDocumentId: hold.payNoteDocumentId,
   };
 }
 
@@ -129,15 +130,15 @@ export function mapHoldMetaItemToHold(item: HoldMetaItem): Hold {
     cardLast4: item.cardLast4,
     merchantName: item.merchantName,
     merchantStatementDescriptor: item.merchantStatementDescriptor,
-    merchantCategoryCode: item.merchantCategoryCode,
-    merchantCountry: item.merchantCountry,
     processorChargeId: item.processorChargeId,
+    cardTransactionDetails: item.cardTransactionDetails,
+    captureDisabled: item.captureDisabled,
     createdAt: item.createdAt,
     expiresAt: item.expiresAt,
     relatedTransactionId: item.relatedTransactionId,
     releasedAt: item.releasedAt,
     releaseReason: item.releaseReason,
-    payNoteEventId: item.payNoteEventId,
+    payNoteDocumentId: item.payNoteDocumentId,
   };
 }
 
@@ -182,8 +183,6 @@ export function buildHoldEventItem(
     cardLast4: hold.cardLast4,
     merchantName: hold.merchantName,
     merchantStatementDescriptor: hold.merchantStatementDescriptor,
-    merchantCategoryCode: hold.merchantCategoryCode,
-    merchantCountry: hold.merchantCountry,
     processorChargeId: hold.processorChargeId,
     payload: holdEventPayload(event),
   };
@@ -230,24 +229,24 @@ function holdEventPayload(
       return compactRecord({
         createdByUserId: event.createdByUserId,
         idempotencyKeyHash: event.idempotencyKeyHash,
-        payNoteEventId: event.payNoteEventId,
+        payNoteDocumentId: event.payNoteDocumentId,
       });
     case 'CAPTURED':
       return compactRecord({
         transactionId: event.transactionId,
         counterpartyAccountNumber: event.counterpartyAccountNumber,
-        payNoteEventId: event.payNoteEventId,
+        payNoteDocumentId: event.payNoteDocumentId,
       });
     case 'RELEASED':
       return compactRecord({
         reason: event.reason,
-        payNoteEventId: event.payNoteEventId,
+        payNoteDocumentId: event.payNoteDocumentId,
       });
     case 'FAILED':
       return compactRecord({
         code: event.code,
         message: event.message,
-        payNoteEventId: event.payNoteEventId,
+        payNoteDocumentId: event.payNoteDocumentId,
       });
     default:
       return undefined;
@@ -266,7 +265,7 @@ function parseHoldEvent(item: HoldEventItem): HoldEvent {
           payload,
           'idempotencyKeyHash'
         ),
-        payNoteEventId: extractOptionalString(payload, 'payNoteEventId'),
+        payNoteDocumentId: extractOptionalString(payload, 'payNoteDocumentId'),
       };
     case 'CAPTURED': {
       const transactionId = extractRequiredString(
@@ -284,7 +283,7 @@ function parseHoldEvent(item: HoldEventItem): HoldEvent {
         type: 'CAPTURED',
         transactionId,
         counterpartyAccountNumber,
-        payNoteEventId: extractOptionalString(payload, 'payNoteEventId'),
+        payNoteDocumentId: extractOptionalString(payload, 'payNoteDocumentId'),
       };
     }
     case 'RELEASED':
@@ -292,7 +291,7 @@ function parseHoldEvent(item: HoldEventItem): HoldEvent {
         at: item.at,
         type: 'RELEASED',
         reason: extractOptionalString(payload, 'reason'),
-        payNoteEventId: extractOptionalString(payload, 'payNoteEventId'),
+        payNoteDocumentId: extractOptionalString(payload, 'payNoteDocumentId'),
       };
     case 'FAILED':
       return {
@@ -300,7 +299,7 @@ function parseHoldEvent(item: HoldEventItem): HoldEvent {
         type: 'FAILED',
         code: extractRequiredFailedCode(payload, item),
         message: extractOptionalString(payload, 'message'),
-        payNoteEventId: extractOptionalString(payload, 'payNoteEventId'),
+        payNoteDocumentId: extractOptionalString(payload, 'payNoteDocumentId'),
       };
   }
 }

@@ -3,18 +3,20 @@ import type {
   BlueIdCalculator,
   ClockPort,
   LogEntry,
-  MyOsClient,
+  PayNoteDeliveryRepository,
+  PayNoteRepository,
 } from '../ports';
 
 export interface GetPayNoteDetailsInput {
   accountNumber: string;
-  myOsEventId: string;
+  payNoteDocumentId: string;
   userId: string;
 }
 
 export interface GetPayNoteDetailsDependencies {
   bankingFacade: BankingFacade;
-  myOsClient: MyOsClient;
+  payNoteRepository: PayNoteRepository;
+  payNoteDeliveryRepository: PayNoteDeliveryRepository;
   blueIdCalculator: BlueIdCalculator;
   clock: ClockPort;
 }
@@ -24,23 +26,16 @@ interface AccountNotFoundResult {
   logs: LogEntry[];
 }
 
-interface EventNotFoundResult {
-  type: 'event-not-found';
+interface PayNoteNotFoundResult {
+  type: 'paynote-not-found';
   logs: LogEntry[];
-}
-
-interface ExternalErrorResult {
-  type: 'external-error';
-  logs: LogEntry[];
-  detail?: string;
-  status?: number;
 }
 
 interface GetPayNoteDetailsSuccess {
   type: 'success';
   logs: LogEntry[];
   detail: {
-    myosEventId: string;
+    payNoteDocumentId: string;
     document?: unknown;
     transactionRequest?: unknown;
     triggerEvent: unknown;
@@ -50,8 +45,7 @@ interface GetPayNoteDetailsSuccess {
 
 export type GetPayNoteDetailsResult =
   | AccountNotFoundResult
-  | EventNotFoundResult
-  | ExternalErrorResult
+  | PayNoteNotFoundResult
   | GetPayNoteDetailsSuccess;
 
 const log = (
@@ -78,113 +72,92 @@ export const getPayNoteDetails = async (
     return { type: 'account-not-found', logs };
   }
 
-  const eventResult = await deps.myOsClient.fetchEvent(input.myOsEventId);
+  const payNote = await deps.payNoteRepository.getPayNote(
+    input.payNoteDocumentId
+  );
 
-  if (eventResult.kind === 'not-found') {
-    log(logs, 'warn', 'PayNote event not found in MyOS', {
+  if (!payNote) {
+    const delivery =
+      await deps.payNoteDeliveryRepository.getDeliveryByDocumentId(
+        input.payNoteDocumentId
+      );
+    if (
+      delivery &&
+      (!delivery.accountNumber ||
+        delivery.accountNumber === account.accountNumber) &&
+      (!delivery.userId || delivery.userId === input.userId)
+    ) {
+      const deliveryPayNote =
+        delivery.payNoteDocument ??
+        (delivery.deliveryDocument?.payNote as
+          | Record<string, unknown>
+          | undefined);
+      const fetchedAt = deps.clock.now().toISOString();
+
+      const detail = {
+        payNoteDocumentId: input.payNoteDocumentId,
+        document: deliveryPayNote
+          ? deps.blueIdCalculator.toReversedJson(deliveryPayNote)
+          : undefined,
+        transactionRequest: null,
+        triggerEvent: null,
+        fetchedAt,
+      };
+
+      log(logs, 'info', 'PayNote details fetched from delivery record', {
+        accountNumber: input.accountNumber,
+        payNoteDocumentId: input.payNoteDocumentId,
+        deliveryId: delivery.deliveryId,
+        hasDocument: Boolean(detail.document),
+      });
+
+      return {
+        type: 'success',
+        logs,
+        detail,
+      };
+    }
+
+    log(logs, 'warn', 'PayNote record not found for account', {
       accountNumber: input.accountNumber,
-      myOsEventId: input.myOsEventId,
+      payNoteDocumentId: input.payNoteDocumentId,
     });
-    return { type: 'event-not-found', logs };
+    return { type: 'paynote-not-found', logs };
   }
 
-  if (eventResult.kind === 'http-error') {
-    log(logs, 'error', 'Failed to retrieve PayNote event from MyOS', {
+  if (
+    (payNote.accountNumber &&
+      payNote.accountNumber !== account.accountNumber) ||
+    (payNote.userId && payNote.userId !== input.userId)
+  ) {
+    log(logs, 'warn', 'PayNote record does not match account owner', {
       accountNumber: input.accountNumber,
-      myOsEventId: input.myOsEventId,
-      myOsStatus: eventResult.status,
-      statusText: eventResult.statusText,
+      payNoteDocumentId: input.payNoteDocumentId,
+      payNoteAccountNumber: payNote.accountNumber,
+      payNoteUserId: payNote.userId,
     });
-    return {
-      type: 'external-error',
-      logs,
-      status: eventResult.status,
-      detail: eventResult.detail,
-    };
-  }
-
-  if (eventResult.kind === 'parse-error') {
-    log(logs, 'error', 'Failed to retrieve PayNote event from MyOS', {
-      accountNumber: input.accountNumber,
-      myOsEventId: input.myOsEventId,
-      myOsStatus: eventResult.status,
-      error:
-        eventResult.error instanceof Error
-          ? eventResult.error.message
-          : String(eventResult.error),
-    });
-    return {
-      type: 'external-error',
-      logs,
-      status: eventResult.status,
-      detail:
-        eventResult.error instanceof Error
-          ? eventResult.error.message
-          : String(eventResult.error),
-    };
-  }
-
-  if (eventResult.kind === 'network-error') {
-    log(logs, 'error', 'Failed to retrieve PayNote event from MyOS', {
-      accountNumber: input.accountNumber,
-      myOsEventId: input.myOsEventId,
-      error:
-        eventResult.error instanceof Error
-          ? eventResult.error.message
-          : String(eventResult.error),
-    });
-    return {
-      type: 'external-error',
-      logs,
-      detail:
-        eventResult.error instanceof Error
-          ? eventResult.error.message
-          : String(eventResult.error),
-    };
-  }
-
-  const payload = eventResult.payload as {
-    object?: {
-      document?: any;
-      emitted?: unknown;
-      triggeredBy?: unknown;
-    };
-  };
-
-  const payNoteObject = payload?.object ?? {};
-  const document = payNoteObject?.document;
-
-  const payerAccountFromDocument =
-    typeof document?.payerAccountNumber?.value === 'string'
-      ? document.payerAccountNumber.value
-      : undefined;
-
-  if (payerAccountFromDocument !== account.accountNumber) {
-    log(logs, 'warn', 'PayNote event document does not match account owner', {
-      accountNumber: input.accountNumber,
-      myOsEventId: input.myOsEventId,
-      payerAccountFromDocument,
-    });
-    return { type: 'event-not-found', logs };
+    return { type: 'paynote-not-found', logs };
   }
 
   const fetchedAt = deps.clock.now().toISOString();
 
   const detail = {
-    myosEventId: input.myOsEventId,
-    document: document
-      ? deps.blueIdCalculator.toReversedJson(document)
+    payNoteDocumentId: input.payNoteDocumentId,
+    document: payNote.document
+      ? deps.blueIdCalculator.toReversedJson(payNote.document)
       : undefined,
-    transactionRequest:
-      deps.blueIdCalculator.toReversedJson(payNoteObject.emitted) ?? undefined,
-    triggerEvent:
-      deps.blueIdCalculator.toReversedJson(payNoteObject.triggeredBy) ?? null,
+    transactionRequest: payNote.transactionRequest
+      ? deps.blueIdCalculator.toReversedJson(payNote.transactionRequest)
+      : undefined,
+    triggerEvent: payNote.triggerEvent
+      ? deps.blueIdCalculator.toReversedJson(payNote.triggerEvent)
+      : null,
     fetchedAt,
   };
 
   log(logs, 'info', 'PayNote details fetched successfully', {
     accountNumber: input.accountNumber,
-    myOsEventId: input.myOsEventId,
+    payNoteDocumentId: input.payNoteDocumentId,
     hasDocument: Boolean(detail.document),
     transactionRequestCount: Array.isArray(detail.transactionRequest)
       ? detail.transactionRequest.length

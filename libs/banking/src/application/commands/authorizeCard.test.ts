@@ -38,6 +38,7 @@ describe('authorizeCard', () => {
     } as unknown as CardRepository;
     holdRepository = {
       reserveHold: vi.fn(),
+      ensureCardTransactionMapping: vi.fn().mockResolvedValue(undefined),
     } as unknown as HoldRepository;
     cardHasher = {
       hashPan: vi.fn().mockReturnValue('pan-hash'),

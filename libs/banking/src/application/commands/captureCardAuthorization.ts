@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import {
   AccountNotFoundError,
+  HoldCaptureDisabledError,
   HoldNotFoundError,
   HoldNotPendingError,
 } from '../errors';
@@ -76,6 +77,10 @@ export async function captureCardAuthorization(
     throw new HoldNotPendingError(hold.holdId, hold.status);
   }
 
+  if (hold.captureDisabled) {
+    throw new HoldCaptureDisabledError(hold.holdId);
+  }
+
   const payerAccountId = await bankingRepository.getAccountIdByNumber(
     hold.payerAccountNumber
   );
@@ -134,8 +139,6 @@ export async function captureCardAuthorization(
       cardLast4: hold.cardLast4,
       merchantName: hold.merchantName,
       merchantStatementDescriptor: hold.merchantStatementDescriptor,
-      merchantCategoryCode: hold.merchantCategoryCode,
-      merchantCountry: hold.merchantCountry,
       processorChargeId: hold.processorChargeId,
     },
     transactionId

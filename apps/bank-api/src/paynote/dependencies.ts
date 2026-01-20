@@ -22,7 +22,13 @@ import {
   createRandomIdGenerator,
   createOpenAiValidationProvider,
   DynamoPayNoteVerificationRepository,
+  DynamoPayNoteDeliveryRepository,
+  DynamoPayNoteRepository,
+  DynamoPayNoteBootstrapRepository,
   type PayNoteVerificationRepository,
+  type PayNoteDeliveryRepository,
+  type PayNoteRepository,
+  type PayNoteBootstrapRepository,
   type BankingFacade,
   type MyOsClient,
   type BlueIdCalculator,
@@ -36,6 +42,9 @@ export type PaynoteDependencies = {
   getOpenAiApiKey: () => Promise<string>;
   getMyOsCredentials: () => Promise<MyOsCredentials>;
   payNoteVerificationRepository: PayNoteVerificationRepository;
+  payNoteDeliveryRepository: PayNoteDeliveryRepository;
+  payNoteRepository: PayNoteRepository;
+  payNoteBootstrapRepository: PayNoteBootstrapRepository;
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
   myOsClient: MyOsClient;
@@ -93,6 +102,24 @@ const initializeDependencies = (): PaynoteDependencies => {
     }
   );
 
+  const payNoteDeliveryRepository = new DynamoPayNoteDeliveryRepository({
+    tableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
+  const payNoteRepository = new DynamoPayNoteRepository({
+    tableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
+  const payNoteBootstrapRepository = new DynamoPayNoteBootstrapRepository({
+    tableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
   const bankingRepository = new DynamoBankingRepository({
     tableName,
     region: awsRegion,
@@ -136,6 +163,9 @@ const initializeDependencies = (): PaynoteDependencies => {
     getOpenAiApiKey,
     getMyOsCredentials,
     payNoteVerificationRepository,
+    payNoteDeliveryRepository,
+    payNoteRepository,
+    payNoteBootstrapRepository,
     bankingRepository,
     holdRepository,
     myOsClient,

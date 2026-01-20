@@ -28,7 +28,7 @@ const ActivityIdSchema = z
   );
 
 const ActivityPayNoteReferenceSchema = z.object({
-  myosEventId: z.string(),
+  payNoteDocumentId: z.string(),
 });
 
 const HoldStatusSchema = z.enum([
@@ -45,27 +45,27 @@ const HoldTimelineEventSchema = z.discriminatedUnion('type', [
     at: z.string().datetime({ offset: true }),
     createdByUserId: z.string().optional(),
     idempotencyKeyHash: z.string().optional(),
-    payNoteEventId: z.string().optional(),
+    payNoteDocumentId: z.string().optional(),
   }),
   z.object({
     type: z.literal('CAPTURED'),
     at: z.string().datetime({ offset: true }),
     transactionId: z.string(),
     counterpartyAccountNumber: z.string().optional(),
-    payNoteEventId: z.string().optional(),
+    payNoteDocumentId: z.string().optional(),
   }),
   z.object({
     type: z.literal('RELEASED'),
     at: z.string().datetime({ offset: true }),
     reason: z.string().optional(),
-    payNoteEventId: z.string().optional(),
+    payNoteDocumentId: z.string().optional(),
   }),
   z.object({
     type: z.literal('FAILED'),
     at: z.string().datetime({ offset: true }),
     code: HoldFailureCodeSchema,
     message: z.string().optional(),
-    payNoteEventId: z.string().optional(),
+    payNoteDocumentId: z.string().optional(),
   }),
 ]);
 
@@ -160,10 +160,6 @@ export const CardMerchantDto = z.object({
   statementDescriptor: createSanitizedOptionalStringSchema(
     z.string().max(140).optional()
   ),
-  categoryCode: createSanitizedOptionalStringSchema(
-    z.string().max(4).optional()
-  ),
-  country: createSanitizedOptionalStringSchema(z.string().max(2).optional()),
 });
 
 const CardDeclineCodeSchema = z.enum([
@@ -175,6 +171,13 @@ const CardDeclineCodeSchema = z.enum([
   'invalid_amount',
   'invalid_currency',
 ]);
+
+export const CardTransactionDetailsDto = z.object({
+  retrievalReferenceNumber: z.string(),
+  systemTraceAuditNumber: z.string(),
+  transmissionDateTime: z.string(),
+  authorizationCode: z.string(),
+});
 
 export const CardAuthorizationRequestDto = z.object({
   pan: z.string().length(16),
@@ -195,6 +198,7 @@ export const CardAuthorizationResponseDto = z.object({
   authorizationId: z.string().optional(),
   cardId: z.string().optional(),
   accountNumber: z.string().optional(),
+  cardTransactionDetails: CardTransactionDetailsDto.optional(),
   declineCode: CardDeclineCodeSchema.optional(),
   message: z.string().optional(),
 });
@@ -225,9 +229,8 @@ export const ActivityPostedTransactionDto = z.object({
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
-  merchantCategoryCode: z.string().optional(),
-  merchantCountry: z.string().optional(),
   processorChargeId: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
 export const ActivityHoldCreatedDto = z.object({
@@ -244,9 +247,8 @@ export const ActivityHoldCreatedDto = z.object({
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
-  merchantCategoryCode: z.string().optional(),
-  merchantCountry: z.string().optional(),
   processorChargeId: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
 export const ActivityHoldReleasedDto = z.object({
@@ -261,9 +263,8 @@ export const ActivityHoldReleasedDto = z.object({
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
-  merchantCategoryCode: z.string().optional(),
-  merchantCountry: z.string().optional(),
   processorChargeId: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
 export const ActivityHoldCapturedDto = z.object({
@@ -279,9 +280,8 @@ export const ActivityHoldCapturedDto = z.object({
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
-  merchantCategoryCode: z.string().optional(),
-  merchantCountry: z.string().optional(),
   processorChargeId: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
 export const ActivityHoldFailedDto = z.object({
@@ -297,9 +297,8 @@ export const ActivityHoldFailedDto = z.object({
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
-  merchantCategoryCode: z.string().optional(),
-  merchantCountry: z.string().optional(),
   processorChargeId: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
 export const ActivityItemDto = z.discriminatedUnion('kind', [
@@ -331,8 +330,6 @@ const ActivityDetailPostedTransactionDto = z.object({
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
-  merchantCategoryCode: z.string().optional(),
-  merchantCountry: z.string().optional(),
   processorChargeId: z.string().optional(),
   payNote: ActivityPayNoteReferenceSchema.optional(),
 });
@@ -359,8 +356,6 @@ const ActivityDetailHoldDto = z.object({
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
-  merchantCategoryCode: z.string().optional(),
-  merchantCountry: z.string().optional(),
   processorChargeId: z.string().optional(),
   timeline: z.array(HoldTimelineEventSchema),
   payNote: ActivityPayNoteReferenceSchema.optional(),
@@ -374,15 +369,61 @@ export const ActivityDetailDto = z.discriminatedUnion('kind', [
 export type ActivityDetailDto = z.infer<typeof ActivityDetailDto>;
 
 export const PayNoteDetailsDto = z.object({
-  myosEventId: z.string(),
+  payNoteDocumentId: z.string(),
   documentYaml: z.string().optional(),
   document: z.unknown().optional(),
-  transactionRequest: z.unknown(),
-  triggerEvent: z.unknown(),
+  transactionRequest: z.unknown().optional(),
+  triggerEvent: z.unknown().optional(),
   fetchedAt: z.string().datetime({ offset: true }),
 });
 
 export type PayNoteDetailsDto = z.infer<typeof PayNoteDetailsDto>;
+
+export const PayNoteSummaryDto = z.object({
+  name: z.string().optional(),
+  amountMinor: MoneyMinor.optional(),
+  currency: z.string().optional(),
+});
+
+export const PayNoteDeliverySummaryDto = z.object({
+  deliveryId: z.string(),
+  deliverySessionId: z.string().optional(),
+  name: z.string().optional(),
+  amountMinor: MoneyMinor.optional(),
+  currency: z.string().optional(),
+  deliveryStatus: z.string().optional(),
+  transactionIdentificationStatus: z.string().optional(),
+  clientDecisionStatus: z.string().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const PayNoteDeliveryListResponseDto = z.object({
+  items: z.array(PayNoteDeliverySummaryDto),
+});
+
+export const PayNoteDeliveryDetailsDto = z.object({
+  deliveryId: z.string(),
+  deliverySessionId: z.string().optional(),
+  deliveryStatus: z.string().optional(),
+  transactionIdentificationStatus: z.string().optional(),
+  clientDecisionStatus: z.string().optional(),
+  cardTransactionDetails: CardTransactionDetailsDto.optional(),
+  payNote: PayNoteSummaryDto.optional(),
+  deliveryDocument: z.unknown(),
+  payNoteDocument: z.unknown().optional(),
+  accountNumber: z.string().optional(),
+  holdId: z.string().optional(),
+  transactionId: z.string().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const ContractOperationResponseDto = z.object({
+  status: z.literal('ok'),
+  myosStatus: z.number().int(),
+  body: z.unknown().optional(),
+});
 
 export const NotImplementedResponseDto = z.object({
   message: z.string(),

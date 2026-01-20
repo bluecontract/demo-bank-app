@@ -187,6 +187,9 @@ Resources:
           JWT_SECRET_ARN: !Ref JwtSecret
           OPENAI_API_KEY_SECRET_ARN: !Ref OpenAiKeySecret
           MYOS_SECRET_ARN: !Ref MyOsSecret
+          MYOS_API_KEY: ''
+          MYOS_ACCOUNT_ID: ''
+          MYOS_BASE_URL: ''
           JWT_TTL_SECONDS: 604800
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
           SERVICE_NAME: !Sub 'bank-api-${Environment}'
@@ -405,13 +408,13 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /v1/activity/{accountNumber}/paynotes/{myosEventId}
+            Path: /v1/activity/{accountNumber}/paynotes/{payNoteDocumentId}
             Method: GET
         GetPayNoteDetailsOptions:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /v1/activity/{accountNumber}/paynotes/{myosEventId}
+            Path: /v1/activity/{accountNumber}/paynotes/{payNoteDocumentId}
             Method: OPTIONS
         BootstrapPayNoteApi:
           Type: Api
@@ -436,6 +439,42 @@ Resources:
           Properties:
             RestApiId: !Ref BankApi
             Path: /v1/paynotes/webhook
+            Method: OPTIONS
+        ListPayNoteDeliveriesApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/deliveries
+            Method: GET
+        ListPayNoteDeliveriesOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/deliveries
+            Method: OPTIONS
+        GetPayNoteDeliveryApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/deliveries/{deliveryId}
+            Method: GET
+        GetPayNoteDeliveryOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/deliveries/{deliveryId}
+            Method: OPTIONS
+        RunContractOperationApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/contracts/{sessionId}/{operation}
+            Method: POST
+        RunContractOperationOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/contracts/{sessionId}/{operation}
             Method: OPTIONS
         AuthorizeCardApi:
           Type: Api

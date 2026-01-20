@@ -75,7 +75,15 @@ describe('authorizeCardHandler', () => {
   it('returns approved authorization result', async () => {
     vi.spyOn(banking, 'authorizeCard').mockResolvedValue({
       status: 'APPROVED',
-      hold: { holdId: 'hold-123' },
+      hold: {
+        holdId: 'hold-123',
+        cardTransactionDetails: {
+          retrievalReferenceNumber: '123456789012',
+          systemTraceAuditNumber: '654321',
+          transmissionDateTime: '0624153045',
+          authorizationCode: 'A1B2C3',
+        },
+      },
       card: { cardId: 'card-123', accountNumber: '1234567890' },
     } as any);
 
@@ -89,6 +97,12 @@ describe('authorizeCardHandler', () => {
       authorizationId: 'hold-123',
       cardId: 'card-123',
       accountNumber: '1234567890',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '123456789012',
+        systemTraceAuditNumber: '654321',
+        transmissionDateTime: '0624153045',
+        authorizationCode: 'A1B2C3',
+      },
     });
   });
 

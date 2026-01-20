@@ -1,6 +1,10 @@
 import { randomUUID } from 'crypto';
 import type { CardMerchant, Card } from '../../domain/entities/Card';
 import type { Hold } from '../../domain/entities/Hold';
+import {
+  type CardTransactionDetails,
+  generateCardTransactionDetails,
+} from '../../domain/valueObjects/CardTransactionDetails';
 import type { BankingRepository } from '../ports';
 import type { CardRepository } from '../CardRepository';
 import type { CardHasher } from '../CardHasher';
@@ -60,6 +64,7 @@ export interface AuthorizeCardDependencies {
   cardHasher: CardHasher;
   idGenerator?: () => string;
   clock?: () => Date;
+  cardTransactionDetailsGenerator?: () => CardTransactionDetails;
 }
 
 export async function authorizeCard(
@@ -73,6 +78,8 @@ export async function authorizeCard(
     cardHasher,
     idGenerator = randomUUID,
     clock = () => new Date(),
+    cardTransactionDetailsGenerator = () =>
+      generateCardTransactionDetails(clock),
   } = deps;
 
   if (command.amountMinor <= 0) {
@@ -186,9 +193,8 @@ export async function authorizeCard(
     cardLast4: card.panLast4,
     merchantName: command.merchant.name,
     merchantStatementDescriptor: command.merchant.statementDescriptor,
-    merchantCategoryCode: command.merchant.categoryCode,
-    merchantCountry: command.merchant.country,
     processorChargeId: command.processorChargeId,
+    cardTransactionDetails: cardTransactionDetailsGenerator(),
   };
 
   const reserveRequest: ReserveHoldRequest = {
@@ -229,6 +235,8 @@ export async function authorizeCard(
     throw error;
   }
 
+  await holdRepository.ensureCardTransactionMapping(result.hold);
+
   if (!result.created) {
     const existing = result.hold;
     const mismatch =
@@ -237,10 +245,7 @@ export async function authorizeCard(
       existing.cardLast4 !== hold.cardLast4 ||
       existing.processorChargeId !== hold.processorChargeId ||
       existing.merchantName !== hold.merchantName ||
-      existing.merchantStatementDescriptor !==
-        hold.merchantStatementDescriptor ||
-      existing.merchantCategoryCode !== hold.merchantCategoryCode ||
-      existing.merchantCountry !== hold.merchantCountry;
+      existing.merchantStatementDescriptor !== hold.merchantStatementDescriptor;
 
     if (mismatch) {
       throw new IdempotencyConflictError(

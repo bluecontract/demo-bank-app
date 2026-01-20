@@ -22,8 +22,9 @@ export const bootstrapPayNoteHandler = async (
     logger,
     payNoteVerificationRepository,
     myOsClient,
-    idGenerator,
     blueIdCalculator,
+    payNoteBootstrapRepository,
+    clock,
   } = dependencies;
 
   try {
@@ -46,8 +47,9 @@ export const bootstrapPayNoteHandler = async (
       {
         verificationRepository: payNoteVerificationRepository,
         myOsClient,
-        idGenerator,
         blueIdCalculator,
+        payNoteBootstrapRepository,
+        clock,
         minimumSuccessfulScore: MIN_PAYNOTE_VERIFICATION_SCORE,
       }
     );

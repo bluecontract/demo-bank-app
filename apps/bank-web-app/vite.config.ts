@@ -33,6 +33,9 @@ export default defineConfig(() => ({
     __PAYNOTE_DEMO_VIDEO_URL__: JSON.stringify(
       process.env.PAYNOTE_DEMO_VIDEO_URL || '/assets/login-demo-placeholder.mp4'
     ),
+    __UI_REFRESH_DISABLE_POLLING__: JSON.stringify(
+      process.env.UI_REFRESH_DISABLE_POLLING || 'false'
+    ),
   },
   // Uncomment this if you are using workers.
   // worker: {

@@ -63,6 +63,7 @@ describe('listAccountActivity', () => {
   };
   let holdRepositoryMock: {
     listHoldActivityByAccountNumber: ReturnType<typeof vi.fn>;
+    getHold: ReturnType<typeof vi.fn>;
   };
   let bankingRepository: BankingRepository;
   let holdRepository: HoldRepository;
@@ -84,6 +85,7 @@ describe('listAccountActivity', () => {
         nextToken: undefined,
         hasMore: false,
       }),
+      getHold: vi.fn().mockResolvedValue(null),
     };
 
     bankingRepository = bankingRepositoryMock as unknown as BankingRepository;

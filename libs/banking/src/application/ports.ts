@@ -47,11 +47,10 @@ export interface TransactionSummary {
   counterpartyAccountNumber?: Posting['counterpartyAccountNumber'];
   createdAt: Transaction['createdAt'];
   originHoldId?: Transaction['originHoldId'];
+  payNoteDocumentId?: Transaction['payNoteDocumentId'];
   cardId?: Transaction['cardId'];
   cardLast4?: Transaction['cardLast4'];
   merchantName?: Transaction['merchantName'];
   merchantStatementDescriptor?: Transaction['merchantStatementDescriptor'];
-  merchantCategoryCode?: Transaction['merchantCategoryCode'];
-  merchantCountry?: Transaction['merchantCountry'];
   processorChargeId?: Transaction['processorChargeId'];
 }

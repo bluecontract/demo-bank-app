@@ -44,11 +44,9 @@ const mapTransactionDetail = (
   cardLast4: transaction.cardLast4,
   merchantName: transaction.merchantName,
   merchantStatementDescriptor: transaction.merchantStatementDescriptor,
-  merchantCategoryCode: transaction.merchantCategoryCode,
-  merchantCountry: transaction.merchantCountry,
   processorChargeId: transaction.processorChargeId,
-  ...(transaction.payNoteEventId
-    ? { payNote: { myosEventId: transaction.payNoteEventId } }
+  ...(transaction.payNoteDocumentId
+    ? { payNote: { payNoteDocumentId: transaction.payNoteDocumentId } }
     : {}),
 });
 
@@ -61,7 +59,7 @@ const mapHoldTimeline = (events: HoldEvent[]) =>
           at: event.at,
           createdByUserId: event.createdByUserId,
           idempotencyKeyHash: event.idempotencyKeyHash,
-          payNoteEventId: event.payNoteEventId,
+          payNoteDocumentId: event.payNoteDocumentId,
         };
       case 'CAPTURED':
         return {
@@ -69,14 +67,14 @@ const mapHoldTimeline = (events: HoldEvent[]) =>
           at: event.at,
           transactionId: event.transactionId,
           counterpartyAccountNumber: event.counterpartyAccountNumber,
-          payNoteEventId: event.payNoteEventId,
+          payNoteDocumentId: event.payNoteDocumentId,
         };
       case 'RELEASED':
         return {
           type: 'RELEASED' as const,
           at: event.at,
           reason: event.reason,
-          payNoteEventId: event.payNoteEventId,
+          payNoteDocumentId: event.payNoteDocumentId,
         };
       case 'FAILED':
         return {
@@ -84,7 +82,7 @@ const mapHoldTimeline = (events: HoldEvent[]) =>
           at: event.at,
           code: event.code,
           message: event.message,
-          payNoteEventId: event.payNoteEventId,
+          payNoteDocumentId: event.payNoteDocumentId,
         };
     }
   });
@@ -96,6 +94,9 @@ const mapHoldDetail = (
 ): ActivityDetailDto => {
   const capturedEvent = events.find(event => event.type === 'CAPTURED');
   const failedEvent = events.find(event => event.type === 'FAILED');
+  const payNoteDocumentId =
+    hold.payNoteDocumentId ??
+    events.find(event => event.payNoteDocumentId)?.payNoteDocumentId;
 
   return {
     kind: 'HOLD',
@@ -121,10 +122,9 @@ const mapHoldDetail = (
     cardLast4: hold.cardLast4,
     merchantName: hold.merchantName,
     merchantStatementDescriptor: hold.merchantStatementDescriptor,
-    merchantCategoryCode: hold.merchantCategoryCode,
-    merchantCountry: hold.merchantCountry,
     processorChargeId: hold.processorChargeId,
     timeline: mapHoldTimeline(events),
+    ...(payNoteDocumentId ? { payNote: { payNoteDocumentId } } : {}),
   };
 };
 

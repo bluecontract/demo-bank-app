@@ -3,8 +3,6 @@ export type CardStatus = 'ACTIVE' | 'BLOCKED' | 'CLOSED' | 'EXPIRED';
 export interface CardMerchant {
   name: string;
   statementDescriptor?: string;
-  categoryCode?: string;
-  country?: string;
 }
 
 export interface Card {

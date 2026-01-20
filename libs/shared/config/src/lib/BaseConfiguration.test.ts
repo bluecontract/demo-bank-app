@@ -13,7 +13,8 @@ class TestConfiguration extends BaseConfiguration {
     this.validateConfiguration(this.testRequiredVariables);
   }
 
-  protected performCustomValidation(errors: string[]): void {
+  protected performCustomValidation(_errors: string[]): void {
+    void _errors;
     // Test implementation can add custom validation
   }
 

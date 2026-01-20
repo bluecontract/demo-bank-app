@@ -509,7 +509,7 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     const accountName = createUniqueAccountName('paynote-activity');
-    const myosEventId = 'event-paynote-001';
+    const payNoteDocumentId = 'doc-paynote-001';
     const transactionActivity = {
       kind: 'POSTED_TRANSACTION',
       activityId: 'TXN#txn-paynote-001',
@@ -562,7 +562,7 @@ test.describe('Banking Core Flows', () => {
           status: transactionActivity.status,
           counterpartyAccountNumber:
             transactionActivity.counterpartyAccountNumber,
-          payNote: { myosEventId },
+          payNote: { payNoteDocumentId },
         }),
       });
     });
@@ -577,7 +577,7 @@ test.describe('Banking Core Flows', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          myosEventId,
+          payNoteDocumentId,
           documentYaml:
             '---\npayNote:\n  payer: 5555999911\n  payee: 0001122334\n  amountMinor: 9850',
           transactionRequest: {

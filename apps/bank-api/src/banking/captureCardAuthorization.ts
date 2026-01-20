@@ -1,5 +1,6 @@
 import {
   AccountNotFoundError,
+  HoldCaptureDisabledError,
   HoldNotFoundError,
   HoldNotPendingError,
   IdempotencyConflictError,
@@ -79,6 +80,14 @@ export const captureCardAuthorizationHandler = async (
       return problemResponse({
         status: 409 as const,
         code: ERROR_CODES.AUTHORIZATION_NOT_PENDING,
+        message: error.message,
+      });
+    }
+
+    if (error instanceof HoldCaptureDisabledError) {
+      return problemResponse({
+        status: 409 as const,
+        code: ERROR_CODES.AUTHORIZATION_CAPTURE_DISABLED,
         message: error.message,
       });
     }

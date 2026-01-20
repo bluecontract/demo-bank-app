@@ -4,8 +4,9 @@ import type {
   PayNoteVerificationRepository,
   MyOsClient,
   BlueIdCalculator,
-  IdGeneratorPort,
   MyOsFetchEventResult,
+  PayNoteBootstrapRepository,
+  ClockPort,
 } from '../ports';
 
 const createVerificationRepository = (): PayNoteVerificationRepository => ({
@@ -28,9 +29,11 @@ const createMyOsClient = (): MyOsClient => {
     bootstrapDocument: vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      body: { id: 'doc-id' },
+      body: { sessionId: 'bootstrap-1' },
     }),
+    runDocumentOperation: vi.fn(),
     fetchEvent,
+    fetchDocument: vi.fn(),
   } satisfies MyOsClient;
 };
 
@@ -40,12 +43,17 @@ const createBlueIdCalculator = (): BlueIdCalculator => ({
   toReversedJson: vi.fn((value: unknown) => value),
 });
 
-const createIdGenerator = (): IdGeneratorPort => ({
-  generate: vi.fn().mockReturnValue('generated-id'),
+const createBootstrapRepository = (): PayNoteBootstrapRepository => ({
+  getBootstrapBySessionId: vi.fn(),
+  saveBootstrap: vi.fn(),
+});
+
+const createClock = (): ClockPort => ({
+  now: () => new Date('2024-01-01T00:00:00.000Z'),
 });
 
 describe('bootstrapPayNote', () => {
-  it('returns success when verification exists', async () => {
+  it('returns success when verification exists and stores bootstrap mapping', async () => {
     const verificationRepository = createVerificationRepository();
     vi.mocked(verificationRepository.getVerification).mockResolvedValue({
       userId: 'user-123',
@@ -56,23 +64,32 @@ describe('bootstrapPayNote', () => {
       validatedAt: new Date().toISOString(),
     });
 
+    const payNoteBootstrapRepository = createBootstrapRepository();
+
     const result = await bootstrapPayNote(
       {
         userId: 'user-123',
         userEmail: 'user@example.com',
-        formData: { fromAccount: '123' },
+        formData: { fromAccount: '123', toAccount: '456' },
         payNote: { name: 'Test' },
       },
       {
         verificationRepository,
         myOsClient: createMyOsClient(),
-        idGenerator: createIdGenerator(),
         blueIdCalculator: createBlueIdCalculator(),
+        payNoteBootstrapRepository,
+        clock: createClock(),
         minimumSuccessfulScore: 7,
       }
     );
 
     expect(result.type).toBe('success');
+    expect(payNoteBootstrapRepository.saveBootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bootstrapSessionId: 'bootstrap-1',
+        accountNumber: '123',
+      })
+    );
   });
 
   it('returns verification-failed when no verification', async () => {
@@ -89,8 +106,9 @@ describe('bootstrapPayNote', () => {
       {
         verificationRepository,
         myOsClient: createMyOsClient(),
-        idGenerator: createIdGenerator(),
         blueIdCalculator: createBlueIdCalculator(),
+        payNoteBootstrapRepository: createBootstrapRepository(),
+        clock: createClock(),
         minimumSuccessfulScore: 7,
       }
     );

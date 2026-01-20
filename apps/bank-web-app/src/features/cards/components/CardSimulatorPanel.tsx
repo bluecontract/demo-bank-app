@@ -46,8 +46,6 @@ export function CardSimulatorPanel() {
   const [amount, setAmount] = useState('12.00');
   const [merchantName, setMerchantName] = useState(DEFAULT_MERCHANT);
   const [statementDescriptor, setStatementDescriptor] = useState('DEMO SHOP');
-  const [categoryCode, setCategoryCode] = useState('5411');
-  const [country, setCountry] = useState('US');
   const [processorChargeId, setProcessorChargeId] = useState('');
   const [processorToken, setProcessorToken] = useState(DEFAULT_TOKEN);
   const [authorizationId, setAuthorizationId] = useState('');
@@ -128,8 +126,6 @@ export function CardSimulatorPanel() {
             merchant: {
               name: merchantName || DEFAULT_MERCHANT,
               statementDescriptor: statementDescriptor || merchantName,
-              categoryCode,
-              country,
             },
             processorChargeId: chargeId,
           }),
@@ -321,29 +317,6 @@ export function CardSimulatorPanel() {
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-600">
-                MCC
-              </label>
-              <Input
-                value={categoryCode}
-                onChange={event => setCategoryCode(event.target.value)}
-                placeholder="5411"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-600">
-                Country
-              </label>
-              <Input
-                value={country}
-                onChange={event => setCountry(event.target.value)}
-                placeholder="US"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-600">
                 Charge ID
               </label>
               <Input
@@ -354,16 +327,14 @@ export function CardSimulatorPanel() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-slate-600">
-                Processor token
-              </label>
-              <Input
-                value={processorToken}
-                onChange={event => setProcessorToken(event.target.value)}
-              />
-            </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-600">
+              Processor token
+            </label>
+            <Input
+              value={processorToken}
+              onChange={event => setProcessorToken(event.target.value)}
+            />
           </div>
         </div>
       )}

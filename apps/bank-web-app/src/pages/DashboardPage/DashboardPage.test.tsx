@@ -47,6 +47,12 @@ vi.mock('../../features/transfer', () => ({
   )),
 }));
 
+vi.mock('../../features/paynote-deliveries', () => ({
+  PayNoteDeliveriesPanel: vi.fn(() => (
+    <div data-testid="paynote-deliveries-panel">PayNote Deliveries</div>
+  )),
+}));
+
 vi.mock('../../features/dashboard/components', () => ({
   DashboardHeader: vi.fn(({ userEmail }) => (
     <div data-testid="dashboard-header">Dashboard Header - {userEmail}</div>

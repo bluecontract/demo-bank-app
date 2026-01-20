@@ -136,8 +136,6 @@ describe('listAccountActivityHandler', () => {
           cardLast4: undefined,
           merchantName: undefined,
           merchantStatementDescriptor: undefined,
-          merchantCategoryCode: undefined,
-          merchantCountry: undefined,
           processorChargeId: undefined,
         },
         {
@@ -152,8 +150,6 @@ describe('listAccountActivityHandler', () => {
           cardLast4: undefined,
           merchantName: undefined,
           merchantStatementDescriptor: undefined,
-          merchantCategoryCode: undefined,
-          merchantCountry: undefined,
           processorChargeId: undefined,
         },
         {
@@ -172,8 +168,6 @@ describe('listAccountActivityHandler', () => {
           cardLast4: undefined,
           merchantName: undefined,
           merchantStatementDescriptor: undefined,
-          merchantCategoryCode: undefined,
-          merchantCountry: undefined,
           processorChargeId: undefined,
         },
       ],
