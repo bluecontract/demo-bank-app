@@ -14,11 +14,14 @@ const cardDetails = {
 
 const buildDeliveryDocument = () => {
   const yaml = `name: Delivery for Invoice
-payNote:
-  type: PayNote/PayNote
-  currency: USD
-  amount:
-    total: 1200
+payNoteBootstrapRequest:
+  type: Conversation/Document Bootstrap Requested
+  bootstrapAssignee: payNoteDeliverer
+  document:
+    type: PayNote/PayNote
+    currency: USD
+    amount:
+      total: 1200
 cardTransactionDetails:
   retrievalReferenceNumber: "${cardDetails.retrievalReferenceNumber}"
   systemTraceAuditNumber: "${cardDetails.systemTraceAuditNumber}"
@@ -27,9 +30,10 @@ cardTransactionDetails:
 contracts:
   payNoteSender:
     type: MyOS/MyOS Timeline Channel
-  links:
-    synchronyMerchantLink:
-      sessionId: "sync-session"
+  payNoteReceiver:
+    type: MyOS/MyOS Timeline Channel
+  payNoteDeliverer:
+    type: MyOS/MyOS Timeline Channel
 `;
   const node = blue.yamlToNode(yaml);
   node.setType(blue.jsonValueToNode({ blueId: PAYNOTE_DELIVERY_BLUE_ID }));
@@ -78,11 +82,22 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           id: 'event-1',
           object: {
             sessionId: 'sync-session',
+            document: {
+              contracts: {
+                synchronyChannel: {
+                  type: 'MyOS/MyOS Timeline Channel',
+                  accountId: 'bank-account',
+                },
+              },
+            },
             emitted: [
               {
-                type: 'Conversation/Event',
-                kind: 'PayNote/PayNote Delivery Bootstrap Requested',
-                delivery: deliveryDocument,
+                type: 'Conversation/Document Bootstrap Requested',
+                bootstrapAssignee: 'synchronyChannel',
+                channelBindings: {
+                  payNoteSender: { accountId: 'merchant-account' },
+                },
+                document: deliveryDocument,
               },
             ],
           },
@@ -110,6 +125,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         payload: expect.objectContaining({
           document: expect.any(Object),
           channelBindings: expect.objectContaining({
+            payNoteSender: { accountId: 'merchant-account' },
             payNoteDeliverer: { accountId: 'bank-account' },
             payNoteReceiver: { accountId: 'bank-account' },
           }),

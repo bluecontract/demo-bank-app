@@ -10,8 +10,10 @@ import {
   handlePayNoteBootstrapWebhookEvent,
 } from '@demo-bank-app/paynotes';
 import type { BlueNode } from '@blue-labs/language';
-import { EventSchema } from '@blue-repository/types/packages/conversation/schemas';
-import { PayNoteDeliveryBootstrapRequestedSchema } from '@blue-repository/types/packages/paynote/schemas';
+import {
+  DocumentBootstrapRequestedSchema,
+  EventSchema,
+} from '@blue-repository/types/packages/conversation/schemas';
 import { DocumentSessionBootstrapSchema } from '@blue-repository/types/packages/myos/schemas';
 import { getDependencies } from './dependencies';
 const BOOTSTRAP_EVENT_NAMES = [
@@ -78,7 +80,7 @@ const isDeliveryBootstrapEvent = (event: unknown): boolean => {
     return false;
   }
   if (
-    blue.isTypeOf(node, PayNoteDeliveryBootstrapRequestedSchema, {
+    blue.isTypeOf(node, DocumentBootstrapRequestedSchema, {
       checkSchemaExtensions: true,
     })
   ) {

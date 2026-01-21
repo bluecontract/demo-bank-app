@@ -155,7 +155,9 @@ const buildFacts = (input: {
   const documentDescription = getRecordString(document, 'description');
 
   const payNoteSummary = getPayNoteSummaryFromDocument(
-    (document as { payNote?: unknown }).payNote
+    (document as { payNoteBootstrapRequest?: { document?: unknown } })
+      .payNoteBootstrapRequest?.document ??
+      (document as { payNote?: unknown }).payNote
   );
 
   const payNoteDeliveryStatus = getDeliveryStatusFromDocument(document);
@@ -266,20 +268,19 @@ export const generateContractSummaryHandler = async (
     });
   }
 
-  const hasFreshSummary =
+  if (
     !force &&
     contract.summary &&
     contract.summarySourceUpdatedAt === contract.updatedAt &&
     !contract.summaryError &&
-    Boolean(contract.summaryUpdatedAt);
-
-  if (hasFreshSummary) {
+    contract.summaryUpdatedAt
+  ) {
     return {
       status: 200 as const,
       body: {
         summary: contract.summary,
-        summaryUpdatedAt: contract.summaryUpdatedAt as string,
-        summarySourceUpdatedAt: contract.summarySourceUpdatedAt as string,
+        summaryUpdatedAt: contract.summaryUpdatedAt,
+        summarySourceUpdatedAt: contract.summarySourceUpdatedAt,
         cached: true,
         model: contract.summaryModel,
       },

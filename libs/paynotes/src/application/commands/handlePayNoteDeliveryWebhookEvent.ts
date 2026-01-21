@@ -1,6 +1,9 @@
 import type { BlueNode } from '@blue-labs/language';
-import { EventSchema } from '@blue-repository/types/packages/conversation/schemas';
-import { PayNoteDeliveryBootstrapRequestedSchema } from '@blue-repository/types/packages/paynote/schemas';
+import {
+  DocumentBootstrapRequestedSchema,
+  EventSchema,
+} from '@blue-repository/types/packages/conversation/schemas';
+import { PayNoteSchema } from '@blue-repository/types/packages/paynote/schemas';
 import type {
   BankingRepository,
   Hold,
@@ -18,7 +21,6 @@ import type {
 import type { ContractRepository } from '@demo-bank-app/contracts';
 import {
   buildChannelBindingsFromContracts,
-  ensureTimelineChannel,
   getCardTransactionDetailsFromDocument,
   getDeliveryNameFromDocument,
   getDeliveryStatusFromDocument,
@@ -109,7 +111,43 @@ const getEventKindName = (node: BlueNode): string | undefined => {
   return typeof record.name === 'string' ? record.name : undefined;
 };
 
-const getBootstrapDeliveryFromEvent = (
+const unwrapNodeValue = (value: unknown): unknown => {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const record = value as Record<string, unknown>;
+  return 'value' in record ? record.value : value;
+};
+
+const getString = (value: unknown): string | undefined => {
+  const unwrapped = unwrapNodeValue(value);
+  if (typeof unwrapped !== 'string') {
+    return undefined;
+  }
+  const trimmed = unwrapped.trim();
+  return trimmed.length ? trimmed : undefined;
+};
+
+const getDocumentBootstrapRequestFromEvent = (
+  event: unknown
+): Record<string, unknown> | null => {
+  const node = toBlueNode(event);
+  if (
+    !node ||
+    !blue.isTypeOf(node, DocumentBootstrapRequestedSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    return null;
+  }
+
+  const payload = blue.nodeToJson(node, 'simple') as
+    | Record<string, unknown>
+    | undefined;
+  return payload && typeof payload === 'object' ? payload : null;
+};
+
+const getLegacyBootstrapDeliveryFromEvent = (
   event: unknown
 ): Record<string, unknown> | null => {
   const node = toBlueNode(event);
@@ -117,23 +155,16 @@ const getBootstrapDeliveryFromEvent = (
     return null;
   }
 
-  const isBootstrapEvent = blue.isTypeOf(
-    node,
-    PayNoteDeliveryBootstrapRequestedSchema,
-    { checkSchemaExtensions: true }
-  );
-  if (!isBootstrapEvent) {
-    if (
-      !blue.isTypeOf(node, EventSchema, {
-        checkSchemaExtensions: true,
-      })
-    ) {
-      return null;
-    }
-    const kindName = getEventKindName(node);
-    if (!kindName || !BOOTSTRAP_EVENT_NAMES.includes(kindName)) {
-      return null;
-    }
+  if (
+    !blue.isTypeOf(node, EventSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    return null;
+  }
+  const kindName = getEventKindName(node);
+  if (!kindName || !BOOTSTRAP_EVENT_NAMES.includes(kindName)) {
+    return null;
   }
 
   const payload = blue.nodeToJson(node, 'official') as
@@ -165,6 +196,101 @@ const isPayNoteDeliveryDocument = (document: unknown): boolean => {
   } catch {
     return false;
   }
+};
+
+const isPayNoteDocument = (document: unknown): boolean => {
+  if (!document || typeof document !== 'object') {
+    return false;
+  }
+  try {
+    const node = blue.jsonValueToNode(document);
+    return blue.isTypeOf(node, PayNoteSchema, {
+      checkSchemaExtensions: true,
+    });
+  } catch {
+    return false;
+  }
+};
+
+const normalizeChannelBindings = (
+  bindings: unknown
+): Record<string, { email?: string; accountId?: string }> => {
+  if (!bindings || typeof bindings !== 'object') {
+    return {};
+  }
+
+  const record = bindings as Record<string, unknown>;
+  const output: Record<string, { email?: string; accountId?: string }> = {};
+
+  Object.entries(record).forEach(([key, value]) => {
+    if (!key) {
+      return;
+    }
+
+    const binding = unwrapNodeValue(value);
+    if (!binding || typeof binding !== 'object') {
+      return;
+    }
+
+    const bindingRecord = binding as Record<string, unknown>;
+    const accountId = getString(bindingRecord.accountId);
+    const email = getString(bindingRecord.email);
+
+    if (accountId) {
+      output[key] = { accountId };
+    } else if (email) {
+      output[key] = { email };
+    }
+  });
+
+  return output;
+};
+
+const isBootstrapAssigneeMatch = (
+  requestingDocument: Record<string, unknown> | undefined,
+  bootstrapAssignee: string | undefined,
+  myOsAccountId: string
+): boolean => {
+  if (!requestingDocument || !bootstrapAssignee) {
+    return false;
+  }
+  const contracts = getContractsRecord(requestingDocument.contracts);
+  if (!contracts) {
+    return false;
+  }
+
+  const bindings = buildChannelBindingsFromContracts(contracts);
+  return bindings[bootstrapAssignee]?.accountId === myOsAccountId;
+};
+
+const attachSynchronyMerchantLink = (
+  document: Record<string, unknown>,
+  options: { sessionId: string; anchor: 'payNoteDeliveries' | 'payNotes' }
+): Record<string, unknown> => {
+  const next = { ...document };
+  const contracts = {
+    ...(getContractsRecord(next.contracts) ?? {}),
+  };
+  const links = {
+    ...(getContractsRecord(contracts.links) ?? {}),
+    type: 'MyOS/Document Links',
+    synchronyMerchantLink: {
+      type: 'MyOS/MyOS Session Link',
+      anchor: options.anchor,
+      sessionId: options.sessionId,
+    },
+  };
+
+  contracts.links = links;
+  next.contracts = contracts;
+  return next;
+};
+
+const extractBootstrapSessionId = (response: {
+  body?: unknown;
+}): string | undefined => {
+  const body = response.body as { sessionId?: unknown } | undefined;
+  return typeof body?.sessionId === 'string' ? body.sessionId : undefined;
 };
 
 const normalizeSessionIds = (
@@ -330,15 +456,17 @@ export const handlePayNoteDeliveryWebhookEvent = async (
   }
 
   const eventObject = payload?.object;
-  const documentPayload = eventObject?.document as
-    | Record<string, unknown>
-    | undefined;
+  const documentPayload =
+    getContractsRecord(eventObject?.document) ?? undefined;
 
   const emitted = Array.isArray(eventObject?.emitted)
     ? eventObject?.emitted
     : [];
-  const bootstrapRequests = emitted
-    .map(event => getBootstrapDeliveryFromEvent(event))
+  const documentBootstrapRequests = emitted
+    .map(event => getDocumentBootstrapRequestFromEvent(event))
+    .filter((request): request is Record<string, unknown> => request !== null);
+  const legacyBootstrapDeliveries = emitted
+    .map(event => getLegacyBootstrapDeliveryFromEvent(event))
     .filter(
       (delivery): delivery is Record<string, unknown> => delivery !== null
     );
@@ -353,11 +481,18 @@ export const handlePayNoteDeliveryWebhookEvent = async (
     sessionId: eventObject?.sessionId,
     hasDocument: Boolean(documentPayload),
     emittedCount: emitted.length,
-    bootstrapRequestCount: bootstrapRequests.length,
+    bootstrapRequestCount:
+      documentBootstrapRequests.length + legacyBootstrapDeliveries.length,
+    documentBootstrapRequestCount: documentBootstrapRequests.length,
+    legacyBootstrapRequestCount: legacyBootstrapDeliveries.length,
     isDeliveryDoc,
   });
 
-  if (!bootstrapRequests.length && !isDeliveryDoc) {
+  if (
+    !documentBootstrapRequests.length &&
+    !legacyBootstrapDeliveries.length &&
+    !isDeliveryDoc
+  ) {
     trace(logs, 'Delivery webhook skipped (not a delivery event)', {
       eventId,
       sessionId: eventObject?.sessionId,
@@ -378,83 +513,266 @@ export const handlePayNoteDeliveryWebhookEvent = async (
 
   const now = deps.clock.now().toISOString();
 
-  if (bootstrapRequests.length > 0) {
+  if (
+    documentBootstrapRequests.length > 0 ||
+    legacyBootstrapDeliveries.length > 0
+  ) {
     const credentials = await deps.myOsClient.getCredentials();
 
-    for (const delivery of bootstrapRequests) {
-      const deliveryDocument = {
-        ...delivery,
-      };
-
-      const deliveryContracts = {
-        ...(getContractsRecord(deliveryDocument.contracts) ?? {}),
-      };
-
-      const delivererCheck = ensureTimelineChannel(
-        deliveryContracts,
-        'payNoteDeliverer',
-        credentials.accountId
+    for (const request of documentBootstrapRequests) {
+      const requestedDocument = getContractsRecord(
+        unwrapNodeValue(request.document)
       );
-      const receiverCheck = ensureTimelineChannel(
-        deliveryContracts,
-        'payNoteReceiver',
-        credentials.accountId
-      );
+      const bootstrapAssignee = getString(request.bootstrapAssignee);
 
-      if (!delivererCheck.ok || !receiverCheck.ok) {
-        log(logs, 'warn', 'Delivery participant validation failed', {
+      if (!bootstrapAssignee) {
+        log(logs, 'warn', 'Bootstrap request missing bootstrapAssignee', {
           eventId,
-          delivererError: delivererCheck.error,
-          receiverError: receiverCheck.error,
         });
         continue;
       }
 
-      deliveryDocument.contracts = deliveryContracts;
-
-      const payNotePayload = getContractsRecord(deliveryDocument.payNote);
-      if (payNotePayload) {
-        const payNoteContracts = {
-          ...(getContractsRecord(payNotePayload.contracts) ?? {}),
-        };
-        const guarantorCheck = ensureTimelineChannel(
-          payNoteContracts,
-          'guarantorChannel',
+      if (
+        !isBootstrapAssigneeMatch(
+          documentPayload,
+          bootstrapAssignee,
           credentials.accountId
-        );
-        const payerCheck = ensureTimelineChannel(
-          payNoteContracts,
-          'payerChannel',
-          credentials.accountId
-        );
+        )
+      ) {
+        trace(logs, 'Bootstrap request ignored (not assigned)', {
+          eventId,
+          bootstrapAssignee,
+        });
+        continue;
+      }
 
-        if (!guarantorCheck.ok || !payerCheck.ok) {
-          log(logs, 'warn', 'PayNote channel validation failed', {
+      if (!requestedDocument) {
+        log(logs, 'warn', 'Bootstrap request missing document', { eventId });
+        continue;
+      }
+
+      const requestBindings = normalizeChannelBindings(request.channelBindings);
+
+      if (isPayNoteDeliveryDocument(requestedDocument)) {
+        const synchronySessionId = getString(eventObject?.sessionId);
+        if (!synchronySessionId) {
+          log(logs, 'warn', 'Delivery bootstrap request missing session id', {
             eventId,
-            guarantorError: guarantorCheck.error,
-            payerError: payerCheck.error,
+            bootstrapAssignee,
           });
           continue;
         }
 
-        payNotePayload.contracts = payNoteContracts;
-        deliveryDocument.payNote = payNotePayload;
+        const deliveryDocument = attachSynchronyMerchantLink(
+          requestedDocument,
+          {
+            sessionId: synchronySessionId,
+            anchor: 'payNoteDeliveries',
+          }
+        );
+
+        const cardDetails =
+          getCardTransactionDetailsFromDocument(deliveryDocument);
+        if (!cardDetails) {
+          log(logs, 'warn', 'Delivery missing card transaction details', {
+            eventId,
+          });
+          continue;
+        }
+
+        const deliveryId = buildCardTransactionDetailsKey(cardDetails);
+        trace(logs, 'Processing delivery bootstrap request', {
+          eventId,
+          deliveryId,
+        });
+
+        const existing = await deps.payNoteDeliveryRepository.getDelivery(
+          deliveryId
+        );
+        const deliveryRecord: PayNoteDeliveryRecord = {
+          ...(existing ?? {
+            deliveryId,
+            createdAt: now,
+            updatedAt: now,
+          }),
+          deliveryId,
+          cardTransactionDetails: cardDetails,
+          cardTransactionDetailsKey: deliveryId,
+          deliveryDocument,
+          synchronySessionId:
+            existing?.synchronySessionId ?? synchronySessionId,
+          updatedAt: now,
+          createdAt: existing?.createdAt ?? now,
+        };
+
+        await deps.payNoteDeliveryRepository.saveDelivery(deliveryRecord);
+
+        const channelBindings = {
+          ...requestBindings,
+          payNoteDeliverer: { accountId: credentials.accountId },
+          payNoteReceiver: { accountId: credentials.accountId },
+        };
+
+        trace(logs, 'Bootstrapping PayNote Delivery document', {
+          eventId,
+          deliveryId,
+          payload: {
+            channelBindings,
+            document: deliveryDocument,
+          },
+        });
+
+        const response = await deps.myOsClient.bootstrapDocument({
+          credentials,
+          payload: {
+            channelBindings,
+            document: deliveryDocument,
+          },
+        });
+
+        if (!response.ok) {
+          log(logs, 'error', 'PayNote Delivery bootstrap failed', {
+            eventId,
+            status: response.status,
+            body: response.body,
+          });
+        } else {
+          log(logs, 'info', 'PayNote Delivery bootstrap requested', {
+            eventId,
+            deliveryId,
+          });
+        }
+        continue;
       }
+
+      if (isPayNoteDocument(requestedDocument)) {
+        const synchronySessionId = documentPayload
+          ? getSynchronySessionIdFromDocument(documentPayload)
+          : undefined;
+
+        const payNoteDocument = synchronySessionId
+          ? attachSynchronyMerchantLink(requestedDocument, {
+              sessionId: synchronySessionId,
+              anchor: 'payNotes',
+            })
+          : requestedDocument;
+
+        if (!synchronySessionId) {
+          trace(
+            logs,
+            'PayNote bootstrap request missing synchrony session link',
+            {
+              eventId,
+            }
+          );
+        }
+
+        const channelBindings = {
+          ...requestBindings,
+          payerChannel: { accountId: credentials.accountId },
+          guarantorChannel: { accountId: credentials.accountId },
+        };
+
+        trace(logs, 'Bootstrapping PayNote document', {
+          eventId,
+          payload: {
+            channelBindings,
+            document: payNoteDocument,
+          },
+        });
+
+        const response = await deps.myOsClient.bootstrapDocument({
+          credentials,
+          payload: {
+            channelBindings,
+            document: payNoteDocument,
+          },
+        });
+
+        if (!response.ok) {
+          log(logs, 'error', 'PayNote bootstrap failed', {
+            eventId,
+            status: response.status,
+            body: response.body,
+          });
+          continue;
+        }
+
+        const bootstrapSessionId = extractBootstrapSessionId(response);
+        const requestingSessionId = getString(eventObject?.sessionId);
+        const requestingDeliveryCardDetails = documentPayload
+          ? getCardTransactionDetailsFromDocument(documentPayload)
+          : null;
+        const deliveryId = requestingDeliveryCardDetails
+          ? buildCardTransactionDetailsKey(requestingDeliveryCardDetails)
+          : undefined;
+
+        const existingDelivery = deliveryId
+          ? await deps.payNoteDeliveryRepository.getDelivery(deliveryId)
+          : requestingSessionId
+          ? await deps.payNoteDeliveryRepository.getDeliveryBySessionId(
+              requestingSessionId
+            )
+          : null;
+
+        if (existingDelivery) {
+          await deps.payNoteDeliveryRepository.saveDelivery({
+            ...existingDelivery,
+            payNoteBootstrapRequestedAt: now,
+            payNoteBootstrapSessionId:
+              existingDelivery.payNoteBootstrapSessionId ?? bootstrapSessionId,
+            updatedAt: now,
+          });
+        }
+
+        log(logs, 'info', 'PayNote bootstrap requested', {
+          eventId,
+          bootstrapSessionId,
+          deliveryId: existingDelivery?.deliveryId ?? deliveryId,
+        });
+        continue;
+      }
+
+      log(logs, 'warn', 'Bootstrap request rejected (unsupported document)', {
+        eventId,
+        bootstrapAssignee,
+      });
+    }
+
+    for (const delivery of legacyBootstrapDeliveries) {
+      const synchronySessionId = getString(eventObject?.sessionId);
+      if (!synchronySessionId) {
+        log(
+          logs,
+          'warn',
+          'Legacy delivery bootstrap request missing session id',
+          {
+            eventId,
+          }
+        );
+        continue;
+      }
+
+      const deliveryDocument = attachSynchronyMerchantLink(delivery, {
+        sessionId: synchronySessionId,
+        anchor: 'payNoteDeliveries',
+      });
+
       const cardDetails =
         getCardTransactionDetailsFromDocument(deliveryDocument);
-
       if (!cardDetails) {
-        log(logs, 'warn', 'Delivery missing card transaction details', {
+        log(logs, 'warn', 'Legacy delivery missing card transaction details', {
           eventId,
         });
         continue;
       }
 
       const deliveryId = buildCardTransactionDetailsKey(cardDetails);
-      trace(logs, 'Processing delivery bootstrap request', {
+      trace(logs, 'Processing legacy delivery bootstrap request', {
         eventId,
         deliveryId,
       });
+
       const existing = await deps.payNoteDeliveryRepository.getDelivery(
         deliveryId
       );
@@ -468,25 +786,19 @@ export const handlePayNoteDeliveryWebhookEvent = async (
         cardTransactionDetails: cardDetails,
         cardTransactionDetailsKey: deliveryId,
         deliveryDocument,
-        synchronySessionId:
-          existing?.synchronySessionId ?? eventObject?.sessionId,
+        synchronySessionId: existing?.synchronySessionId ?? synchronySessionId,
         updatedAt: now,
         createdAt: existing?.createdAt ?? now,
       };
 
       await deps.payNoteDeliveryRepository.saveDelivery(deliveryRecord);
 
-      const channelBindings =
-        buildChannelBindingsFromContracts(deliveryContracts);
-
-      trace(logs, 'Bootstrapping PayNote Delivery document', {
-        eventId,
-        deliveryId,
-        payload: {
-          channelBindings,
-          document: deliveryDocument,
-        },
-      });
+      const contracts = getContractsRecord(deliveryDocument.contracts) ?? {};
+      const channelBindings = {
+        ...buildChannelBindingsFromContracts(contracts),
+        payNoteDeliverer: { accountId: credentials.accountId },
+        payNoteReceiver: { accountId: credentials.accountId },
+      };
 
       const response = await deps.myOsClient.bootstrapDocument({
         credentials,
@@ -497,13 +809,13 @@ export const handlePayNoteDeliveryWebhookEvent = async (
       });
 
       if (!response.ok) {
-        log(logs, 'error', 'PayNote Delivery bootstrap failed', {
+        log(logs, 'error', 'Legacy PayNote Delivery bootstrap failed', {
           eventId,
           status: response.status,
           body: response.body,
         });
       } else {
-        log(logs, 'info', 'PayNote Delivery bootstrap requested', {
+        log(logs, 'info', 'Legacy PayNote Delivery bootstrap requested', {
           eventId,
           deliveryId,
         });
@@ -800,9 +1112,15 @@ export const handlePayNoteDeliveryWebhookEvent = async (
       now,
     });
 
-    const payNotePayload = documentPayload.payNote as
-      | Record<string, unknown>
-      | undefined;
+    const payNotePayload = getContractsRecord(
+      unwrapNodeValue(
+        (
+          getContractsRecord(documentPayload.payNoteBootstrapRequest) as
+            | Record<string, unknown>
+            | undefined
+        )?.document
+      )
+    );
     const payNoteSummary = getPayNoteSummaryFromDocument(payNotePayload);
     log(logs, 'info', 'PayNote Delivery updated', {
       eventId,

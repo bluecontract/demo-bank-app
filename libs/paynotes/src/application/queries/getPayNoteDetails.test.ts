@@ -112,7 +112,9 @@ describe('getPayNoteDetails', () => {
       deliveryDocumentId: 'doc-1',
       accountNumber: '1234567890',
       userId: 'user-123',
-      deliveryDocument: { payNote: { name: 'Delivery PayNote' } },
+      deliveryDocument: {
+        payNoteBootstrapRequest: { document: { name: 'Delivery PayNote' } },
+      },
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
     });

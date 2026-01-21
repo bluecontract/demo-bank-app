@@ -67,10 +67,12 @@ describe('getPayNoteDeliveryHandler', () => {
       },
       deliveryDocument: {
         name: 'Merchant Delivery',
-        payNote: {
-          name: 'Invoice 42',
-          amount: { total: 1200 },
-          currency: 'USD',
+        payNoteBootstrapRequest: {
+          document: {
+            name: 'Invoice 42',
+            amount: { total: 1200 },
+            currency: 'USD',
+          },
         },
       },
       createdAt: '2024-01-01T00:00:00.000Z',

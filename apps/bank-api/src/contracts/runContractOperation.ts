@@ -9,17 +9,6 @@ import {
 } from '../auth/middleware';
 import { getDependencies } from '../paynote/dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
-import {
-  buildChannelBindingsFromContracts,
-  ensureTimelineChannel,
-} from '@demo-bank-app/paynotes';
-
-const getContractsRecord = (value: unknown): Record<string, unknown> | null => {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-  return value as Record<string, unknown>;
-};
 
 const mergeUnique = (existing?: string[], incoming?: string[]) => {
   const set = new Set<string>(existing ?? []);
@@ -187,80 +176,10 @@ export const runContractOperationHandler = async (
     if (delivery.holdId) {
       await holdRepository.disableHoldCapture(delivery.holdId);
     }
-
-    const payNotePayload = delivery.deliveryDocument?.payNote as
-      | Record<string, unknown>
-      | undefined;
-
-    if (payNotePayload) {
-      try {
-        const payNoteDocument = { ...payNotePayload };
-        const payNoteContracts = {
-          ...(getContractsRecord(payNotePayload.contracts) ?? {}),
-        };
-        const guarantorCheck = ensureTimelineChannel(
-          payNoteContracts,
-          'guarantorChannel',
-          credentials.accountId
-        );
-        const payerCheck = ensureTimelineChannel(
-          payNoteContracts,
-          'payerChannel',
-          credentials.accountId
-        );
-
-        if (!guarantorCheck.ok || !payerCheck.ok) {
-          logger.warn('PayNote channel validation failed', {
-            deliveryId: delivery.deliveryId,
-            guarantorError: guarantorCheck.error,
-            payerError: payerCheck.error,
-          });
-        } else {
-          payNoteDocument.contracts = payNoteContracts;
-          const channelBindings =
-            buildChannelBindingsFromContracts(payNoteContracts);
-
-          const bootstrapResponse = await myOsClient.bootstrapDocument({
-            credentials,
-            payload: {
-              channelBindings,
-              document: payNoteDocument,
-            },
-          });
-
-          if (bootstrapResponse.ok) {
-            const responseBody = bootstrapResponse.body as
-              | { sessionId?: unknown }
-              | undefined;
-            const bootstrapSessionId =
-              typeof responseBody?.sessionId === 'string'
-                ? responseBody.sessionId
-                : undefined;
-
-            updatedDelivery.payNoteBootstrapRequestedAt = now;
-            if (bootstrapSessionId) {
-              updatedDelivery.payNoteBootstrapSessionId =
-                updatedDelivery.payNoteBootstrapSessionId ?? bootstrapSessionId;
-            }
-          } else {
-            logger.error('PayNote bootstrap failed after acceptance', {
-              deliveryId: delivery.deliveryId,
-              status: bootstrapResponse.status,
-              body: bootstrapResponse.body,
-            });
-          }
-        }
-      } catch (error) {
-        logger.error('Unable to bootstrap PayNote after acceptance', {
-          deliveryId: delivery.deliveryId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    } else {
-      logger.warn('PayNote payload missing for accepted delivery', {
-        deliveryId: delivery.deliveryId,
-      });
-    }
+    logger.info('PayNote bootstrap deferred to webhook handler', {
+      deliveryId: delivery.deliveryId,
+      sessionId,
+    });
   }
 
   await payNoteDeliveryRepository.saveDelivery(updatedDelivery);

@@ -57,9 +57,13 @@ const parsePayNoteDelivery = (document: unknown) => {
   ) {
     return null;
   }
+  const simple = blue.nodeToJson(node, 'simple') as
+    | Record<string, unknown>
+    | undefined;
   return {
     node,
     output: blue.nodeToSchemaOutput(node, PayNoteDeliverySchema),
+    simple,
   };
 };
 
@@ -289,16 +293,20 @@ export const getDeliveryNameFromDocument = (
     if (name) {
       return name;
     }
-    return getPayNoteSummaryFromDocument(
-      (simple as { payNote?: unknown }).payNote
-    ).name;
+    const payNote = (
+      simple as { payNoteBootstrapRequest?: { document?: unknown } }
+    ).payNoteBootstrapRequest?.document;
+    return getPayNoteSummaryFromDocument(payNote).name;
   }
 
   const name = getString(parsed.output.name);
   if (name) {
     return name;
   }
-  return getPayNoteSummaryFromDocument(parsed.output.payNote).name;
+  const payNote = (
+    parsed.simple as { payNoteBootstrapRequest?: { document?: unknown } }
+  )?.payNoteBootstrapRequest?.document;
+  return getPayNoteSummaryFromDocument(payNote).name;
 };
 
 export const getSynchronySessionIdFromDocument = (

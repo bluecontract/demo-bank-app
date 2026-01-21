@@ -35,7 +35,11 @@ export const getPayNoteDeliveryHandler = async (
 
   const payNoteSummary = record.deliveryDocument
     ? getPayNoteSummaryFromDocument(
-        record.deliveryDocument.payNote as Record<string, unknown>
+        (
+          record.deliveryDocument.payNoteBootstrapRequest as
+            | { document?: Record<string, unknown> }
+            | undefined
+        )?.document
       )
     : {};
 

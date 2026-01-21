@@ -89,9 +89,11 @@ export const getPayNoteDetails = async (
     ) {
       const deliveryPayNote =
         delivery.payNoteDocument ??
-        (delivery.deliveryDocument?.payNote as
-          | Record<string, unknown>
-          | undefined);
+        (
+          delivery.deliveryDocument?.payNoteBootstrapRequest as
+            | { document?: Record<string, unknown> }
+            | undefined
+        )?.document;
       const fetchedAt = deps.clock.now().toISOString();
 
       const detail = {

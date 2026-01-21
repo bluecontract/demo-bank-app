@@ -31,6 +31,7 @@ describe('runContractOperationHandler', () => {
   const logger = {
     error: vi.fn(),
     warn: vi.fn(),
+    info: vi.fn(),
   };
 
   const payNoteDeliveryRepository = {
@@ -61,6 +62,7 @@ describe('runContractOperationHandler', () => {
     hoisted.extractAuthInfoMock.mockReset();
     logger.error.mockReset();
     logger.warn.mockReset();
+    logger.info.mockReset();
     payNoteDeliveryRepository.getDeliveryBySessionId.mockReset();
     payNoteDeliveryRepository.saveDelivery.mockReset();
     myOsClient.getCredentials.mockReset();
@@ -87,7 +89,7 @@ describe('runContractOperationHandler', () => {
     vi.useRealTimers();
   });
 
-  it('accepts a delivery, disables capture, and bootstraps the paynote', async () => {
+  it('accepts a delivery and disables capture', async () => {
     const payNotePayload = buildPayNotePayload();
 
     contractRepository.getContractBySessionId.mockResolvedValue({
@@ -108,7 +110,7 @@ describe('runContractOperationHandler', () => {
       clientDecisionStatus: 'pending',
       holdId: 'hold-1',
       deliveryDocument: {
-        payNote: payNotePayload,
+        payNoteBootstrapRequest: { document: payNotePayload },
       },
       createdAt: '2024-02-01T10:00:00.000Z',
       updatedAt: '2024-02-01T10:00:00.000Z',
@@ -123,11 +125,6 @@ describe('runContractOperationHandler', () => {
       ok: true,
       status: 200,
     });
-    myOsClient.bootstrapDocument.mockResolvedValue({
-      ok: true,
-      status: 200,
-    });
-
     const response = await runContractOperationHandler(
       {
         params: {
@@ -150,19 +147,12 @@ describe('runContractOperationHandler', () => {
       })
     );
     expect(holdRepository.disableHoldCapture).toHaveBeenCalledWith('hold-1');
-    expect(myOsClient.bootstrapDocument).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: expect.objectContaining({
-          document: expect.any(Object),
-        }),
-      })
-    );
+    expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     expect(payNoteDeliveryRepository.saveDelivery).toHaveBeenCalledWith(
       expect.objectContaining({
         deliveryId: 'delivery-1',
         clientDecisionStatus: 'accepted',
         decisionRecordedAt: '2024-02-01T12:00:00.000Z',
-        payNoteBootstrapRequestedAt: '2024-02-01T12:00:00.000Z',
       })
     );
   });
