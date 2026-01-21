@@ -93,6 +93,19 @@ export type PayNoteDeliveryDetails = ClientInferResponseBody<
   200
 >;
 
+// Contract types
+export type ContractListResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['listContracts'],
+  200
+>;
+
+export type ContractSummary = ContractListResponse['items'][number];
+
+export type ContractDetails = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['getContractDetails'],
+  200
+>;
+
 export type ContractOperationResponse = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['runContractOperation'],
   200

@@ -23,6 +23,8 @@ import {
   PayNoteDetailsDto,
   PayNoteDeliveryListResponseDto,
   PayNoteDeliveryDetailsDto,
+  ContractListResponseDto,
+  ContractDetailsDto,
   ContractOperationResponseDto,
   NotImplementedResponseDto,
 } from './schemas';
@@ -360,6 +362,35 @@ export const bankApiContract = c.router(
           404: ProblemDto,
         },
         summary: 'Get PayNote Delivery details for the current user.',
+      },
+
+      listContracts: {
+        method: 'GET',
+        path: '/v1/contracts',
+        query: z
+          .object({
+            updatedSince: z.string().datetime({ offset: true }).optional(),
+          })
+          .optional(),
+        responses: {
+          200: ContractListResponseDto,
+          401: ProblemDto,
+        },
+        summary: 'List contracts available for the current user.',
+      },
+
+      getContractDetails: {
+        method: 'GET',
+        path: '/v1/contracts/:sessionId',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        responses: {
+          200: ContractDetailsDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Get contract details by session id.',
       },
 
       runContractOperation: {

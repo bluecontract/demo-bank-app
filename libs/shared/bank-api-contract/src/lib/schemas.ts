@@ -419,6 +419,41 @@ export const PayNoteDeliveryDetailsDto = z.object({
   updatedAt: z.string().datetime({ offset: true }),
 });
 
+export const ContractSummaryDto = z.object({
+  contractId: z.string(),
+  typeBlueId: z.string(),
+  displayName: z.string(),
+  documentName: z.string().optional(),
+  sessionId: z.string().optional(),
+  documentId: z.string().optional(),
+  status: z.string().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const ContractListResponseDto = z.object({
+  items: z.array(ContractSummaryDto),
+});
+
+export const ContractDetailsDto = z.object({
+  contractId: z.string(),
+  typeBlueId: z.string(),
+  displayName: z.string(),
+  sessionId: z.string().optional(),
+  documentId: z.string().optional(),
+  status: z.string().optional(),
+  statusUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  statusTimestamps: z.record(z.string()).optional(),
+  triggerEvent: z.unknown().optional(),
+  emittedEvents: z.array(z.unknown()).optional(),
+  relatedTransactionIds: z.array(z.string()).optional(),
+  relatedHoldIds: z.array(z.string()).optional(),
+  accountNumber: z.string().optional(),
+  document: z.unknown().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
 export const ContractOperationResponseDto = z.object({
   status: z.literal('ok'),
   myosStatus: z.number().int(),

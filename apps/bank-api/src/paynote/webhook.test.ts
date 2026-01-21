@@ -105,6 +105,13 @@ describe('payNoteWebhookHandler', () => {
         getBootstrapBySessionId: vi.fn(),
         saveBootstrap: vi.fn(),
       },
+      contractRepository: {
+        getContract: vi.fn(),
+        getContractBySessionId: vi.fn(),
+        getContractByDocumentId: vi.fn(),
+        saveContract: vi.fn(),
+        listContractsByUserId: vi.fn(),
+      },
       bankingRepository: {
         getAccountIdByNumber: vi.fn(),
         getAccountById: vi.fn(),

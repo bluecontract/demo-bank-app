@@ -67,6 +67,15 @@ const createDependencies = () => {
       listDeliveriesByUserId: vi.fn(),
     };
 
+  const contractRepository: HandleWebhookEventDependencies['contractRepository'] =
+    {
+      getContract: vi.fn().mockResolvedValue(null),
+      getContractBySessionId: vi.fn().mockResolvedValue(null),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
+      saveContract: vi.fn(),
+      listContractsByUserId: vi.fn(),
+    };
+
   const clock = { now: () => new Date('2024-01-01T00:00:00.000Z') };
 
   return {
@@ -75,6 +84,7 @@ const createDependencies = () => {
       bankingFacade,
       payNoteRepository,
       payNoteDeliveryRepository,
+      contractRepository,
       clock,
     } satisfies HandleWebhookEventDependencies,
     fetchEvent,

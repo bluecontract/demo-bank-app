@@ -16,7 +16,9 @@ import type {
   PayNoteRecord,
   PayNoteRepository,
 } from '../ports';
+import type { ContractRepository } from '@demo-bank-app/contracts';
 import { blue } from '../../blue';
+import { upsertContractRecord } from '../contracts';
 
 const RESERVE_FUNDS_EVENT_NAME = 'PayNote/Reserve Funds Requested';
 const CAPTURE_FUNDS_EVENT_NAME = 'PayNote/Capture Funds Requested';
@@ -122,6 +124,7 @@ export interface HandleWebhookEventDependencies {
   bankingFacade: BankingFacade;
   payNoteRepository: PayNoteRepository;
   payNoteDeliveryRepository: PayNoteDeliveryRepository;
+  contractRepository: ContractRepository;
   clock: ClockPort;
 }
 
@@ -311,6 +314,9 @@ export const handleWebhookEvent = async (
 
   const eventObject = eventPayload?.object;
   const document = eventObject?.document;
+  const emittedEvents = Array.isArray(eventObject?.emitted)
+    ? eventObject?.emitted
+    : undefined;
 
   if (!document) {
     const note = logAndReturn(
@@ -443,6 +449,26 @@ export const handleWebhookEvent = async (
   };
 
   await deps.payNoteRepository.savePayNote(updatedRecord);
+  await upsertContractRecord({
+    contractRepository: deps.contractRepository,
+    document: updatedRecord.document,
+    sessionId,
+    documentId: payNoteDocumentId,
+    userId: updatedRecord.userId,
+    accountNumber: updatedRecord.accountNumber,
+    triggerEvent: eventObject?.triggeredBy,
+    emittedEvents,
+    relatedTransactionIds: updatedRecord.transactionId
+      ? [updatedRecord.transactionId]
+      : undefined,
+    relatedHoldIds: updatedRecord.holdId ? [updatedRecord.holdId] : undefined,
+    status: updatedRecord.transactionId
+      ? 'processed'
+      : updatedRecord.holdId
+      ? 'reserved'
+      : undefined,
+    now,
+  });
 
   if (!payerAccountNumber) {
     const note = logAndReturn(

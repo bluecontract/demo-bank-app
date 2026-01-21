@@ -30,9 +30,17 @@ describe('bootstrapPayNoteHandler', () => {
   const verificationRepository = {
     getVerification: vi.fn(),
   };
+  const contractRepository = {
+    getContract: vi.fn(),
+    getContractBySessionId: vi.fn(),
+    getContractByDocumentId: vi.fn(),
+    saveContract: vi.fn(),
+    listContractsByUserId: vi.fn(),
+  };
 
   const createPayNote = () => ({
     name: 'Test PayNote',
+    type: 'PayNote/PayNote',
     contracts: {
       payerChannel: { type: 'MyOS/MyOS Timeline Channel' },
       payeeChannel: {
@@ -49,6 +57,11 @@ describe('bootstrapPayNoteHandler', () => {
     logger.info.mockReset();
     logger.error.mockReset();
     verificationRepository.getVerification.mockReset();
+    contractRepository.getContract.mockReset();
+    contractRepository.getContractBySessionId.mockReset();
+    contractRepository.getContractByDocumentId.mockReset();
+    contractRepository.saveContract.mockReset();
+    contractRepository.listContractsByUserId.mockReset();
     hoistedAdapters.bootstrapDocumentMock.mockReset();
     hoistedAdapters.saveBootstrapMock.mockReset();
     hoistedAdapters.bootstrapResponse = {
@@ -87,6 +100,7 @@ describe('bootstrapPayNoteHandler', () => {
         getBootstrapBySessionId: vi.fn(),
         saveBootstrap: hoistedAdapters.saveBootstrapMock,
       },
+      contractRepository,
       payNoteRepository: {
         getPayNote: vi.fn(),
         getPayNoteBySessionId: vi.fn(),
@@ -165,11 +179,37 @@ describe('bootstrapPayNoteHandler', () => {
         accountNumber: '137',
       })
     );
+    expect(contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'boot-123',
+        sessionId: 'boot-123',
+        displayName: 'PayNote',
+        accountNumber: '137',
+      })
+    );
 
     expect(verificationRepository.getVerification).toHaveBeenCalledWith({
       userId: 'user-123',
       blueId: 'blue-id-123',
     });
+  });
+
+  it('rejects unsupported contract types', async () => {
+    const result = await bootstrapPayNoteHandler(
+      {
+        body: {
+          payNote: {
+            type: 'PayNote/PayNote Delivery',
+          },
+          formData: { fromAccount: '137' },
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBe('UNSUPPORTED_CONTRACT_TYPE');
+    expect(hoistedAdapters.bootstrapDocumentMock).not.toHaveBeenCalled();
   });
 
   it('rejects when no successful verification exists', async () => {

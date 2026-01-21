@@ -50,12 +50,10 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       bootstrapDocument: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
       runDocumentOperation: vi.fn(),
       fetchEvent: vi.fn(),
-      fetchDocument: vi
-        .fn()
-        .mockResolvedValue({
-          kind: 'not-found',
-          status: 404,
-        } satisfies MyOsFetchDocumentResult),
+      fetchDocument: vi.fn().mockResolvedValue({
+        kind: 'not-found',
+        status: 404,
+      } satisfies MyOsFetchDocumentResult),
     };
 
     const payNoteDeliveryRepository = {
@@ -68,6 +66,10 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+    };
+    const contractRepository = {
+      getContract: vi.fn(),
+      saveContract: vi.fn(),
     };
 
     const result = await handlePayNoteDeliveryWebhookEvent(
@@ -89,6 +91,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       {
         myOsClient: myOsClient as any,
         payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+        contractRepository: contractRepository as any,
         bankingRepository: {} as any,
         holdRepository: {} as any,
         clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
@@ -147,6 +150,10 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn().mockResolvedValue(null),
       saveDelivery: vi.fn(),
     };
+    const contractRepository = {
+      getContract: vi.fn(),
+      saveContract: vi.fn(),
+    };
 
     const bankingRepository = {
       getAccountIdByNumber: vi.fn().mockResolvedValue('account-1'),
@@ -181,6 +188,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       {
         myOsClient: myOsClient as any,
         payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+        contractRepository: contractRepository as any,
         bankingRepository: bankingRepository as any,
         holdRepository: holdRepository as any,
         clock: { now: () => new Date('2024-01-02T10:00:00.000Z') },
@@ -257,6 +265,10 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn().mockResolvedValue(null),
       saveDelivery: vi.fn(),
     };
+    const contractRepository = {
+      getContract: vi.fn(),
+      saveContract: vi.fn(),
+    };
 
     const holdRepository = {
       getHoldByCardTransactionDetails: vi.fn(),
@@ -282,6 +294,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       {
         myOsClient: myOsClient as any,
         payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+        contractRepository: contractRepository as any,
         bankingRepository: {} as any,
         holdRepository: holdRepository as any,
         clock: { now: () => new Date(now) },

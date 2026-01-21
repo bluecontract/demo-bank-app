@@ -92,12 +92,13 @@ class PdfParser implements Parser {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-      const items: Array<{ str: string }> = [];
+      const items: PdfTextItem[] = [];
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const page = await pdf.getPage(pageNum);
         const content = await page.getTextContent();
-        content.items.forEach((item: any) => {
+        const contentItems = content.items as PdfTextItem[];
+        contentItems.forEach(item => {
           if (item.str) {
             items.push(item);
           }

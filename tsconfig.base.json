@@ -22,6 +22,7 @@
     "paths": {
       "@demo-bank-app/auth": ["libs/auth/src/index.ts"],
       "@demo-bank-app/banking": ["libs/banking/src/index.ts"],
+      "@demo-bank-app/contracts": ["libs/contracts/src/index.ts"],
       "@demo-bank-app/paynotes": ["libs/paynotes/src/index.ts"],
       "@demo-bank-app/shared-bank-api-client": [
         "libs/shared/bank-api-client/src/index.ts"

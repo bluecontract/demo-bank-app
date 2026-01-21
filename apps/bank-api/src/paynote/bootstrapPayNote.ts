@@ -1,5 +1,8 @@
 import { ServerInferRequest } from '@ts-rest/core';
-import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
+import {
+  bankApiContract,
+  getSupportedContractForDocument,
+} from '@demo-bank-app/shared-bank-api-contract';
 import { bootstrapPayNote as bootstrapPayNoteUseCase } from '@demo-bank-app/paynotes';
 import { problemResponse, ERROR_CODES } from '../shared/errors';
 import {
@@ -24,12 +27,25 @@ export const bootstrapPayNoteHandler = async (
     myOsClient,
     blueIdCalculator,
     payNoteBootstrapRepository,
+    contractRepository,
     clock,
   } = dependencies;
 
   try {
     const { userId, userEmail } = await extractAuthInfo(context.request);
     const { payNote, formData } = request.body;
+    const supportedContract = getSupportedContractForDocument(payNote);
+
+    if (
+      !supportedContract ||
+      supportedContract.typeName !== 'PayNote/PayNote'
+    ) {
+      return problemResponse({
+        status: 400 as const,
+        code: ERROR_CODES.UNSUPPORTED_CONTRACT_TYPE,
+        message: 'Unsupported contract type.',
+      });
+    }
 
     logger.info('Received PayNote bootstrap request', {
       userId,
@@ -108,6 +124,23 @@ export const bootstrapPayNoteHandler = async (
         code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
         message: 'MyOS bootstrap request failed.',
         detail,
+      });
+    }
+
+    if (result.type === 'success' && result.bootstrapSessionId) {
+      const now = clock.now().toISOString();
+      await contractRepository.saveContract({
+        contractId: result.bootstrapSessionId,
+        typeBlueId: supportedContract.typeBlueId,
+        displayName: supportedContract.displayName,
+        sessionId: result.bootstrapSessionId,
+        document: payNote,
+        status: 'bootstrapped',
+        statusUpdatedAt: now,
+        accountNumber: formData?.fromAccount,
+        userId,
+        createdAt: now,
+        updatedAt: now,
       });
     }
 

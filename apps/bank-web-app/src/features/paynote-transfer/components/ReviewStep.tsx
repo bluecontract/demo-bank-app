@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   decodePayNoteBase64AsObject,
   decodePayNoteBase64AsYaml,
@@ -73,25 +73,7 @@ export function ReviewStep({
   );
   const isMissingSomeDetails = !formData.toAccount;
 
-  useEffect(() => {
-    if (!hasValidated.current) {
-      hasValidated.current = true; // Prevent double validation
-      if (isPayNoteEnabled && formData.payNoteCode) {
-        validatePayNote();
-      } else {
-        setIsValidating(false);
-        setCanProceed(true);
-      }
-    }
-  }, [formData, isPayNoteEnabled]);
-
-  useEffect(() => {
-    if (explanationRef.current) {
-      explanationRef.current.scrollTop = explanationRef.current.scrollHeight;
-    }
-  }, [validationResult?.explanation]);
-
-  const validatePayNote = async () => {
+  const validatePayNote = useCallback(async () => {
     if (!isPayNoteEnabled || !formData.payNoteCode) {
       setIsValidating(false);
       setCanProceed(true);
@@ -146,7 +128,20 @@ export function ReviewStep({
     } finally {
       setIsValidating(false);
     }
-  };
+  }, [apiClient, formData, isPayNoteEnabled]);
+
+  useEffect(() => {
+    if (!hasValidated.current) {
+      hasValidated.current = true; // Prevent double validation
+      validatePayNote();
+    }
+  }, [validatePayNote]);
+
+  useEffect(() => {
+    if (explanationRef.current) {
+      explanationRef.current.scrollTop = explanationRef.current.scrollHeight;
+    }
+  }, [validationResult?.explanation]);
 
   const validationScore =
     validationResult?.validationScore ?? MIN_PROCEED_SCORE;

@@ -15,6 +15,7 @@ import type {
   PayNoteDeliveryRecord,
   PayNoteDeliveryRepository,
 } from '../ports';
+import type { ContractRepository } from '@demo-bank-app/contracts';
 import {
   buildChannelBindingsFromContracts,
   ensureTimelineChannel,
@@ -26,6 +27,7 @@ import {
 } from '../payNoteDelivery/blueUtils';
 import { PayNoteDeliverySchema } from '../payNoteDelivery/schema';
 import { blue } from '../../blue';
+import { upsertContractRecord } from '../contracts';
 
 const BOOTSTRAP_EVENT_NAMES = [
   'PayNote/PayNote Delivery Bootstrap Requested',
@@ -43,6 +45,7 @@ export interface HandlePayNoteDeliveryWebhookInput {
 export interface HandlePayNoteDeliveryWebhookDependencies {
   myOsClient: MyOsClient;
   payNoteDeliveryRepository: PayNoteDeliveryRepository;
+  contractRepository: ContractRepository;
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
   clock: ClockPort;
@@ -311,6 +314,7 @@ export const handlePayNoteDeliveryWebhookEvent = async (
       sessionId?: string;
       document?: unknown;
       emitted?: unknown[];
+      triggeredBy?: unknown;
       created?: string;
       epoch?: number;
     };
@@ -759,6 +763,42 @@ export const handlePayNoteDeliveryWebhookEvent = async (
     }
 
     await deps.payNoteDeliveryRepository.saveDelivery(deliveryRecord);
+    await upsertContractRecord({
+      contractRepository: deps.contractRepository,
+      document: deliveryRecord.deliveryDocument,
+      sessionId,
+      documentId: deliveryRecord.deliveryDocumentId ?? deliveryDocumentId,
+      userId: deliveryRecord.userId,
+      accountNumber: deliveryRecord.accountNumber,
+      triggerEvent: eventObject?.triggeredBy,
+      emittedEvents: emitted,
+      relatedTransactionIds: deliveryRecord.transactionId
+        ? [deliveryRecord.transactionId]
+        : undefined,
+      relatedHoldIds: deliveryRecord.holdId
+        ? [deliveryRecord.holdId]
+        : undefined,
+      status:
+        deliveryRecord.clientDecisionStatus ??
+        deliveryRecord.transactionIdentificationStatus ??
+        deliveryRecord.deliveryStatus,
+      statusTimestamps: {
+        ...(deliveryRecord.deliveryUpdatedAt && {
+          deliveryUpdatedAt: deliveryRecord.deliveryUpdatedAt,
+        }),
+        ...(deliveryRecord.identificationReportedAt && {
+          identificationReportedAt: deliveryRecord.identificationReportedAt,
+        }),
+        ...(deliveryRecord.decisionRecordedAt && {
+          decisionRecordedAt: deliveryRecord.decisionRecordedAt,
+        }),
+        ...(deliveryRecord.payNoteBootstrapRequestedAt && {
+          payNoteBootstrapRequestedAt:
+            deliveryRecord.payNoteBootstrapRequestedAt,
+        }),
+      },
+      now,
+    });
 
     const payNotePayload = documentPayload.payNote as
       | Record<string, unknown>

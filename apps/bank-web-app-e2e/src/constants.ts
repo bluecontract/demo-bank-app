@@ -163,7 +163,7 @@ export const expectFormValidationError = async (
 
   // Check if the input has validation constraint violation (HTML5 validation)
   const validationMessage = await input.evaluate(
-    (el: any) => el.validationMessage
+    (el: HTMLInputElement) => el.validationMessage
   );
 
   if (validationMessage) {
@@ -192,10 +192,9 @@ export const completeStandardTransferViaStepper = async (
     title?: string;
   }
 ) => {
-  await page.waitForSelector('text=Loading...', {
-    state: 'hidden',
-    timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
-  });
+  await page
+    .getByText('Loading...')
+    .waitFor({ state: 'hidden', timeout: TEST_DATA.TIMEOUTS.NAVIGATION });
 
   await expect(page.getByText('Initiate New Transfer')).toBeVisible({
     timeout: TEST_DATA.TIMEOUTS.NAVIGATION,

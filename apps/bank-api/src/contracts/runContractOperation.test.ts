@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runContractOperationHandler } from './runContractOperation';
 import { ERROR_CODES } from '../shared/errors';
-import { blue } from '@demo-bank-app/paynotes';
+import { blue, PAYNOTE_DELIVERY_BLUE_ID } from '@demo-bank-app/paynotes';
 
 const hoisted = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
@@ -48,6 +48,11 @@ describe('runContractOperationHandler', () => {
     disableHoldCapture: vi.fn(),
   };
 
+  const contractRepository = {
+    getContractBySessionId: vi.fn(),
+    saveContract: vi.fn(),
+  };
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-02-01T12:00:00.000Z'));
@@ -62,9 +67,12 @@ describe('runContractOperationHandler', () => {
     myOsClient.runDocumentOperation.mockReset();
     myOsClient.bootstrapDocument.mockReset();
     holdRepository.disableHoldCapture.mockReset();
+    contractRepository.getContractBySessionId.mockReset();
+    contractRepository.saveContract.mockReset();
 
     hoisted.getDependenciesMock.mockResolvedValue({
       payNoteDeliveryRepository,
+      contractRepository,
       myOsClient,
       holdRepository,
       logger,
@@ -81,6 +89,16 @@ describe('runContractOperationHandler', () => {
 
   it('accepts a delivery, disables capture, and bootstraps the paynote', async () => {
     const payNotePayload = buildPayNotePayload();
+
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'session-1',
+      typeBlueId: PAYNOTE_DELIVERY_BLUE_ID,
+      displayName: 'PayNote Delivery',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      createdAt: '2024-02-01T10:00:00.000Z',
+      updatedAt: '2024-02-01T10:00:00.000Z',
+    });
 
     payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValue({
       deliveryId: 'delivery-1',
@@ -150,6 +168,16 @@ describe('runContractOperationHandler', () => {
   });
 
   it('rejects when delivery is already decided', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'session-1',
+      typeBlueId: PAYNOTE_DELIVERY_BLUE_ID,
+      displayName: 'PayNote Delivery',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      createdAt: '2024-02-01T10:00:00.000Z',
+      updatedAt: '2024-02-01T10:00:00.000Z',
+    });
+
     payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValue({
       deliveryId: 'delivery-1',
       deliverySessionId: 'session-1',

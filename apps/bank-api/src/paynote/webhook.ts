@@ -1,18 +1,17 @@
 import { ServerInferRequest } from '@ts-rest/core';
-import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
+import {
+  bankApiContract,
+  getSupportedContractForDocument,
+} from '@demo-bank-app/shared-bank-api-contract';
 import {
   blue,
   handleWebhookEvent as handleWebhookEventUseCase,
   handlePayNoteDeliveryWebhookEvent,
   handlePayNoteBootstrapWebhookEvent,
-  PayNoteDeliverySchema,
 } from '@demo-bank-app/paynotes';
 import type { BlueNode } from '@blue-labs/language';
 import { EventSchema } from '@blue-repository/types/packages/conversation/schemas';
-import {
-  PayNoteDeliveryBootstrapRequestedSchema,
-  PayNoteSchema,
-} from '@blue-repository/types/packages/paynote/schemas';
+import { PayNoteDeliveryBootstrapRequestedSchema } from '@blue-repository/types/packages/paynote/schemas';
 import { DocumentSessionBootstrapSchema } from '@blue-repository/types/packages/myos/schemas';
 import { getDependencies } from './dependencies';
 const BOOTSTRAP_EVENT_NAMES = [
@@ -108,13 +107,10 @@ const hasDeliveryBootstrapRequest = (payload: unknown): boolean => {
 const classifyDocumentType = (document: unknown) => {
   try {
     const node = blue.jsonValueToNode(document);
+    const supportedContract = getSupportedContractForDocument(document);
     return {
-      isPayNote: blue.isTypeOf(node, PayNoteSchema, {
-        checkSchemaExtensions: true,
-      }),
-      isDelivery: blue.isTypeOf(node, PayNoteDeliverySchema, {
-        checkSchemaExtensions: true,
-      }),
+      isPayNote: supportedContract?.typeName === 'PayNote/PayNote',
+      isDelivery: supportedContract?.typeName === 'PayNote/PayNote Delivery',
       isBootstrap: blue.isTypeOf(node, DocumentSessionBootstrapSchema, {
         checkSchemaExtensions: true,
       }),
@@ -136,6 +132,7 @@ export const payNoteWebhookHandler = async (
     payNoteRepository,
     payNoteDeliveryRepository,
     payNoteBootstrapRepository,
+    contractRepository,
     bankingRepository,
     holdRepository,
     clock,
@@ -252,6 +249,7 @@ export const payNoteWebhookHandler = async (
         {
           myOsClient,
           payNoteDeliveryRepository,
+          contractRepository,
           bankingRepository,
           holdRepository,
           clock,
@@ -281,6 +279,7 @@ export const payNoteWebhookHandler = async (
           payNoteRepository,
           payNoteDeliveryRepository,
           payNoteBootstrapRepository,
+          contractRepository,
           holdRepository,
           clock,
         }
@@ -312,6 +311,7 @@ export const payNoteWebhookHandler = async (
           bankingFacade,
           payNoteRepository,
           payNoteDeliveryRepository,
+          contractRepository,
           clock,
         }
       )

@@ -15,7 +15,9 @@ import type {
   PayNoteRecord,
 } from '../ports';
 import type { HoldRepository } from '@demo-bank-app/banking';
+import type { ContractRepository } from '@demo-bank-app/contracts';
 import { blue } from '../../blue';
+import { upsertContractRecord } from '../contracts';
 
 const isTraceEnabled =
   process.env.PAYNOTE_WEBHOOK_TRACE === '1' ||
@@ -31,6 +33,7 @@ export interface HandlePayNoteBootstrapWebhookDependencies {
   payNoteRepository: PayNoteRepository;
   payNoteDeliveryRepository: PayNoteDeliveryRepository;
   payNoteBootstrapRepository: PayNoteBootstrapRepository;
+  contractRepository: ContractRepository;
   holdRepository: HoldRepository;
   clock: ClockPort;
 }
@@ -327,9 +330,10 @@ export const handlePayNoteBootstrapWebhookEvent = async (
       ? eventObject.sessionId
       : undefined;
 
-  const emitted = Array.isArray(eventObject?.emitted)
+  const emittedEvents = Array.isArray(eventObject?.emitted)
     ? eventObject.emitted
-    : [];
+    : undefined;
+  const emitted = emittedEvents ?? [];
   const targetEvents = emitted
     .map(event => ({ event, sessionIds: getTargetSessionIds(event) }))
     .filter(
@@ -441,6 +445,27 @@ export const handlePayNoteBootstrapWebhookEvent = async (
       });
 
       await deps.payNoteRepository.savePayNote(updatedRecord);
+      await upsertContractRecord({
+        contractRepository: deps.contractRepository,
+        document: resolved.document,
+        sessionId,
+        documentId: payNoteDocumentId,
+        userId: updatedRecord.userId,
+        accountNumber: updatedRecord.accountNumber,
+        emittedEvents,
+        relatedTransactionIds: updatedRecord.transactionId
+          ? [updatedRecord.transactionId]
+          : undefined,
+        relatedHoldIds: updatedRecord.holdId
+          ? [updatedRecord.holdId]
+          : undefined,
+        status: updatedRecord.transactionId
+          ? 'processed'
+          : updatedRecord.holdId
+          ? 'reserved'
+          : undefined,
+        now,
+      });
 
       if (deliveryRecord) {
         const updatedDelivery = {

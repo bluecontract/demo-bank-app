@@ -14,15 +14,18 @@ import { FundModal } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import {
   CardsPanel,
+  CardActivityPanel,
   CardSimulatorPanel,
 } from '../../features/cards/components';
 import { SpinnerWithText } from '../../ui/Spinner';
-import type { Account } from '../../types/api';
+import type { Account, CardSummary } from '../../types/api';
 
 export function CardsPage() {
   const { user } = useAuth();
   const { data: accounts, isLoading, error } = useAccounts();
   const navigate = useNavigate();
+  const [selectedCard, setSelectedCard] = useState<CardSummary | null>(null);
+  const [showDevTools, setShowDevTools] = useState(false);
 
   const [accountCreationModal, setAccountCreationModal] = useState({
     isOpen: false,
@@ -111,9 +114,24 @@ export function CardsPage() {
               onFund={handleFund}
             />
 
-            <section className="grid gap-6 lg:grid-cols-2">
-              <CardsPanel />
-              <CardSimulatorPanel />
+            <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] min-h-0">
+              <CardsPanel
+                selectedCardId={selectedCard?.cardId ?? null}
+                onSelectCard={setSelectedCard}
+              />
+              <CardActivityPanel selectedCard={selectedCard} />
+            </section>
+
+            <section className="flex flex-col gap-4">
+              <button
+                type="button"
+                className="text-left text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--color-muted)]"
+                onClick={() => setShowDevTools(prev => !prev)}
+                aria-expanded={showDevTools}
+              >
+                {showDevTools ? 'Hide' : 'Show'} dev tools
+              </button>
+              {showDevTools && <CardSimulatorPanel />}
             </section>
           </main>
         </div>

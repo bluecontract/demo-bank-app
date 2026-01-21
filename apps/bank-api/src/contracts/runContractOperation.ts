@@ -1,5 +1,8 @@
 import { ServerInferRequest } from '@ts-rest/core';
-import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
+import {
+  bankApiContract,
+  getSupportedContractByTypeBlueId,
+} from '@demo-bank-app/shared-bank-api-contract';
 import {
   extractAuthInfo,
   type MaybeAuthenticatedTsRestRequestContext,
@@ -18,17 +21,90 @@ const getContractsRecord = (value: unknown): Record<string, unknown> | null => {
   return value as Record<string, unknown>;
 };
 
+const mergeUnique = (existing?: string[], incoming?: string[]) => {
+  const set = new Set<string>(existing ?? []);
+  (incoming ?? []).forEach(value => {
+    if (value) {
+      set.add(value);
+    }
+  });
+  return set.size ? Array.from(set) : undefined;
+};
+
 export const runContractOperationHandler = async (
   request: ServerInferRequest<
     (typeof bankApiContract)['banking']['runContractOperation']
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { payNoteDeliveryRepository, myOsClient, holdRepository, logger } =
-    await getDependencies();
+  const {
+    payNoteDeliveryRepository,
+    contractRepository,
+    myOsClient,
+    holdRepository,
+    logger,
+  } = await getDependencies();
 
   const { userId } = await extractAuthInfo(context.request);
   const { sessionId, operation } = request.params;
+
+  const contract = await contractRepository.getContractBySessionId(sessionId);
+
+  if (!contract || contract.userId !== userId) {
+    return problemResponse({
+      status: 404,
+      code: ERROR_CODES.CONTRACT_NOT_FOUND,
+      message: 'Contract not found',
+    });
+  }
+
+  const supportedContract = getSupportedContractByTypeBlueId(
+    contract.typeBlueId
+  );
+
+  if (!supportedContract) {
+    return problemResponse({
+      status: 400,
+      code: ERROR_CODES.UNSUPPORTED_CONTRACT_TYPE,
+      message: 'Unsupported contract type',
+    });
+  }
+
+  const now = new Date().toISOString();
+
+  if (supportedContract.typeName !== 'PayNote/PayNote Delivery') {
+    const credentials = await myOsClient.getCredentials();
+    const response = await myOsClient.runDocumentOperation({
+      credentials,
+      sessionId,
+      operation,
+      payload: request.body,
+    });
+
+    if (!response.ok) {
+      return problemResponse({
+        status: 500,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        message: 'Failed to run MyOS document operation',
+        detail: response.body ? JSON.stringify(response.body) : undefined,
+      });
+    }
+
+    await contractRepository.saveContract({
+      ...contract,
+      sessionId: contract.sessionId ?? sessionId,
+      updatedAt: now,
+    });
+
+    return {
+      status: 200 as const,
+      body: {
+        status: 'ok' as const,
+        myosStatus: response.status,
+        body: response.body,
+      },
+    };
+  }
 
   const delivery = await payNoteDeliveryRepository.getDeliveryBySessionId(
     sessionId
@@ -65,8 +141,6 @@ export const runContractOperationHandler = async (
       message: 'PayNote delivery decision has already been recorded',
     });
   }
-
-  const now = new Date().toISOString();
 
   const basePayload =
     typeof request.body === 'object' && request.body !== null
@@ -190,6 +264,54 @@ export const runContractOperationHandler = async (
   }
 
   await payNoteDeliveryRepository.saveDelivery(updatedDelivery);
+
+  const nextStatus =
+    updatedDelivery.clientDecisionStatus ??
+    updatedDelivery.transactionIdentificationStatus ??
+    updatedDelivery.deliveryStatus;
+  const statusTimestamps = {
+    ...(updatedDelivery.deliveryUpdatedAt && {
+      deliveryUpdatedAt: updatedDelivery.deliveryUpdatedAt,
+    }),
+    ...(updatedDelivery.identificationReportedAt && {
+      identificationReportedAt: updatedDelivery.identificationReportedAt,
+    }),
+    ...(updatedDelivery.decisionRecordedAt && {
+      decisionRecordedAt: updatedDelivery.decisionRecordedAt,
+    }),
+    ...(updatedDelivery.payNoteBootstrapRequestedAt && {
+      payNoteBootstrapRequestedAt: updatedDelivery.payNoteBootstrapRequestedAt,
+    }),
+  };
+
+  await contractRepository.saveContract({
+    ...contract,
+    sessionId: contract.sessionId ?? sessionId,
+    documentId: updatedDelivery.deliveryDocumentId ?? contract.documentId,
+    document: updatedDelivery.deliveryDocument ?? contract.document,
+    status: nextStatus,
+    statusUpdatedAt:
+      nextStatus && nextStatus !== contract.status
+        ? now
+        : contract.statusUpdatedAt,
+    statusTimestamps: {
+      ...(contract.statusTimestamps ?? {}),
+      ...statusTimestamps,
+    },
+    relatedTransactionIds: mergeUnique(
+      contract.relatedTransactionIds,
+      updatedDelivery.transactionId
+        ? [updatedDelivery.transactionId]
+        : undefined
+    ),
+    relatedHoldIds: mergeUnique(
+      contract.relatedHoldIds,
+      updatedDelivery.holdId ? [updatedDelivery.holdId] : undefined
+    ),
+    accountNumber: updatedDelivery.accountNumber ?? contract.accountNumber,
+    userId: updatedDelivery.userId ?? contract.userId,
+    updatedAt: now,
+  });
 
   return {
     status: 200 as const,

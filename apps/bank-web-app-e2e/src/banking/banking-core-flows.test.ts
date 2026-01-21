@@ -76,14 +76,13 @@ test.describe('Banking Core Flows', () => {
 
     if (await scrollRightBtn.isVisible()) {
       await scrollRightBtn.click();
-      await page.waitForTimeout(300);
 
       // Should show left arrow after scrolling right
       await expect(scrollLeftBtn).toBeVisible();
 
       // Scroll back left
       await scrollLeftBtn.click();
-      await page.waitForTimeout(300);
+      await expect(scrollLeftBtn).toBeHidden();
     }
   });
 
@@ -741,15 +740,19 @@ test.describe('Banking Core Flows', () => {
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
 
-    // Wait a bit for the account switch to complete fully
-    await page.waitForTimeout(2000);
+    const account2Card = page
+      .getByRole('heading', { name: account2 })
+      .locator('xpath=ancestor::div[contains(@class,"app-surface")]');
+    await expect(account2Card).toHaveClass(/ring-2/);
 
     // Check if there are no transaction items for the second account
     // If the account switching is not working properly, just check that we have less transactions
-    const transactionCount = await page
-      .locator('[data-testid^="activity-item-"]')
-      .count();
-    expect(transactionCount).toBeLessThanOrEqual(1);
+    await expect
+      .poll(
+        async () => page.locator('[data-testid^="activity-item-"]').count(),
+        { timeout: TEST_DATA.TIMEOUTS.API_RESPONSE }
+      )
+      .toBeLessThanOrEqual(1);
 
     // Click back to first account
     await page.click(`text=${account1}`);
@@ -759,5 +762,10 @@ test.describe('Banking Core Flows', () => {
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
     await expect(page.locator('[data-testid^="activity-item-"]')).toBeVisible();
+
+    const account1Card = page
+      .getByRole('heading', { name: account1 })
+      .locator('xpath=ancestor::div[contains(@class,"app-surface")]');
+    await expect(account1Card).toHaveClass(/ring-2/);
   });
 });

@@ -36,6 +36,10 @@ import {
   type IdGeneratorPort,
   type PayNoteValidationProvider,
 } from '@demo-bank-app/paynotes';
+import {
+  DynamoContractRepository,
+  type ContractRepository,
+} from '@demo-bank-app/contracts';
 
 export type PaynoteDependencies = {
   logger: PowertoolsLogger;
@@ -45,6 +49,7 @@ export type PaynoteDependencies = {
   payNoteDeliveryRepository: PayNoteDeliveryRepository;
   payNoteRepository: PayNoteRepository;
   payNoteBootstrapRepository: PayNoteBootstrapRepository;
+  contractRepository: ContractRepository;
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
   myOsClient: MyOsClient;
@@ -120,6 +125,12 @@ const initializeDependencies = (): PaynoteDependencies => {
     endpoint: awsEndpoint,
   });
 
+  const contractRepository = new DynamoContractRepository({
+    tableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
   const bankingRepository = new DynamoBankingRepository({
     tableName,
     region: awsRegion,
@@ -166,6 +177,7 @@ const initializeDependencies = (): PaynoteDependencies => {
     payNoteDeliveryRepository,
     payNoteRepository,
     payNoteBootstrapRepository,
+    contractRepository,
     bankingRepository,
     holdRepository,
     myOsClient,

@@ -17,6 +17,8 @@ const filterOptions: { label: string; value: ActivityFilter }[] = [
   { label: 'Holds', value: 'holds' },
 ];
 
+const EMPTY_ACTIVITY_ITEMS: ActivityItem[] = [];
+
 const hasCardContext = (item: ActivityItem) =>
   Boolean(
     item.cardId || item.cardLast4 || item.merchantName || item.processorChargeId
@@ -55,7 +57,7 @@ export function TransactionHistory() {
     accountNumber: selectedAccount?.accountNumber || null,
   });
 
-  const activityItems = activityData?.items || [];
+  const activityItems = activityData?.items ?? EMPTY_ACTIVITY_ITEMS;
   const filteredItems = useMemo(() => {
     if (!activityItems.length) {
       return activityItems;

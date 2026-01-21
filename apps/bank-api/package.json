@@ -24,6 +24,7 @@
     "@blue-repository/types": "0.6.0",
     "@demo-bank-app/auth": "*",
     "@demo-bank-app/banking": "*",
+    "@demo-bank-app/contracts": "*",
     "@demo-bank-app/paynotes": "*",
     "@demo-bank-app/shared-bank-api-contract": "*",
     "@demo-bank-app/shared-config": "*",

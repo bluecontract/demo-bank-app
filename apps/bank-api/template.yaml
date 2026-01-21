@@ -464,6 +464,30 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /v1/paynotes/deliveries/{deliveryId}
             Method: OPTIONS
+        ListContractsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/contracts
+            Method: GET
+        ListContractsOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/contracts
+            Method: OPTIONS
+        GetContractDetailsApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/contracts/{sessionId}
+            Method: GET
+        GetContractDetailsOptions:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/contracts/{sessionId}
+            Method: OPTIONS
         RunContractOperationApi:
           Type: Api
           Properties:

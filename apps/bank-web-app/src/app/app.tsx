@@ -6,6 +6,7 @@ import { HomePage } from '../pages/HomePage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { CardsPage } from '../pages/CardsPage';
 import { NewTransferPage } from '../pages/NewTransferPage';
+import { ContractsPage } from '../pages/ContractsPage';
 import { SignUpPage } from '../features/auth/pages/SignUpPage';
 import { SignInPage } from '../features/auth/pages/SignInPage';
 
@@ -38,6 +39,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <NewTransferPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contracts"
+            element={
+              <ProtectedRoute>
+                <ContractsPage />
               </ProtectedRoute>
             }
           />

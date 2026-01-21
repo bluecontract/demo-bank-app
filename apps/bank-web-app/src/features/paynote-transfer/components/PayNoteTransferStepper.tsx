@@ -61,7 +61,7 @@ export function PayNoteTransferStepper({
       let fromAccount = '';
       if (defaultAccountId) {
         fromAccount =
-          accounts.find(a => a.accountId == defaultAccountId)?.accountNumber ??
+          accounts.find(a => a.accountId === defaultAccountId)?.accountNumber ??
           '';
       } else {
         fromAccount = accounts[0].accountNumber;
