@@ -35,6 +35,7 @@ describe('bootstrapPayNoteHandler', () => {
     getContractBySessionId: vi.fn(),
     getContractByDocumentId: vi.fn(),
     saveContract: vi.fn(),
+    updateContractSummary: vi.fn(),
     listContractsByUserId: vi.fn(),
   };
 

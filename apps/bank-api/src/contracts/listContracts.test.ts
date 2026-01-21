@@ -21,6 +21,7 @@ describe('listContractsHandler', () => {
 
   const contractRepository = {
     listContractsByUserId: vi.fn(),
+    updateContractSummary: vi.fn(),
   };
 
   beforeEach(() => {

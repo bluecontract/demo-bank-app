@@ -25,6 +25,7 @@ import {
   PayNoteDeliveryDetailsDto,
   ContractListResponseDto,
   ContractDetailsDto,
+  ContractSummaryGenerationDto,
   ContractOperationResponseDto,
   NotImplementedResponseDto,
 } from './schemas';
@@ -391,6 +392,27 @@ export const bankApiContract = c.router(
           404: ProblemDto,
         },
         summary: 'Get contract details by session id.',
+      },
+
+      generateContractSummary: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/summary',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        body: z
+          .object({
+            force: z.boolean().optional(),
+          })
+          .optional(),
+        responses: {
+          200: ContractSummaryGenerationDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          500: ProblemDto,
+        },
+        summary:
+          'Generate (or return cached) contract summary for the current document state.',
       },
 
       runContractOperation: {

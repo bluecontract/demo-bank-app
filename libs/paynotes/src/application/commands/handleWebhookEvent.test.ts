@@ -73,6 +73,7 @@ const createDependencies = () => {
       getContractBySessionId: vi.fn().mockResolvedValue(null),
       getContractByDocumentId: vi.fn().mockResolvedValue(null),
       saveContract: vi.fn(),
+      updateContractSummary: vi.fn(),
       listContractsByUserId: vi.fn(),
     };
 

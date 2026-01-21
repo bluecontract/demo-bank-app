@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 
 interface ButtonProps {
   children: ReactNode;
@@ -7,7 +7,7 @@ interface ButtonProps {
   fullWidth?: boolean;
   disabled?: boolean;
   className?: string;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   'data-testid'?: string;
 }
 

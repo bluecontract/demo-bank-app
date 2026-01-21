@@ -4,12 +4,15 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 import type {
   ContractRecord,
   ContractRepository,
   ContractSummary,
+  ContractDocumentSummary,
+  ContractSummaryUpdate,
 } from '../application/ports';
 
 const ENTITY_TYPES = {
@@ -58,6 +61,11 @@ interface ContractItem {
   relatedHoldIds?: string[];
   accountNumber?: string;
   userId?: string;
+  summary?: ContractDocumentSummary;
+  summaryUpdatedAt?: string;
+  summarySourceUpdatedAt?: string;
+  summaryModel?: string;
+  summaryError?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -148,6 +156,11 @@ export class DynamoContractRepository implements ContractRepository {
       relatedHoldIds: item.relatedHoldIds,
       accountNumber: item.accountNumber,
       userId: item.userId,
+      summary: item.summary,
+      summaryUpdatedAt: item.summaryUpdatedAt,
+      summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+      summaryModel: item.summaryModel,
+      summaryError: item.summaryError,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
@@ -236,6 +249,11 @@ export class DynamoContractRepository implements ContractRepository {
       relatedHoldIds: record.relatedHoldIds,
       accountNumber: record.accountNumber,
       userId: record.userId,
+      summary: record.summary,
+      summaryUpdatedAt: record.summaryUpdatedAt,
+      summarySourceUpdatedAt: record.summarySourceUpdatedAt,
+      summaryModel: record.summaryModel,
+      summaryError: record.summaryError,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };
@@ -306,6 +324,87 @@ export class DynamoContractRepository implements ContractRepository {
     if (writes.length) {
       await Promise.all(writes);
     }
+  }
+
+  async updateContractSummary(update: ContractSummaryUpdate): Promise<void> {
+    const setters: string[] = [];
+    const removals: string[] = [];
+    const names: Record<string, string> = {
+      '#pk': 'PK',
+      '#summary': 'summary',
+      '#summaryUpdatedAt': 'summaryUpdatedAt',
+      '#summarySourceUpdatedAt': 'summarySourceUpdatedAt',
+      '#summaryModel': 'summaryModel',
+      '#summaryError': 'summaryError',
+    };
+    const values: Record<string, unknown> = {};
+
+    const addValue = (key: string, value: unknown) => {
+      values[key] = value;
+      return key;
+    };
+
+    const setField = (nameKey: string, valueKey: string, value: unknown) => {
+      addValue(valueKey, value);
+      setters.push(`${nameKey} = ${valueKey}`);
+    };
+
+    const handleField = (
+      nameKey: string,
+      valueKey: string,
+      value: unknown | null | undefined
+    ) => {
+      if (value === undefined) {
+        return;
+      }
+      if (value === null) {
+        removals.push(nameKey);
+        return;
+      }
+      setField(nameKey, valueKey, value);
+    };
+
+    handleField('#summary', ':summary', update.summary);
+    handleField(
+      '#summaryUpdatedAt',
+      ':summaryUpdatedAt',
+      update.summaryUpdatedAt
+    );
+    handleField(
+      '#summarySourceUpdatedAt',
+      ':summarySourceUpdatedAt',
+      update.summarySourceUpdatedAt
+    );
+    handleField('#summaryModel', ':summaryModel', update.summaryModel);
+    handleField('#summaryError', ':summaryError', update.summaryError);
+
+    if (!setters.length && !removals.length) {
+      return;
+    }
+
+    const expressions: string[] = [];
+    if (setters.length) {
+      expressions.push(`SET ${setters.join(', ')}`);
+    }
+    if (removals.length) {
+      expressions.push(`REMOVE ${removals.join(', ')}`);
+    }
+
+    await this.client.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: this.buildContractPk(update.contractId),
+          SK: SORT_KEYS.META,
+        },
+        ConditionExpression: 'attribute_exists(#pk)',
+        UpdateExpression: expressions.join(' '),
+        ExpressionAttributeNames: names,
+        ...(Object.keys(values).length
+          ? { ExpressionAttributeValues: values }
+          : {}),
+      })
+    );
   }
 
   async listContractsByUserId(

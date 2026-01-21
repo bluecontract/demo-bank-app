@@ -70,7 +70,10 @@ export function CardActivityPanel({ selectedCard }: CardActivityPanelProps) {
   }, [activityItems, selectedCard]);
 
   const isEmpty =
-    !isLoading && !isError && selectedCard && filteredItems.length === 0;
+    !isLoading &&
+    !isError &&
+    Boolean(selectedCard) &&
+    filteredItems.length === 0;
 
   return (
     <Card className="flex flex-col flex-1 min-h-0">

@@ -17,6 +17,7 @@ import {
   ActivityItem,
   useActivity,
 } from '../../transactions/hooks/useActivity';
+import { useContractSummary, useRegenerateContractSummary } from '../hooks';
 
 interface ContractDetailsPanelProps {
   contract?: ContractDetails | null;
@@ -199,6 +200,16 @@ export function ContractDetailsPanel({
     getDocumentName(restoredDocument) ?? contract?.displayName ?? 'Contract';
   const documentSummary =
     getDocumentDescription(restoredDocument) ?? documentTitle;
+  const summaryQuery = useContractSummary(
+    contract?.sessionId ?? null,
+    contract?.updatedAt ?? null
+  );
+  const regenerateSummary = useRegenerateContractSummary();
+  const generatedSummary = summaryQuery.data?.summary ?? contract?.summary;
+  const summaryErrorMessage =
+    (summaryQuery.error instanceof Error ? summaryQuery.error.message : null) ??
+    contract?.summaryError ??
+    null;
   const triggerEventJson = formatJson(contract?.triggerEvent);
   const emittedEventsJson = formatJson(contract?.emittedEvents);
   const statusEntries = contract?.statusTimestamps
@@ -358,9 +369,100 @@ export function ContractDetailsPanel({
             </h3>
           </header>
           <div className="p-4">
-            <p className="text-sm text-slate-700 leading-relaxed">
-              {documentSummary}
-            </p>
+            {summaryQuery.isLoading && !generatedSummary && (
+              <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
+                <Spinner size="sm" color="green" />
+                Generating summary...
+              </div>
+            )}
+
+            {summaryErrorMessage && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
+                {summaryErrorMessage}
+              </div>
+            )}
+
+            {generatedSummary ? (
+              <div className="space-y-4 text-sm text-slate-700">
+                <div>
+                  <p className="text-lg font-semibold text-slate-900">
+                    {generatedSummary.title}
+                  </p>
+                  <p className="mt-1 text-slate-600">
+                    {generatedSummary.oneLiner}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                    Current state
+                  </p>
+                  <p className="mt-2 font-semibold text-slate-900">
+                    {generatedSummary.state.statusLabel}
+                  </p>
+                  <p className="mt-1 text-slate-600">
+                    {generatedSummary.state.explanation}
+                  </p>
+                </div>
+
+                {generatedSummary.keyFacts.length > 0 && (
+                  <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                      Key facts
+                    </p>
+                    <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+                      {generatedSummary.keyFacts.map(fact => (
+                        <div
+                          key={`${fact.label}:${fact.value}`}
+                          className="flex items-center justify-between gap-4"
+                        >
+                          <span className="text-slate-500">{fact.label}</span>
+                          <span className="font-medium text-slate-900">
+                            {fact.value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {generatedSummary.warnings?.length ? (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
+                    <p className="text-xs uppercase tracking-[0.2em] text-amber-700">
+                      Notes
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5">
+                      {generatedSummary.warnings.map(warning => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-700 leading-relaxed">
+                {documentSummary}
+              </p>
+            )}
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!contract.sessionId || regenerateSummary.isPending}
+                onClick={() => {
+                  if (!contract.sessionId) return;
+                  regenerateSummary.mutate({ sessionId: contract.sessionId });
+                }}
+              >
+                {regenerateSummary.isPending ? 'Regenerating...' : 'Regenerate'}
+              </Button>
+              {summaryQuery.data?.model && (
+                <span className="text-xs text-slate-500">
+                  Model: {summaryQuery.data.model}
+                </span>
+              )}
+            </div>
           </div>
         </section>
 

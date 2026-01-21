@@ -1,5 +1,33 @@
 export type ContractStatusTimestamps = Record<string, string>;
 
+export type ContractDocumentSummaryKeyFact = {
+  label: string;
+  value: string;
+};
+
+export type ContractDocumentSummaryState = {
+  statusLabel: string;
+  explanation: string;
+  updatedAt: string | null;
+};
+
+export type ContractDocumentSummary = {
+  title: string;
+  oneLiner: string;
+  state: ContractDocumentSummaryState;
+  keyFacts: ContractDocumentSummaryKeyFact[];
+  warnings: string[];
+};
+
+export type ContractSummaryUpdate = {
+  contractId: string;
+  summary?: ContractDocumentSummary | null;
+  summaryUpdatedAt?: string | null;
+  summarySourceUpdatedAt?: string | null;
+  summaryModel?: string | null;
+  summaryError?: string | null;
+};
+
 export interface ContractRecord {
   contractId: string;
   typeBlueId: string;
@@ -17,6 +45,11 @@ export interface ContractRecord {
   relatedHoldIds?: string[];
   accountNumber?: string;
   userId?: string;
+  summary?: ContractDocumentSummary;
+  summaryUpdatedAt?: string;
+  summarySourceUpdatedAt?: string;
+  summaryModel?: string;
+  summaryError?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +71,7 @@ export interface ContractRepository {
   getContractBySessionId(sessionId: string): Promise<ContractRecord | null>;
   getContractByDocumentId(documentId: string): Promise<ContractRecord | null>;
   saveContract(record: ContractRecord): Promise<void>;
+  updateContractSummary(update: ContractSummaryUpdate): Promise<void>;
   listContractsByUserId(
     userId: string,
     options?: { updatedSince?: string }

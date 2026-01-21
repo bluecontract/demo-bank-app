@@ -34,6 +34,7 @@ import { getPayNoteDeliveryHandler } from './paynote/getPayNoteDelivery';
 import { runContractOperationHandler } from './contracts/runContractOperation';
 import { listContractsHandler } from './contracts/listContracts';
 import { getContractDetailsHandler } from './contracts/getContractDetails';
+import { generateContractSummaryHandler } from './contracts/generateContractSummary';
 
 const metrics = getMetrics();
 const logger = getLogger();
@@ -81,6 +82,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       getPayNoteDelivery: getPayNoteDeliveryHandler,
       listContracts: listContractsHandler,
       getContractDetails: getContractDetailsHandler,
+      generateContractSummary: generateContractSummaryHandler,
       runContractOperation: runContractOperationHandler,
       authorizeCard: authorizeCardHandler,
       captureCardAuthorization: captureCardAuthorizationHandler,

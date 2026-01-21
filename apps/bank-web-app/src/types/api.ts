@@ -106,6 +106,11 @@ export type ContractDetails = ClientInferResponseBody<
   200
 >;
 
+export type ContractSummaryGeneration = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['generateContractSummary'],
+  200
+>;
+
 export type ContractOperationResponse = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['runContractOperation'],
   200

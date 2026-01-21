@@ -435,6 +435,25 @@ export const ContractListResponseDto = z.object({
   items: z.array(ContractSummaryDto),
 });
 
+export const ContractDocumentSummaryKeyFactDto = z.object({
+  label: z.string(),
+  value: z.string(),
+});
+
+export const ContractDocumentSummaryStateDto = z.object({
+  statusLabel: z.string(),
+  explanation: z.string(),
+  updatedAt: z.string().datetime({ offset: true }).nullable(),
+});
+
+export const ContractDocumentSummaryDto = z.object({
+  title: z.string(),
+  oneLiner: z.string(),
+  state: ContractDocumentSummaryStateDto,
+  keyFacts: z.array(ContractDocumentSummaryKeyFactDto),
+  warnings: z.array(z.string()),
+});
+
 export const ContractDetailsDto = z.object({
   contractId: z.string(),
   typeBlueId: z.string(),
@@ -450,8 +469,21 @@ export const ContractDetailsDto = z.object({
   relatedHoldIds: z.array(z.string()).optional(),
   accountNumber: z.string().optional(),
   document: z.unknown().optional(),
+  summary: ContractDocumentSummaryDto.optional(),
+  summaryUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  summarySourceUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  summaryModel: z.string().optional(),
+  summaryError: z.string().optional(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const ContractSummaryGenerationDto = z.object({
+  summary: ContractDocumentSummaryDto,
+  summaryUpdatedAt: z.string().datetime({ offset: true }),
+  summarySourceUpdatedAt: z.string().datetime({ offset: true }),
+  cached: z.boolean().optional(),
+  model: z.string().optional(),
 });
 
 export const ContractOperationResponseDto = z.object({

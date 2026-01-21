@@ -110,6 +110,11 @@ export const upsertContractRecord = async (input: {
     relatedHoldIds: mergeUnique(existing?.relatedHoldIds, input.relatedHoldIds),
     accountNumber: input.accountNumber ?? existing?.accountNumber,
     userId: input.userId ?? existing?.userId,
+    summary: existing?.summary,
+    summaryUpdatedAt: existing?.summaryUpdatedAt,
+    summarySourceUpdatedAt: existing?.summarySourceUpdatedAt,
+    summaryModel: existing?.summaryModel,
+    summaryError: existing?.summaryError,
     createdAt: existing?.createdAt ?? input.now,
     updatedAt: input.now,
   });

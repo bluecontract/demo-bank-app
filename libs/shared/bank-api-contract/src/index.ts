@@ -9,6 +9,8 @@ export {
   PayNoteSummaryDto,
   ContractSummaryDto,
   ContractListResponseDto,
+  ContractDocumentSummaryDto,
+  ContractSummaryGenerationDto,
   ContractDetailsDto,
   ContractOperationResponseDto,
   NotImplementedResponseDto,
