@@ -331,16 +331,16 @@ export class DynamoContractRepository implements ContractRepository {
     const removals: string[] = [];
     const names: Record<string, string> = {
       '#pk': 'PK',
-      '#summary': 'summary',
-      '#summaryUpdatedAt': 'summaryUpdatedAt',
-      '#summarySourceUpdatedAt': 'summarySourceUpdatedAt',
-      '#summaryModel': 'summaryModel',
-      '#summaryError': 'summaryError',
     };
     const values: Record<string, unknown> = {};
 
     const addValue = (key: string, value: unknown) => {
       values[key] = value;
+      return key;
+    };
+
+    const addName = (key: string, value: string) => {
+      names[key] = value;
       return key;
     };
 
@@ -351,12 +351,14 @@ export class DynamoContractRepository implements ContractRepository {
 
     const handleField = (
       nameKey: string,
+      attributeName: string,
       valueKey: string,
       value: unknown | null | undefined
     ) => {
       if (value === undefined) {
         return;
       }
+      addName(nameKey, attributeName);
       if (value === null) {
         removals.push(nameKey);
         return;
@@ -364,19 +366,31 @@ export class DynamoContractRepository implements ContractRepository {
       setField(nameKey, valueKey, value);
     };
 
-    handleField('#summary', ':summary', update.summary);
+    handleField('#summary', 'summary', ':summary', update.summary);
     handleField(
       '#summaryUpdatedAt',
+      'summaryUpdatedAt',
       ':summaryUpdatedAt',
       update.summaryUpdatedAt
     );
     handleField(
       '#summarySourceUpdatedAt',
+      'summarySourceUpdatedAt',
       ':summarySourceUpdatedAt',
       update.summarySourceUpdatedAt
     );
-    handleField('#summaryModel', ':summaryModel', update.summaryModel);
-    handleField('#summaryError', ':summaryError', update.summaryError);
+    handleField(
+      '#summaryModel',
+      'summaryModel',
+      ':summaryModel',
+      update.summaryModel
+    );
+    handleField(
+      '#summaryError',
+      'summaryError',
+      ':summaryError',
+      update.summaryError
+    );
 
     if (!setters.length && !removals.length) {
       return;
