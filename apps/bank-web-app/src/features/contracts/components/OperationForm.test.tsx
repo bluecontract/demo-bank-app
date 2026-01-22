@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BlueNode } from '@blue-labs/language';
-import { blue } from '@demo-bank-app/shared-bank-api-contract';
+import { blue } from '../../../lib/blue';
 import { OperationForm } from './OperationForm';
 import { useRunContractOperation } from '../hooks/useRunContractOperation';
 

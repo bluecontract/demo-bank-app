@@ -1,4 +1,5 @@
-import { Blue, type BlueNode } from '@blue-labs/language';
+import { Blue } from '@blue-labs/language';
+import type { BlueNode } from '@blue-labs/language';
 import { repository } from '@blue-repository/types';
 import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 import {
@@ -12,6 +13,7 @@ export type SupportedContract = {
   typeName: string;
   displayName: string;
   operationsChannelKey: string;
+  userChannelKey: string;
 };
 
 type SupportedContractDefinition = SupportedContract & {
@@ -35,6 +37,7 @@ const supportedContractDefinitions: SupportedContractDefinition[] = [
     typeName: 'PayNote/PayNote Delivery',
     displayName: buildDisplayName('PayNote/PayNote Delivery'),
     operationsChannelKey: 'payNoteReceiver',
+    userChannelKey: 'payNoteReceiver',
     schema: PayNoteDeliverySchema,
   },
   {
@@ -42,16 +45,24 @@ const supportedContractDefinitions: SupportedContractDefinition[] = [
     typeName: 'PayNote/PayNote',
     displayName: buildDisplayName('PayNote/PayNote'),
     operationsChannelKey: 'payeeChannel',
+    userChannelKey: 'payerChannel',
     schema: PayNoteSchema,
   },
 ];
 
 export const supportedContracts = supportedContractDefinitions.map(
-  ({ typeBlueId, typeName, displayName, operationsChannelKey }) => ({
+  ({
     typeBlueId,
     typeName,
     displayName,
     operationsChannelKey,
+    userChannelKey,
+  }) => ({
+    typeBlueId,
+    typeName,
+    displayName,
+    operationsChannelKey,
+    userChannelKey,
   })
 );
 

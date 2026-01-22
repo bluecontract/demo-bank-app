@@ -4,18 +4,25 @@ import {
   getSupportedContractForDocument,
 } from '@demo-bank-app/shared-bank-api-contract';
 import {
-  blue,
   handleWebhookEvent as handleWebhookEventUseCase,
   handlePayNoteDeliveryWebhookEvent,
   handlePayNoteBootstrapWebhookEvent,
 } from '@demo-bank-app/paynotes';
+import { Blue } from '@blue-labs/language';
 import type { BlueNode } from '@blue-labs/language';
+import { repository } from '@blue-repository/types';
 import {
   DocumentBootstrapRequestedSchema,
   EventSchema,
 } from '@blue-repository/types/packages/conversation/schemas';
 import { DocumentSessionBootstrapSchema } from '@blue-repository/types/packages/myos/schemas';
 import { getDependencies } from './dependencies';
+import { prefetchContractSummaryForSessionId } from '../contracts/generateContractSummary';
+
+const blue = new Blue({
+  repositories: [repository],
+});
+
 const BOOTSTRAP_EVENT_NAMES = [
   'PayNote/PayNote Delivery Bootstrap Requested',
   'PayNote Delivery Bootstrap Requested',
@@ -129,6 +136,7 @@ export const payNoteWebhookHandler = async (
 ) => {
   const {
     logger,
+    getOpenAiApiKey,
     myOsClient,
     bankingFacade,
     payNoteRepository,
@@ -335,6 +343,17 @@ export const payNoteWebhookHandler = async (
 
   const note =
     payNoteResult?.note ?? bootstrapResult?.note ?? deliveryResult?.note;
+
+  const sessionId = (payload as { object?: { sessionId?: unknown } })?.object
+    ?.sessionId;
+  if (typeof sessionId === 'string') {
+    void prefetchContractSummaryForSessionId({
+      sessionId,
+      contractRepository,
+      getOpenAiApiKey,
+      logger,
+    });
+  }
 
   return {
     status: 200 as const,

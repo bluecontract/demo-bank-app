@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { BlueNode } from '@blue-labs/language';
-import { blue } from '@demo-bank-app/shared-bank-api-contract';
+import { blue } from '../../../lib/blue';
 import {
   buildPayload,
   buildRequestModel,

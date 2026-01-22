@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateContractSummaryHandler } from './generateContractSummary';
+import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 
 const hoistedOpenAI = vi.hoisted(() => {
   const responsesParseMock = vi.fn();
@@ -33,6 +34,7 @@ vi.mock('../auth/middleware', () => ({
 }));
 
 describe('generateContractSummaryHandler', () => {
+  const payNoteTypeBlueId = paynoteBlueIds['PayNote/PayNote'];
   const logger = {
     info: vi.fn(),
     error: vi.fn(),
@@ -79,10 +81,14 @@ describe('generateContractSummaryHandler', () => {
   it('returns cached summary when fresh and force is false', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
-      typeBlueId: 'type-1',
+      typeBlueId: payNoteTypeBlueId,
       displayName: 'PayNote',
       sessionId: 'sess-1',
-      document: { type: 'PayNote/PayNote', name: 'Test PayNote' },
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
       userId: 'user-123',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
@@ -122,10 +128,14 @@ describe('generateContractSummaryHandler', () => {
   it('generates a new summary when missing', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
-      typeBlueId: 'type-1',
+      typeBlueId: payNoteTypeBlueId,
       displayName: 'PayNote',
       sessionId: 'sess-1',
-      document: { type: 'PayNote/PayNote', name: 'Test PayNote' },
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
       userId: 'user-123',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
@@ -158,6 +168,68 @@ describe('generateContractSummaryHandler', () => {
     expect(result.body.summary.title).toBe('PayNote');
     expect(getOpenAiApiKey).toHaveBeenCalled();
     expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalled();
+    expect(contractRepository.updateContractSummary).toHaveBeenCalled();
+  });
+
+  it('returns 400 when type pack is missing required type definitions', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: 'unknown-type-blue-id',
+      displayName: 'Unknown',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: 'unknown-type-blue-id' },
+        name: 'Unknown Doc',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: {},
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(400);
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(getOpenAiApiKey).not.toHaveBeenCalled();
+    expect(contractRepository.updateContractSummary).toHaveBeenCalled();
+  });
+
+  it('returns 400 when contracts contain non-type {blueId} stubs', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {
+          someRef: { blueId: 'node-blue-id-stub' },
+        },
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: {},
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(400);
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(getOpenAiApiKey).not.toHaveBeenCalled();
     expect(contractRepository.updateContractSummary).toHaveBeenCalled();
   });
 });

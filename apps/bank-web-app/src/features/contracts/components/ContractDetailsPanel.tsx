@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { dump as yamlDump } from 'js-yaml';
-import {
-  blue,
-  getSupportedContractByTypeBlueId,
-} from '@demo-bank-app/shared-bank-api-contract';
+import { getSupportedContractByTypeBlueId } from '@demo-bank-app/shared-bank-api-contract';
+import { blue } from '../../../lib/blue';
 import { Card } from '../../../ui/Card';
 import { Spinner } from '../../../ui/Spinner';
 import { Button } from '../../../ui/Button';
@@ -163,6 +161,7 @@ export function ContractDetailsPanel({
   const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(
     null
   );
+  const [isKeyFactsExpanded, setIsKeyFactsExpanded] = useState(false);
   const { data: accounts } = useAccounts();
   const activityQuery = useActivity({
     accountNumber: contract?.accountNumber ?? null,
@@ -192,6 +191,7 @@ export function ContractDetailsPanel({
     setActiveOperation(null);
     setActiveActivityId(null);
     setSelectedActivity(null);
+    setIsKeyFactsExpanded(false);
   }, [contract?.sessionId]);
 
   const restoredDocument = restoreInlineTypes(contract?.document);
@@ -376,6 +376,13 @@ export function ContractDetailsPanel({
               </div>
             )}
 
+            {summaryQuery.isFetching && generatedSummary && (
+              <div className="mb-3 flex items-center gap-2 text-xs text-slate-500">
+                <Spinner size="sm" color="green" />
+                Updating summary...
+              </div>
+            )}
+
             {summaryErrorMessage && (
               <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
                 {summaryErrorMessage}
@@ -388,7 +395,7 @@ export function ContractDetailsPanel({
                   <p className="text-lg font-semibold text-slate-900">
                     {generatedSummary.title}
                   </p>
-                  <p className="mt-1 text-slate-600">
+                  <p className="mt-1 whitespace-pre-line break-words text-slate-600 leading-relaxed">
                     {generatedSummary.oneLiner}
                   </p>
                 </div>
@@ -400,29 +407,50 @@ export function ContractDetailsPanel({
                   <p className="mt-2 font-semibold text-slate-900">
                     {generatedSummary.state.statusLabel}
                   </p>
-                  <p className="mt-1 text-slate-600">
+                  <p className="mt-1 whitespace-pre-line break-words text-slate-600 leading-relaxed">
                     {generatedSummary.state.explanation}
                   </p>
                 </div>
 
                 {generatedSummary.keyFacts.length > 0 && (
                   <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                      Key facts
-                    </p>
-                    <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-                      {generatedSummary.keyFacts.map(fact => (
-                        <div
-                          key={`${fact.label}:${fact.value}`}
-                          className="flex items-center justify-between gap-4"
-                        >
-                          <span className="text-slate-500">{fact.label}</span>
-                          <span className="font-medium text-slate-900">
-                            {fact.value}
-                          </span>
-                        </div>
-                      ))}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                        Key facts
+                      </p>
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+                        onClick={() => setIsKeyFactsExpanded(prev => !prev)}
+                        aria-expanded={isKeyFactsExpanded}
+                      >
+                        {isKeyFactsExpanded ? 'Hide' : 'Show'} (
+                        {generatedSummary.keyFacts.length})
+                      </button>
                     </div>
+
+                    {isKeyFactsExpanded ? (
+                      <dl className="mt-3 divide-y divide-slate-200/70">
+                        {generatedSummary.keyFacts.map(fact => (
+                          <div
+                            key={`${fact.label}:${fact.value}`}
+                            className="py-3 first:pt-0 last:pb-0"
+                          >
+                            <dt className="text-xs font-medium text-slate-500">
+                              {fact.label}
+                            </dt>
+                            <dd className="mt-1 whitespace-pre-wrap break-words font-medium text-slate-900">
+                              {fact.value}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : (
+                      <p className="mt-2 text-xs text-slate-500">
+                        Key information about the contract (participants,
+                        amounts, statuses, and identifiers).
+                      </p>
+                    )}
                   </div>
                 )}
 

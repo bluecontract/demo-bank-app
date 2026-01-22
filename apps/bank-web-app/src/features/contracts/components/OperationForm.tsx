@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { blue } from '@demo-bank-app/shared-bank-api-contract';
+import { blue } from '../../../lib/blue';
 import { Button } from '../../../ui/Button';
 import { Spinner } from '../../../ui/Spinner';
 import type { ContractOperation } from '../lib/operations';
