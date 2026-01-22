@@ -28,7 +28,11 @@ const createDependencies = () => {
     } as MyOsFetchDocumentResult);
 
   const myOsClient: HandleWebhookEventDependencies['myOsClient'] = {
-    getCredentials: vi.fn(),
+    getCredentials: vi.fn().mockResolvedValue({
+      apiKey: 'api-key',
+      accountId: 'account-id',
+      baseUrl: 'https://example.test',
+    }),
     bootstrapDocument: vi.fn(),
     runDocumentOperation: vi.fn(),
     fetchEvent,
@@ -53,6 +57,13 @@ const createDependencies = () => {
       getPayNoteBySessionId: vi.fn().mockResolvedValue(null),
       savePayNote: vi.fn(),
     };
+
+  const holdRepository: HandleWebhookEventDependencies['holdRepository'] = {
+    getHold: vi.fn().mockResolvedValue(null),
+    getHoldByCardTransactionDetails: vi.fn().mockResolvedValue(null),
+    disableHoldCapture: vi.fn().mockResolvedValue(null),
+    enableHoldCapture: vi.fn().mockResolvedValue(null),
+  } as any;
 
   const payNoteDeliveryRepository: HandleWebhookEventDependencies['payNoteDeliveryRepository'] =
     {
@@ -83,6 +94,7 @@ const createDependencies = () => {
     deps: {
       myOsClient,
       bankingFacade,
+      holdRepository,
       payNoteRepository,
       payNoteDeliveryRepository,
       contractRepository,
@@ -146,5 +158,129 @@ describe('handleWebhookEvent', () => {
         payerAccountNumber: '1234567890',
       })
     );
+  });
+
+  it('handles card transaction capture lock request without payer account', async () => {
+    const { deps, fetchEvent } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: { type: 'PayNote/PayNote', name: 'Slow Digestion PayNote' },
+          emitted: [
+            {
+              type: { name: 'PayNote/Card Transaction Capture Lock Requested' },
+              cardTransactionDetails: {
+                authorizationCode: { value: 'AUTH01' },
+              },
+            },
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      holdId: 'hold-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    (deps.holdRepository.getHold as any).mockResolvedValue({
+      holdId: 'hold-1',
+      payerAccountNumber: '955',
+      amountMinor: 12000,
+      currency: 'USD',
+      status: 'PENDING',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '111111111111',
+        systemTraceAuditNumber: '222222',
+        transmissionDateTime: '0101000000',
+        authorizationCode: 'AUTH01',
+      },
+      captureDisabled: false,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    (deps.holdRepository.disableHoldCapture as any).mockResolvedValue({
+      holdId: 'hold-1',
+      payerAccountNumber: '955',
+      amountMinor: 12000,
+      currency: 'USD',
+      status: 'PENDING',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '111111111111',
+        systemTraceAuditNumber: '222222',
+        transmissionDateTime: '0101000000',
+        authorizationCode: 'AUTH01',
+      },
+      captureDisabled: true,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.bankingFacade.getAccountByNumber).not.toHaveBeenCalled();
+    expect(deps.holdRepository.disableHoldCapture).toHaveBeenCalledWith(
+      'hold-1'
+    );
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        operation: 'confirmCardTransactionCaptureLocked',
+      })
+    );
+  });
+
+  it('ignores card transaction capture lock request when details mismatch', async () => {
+    const { deps, fetchEvent } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: { type: 'PayNote/PayNote', name: 'Slow Digestion PayNote' },
+          emitted: [
+            {
+              type: { name: 'PayNote/Card Transaction Capture Lock Requested' },
+              cardTransactionDetails: {
+                authorizationCode: { value: 'AUTH99' },
+              },
+            },
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      holdId: 'hold-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    (deps.holdRepository.getHold as any).mockResolvedValue({
+      holdId: 'hold-1',
+      payerAccountNumber: '955',
+      amountMinor: 12000,
+      currency: 'USD',
+      status: 'PENDING',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '111111111111',
+        systemTraceAuditNumber: '222222',
+        transmissionDateTime: '0101000000',
+        authorizationCode: 'AUTH01',
+      },
+      captureDisabled: false,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.holdRepository.disableHoldCapture).not.toHaveBeenCalled();
+    expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
   });
 });

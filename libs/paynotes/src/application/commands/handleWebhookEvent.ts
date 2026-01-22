@@ -1,10 +1,17 @@
 import type { BlueNode } from '@blue-labs/language';
 import {
+  CardTransactionCaptureLockRequestedSchema,
+  CardTransactionCaptureUnlockRequestedSchema,
   CaptureFundsRequestedSchema,
   PayNoteSchema,
   ReserveFundsAndCaptureImmediatelyRequestedSchema,
   ReserveFundsRequestedSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
+import type {
+  CardTransactionDetails,
+  Hold,
+  HoldRepository,
+} from '@demo-bank-app/banking';
 import type {
   BankingFacade,
   ClockPort,
@@ -24,6 +31,10 @@ const RESERVE_FUNDS_EVENT_NAME = 'PayNote/Reserve Funds Requested';
 const CAPTURE_FUNDS_EVENT_NAME = 'PayNote/Capture Funds Requested';
 const CAPTURE_IMMEDIATELY_EVENT_NAME =
   'PayNote/Reserve Funds and Capture Immediately Requested';
+const CAPTURE_LOCK_REQUESTED_EVENT_NAME =
+  'PayNote/Card Transaction Capture Lock Requested';
+const CAPTURE_UNLOCK_REQUESTED_EVENT_NAME =
+  'PayNote/Card Transaction Capture Unlock Requested';
 
 const isTraceEnabled =
   process.env.PAYNOTE_WEBHOOK_TRACE === '1' ||
@@ -33,8 +44,18 @@ const resolveEventTypeLabel = (event: unknown): string | undefined => {
   if (!event || typeof event !== 'object') {
     return undefined;
   }
-  const fallbackType = (event as { type?: { name?: unknown } }).type?.name;
-  return typeof fallbackType === 'string' ? fallbackType : undefined;
+  const type = (event as { type?: unknown }).type;
+  if (typeof type === 'string') {
+    return type;
+  }
+  if (!type || typeof type !== 'object') {
+    return undefined;
+  }
+  const typeRecord = type as { name?: unknown; value?: unknown };
+  if (typeof typeRecord.name === 'string') {
+    return typeRecord.name;
+  }
+  return typeof typeRecord.value === 'string' ? typeRecord.value : undefined;
 };
 
 const resolveEventType = (event: unknown): string | undefined => {
@@ -44,6 +65,12 @@ const resolveEventType = (event: unknown): string | undefined => {
 
   try {
     const node = blue.jsonValueToNode(event);
+    if (blue.isTypeOf(node, CardTransactionCaptureLockRequestedSchema)) {
+      return CAPTURE_LOCK_REQUESTED_EVENT_NAME;
+    }
+    if (blue.isTypeOf(node, CardTransactionCaptureUnlockRequestedSchema)) {
+      return CAPTURE_UNLOCK_REQUESTED_EVENT_NAME;
+    }
     if (blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema)) {
       return CAPTURE_IMMEDIATELY_EVENT_NAME;
     }
@@ -95,11 +122,126 @@ const getString = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const unwrapNodeValue = (value: unknown): unknown => {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const record = value as Record<string, unknown>;
+  return 'value' in record ? record.value : value;
+};
+
+const getUnwrappedString = (value: unknown): string | undefined => {
+  const unwrapped = unwrapNodeValue(value);
+  return getString(unwrapped);
+};
+
 const getRecordString = (
   record: Record<string, unknown> | undefined,
   key: string
 ): string | undefined => {
   return record ? getString(record[key]) : undefined;
+};
+
+type PartialCardTransactionDetails = Partial<CardTransactionDetails>;
+
+const extractCardTransactionDetails = (
+  value: unknown
+): PartialCardTransactionDetails | undefined => {
+  const unwrapped = unwrapNodeValue(value);
+  if (!unwrapped || typeof unwrapped !== 'object') {
+    return undefined;
+  }
+
+  const record = unwrapped as Record<string, unknown>;
+  const details: PartialCardTransactionDetails = {
+    retrievalReferenceNumber: getUnwrappedString(
+      record.retrievalReferenceNumber
+    ),
+    systemTraceAuditNumber: getUnwrappedString(record.systemTraceAuditNumber),
+    transmissionDateTime: getUnwrappedString(record.transmissionDateTime),
+    authorizationCode: getUnwrappedString(record.authorizationCode),
+  };
+
+  if (
+    !details.retrievalReferenceNumber &&
+    !details.systemTraceAuditNumber &&
+    !details.transmissionDateTime &&
+    !details.authorizationCode
+  ) {
+    return undefined;
+  }
+
+  return details;
+};
+
+const toCompleteCardTransactionDetails = (
+  details: PartialCardTransactionDetails | undefined
+): CardTransactionDetails | null => {
+  if (!details) {
+    return null;
+  }
+
+  const {
+    retrievalReferenceNumber,
+    systemTraceAuditNumber,
+    transmissionDateTime,
+    authorizationCode,
+  } = details;
+
+  if (
+    !retrievalReferenceNumber ||
+    !systemTraceAuditNumber ||
+    !transmissionDateTime ||
+    !authorizationCode
+  ) {
+    return null;
+  }
+
+  return {
+    retrievalReferenceNumber,
+    systemTraceAuditNumber,
+    transmissionDateTime,
+    authorizationCode,
+  };
+};
+
+const matchesCardTransactionDetails = (
+  holdDetails: CardTransactionDetails | undefined,
+  provided: PartialCardTransactionDetails | undefined
+): boolean => {
+  if (!provided) {
+    return true;
+  }
+  if (!holdDetails) {
+    return false;
+  }
+
+  if (
+    provided.retrievalReferenceNumber &&
+    provided.retrievalReferenceNumber !== holdDetails.retrievalReferenceNumber
+  ) {
+    return false;
+  }
+  if (
+    provided.systemTraceAuditNumber &&
+    provided.systemTraceAuditNumber !== holdDetails.systemTraceAuditNumber
+  ) {
+    return false;
+  }
+  if (
+    provided.transmissionDateTime &&
+    provided.transmissionDateTime !== holdDetails.transmissionDateTime
+  ) {
+    return false;
+  }
+  if (
+    provided.authorizationCode &&
+    provided.authorizationCode !== holdDetails.authorizationCode
+  ) {
+    return false;
+  }
+
+  return true;
 };
 
 const mergeSessionIds = (
@@ -122,6 +264,7 @@ export interface HandleWebhookEventInput {
 export interface HandleWebhookEventDependencies {
   myOsClient: MyOsClient;
   bankingFacade: BankingFacade;
+  holdRepository: HoldRepository;
   payNoteRepository: PayNoteRepository;
   payNoteDeliveryRepository: PayNoteDeliveryRepository;
   contractRepository: ContractRepository;
@@ -470,7 +613,373 @@ export const handleWebhookEvent = async (
     now,
   });
 
+  const events =
+    eventObject?.emitted ??
+    ([] as Array<{ type?: unknown; amount?: { value?: number } }>);
+
+  logs.push({
+    level: 'info',
+    message: 'Received PayNote webhook',
+    context: {
+      eventId: input.eventId,
+      events,
+      payNoteDocumentId,
+      payerAccountNumber,
+      payeeAccountNumber,
+    },
+  });
+
+  const captureRequestEvents = events.filter(event => {
+    const eventType = resolveEventType(event) ?? resolveEventTypeLabel(event);
+    return (
+      eventType === CAPTURE_LOCK_REQUESTED_EVENT_NAME ||
+      eventType === CAPTURE_UNLOCK_REQUESTED_EVENT_NAME
+    );
+  });
+
+  if (captureRequestEvents.length) {
+    let credentials: Awaited<ReturnType<MyOsClient['getCredentials']>> | null =
+      null;
+
+    try {
+      credentials = await deps.myOsClient.getCredentials();
+    } catch (error) {
+      logs.push({
+        level: 'error',
+        message:
+          'Failed to resolve MyOS credentials for PayNote capture request',
+        context: {
+          eventId: input.eventId,
+          payNoteDocumentId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+
+    for (const event of captureRequestEvents) {
+      try {
+        const eventType =
+          resolveEventType(event) ?? resolveEventTypeLabel(event);
+        if (
+          eventType !== CAPTURE_LOCK_REQUESTED_EVENT_NAME &&
+          eventType !== CAPTURE_UNLOCK_REQUESTED_EVENT_NAME
+        ) {
+          continue;
+        }
+
+        const providedCardDetails = extractCardTransactionDetails(
+          (event as { cardTransactionDetails?: unknown }).cardTransactionDetails
+        );
+        const completeCardDetails =
+          toCompleteCardTransactionDetails(providedCardDetails);
+
+        const expectedHoldId = updatedRecord.holdId;
+        const linkedHold = expectedHoldId
+          ? await deps.holdRepository.getHold(expectedHoldId)
+          : null;
+
+        const lookupHold = completeCardDetails
+          ? await deps.holdRepository.getHoldByCardTransactionDetails(
+              completeCardDetails
+            )
+          : null;
+
+        if (
+          expectedHoldId &&
+          lookupHold &&
+          lookupHold.holdId !== expectedHoldId
+        ) {
+          logs.push({
+            level: 'warn',
+            message:
+              'PayNote capture request ignored (card transaction hold mismatch)',
+            context: {
+              eventId: input.eventId,
+              payNoteDocumentId,
+              eventType,
+              expectedHoldId,
+              resolvedHoldId: lookupHold.holdId,
+            },
+          });
+          continue;
+        }
+
+        const holdId = expectedHoldId ?? lookupHold?.holdId;
+        const hold: Hold | null = linkedHold ?? lookupHold ?? null;
+
+        if (!hold || !holdId) {
+          logs.push({
+            level: 'warn',
+            message:
+              'PayNote capture request ignored (unable to resolve related hold)',
+            context: {
+              eventId: input.eventId,
+              payNoteDocumentId,
+              eventType,
+              holdId,
+            },
+          });
+          continue;
+        }
+
+        if (
+          providedCardDetails &&
+          hold.cardTransactionDetails &&
+          !matchesCardTransactionDetails(
+            hold.cardTransactionDetails,
+            providedCardDetails
+          )
+        ) {
+          logs.push({
+            level: 'warn',
+            message:
+              'PayNote capture request ignored (card transaction details mismatch)',
+            context: {
+              eventId: input.eventId,
+              payNoteDocumentId,
+              eventType,
+              holdId,
+              providedCardTransactionDetails: providedCardDetails,
+              holdCardTransactionDetails: hold.cardTransactionDetails,
+            },
+          });
+          continue;
+        }
+
+        if (providedCardDetails && !hold.cardTransactionDetails) {
+          logs.push({
+            level: 'warn',
+            message:
+              'PayNote capture request hold missing card transaction details (continuing with hold linkage)',
+            context: {
+              eventId: input.eventId,
+              payNoteDocumentId,
+              eventType,
+              holdId,
+              providedCardTransactionDetails: providedCardDetails,
+            },
+          });
+        }
+
+        if (!expectedHoldId) {
+          updatedRecord.holdId = holdId;
+          const updatedAt = deps.clock.now().toISOString();
+          updatedRecord.updatedAt = updatedAt;
+          await deps.payNoteRepository.savePayNote({
+            ...updatedRecord,
+            updatedAt,
+          });
+          await upsertContractRecord({
+            contractRepository: deps.contractRepository,
+            document: updatedRecord.document,
+            sessionId,
+            documentId: payNoteDocumentId,
+            userId: updatedRecord.userId,
+            accountNumber: updatedRecord.accountNumber,
+            triggerEvent: eventObject?.triggeredBy,
+            emittedEvents,
+            relatedTransactionIds: updatedRecord.transactionId
+              ? [updatedRecord.transactionId]
+              : undefined,
+            relatedHoldIds: [holdId],
+            status: updatedRecord.transactionId ? 'processed' : 'reserved',
+            now: updatedAt,
+          });
+        }
+
+        if (eventType === CAPTURE_LOCK_REQUESTED_EVENT_NAME) {
+          const updatedHold = await deps.holdRepository.disableHoldCapture(
+            holdId
+          );
+          if (!updatedHold) {
+            logs.push({
+              level: 'warn',
+              message:
+                'PayNote capture lock request ignored (hold not found while applying lock)',
+              context: {
+                eventId: input.eventId,
+                payNoteDocumentId,
+                holdId,
+              },
+            });
+            continue;
+          }
+
+          if (
+            updatedHold.status !== 'PENDING' ||
+            !updatedHold.captureDisabled
+          ) {
+            logs.push({
+              level: 'warn',
+              message:
+                'PayNote capture lock request ignored (hold capture could not be locked)',
+              context: {
+                eventId: input.eventId,
+                payNoteDocumentId,
+                holdId,
+                holdStatus: updatedHold.status,
+                captureDisabled: updatedHold.captureDisabled ?? false,
+              },
+            });
+            continue;
+          }
+
+          if (!credentials) {
+            logs.push({
+              level: 'error',
+              message:
+                'Skipped confirming PayNote card transaction capture locked (missing MyOS credentials)',
+              context: {
+                eventId: input.eventId,
+                payNoteDocumentId,
+                holdId,
+              },
+            });
+            continue;
+          }
+
+          const response = await deps.myOsClient.runDocumentOperation({
+            credentials,
+            sessionId,
+            operation: 'confirmCardTransactionCaptureLocked',
+          });
+
+          if (!response.ok) {
+            logs.push({
+              level: 'error',
+              message:
+                'Failed to confirm PayNote card transaction capture locked',
+              context: {
+                eventId: input.eventId,
+                payNoteDocumentId,
+                holdId,
+                status: response.status,
+                body: response.body,
+              },
+            });
+            continue;
+          }
+
+          logs.push({
+            level: 'info',
+            message: 'Confirmed PayNote card transaction capture locked',
+            context: {
+              eventId: input.eventId,
+              payNoteDocumentId,
+              holdId,
+            },
+          });
+        } else if (eventType === CAPTURE_UNLOCK_REQUESTED_EVENT_NAME) {
+          const updatedHold = await deps.holdRepository.enableHoldCapture(
+            holdId
+          );
+          if (!updatedHold) {
+            logs.push({
+              level: 'warn',
+              message:
+                'PayNote capture unlock request ignored (hold not found while applying unlock)',
+              context: {
+                eventId: input.eventId,
+                payNoteDocumentId,
+                holdId,
+              },
+            });
+            continue;
+          }
+
+          if (updatedHold.status !== 'PENDING' || updatedHold.captureDisabled) {
+            logs.push({
+              level: 'warn',
+              message:
+                'PayNote capture unlock request ignored (hold capture could not be unlocked)',
+              context: {
+                eventId: input.eventId,
+                payNoteDocumentId,
+                holdId,
+                holdStatus: updatedHold.status,
+                captureDisabled: updatedHold.captureDisabled ?? false,
+              },
+            });
+            continue;
+          }
+
+          if (!credentials) {
+            logs.push({
+              level: 'error',
+              message:
+                'Skipped confirming PayNote card transaction capture unlocked (missing MyOS credentials)',
+              context: {
+                eventId: input.eventId,
+                payNoteDocumentId,
+                holdId,
+              },
+            });
+            continue;
+          }
+
+          const response = await deps.myOsClient.runDocumentOperation({
+            credentials,
+            sessionId,
+            operation: 'confirmCardTransactionCaptureUnlocked',
+          });
+
+          if (!response.ok) {
+            logs.push({
+              level: 'error',
+              message:
+                'Failed to confirm PayNote card transaction capture unlocked',
+              context: {
+                eventId: input.eventId,
+                payNoteDocumentId,
+                holdId,
+                status: response.status,
+                body: response.body,
+              },
+            });
+            continue;
+          }
+
+          logs.push({
+            level: 'info',
+            message: 'Confirmed PayNote card transaction capture unlocked',
+            context: {
+              eventId: input.eventId,
+              payNoteDocumentId,
+              holdId,
+            },
+          });
+        }
+      } catch (error) {
+        logs.push({
+          level: 'error',
+          message: 'Unexpected error while handling PayNote capture request',
+          context: {
+            eventId: input.eventId,
+            payNoteDocumentId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+    }
+  }
+
+  const transferDescription =
+    getString(payNoteParsed.output.name) ?? 'PayNote transfer';
+
+  const requiresPayerAccount = events.some(event => {
+    const eventType = resolveEventType(event) ?? resolveEventTypeLabel(event);
+    return (
+      eventType === CAPTURE_IMMEDIATELY_EVENT_NAME ||
+      eventType === CAPTURE_FUNDS_EVENT_NAME ||
+      eventType === RESERVE_FUNDS_EVENT_NAME
+    );
+  });
+
   if (!payerAccountNumber) {
+    if (!requiresPayerAccount) {
+      return { note: '', logs };
+    }
+
     const note = logAndReturn(
       logs,
       'error',
@@ -482,9 +991,6 @@ export const handleWebhookEvent = async (
     );
     return { note, logs };
   }
-
-  const transferDescription =
-    getString(payNoteParsed.output.name) ?? 'PayNote transfer';
 
   try {
     const account = await deps.bankingFacade.getAccountByNumber(
@@ -526,26 +1032,16 @@ export const handleWebhookEvent = async (
       });
     }
 
-    const events =
-      eventObject?.emitted ??
-      ([] as Array<{ type?: { name?: string }; amount?: { value?: number } }>);
-
-    logs.push({
-      level: 'info',
-      message: 'Received PayNote webhook',
-      context: {
-        eventId: input.eventId,
-        events,
-        payNoteDocumentId,
-        payerAccountNumber,
-        payeeAccountNumber,
-      },
-    });
-
     for (const event of events) {
       const transferAmountMinor: number = event.amount?.value ?? 0;
-      const eventType = resolveEventType(event);
-      const eventTypeLabel = eventType ?? resolveEventTypeLabel(event);
+      const eventType = resolveEventType(event) ?? resolveEventTypeLabel(event);
+
+      if (
+        eventType === CAPTURE_LOCK_REQUESTED_EVENT_NAME ||
+        eventType === CAPTURE_UNLOCK_REQUESTED_EVENT_NAME
+      ) {
+        continue;
+      }
 
       if (eventType === CAPTURE_IMMEDIATELY_EVENT_NAME) {
         if (!payeeAccountNumber) {
@@ -629,7 +1125,7 @@ export const handleWebhookEvent = async (
           message: 'PayNote webhook event ignored',
           context: {
             eventId: input.eventId,
-            eventType: eventTypeLabel,
+            eventType,
             payerAccountNumber,
             payeeAccountNumber,
             transferAmountMinor,

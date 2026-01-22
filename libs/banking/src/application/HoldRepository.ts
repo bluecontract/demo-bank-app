@@ -85,6 +85,7 @@ export interface HoldRepository {
   ): Promise<Hold | null>;
   ensureCardTransactionMapping(hold: Hold): Promise<void>;
   disableHoldCapture(holdId: Hold['holdId']): Promise<Hold | null>;
+  enableHoldCapture(holdId: Hold['holdId']): Promise<Hold | null>;
   listHoldEvents(holdId: Hold['holdId']): Promise<HoldEvent[]>;
   listHoldActivityByAccountNumber(
     accountNumber: Hold['payerAccountNumber'],

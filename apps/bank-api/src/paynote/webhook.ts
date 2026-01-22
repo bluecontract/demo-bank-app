@@ -319,6 +319,7 @@ export const payNoteWebhookHandler = async (
         {
           myOsClient,
           bankingFacade,
+          holdRepository,
           payNoteRepository,
           payNoteDeliveryRepository,
           contractRepository,

@@ -50,9 +50,7 @@ export function useContractSummary(
       return failureCount < 1;
     },
     throwOnError: error => {
-      if (!handleAuthError(error)) {
-        return true;
-      }
+      handleAuthError(error);
       return false;
     },
   });
@@ -92,9 +90,7 @@ export function useRegenerateContractSummary() {
       });
     },
     throwOnError: error => {
-      if (!handleAuthError(error)) {
-        return true;
-      }
+      handleAuthError(error);
       return false;
     },
   });

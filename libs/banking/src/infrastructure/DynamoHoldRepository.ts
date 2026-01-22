@@ -238,6 +238,55 @@ export class DynamoHoldRepository implements HoldRepository {
     return { ...hold, captureDisabled: true };
   }
 
+  async enableHoldCapture(holdId: Hold['holdId']): Promise<Hold | null> {
+    const hold = await this.getHold(holdId);
+    if (!hold) {
+      return null;
+    }
+
+    if (!hold.captureDisabled || hold.status !== 'PENDING') {
+      return hold;
+    }
+
+    try {
+      await this.client.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Update: {
+                TableName: this.tableName,
+                Key: {
+                  PK: buildHoldPartitionKey(holdId),
+                  SK: SORT_KEYS.META,
+                },
+                UpdateExpression: 'SET captureDisabled = :captureDisabled',
+                ConditionExpression: '#status = :pendingStatus',
+                ExpressionAttributeNames: {
+                  '#status': 'status',
+                },
+                ExpressionAttributeValues: {
+                  ':captureDisabled': false,
+                  ':pendingStatus': 'PENDING',
+                },
+              },
+            },
+          ],
+        })
+      );
+    } catch (error) {
+      if (
+        error instanceof TransactionCanceledException &&
+        error.CancellationReasons?.[0]?.Code ===
+          DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED
+      ) {
+        return hold;
+      }
+      throw error;
+    }
+
+    return { ...hold, captureDisabled: false };
+  }
+
   async reserveHold(request: ReserveHoldRequest): Promise<ReserveHoldResult> {
     const timing = TimingUtils.startTiming(
       OPERATION_NAMES.BANKING?.RESERVE_FUNDS_REPOSITORY ??
