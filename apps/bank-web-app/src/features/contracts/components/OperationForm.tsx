@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { blue } from '../../../lib/blue';
 import { Button } from '../../../ui/Button';
 import { Spinner } from '../../../ui/Spinner';
@@ -16,7 +16,8 @@ import { useRunContractOperation } from '../hooks/useRunContractOperation';
 interface OperationFormProps {
   operation: ContractOperation;
   sessionId: string;
-  onCompleted?: () => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 type Breadcrumb = {
@@ -113,16 +114,16 @@ const removeValueAtPath = (current: unknown, path: PathSegment[]): unknown => {
   return objectValue;
 };
 
-const formatPayload = (payload: unknown) =>
-  JSON.stringify(payload ?? {}, null, 2);
-
 export function OperationForm({
   operation,
   sessionId,
-  onCompleted,
+  isOpen,
+  onClose,
 }: OperationFormProps) {
   const runOperation = useRunContractOperation();
-  const [mode, setMode] = useState<'form' | 'confirm' | 'success'>('form');
+  const [mode, setMode] = useState<'form' | 'confirm' | 'success'>(() =>
+    operation.request ? 'form' : 'confirm'
+  );
   const [values, setValues] = useState<unknown>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
@@ -138,7 +139,13 @@ export function OperationForm({
     return buildRequestModel(operation.request, blue, 'Request');
   }, [operation]);
 
+  const hasRequest = Boolean(operation.request && model);
+
   useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
     if (!model) {
       setValues({});
     } else {
@@ -146,13 +153,13 @@ export function OperationForm({
     }
     setErrors({});
     setBreadcrumbs([]);
-    setMode('form');
+    setDictionaryDrafts({});
     setPayloadPreview({});
-  }, [model, operation.name]);
-
-  const hasRequest = Boolean(operation.request && model);
+    setMode(hasRequest ? 'form' : 'confirm');
+  }, [hasRequest, isOpen, model, operation.name]);
   const isConfirming = mode === 'confirm';
   const isSuccess = mode === 'success';
+  const operationTitle = operation.label || operation.name;
 
   const handleReview = () => {
     if (!model) {
@@ -180,20 +187,40 @@ export function OperationForm({
     setMode('confirm');
   };
 
+  const handleClose = () => {
+    runOperation.reset?.();
+    onClose();
+  };
+
+  const handleConfirmCancel = () => {
+    if (hasRequest) {
+      runOperation.reset?.();
+      setMode('form');
+      return;
+    }
+    handleClose();
+  };
+
   const handleConfirm = () => {
+    const body = hasRequest ? payloadPreview ?? {} : {};
     runOperation.mutate(
       {
         sessionId,
         operation: operation.name,
-        body: payloadPreview ?? {},
+        body,
       },
       {
         onSuccess: () => {
           setMode('success');
-          onCompleted?.();
         },
       }
     );
+  };
+
+  const handleBackdropClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      handleClose();
+    }
   };
 
   const currentContext = breadcrumbs.length
@@ -704,113 +731,140 @@ export function OperationForm({
     return renderInputField(currentContext.field, currentContext.path);
   };
 
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--color-muted)]">
-            Operation request
-          </p>
-          <h3 className="mt-2 text-lg font-semibold text-slate-900">
-            {operation.label}
-          </h3>
-          {operation.description && (
-            <p className="mt-1 text-sm text-slate-600">
-              {operation.description}
-            </p>
-          )}
-        </div>
-        {hasRequest ? (
-          <span className="app-chip">Request required</span>
-        ) : (
-          <span className="app-chip app-chip-neutral">No input</span>
-        )}
-      </div>
+  if (!isOpen) {
+    return null;
+  }
 
-      {!isConfirming && !isSuccess && (
-        <div className="mt-6 space-y-4">
-          {breadcrumbs.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <button
-                type="button"
-                className="font-semibold text-[color:var(--color-primary)]"
-                onClick={() => setBreadcrumbs([])}
-              >
-                Request
-              </button>
-              {breadcrumbs.map((crumb, index) => (
-                <div
-                  key={`${crumb.label}-${index}`}
-                  className="flex items-center gap-2"
-                >
-                  <span>/</span>
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+      onClick={handleBackdropClick}
+      data-testid="operation-modal-backdrop"
+    >
+      <div
+        className="bg-white/90 rounded-2xl shadow-xl border border-slate-200 backdrop-blur max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={event => event.stopPropagation()}
+        data-testid="operation-modal-content"
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="p-6 space-y-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--color-muted)]">
+                Contract operation
+              </p>
+              <h3 className="mt-2 text-lg font-semibold text-slate-900">
+                {operationTitle}
+              </h3>
+              {operation.description && (
+                <p className="mt-1 text-sm text-slate-600">
+                  {operation.description}
+                </p>
+              )}
+            </div>
+            {hasRequest ? (
+              <span className="app-chip">Input required</span>
+            ) : (
+              <span className="app-chip app-chip-neutral">No input</span>
+            )}
+          </div>
+
+          {mode === 'form' && (
+            <div className="space-y-4">
+              {breadcrumbs.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                   <button
                     type="button"
                     className="font-semibold text-[color:var(--color-primary)]"
-                    onClick={() => navigateTo(index)}
+                    onClick={() => setBreadcrumbs([])}
                   >
-                    {crumb.label}
+                    Request
                   </button>
+                  {breadcrumbs.map((crumb, index) => (
+                    <div
+                      key={`${crumb.label}-${index}`}
+                      className="flex items-center gap-2"
+                    >
+                      <span>/</span>
+                      <button
+                        type="button"
+                        className="font-semibold text-[color:var(--color-primary)]"
+                        onClick={() => navigateTo(index)}
+                      >
+                        {crumb.label}
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {renderCurrentContext()}
+
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <Button variant="secondary" size="sm" onClick={handleClose}>
+                  Cancel
+                </Button>
+                <Button variant="primary" size="sm" onClick={handleReview}>
+                  OK
+                </Button>
+              </div>
+
+              {runOperation.isError && (
+                <p className="text-sm text-rose-600">
+                  {runOperation.error?.message ?? 'Unable to run operation.'}
+                </p>
+              )}
             </div>
           )}
 
-          {!hasRequest && (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm text-slate-600">
-              This operation does not require any inputs. You can continue to
-              confirmation.
+          {isConfirming && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-4 text-sm text-amber-900">
+                Confirm you want to execute contract operation:{' '}
+                <span className="font-semibold">"{operationTitle}"</span>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleConfirmCancel}
+                  disabled={runOperation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleConfirm}
+                  disabled={runOperation.isPending}
+                >
+                  {runOperation.isPending ? 'Running...' : 'Confirm'}
+                </Button>
+                {runOperation.isPending && <Spinner size="sm" color="green" />}
+              </div>
+              {runOperation.isError && (
+                <p className="text-sm text-rose-600">
+                  {runOperation.error?.message ?? 'Unable to run operation.'}
+                </p>
+              )}
             </div>
           )}
 
-          {hasRequest && renderCurrentContext()}
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="primary" size="sm" onClick={handleReview}>
-              Review request
-            </Button>
-            {runOperation.isError && (
-              <p className="text-sm text-rose-600">
-                {runOperation.error?.message ?? 'Unable to run operation.'}
-              </p>
-            )}
-          </div>
+          {isSuccess && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-emerald-700">
+                Operation submitted successfully.
+              </div>
+              <div className="flex justify-end">
+                <Button variant="primary" size="sm" onClick={handleClose}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
-      )}
-
-      {isConfirming && (
-        <div className="mt-6 space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-900/95 p-4">
-            <pre className="text-xs text-emerald-100 whitespace-pre-wrap">
-              {formatPayload(payloadPreview)}
-            </pre>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setMode('form')}
-            >
-              Back
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleConfirm}
-              disabled={runOperation.isPending}
-            >
-              {runOperation.isPending ? 'Running...' : 'Confirm & Run'}
-            </Button>
-            {runOperation.isPending && <Spinner size="sm" color="green" />}
-          </div>
-        </div>
-      )}
-
-      {isSuccess && (
-        <div className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-emerald-700">
-          Operation submitted successfully.
-        </div>
-      )}
+      </div>
     </div>
   );
 }

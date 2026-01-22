@@ -546,9 +546,10 @@ export function ContractDetailsPanel({
 
           {activeOperationDetails && contract.sessionId && (
             <OperationForm
+              isOpen
               operation={activeOperationDetails}
               sessionId={contract.sessionId}
-              onCompleted={() => setActiveOperation(null)}
+              onClose={() => setActiveOperation(null)}
             />
           )}
         </section>

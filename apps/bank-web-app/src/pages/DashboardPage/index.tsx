@@ -14,7 +14,6 @@ import { FundModal, TransactionHistory } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import { SpinnerWithText } from '../../ui/Spinner';
 import type { Account } from '../../types/api';
-import { PayNoteDeliveriesPanel } from '../../features/paynote-deliveries';
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -103,10 +102,6 @@ export function DashboardPage() {
               onTransfer={handleTransfer}
               onFund={handleFund}
             />
-
-            <section>
-              <PayNoteDeliveriesPanel />
-            </section>
 
             <section className="flex-1 min-h-0">
               <TransactionHistory />
