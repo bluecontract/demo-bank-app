@@ -18,8 +18,8 @@ Demo Bank must handle `Conversation/Document Bootstrap Requested` events emitted
 | FR-4 | For requests whose `document` is a `PayNote/PayNote`: bootstrap the provided document in MyOS using a merged `channelBindings` (processor-provided + bank-provided).                                                   |   Must   |
 | FR-5 | Reject (log and do not bootstrap) `Conversation/Document Bootstrap Requested` whose `document` is not a supported type.                                                                                                |   Must   |
 | FR-6 | Do not inject participant `accountId` values directly into document contract channels during bootstrap handling; instead use `channelBindings`. (Non-participant metadata such as `synchronyMerchantLink` is allowed.) |   Must   |
-| FR-7 | When bootstrapping a PayNote Delivery, attach `contracts.links.synchronyMerchantLink` pointing to the Synchrony Merchant session and the `payNoteDeliveries` anchor.                                                   |   Must   |
-| FR-8 | When bootstrapping a PayNote, attach `contracts.links.synchronyMerchantLink` pointing to the Synchrony Merchant session and the `payNotes` anchor.                                                                     |   Must   |
+| FR-7 | Preserve `contracts.links.synchronyMerchantLink` (provided by the processor) when bootstrapping PayNote Delivery documents; do not attempt to rewrite the linked Synchrony Merchant `sessionId`.                       |   Must   |
+| FR-8 | Preserve `contracts.links.synchronyMerchantLink` (provided by the processor) when bootstrapping PayNote documents; do not attempt to rewrite the linked Synchrony Merchant `sessionId`.                                |   Must   |
 | FR-9 | Persist delivery/paynote bootstrap context needed for downstream linking: `payNoteBootstrapRequestedAt` and (when available) `payNoteBootstrapSessionId`.                                                              |  Should  |
 
 ## Non-Functional Requirements

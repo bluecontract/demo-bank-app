@@ -263,29 +263,6 @@ const isBootstrapAssigneeMatch = (
   return bindings[bootstrapAssignee]?.accountId === myOsAccountId;
 };
 
-const attachSynchronyMerchantLink = (
-  document: Record<string, unknown>,
-  options: { sessionId: string; anchor: 'payNoteDeliveries' | 'payNotes' }
-): Record<string, unknown> => {
-  const next = { ...document };
-  const contracts = {
-    ...(getContractsRecord(next.contracts) ?? {}),
-  };
-  const links = {
-    ...(getContractsRecord(contracts.links) ?? {}),
-    type: 'MyOS/Document Links',
-    synchronyMerchantLink: {
-      type: 'MyOS/MyOS Session Link',
-      anchor: options.anchor,
-      sessionId: options.sessionId,
-    },
-  };
-
-  contracts.links = links;
-  next.contracts = contracts;
-  return next;
-};
-
 const extractBootstrapSessionId = (response: {
   body?: unknown;
 }): string | undefined => {
@@ -554,22 +531,20 @@ export const handlePayNoteDeliveryWebhookEvent = async (
       const requestBindings = normalizeChannelBindings(request.channelBindings);
 
       if (isPayNoteDeliveryDocument(requestedDocument)) {
-        const synchronySessionId = getString(eventObject?.sessionId);
+        const deliveryDocument = requestedDocument;
+        const synchronySessionId =
+          getSynchronySessionIdFromDocument(deliveryDocument);
+        const deliveryError = getString(deliveryDocument.deliveryError);
         if (!synchronySessionId) {
-          log(logs, 'warn', 'Delivery bootstrap request missing session id', {
-            eventId,
-            bootstrapAssignee,
-          });
-          continue;
+          trace(
+            logs,
+            'Delivery bootstrap request missing synchrony merchant link',
+            {
+              eventId,
+              bootstrapAssignee,
+            }
+          );
         }
-
-        const deliveryDocument = attachSynchronyMerchantLink(
-          requestedDocument,
-          {
-            sessionId: synchronySessionId,
-            anchor: 'payNoteDeliveries',
-          }
-        );
 
         const cardDetails =
           getCardTransactionDetailsFromDocument(deliveryDocument);
@@ -642,29 +617,124 @@ export const handlePayNoteDeliveryWebhookEvent = async (
             deliveryId,
           });
         }
+
+        if (response.ok && deliveryError) {
+          const bootstrapSessionId = extractBootstrapSessionId(response);
+          if (!bootstrapSessionId) {
+            log(
+              logs,
+              'error',
+              'Failed to report PayNote Delivery bootstrap error (missing session id)',
+              { eventId, deliveryId }
+            );
+            continue;
+          }
+
+          const reportResponse = await deps.myOsClient.runDocumentOperation({
+            credentials,
+            sessionId: bootstrapSessionId,
+            operation: 'reportDeliveryError',
+            payload: deliveryError,
+          });
+
+          if (!reportResponse.ok) {
+            log(logs, 'error', 'Failed to report PayNote Delivery error', {
+              eventId,
+              deliveryId,
+              status: reportResponse.status,
+              body: reportResponse.body,
+            });
+          } else {
+            log(logs, 'info', 'Reported PayNote Delivery error', {
+              eventId,
+              deliveryId,
+            });
+          }
+        }
         continue;
       }
 
       if (isPayNoteDocument(requestedDocument)) {
-        const synchronySessionId = documentPayload
-          ? getSynchronySessionIdFromDocument(documentPayload)
+        const payNoteDocument = requestedDocument;
+        const requestingSessionId = getString(eventObject?.sessionId);
+        const requestingDeliveryCardDetails = documentPayload
+          ? getCardTransactionDetailsFromDocument(documentPayload)
+          : null;
+        const deliveryId = requestingDeliveryCardDetails
+          ? buildCardTransactionDetailsKey(requestingDeliveryCardDetails)
           : undefined;
+        const existingDelivery = deliveryId
+          ? await deps.payNoteDeliveryRepository.getDelivery(deliveryId)
+          : requestingSessionId
+          ? await deps.payNoteDeliveryRepository.getDeliveryBySessionId(
+              requestingSessionId
+            )
+          : null;
+        const payNoteSummary = getPayNoteSummaryFromDocument(payNoteDocument);
+        const payNoteAmountMinor = payNoteSummary.amountMinor;
 
-        const payNoteDocument = synchronySessionId
-          ? attachSynchronyMerchantLink(requestedDocument, {
-              sessionId: synchronySessionId,
-              anchor: 'payNotes',
-            })
-          : requestedDocument;
+        if (payNoteAmountMinor !== undefined) {
+          let hold: Hold | null = null;
+          if (existingDelivery?.holdId) {
+            hold = await deps.holdRepository.getHold(existingDelivery.holdId);
+          }
+          if (!hold && requestingDeliveryCardDetails) {
+            hold = await deps.holdRepository.getHoldByCardTransactionDetails(
+              requestingDeliveryCardDetails
+            );
+          }
 
-        if (!synchronySessionId) {
-          trace(
-            logs,
-            'PayNote bootstrap request missing synchrony session link',
-            {
-              eventId,
+          if (hold && hold.amountMinor !== payNoteAmountMinor) {
+            const deliveryError = `PayNote amount (${payNoteAmountMinor}) does not match transaction amount (${hold.amountMinor})`;
+            log(
+              logs,
+              'error',
+              'PayNote bootstrap request rejected (amount mismatch)',
+              {
+                eventId,
+                deliveryId,
+                holdId: hold.holdId,
+                payNoteAmountMinor,
+                holdAmountMinor: hold.amountMinor,
+              }
+            );
+
+            if (!requestingSessionId) {
+              log(
+                logs,
+                'error',
+                'Failed to report PayNote bootstrap error (missing session id)',
+                {
+                  eventId,
+                  deliveryId,
+                  holdId: hold.holdId,
+                }
+              );
+              continue;
             }
-          );
+
+            const reportResponse = await deps.myOsClient.runDocumentOperation({
+              credentials,
+              sessionId: requestingSessionId,
+              operation: 'reportDeliveryError',
+              payload: deliveryError,
+            });
+
+            if (!reportResponse.ok) {
+              log(logs, 'error', 'Failed to report PayNote delivery error', {
+                eventId,
+                deliveryId,
+                status: reportResponse.status,
+                body: reportResponse.body,
+              });
+            } else {
+              log(logs, 'info', 'Reported PayNote delivery error', {
+                eventId,
+                deliveryId,
+              });
+            }
+            continue;
+          }
         }
 
         const channelBindings = {
@@ -699,21 +769,6 @@ export const handlePayNoteDeliveryWebhookEvent = async (
         }
 
         const bootstrapSessionId = extractBootstrapSessionId(response);
-        const requestingSessionId = getString(eventObject?.sessionId);
-        const requestingDeliveryCardDetails = documentPayload
-          ? getCardTransactionDetailsFromDocument(documentPayload)
-          : null;
-        const deliveryId = requestingDeliveryCardDetails
-          ? buildCardTransactionDetailsKey(requestingDeliveryCardDetails)
-          : undefined;
-
-        const existingDelivery = deliveryId
-          ? await deps.payNoteDeliveryRepository.getDelivery(deliveryId)
-          : requestingSessionId
-          ? await deps.payNoteDeliveryRepository.getDeliveryBySessionId(
-              requestingSessionId
-            )
-          : null;
 
         if (existingDelivery) {
           await deps.payNoteDeliveryRepository.saveDelivery({
@@ -740,23 +795,7 @@ export const handlePayNoteDeliveryWebhookEvent = async (
     }
 
     for (const delivery of legacyBootstrapDeliveries) {
-      const synchronySessionId = getString(eventObject?.sessionId);
-      if (!synchronySessionId) {
-        log(
-          logs,
-          'warn',
-          'Legacy delivery bootstrap request missing session id',
-          {
-            eventId,
-          }
-        );
-        continue;
-      }
-
-      const deliveryDocument = attachSynchronyMerchantLink(delivery, {
-        sessionId: synchronySessionId,
-        anchor: 'payNoteDeliveries',
-      });
+      const deliveryDocument = delivery;
 
       const cardDetails =
         getCardTransactionDetailsFromDocument(deliveryDocument);
@@ -786,7 +825,9 @@ export const handlePayNoteDeliveryWebhookEvent = async (
         cardTransactionDetails: cardDetails,
         cardTransactionDetailsKey: deliveryId,
         deliveryDocument,
-        synchronySessionId: existing?.synchronySessionId ?? synchronySessionId,
+        synchronySessionId:
+          existing?.synchronySessionId ??
+          getSynchronySessionIdFromDocument(deliveryDocument),
         updatedAt: now,
         createdAt: existing?.createdAt ?? now,
       };

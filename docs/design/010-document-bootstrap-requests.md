@@ -17,7 +17,7 @@ Handle `Conversation/Document Bootstrap Requested` events in the bank webhook pi
    - Validate assignment (`bootstrapAssignee` resolves to a channel in the requesting document bound to the bank’s MyOS account id).
    - Validate the requested document type.
    - Merge `channelBindings` with bank bindings.
-   - Attach `synchronyMerchantLink` where applicable.
+   - Preserve `synchronyMerchantLink` (provided by the processor).
    - Call MyOS `POST /documents/bootstrap`.
    - Persist delivery/bootstrap metadata for later linking.
 
@@ -45,8 +45,8 @@ Input:
 
 Bank behavior:
 
-- Attach `contracts.links.synchronyMerchantLink` to the delivery document:
-  - `sessionId`: Synchrony Merchant session id
+- Preserve `contracts.links.synchronyMerchantLink` on the delivery document (provided by the processor):
+  - `sessionId`: merchant-facing Synchrony Merchant session id
   - `anchor`: `payNoteDeliveries`
 - Extend `channelBindings` with bank bindings:
   - `payNoteDeliverer` → bank MyOS `accountId`
@@ -66,9 +66,8 @@ Input:
 
 Bank behavior:
 
-- Resolve Synchrony Merchant session id from the delivery’s `synchronyMerchantLink`.
-- Attach `contracts.links.synchronyMerchantLink` to the PayNote document:
-  - `sessionId`: Synchrony Merchant session id
+- Preserve `contracts.links.synchronyMerchantLink` on the PayNote document (provided by the processor):
+  - `sessionId`: merchant-facing Synchrony Merchant session id
   - `anchor`: `payNotes`
 - Extend `channelBindings` with bank bindings:
   - `payerChannel` → bank MyOS `accountId`

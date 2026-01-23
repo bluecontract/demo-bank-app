@@ -19,10 +19,12 @@ The flow also shifts responsibility for participant binding:
 - Bank supplies its own mappings (e.g., deliverer/receiver channels) by **extending** `channelBindings`.
 - Both parties avoid injecting `accountId`s directly into document contracts; `channelBindings` is the source of truth for bootstrap bindings.
 
-Finally, the bank (not the processor) attaches `synchronyMerchantLink` into:
+Finally, the processor attaches `synchronyMerchantLink` into:
 
 - PayNote Delivery documents (anchor: `payNoteDeliveries`)
 - PayNote documents (anchor: `payNotes`)
+
+The bank only knows its own participant session id for the Synchrony Merchant document; the processor already knows the merchant-facing Synchrony Merchant session id and therefore is responsible for setting `synchronyMerchantLink.sessionId` correctly.
 
 ## Scenarios
 
@@ -50,4 +52,4 @@ Finally, the bank (not the processor) attaches `synchronyMerchantLink` into:
 - Replaces bespoke “bootstrap requested” events with a single request type (`Conversation/Document Bootstrap Requested`).
 - Makes bootstrap responsibility explicit via `bootstrapAssignee` and prevents unintended bootstrapping.
 - Moves participant binding out of contracts and into `channelBindings`, reducing mutation and clarifying ownership.
-- Centralizes `synchronyMerchantLink` responsibility in the bank for both delivery and paynote documents.
+- Centralizes `synchronyMerchantLink` responsibility in the processor (which knows the merchant-facing Synchrony Merchant session id) for both delivery and paynote documents.
