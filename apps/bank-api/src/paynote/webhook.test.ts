@@ -40,6 +40,7 @@ describe('payNoteWebhookHandler', () => {
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
+    debug: vi.fn(),
   };
 
   beforeEach(() => {
@@ -47,6 +48,7 @@ describe('payNoteWebhookHandler', () => {
     logger.info.mockReset();
     logger.error.mockReset();
     logger.warn.mockReset();
+    logger.debug.mockReset();
     hoistedAdapters.fetchEventImpl.mockReset();
     hoistedAdapters.fetchDocumentImpl.mockReset();
     hoistedAdapters.getAccountByNumberImpl.mockReset();
@@ -222,7 +224,7 @@ describe('payNoteWebhookHandler', () => {
       idempotencyKey: 'doc-123',
       payNoteDocumentId: 'doc-123',
     });
-    expect(logger.info).toHaveBeenCalledWith(
+    expect(logger.debug).toHaveBeenCalledWith(
       'PayNote transfer triggered',
       expect.objectContaining({ transferAmountMinor: 15000 })
     );
@@ -260,7 +262,7 @@ describe('payNoteWebhookHandler', () => {
     await payNoteWebhookHandler({ body: { id: 'event-456' } } as any);
 
     expect(hoistedAdapters.transferFundsMock).not.toHaveBeenCalled();
-    expect(logger.info).toHaveBeenCalledWith(
+    expect(logger.debug).toHaveBeenCalledWith(
       'PayNote webhook event ignored',
       expect.objectContaining({ eventType: 'PayNote/PayNote Cancelled' })
     );

@@ -142,11 +142,11 @@ describe('createAccountHandler', () => {
         accountNumberGenerator: mockAccountNumberGenerator,
       }
     );
-    expect(mockLogger.info).toHaveBeenCalledWith('Creating new account', {
+    expect(mockLogger.debug).toHaveBeenCalledWith('Creating new account', {
       userId: TEST_USER_ID,
       name: 'My Savings Account',
     });
-    expect(mockLogger.info).toHaveBeenCalledWith('Account created', {
+    expect(mockLogger.debug).toHaveBeenCalledWith('Account created', {
       userId: TEST_USER_ID,
       accountId: mockAccount.id,
       name: 'My Savings Account',

@@ -112,7 +112,7 @@ export const listAccountActivityHandler = async (
   const accountNumber = request.params.accountNumber;
 
   try {
-    logger.info('Listing account activity', {
+    logger.debug('Listing account activity', {
       userId,
       accountNumber,
     });

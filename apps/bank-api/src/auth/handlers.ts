@@ -83,17 +83,18 @@ export const signInHandler = async (
   const { logger, config } = deps;
 
   try {
-    logger.info('Signing in', { email: body.email });
+    logger.debug('Signing in', { email: body.email });
     const result = await signIn(
       {
         email: body.email,
       },
       deps
     );
-    logger.info('Signed in', { userId: result.user.id });
+    logger.debug('Signed in', { userId: result.user.id });
     return toAuthResponse(200, result, config, responseHeaders);
   } catch (error: unknown) {
-    logger.error('Sign-in failed', { error: String(error), email: body.email });
+    logger.error('Sign-in failed', { error: String(error) });
+    logger.debug('Sign-in failed', { email: body.email });
     if (error instanceof UserNotFoundError) {
       return toUnauthorizedResponse(
         'User not found. Please check the email and try again or sign up.'

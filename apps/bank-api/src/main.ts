@@ -104,7 +104,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
     },
     requestMiddleware: [
       async request => {
-        logger.info('Received request', {
+        logger.debug('Received request', {
           method: request.method,
           path: request.url,
         });
@@ -138,7 +138,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
         return response;
       },
       async (response, request) => {
-        logger.info('Sending response', {
+        logger.debug('Sending response', {
           status: response.status,
           method: request.method,
           path: request.url,

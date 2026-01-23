@@ -289,7 +289,7 @@ test.describe('Banking Form Validation', () => {
 
     // Fill valid amount to clear error
     await page.fill('input#amount', '75.00');
-    await expect(page.locator('input#amount')).toHaveValue('75.00');
+    await expect(page.locator('input#amount')).toHaveValue('$75.00');
 
     // Submit should work
     await page.click('button[type="submit"]');
@@ -313,7 +313,7 @@ test.describe('Banking Form Validation', () => {
 
     // Fill valid decimal places (the input sanitization prevents > 2 decimal places)
     await page.fill('input#amount', '50.12');
-    await expect(page.locator('input#amount')).toHaveValue('50.12');
+    await expect(page.locator('input#amount')).toHaveValue('$50.12');
     await page.click('button[type="submit"]');
 
     // Should work

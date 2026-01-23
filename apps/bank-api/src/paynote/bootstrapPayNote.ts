@@ -12,6 +12,16 @@ import {
 import { getDependencies } from './dependencies';
 import { MIN_PAYNOTE_VERIFICATION_SCORE } from './constants';
 
+const getPayloadSummary = (payload: unknown) => {
+  if (payload && typeof payload === 'object') {
+    return {
+      payloadType: Array.isArray(payload) ? 'array' : 'object',
+      payloadKeyCount: Object.keys(payload as Record<string, unknown>).length,
+    };
+  }
+  return { payloadType: typeof payload };
+};
+
 export const bootstrapPayNoteHandler = async (
   request: ServerInferRequest<
     (typeof bankApiContract)['banking']['bootstrapPayNote']
@@ -47,10 +57,10 @@ export const bootstrapPayNoteHandler = async (
       });
     }
 
-    logger.info('Received PayNote bootstrap request', {
+    logger.debug('Received PayNote bootstrap request', {
       userId,
-      userEmail,
-      payNote,
+      contractType: supportedContract.typeName,
+      payNoteSummary: getPayloadSummary(payNote),
     });
 
     const result = await bootstrapPayNoteUseCase(
@@ -73,7 +83,6 @@ export const bootstrapPayNoteHandler = async (
     if (result.type === 'verification-failed') {
       logger.error('PayNote bootstrap rejected due to missing verification', {
         userId,
-        userEmail,
         blueId: result.blueId,
         hasVerification: Boolean(result.verification),
         verificationScore: result.verification?.validationScore,
@@ -96,20 +105,18 @@ export const bootstrapPayNoteHandler = async (
 
     const responseBody = result.response.body;
 
-    logger.info('MyOS bootstrap response received', {
+    logger.debug('MyOS bootstrap response received', {
       userId,
-      userEmail,
       status: result.response.status,
       ok: result.response.ok,
-      responseBody,
+      responseBodySummary: getPayloadSummary(responseBody),
     });
 
     if (result.type === 'external-error') {
       logger.error('MyOS bootstrap request failed', {
         userId,
-        userEmail,
         status: result.response.status,
-        responseBody,
+        responseBodySummary: getPayloadSummary(responseBody),
       });
 
       const detail =

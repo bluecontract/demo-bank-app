@@ -26,6 +26,7 @@ describe('bootstrapPayNoteHandler', () => {
   const logger = {
     info: vi.fn(),
     error: vi.fn(),
+    debug: vi.fn(),
   };
   const verificationRepository = {
     getVerification: vi.fn(),
@@ -57,6 +58,7 @@ describe('bootstrapPayNoteHandler', () => {
     hoistedDeps.extractAuthInfoMock.mockReset();
     logger.info.mockReset();
     logger.error.mockReset();
+    logger.debug.mockReset();
     verificationRepository.getVerification.mockReset();
     contractRepository.getContract.mockReset();
     contractRepository.getContractBySessionId.mockReset();
@@ -149,11 +151,12 @@ describe('bootstrapPayNoteHandler', () => {
 
     expect(result.status).toBe(200);
     expect(result.body).toEqual({ message: 'Bootstrap accepted' });
-    expect(logger.info).toHaveBeenCalledWith(
+    expect(logger.debug).toHaveBeenCalledWith(
       'Received PayNote bootstrap request',
       expect.objectContaining({
         userId: 'user-123',
-        userEmail: 'john.doe@example.com',
+        contractType: 'PayNote/PayNote',
+        payNoteSummary: expect.objectContaining({ payloadType: 'object' }),
       })
     );
 

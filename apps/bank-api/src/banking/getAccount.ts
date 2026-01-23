@@ -21,7 +21,7 @@ export const getAccountHandler = async (
   const accountId = request.params?.accountId;
 
   try {
-    logger.info('Getting account', { userId, accountId });
+    logger.debug('Getting account', { userId, accountId });
     const account = await getAccount({ userId, accountId }, { repository });
     return {
       status: 200 as const,

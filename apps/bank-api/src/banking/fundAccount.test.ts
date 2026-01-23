@@ -111,12 +111,12 @@ describe('fundAccountHandler', () => {
       },
       { repository: mockRepository }
     );
-    expect(mockLogger.info).toHaveBeenCalledWith('Funding account', {
+    expect(mockLogger.debug).toHaveBeenCalledWith('Funding account', {
       userId,
       accountId,
       amountMinor: 100,
     });
-    expect(mockLogger.info).toHaveBeenCalledWith('Account funded', {
+    expect(mockLogger.debug).toHaveBeenCalledWith('Account funded', {
       userId,
       accountId,
       txnId: 'txn-456',

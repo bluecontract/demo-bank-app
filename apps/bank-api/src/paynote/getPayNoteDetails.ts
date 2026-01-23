@@ -26,7 +26,7 @@ export const getPayNoteDetailsHandler = async (
 
   const { accountNumber, payNoteDocumentId } = request.params;
 
-  logger.info('Fetching PayNote details', {
+  logger.debug('Fetching PayNote details', {
     accountNumber,
     payNoteDocumentId,
   });
@@ -55,7 +55,7 @@ export const getPayNoteDetailsHandler = async (
       } else if (entry.level === 'warn') {
         logger.warn(entry.message, entry.context);
       } else {
-        logger.info(entry.message, entry.context);
+        logger.debug(entry.message, entry.context);
       }
     });
 
@@ -90,9 +90,12 @@ export const getPayNoteDetailsHandler = async (
     }
 
     logger.error('Unexpected error fetching PayNote details', {
-      accountNumber,
       payNoteDocumentId,
       error: error instanceof Error ? error.message : String(error),
+    });
+    logger.debug('Unexpected error fetching PayNote details', {
+      accountNumber,
+      payNoteDocumentId,
     });
 
     throw error;

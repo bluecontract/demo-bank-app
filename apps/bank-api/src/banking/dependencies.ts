@@ -113,7 +113,7 @@ const ensureSystemAccounts = async (
 
       try {
         await repository.saveAccount(account);
-        logger.info('Seeded system account', {
+        logger.debug('Seeded system account', {
           accountId: accountInfo.id,
           accountNumber: accountInfo.accountNumber,
         });

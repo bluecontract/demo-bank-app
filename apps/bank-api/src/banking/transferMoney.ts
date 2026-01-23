@@ -34,7 +34,7 @@ export const transferMoneyHandler = async (
     });
   }
   try {
-    logger.info('Transferring money', { userId, ...request.body });
+    logger.debug('Transferring money', { userId, ...request.body });
     const txnId = await transferMoney(
       {
         srcAccountId: request.body.sourceAccountId,
@@ -45,7 +45,7 @@ export const transferMoneyHandler = async (
       },
       { repository }
     );
-    logger.info('Money transferred', {
+    logger.debug('Money transferred', {
       userId,
       txnId,
       ...request.body,

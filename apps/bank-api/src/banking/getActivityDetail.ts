@@ -159,7 +159,7 @@ export const getActivityDetailHandler = async (
     }
   })();
 
-  logger.info('Fetching activity detail', {
+  logger.debug('Fetching activity detail', {
     userId,
     accountNumber,
     activityId,
@@ -251,10 +251,14 @@ export const getActivityDetailHandler = async (
 
     logger.error('Failed to fetch activity detail', {
       userId,
-      accountNumber,
       activityId,
       rawActivityId,
       error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    logger.debug('Failed to fetch activity detail', {
+      accountNumber,
+      activityId,
+      rawActivityId,
     });
 
     throw error;

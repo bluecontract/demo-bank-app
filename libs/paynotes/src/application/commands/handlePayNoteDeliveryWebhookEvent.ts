@@ -39,6 +39,16 @@ const isTraceEnabled =
   process.env.PAYNOTE_WEBHOOK_TRACE === '1' ||
   (process.env.LOG_LEVEL ?? '').toUpperCase() === 'DEBUG';
 
+const getPayloadSummary = (payload: unknown) => {
+  if (payload && typeof payload === 'object') {
+    return {
+      payloadType: Array.isArray(payload) ? 'array' : 'object',
+      payloadKeyCount: Object.keys(payload as Record<string, unknown>).length,
+    };
+  }
+  return { payloadType: typeof payload };
+};
+
 export interface HandlePayNoteDeliveryWebhookInput {
   payload: unknown;
   eventId?: string;
@@ -427,7 +437,7 @@ export const handlePayNoteDeliveryWebhookEvent = async (
 
   if (!eventId) {
     log(logs, 'warn', 'Webhook payload missing event id', {
-      payload: input.payload,
+      payloadSummary: getPayloadSummary(input.payload),
     });
     return { handled: false, note: 'Missing event id', logs };
   }
@@ -591,10 +601,8 @@ export const handlePayNoteDeliveryWebhookEvent = async (
         trace(logs, 'Bootstrapping PayNote Delivery document', {
           eventId,
           deliveryId,
-          payload: {
-            channelBindings,
-            document: deliveryDocument,
-          },
+          channelBindingCount: Object.keys(channelBindings).length,
+          hasDeliveryDocument: Boolean(deliveryDocument),
         });
 
         const response = await deps.myOsClient.bootstrapDocument({
@@ -745,10 +753,9 @@ export const handlePayNoteDeliveryWebhookEvent = async (
 
         trace(logs, 'Bootstrapping PayNote document', {
           eventId,
-          payload: {
-            channelBindings,
-            document: payNoteDocument,
-          },
+          deliveryId,
+          channelBindingCount: Object.keys(channelBindings).length,
+          hasPayNoteDocument: Boolean(payNoteDocument),
         });
 
         const response = await deps.myOsClient.bootstrapDocument({

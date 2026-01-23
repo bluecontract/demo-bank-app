@@ -36,7 +36,10 @@ export function AccountCard({
     : 'hover:shadow-md';
 
   return (
-    <Card className={cardClassName}>
+    <Card
+      className={cardClassName}
+      onClick={onDetailsClick ? handleDetailsClick : undefined}
+    >
       <div className="space-y-4">
         {/* Account Name and Fund Button */}
         <div className="flex items-start justify-between">
@@ -53,7 +56,10 @@ export function AccountCard({
           <Button
             variant="secondary"
             size="sm"
-            onClick={handleFundClick}
+            onClick={event => {
+              event.stopPropagation();
+              handleFundClick();
+            }}
             className="px-3 whitespace-normal leading-tight text-sm py-2 mt-1"
           >
             Fund Account
@@ -70,7 +76,10 @@ export function AccountCard({
           <Button
             variant="primary"
             size="md"
-            onClick={handleDetailsClick}
+            onClick={event => {
+              event.stopPropagation();
+              handleDetailsClick();
+            }}
             className="flex-[0.4]"
           >
             Details
@@ -78,7 +87,10 @@ export function AccountCard({
           <Button
             variant="secondary"
             size="md"
-            onClick={handleTransferClick}
+            onClick={event => {
+              event.stopPropagation();
+              handleTransferClick();
+            }}
             className="flex-[0.6] whitespace-nowrap"
           >
             New transfer

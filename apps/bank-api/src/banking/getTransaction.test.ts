@@ -141,7 +141,7 @@ describe('getTransactionHandler', () => {
       { repository: mockRepository }
     );
 
-    expect(mockLogger.info).toHaveBeenCalledWith('Getting transaction', {
+    expect(mockLogger.debug).toHaveBeenCalledWith('Getting transaction', {
       userId: TEST_USER_ID,
       accountId,
       txnId,

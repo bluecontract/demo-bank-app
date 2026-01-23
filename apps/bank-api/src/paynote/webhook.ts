@@ -31,6 +31,16 @@ const isTraceEnabled =
   process.env.PAYNOTE_WEBHOOK_TRACE === '1' ||
   (process.env.LOG_LEVEL ?? '').toUpperCase() === 'DEBUG';
 
+const getPayloadSummary = (payload: unknown) => {
+  if (payload && typeof payload === 'object') {
+    return {
+      payloadType: Array.isArray(payload) ? 'array' : 'object',
+      payloadKeyCount: Object.keys(payload as Record<string, unknown>).length,
+    };
+  }
+  return { payloadType: typeof payload };
+};
+
 const getEventTypeName = (event: unknown): string | undefined => {
   if (!event || typeof event !== 'object') {
     return undefined;
@@ -155,7 +165,7 @@ export const payNoteWebhookHandler = async (
     if (!isTraceEnabled) {
       return;
     }
-    logger.info(message, context);
+    logger.debug(message, context);
   };
 
   const hasFullPayload =
@@ -215,7 +225,7 @@ export const payNoteWebhookHandler = async (
 
   if (!eventId) {
     logger.error('PayNote webhook received payload without valid id', {
-      payload: request.body,
+      payloadSummary: getPayloadSummary(request.body),
     });
     return {
       status: 200 as const,
@@ -277,7 +287,7 @@ export const payNoteWebhookHandler = async (
     } else if (entry.level === 'warn') {
       logger.warn(entry.message, entry.context);
     } else {
-      logger.info(entry.message, entry.context);
+      logger.debug(entry.message, entry.context);
     }
   });
 
@@ -306,7 +316,7 @@ export const payNoteWebhookHandler = async (
     } else if (entry.level === 'warn') {
       logger.warn(entry.message, entry.context);
     } else {
-      logger.info(entry.message, entry.context);
+      logger.debug(entry.message, entry.context);
     }
   });
 
@@ -338,7 +348,7 @@ export const payNoteWebhookHandler = async (
     } else if (entry.level === 'warn') {
       logger.warn(entry.message, entry.context);
     } else {
-      logger.info(entry.message, entry.context);
+      logger.debug(entry.message, entry.context);
     }
   });
 

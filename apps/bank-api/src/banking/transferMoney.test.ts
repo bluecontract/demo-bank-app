@@ -136,13 +136,13 @@ describe('transferMoneyHandler', () => {
       },
       { repository: mockRepository }
     );
-    expect(mockLogger.info).toHaveBeenCalledWith('Transferring money', {
+    expect(mockLogger.debug).toHaveBeenCalledWith('Transferring money', {
       userId: TEST_USER_ID,
       sourceAccountId: minimalAccount.id,
       destinationAccountNumber: '1234567890',
       amountMinor: 100,
     });
-    expect(mockLogger.info).toHaveBeenCalledWith('Money transferred', {
+    expect(mockLogger.debug).toHaveBeenCalledWith('Money transferred', {
       userId: TEST_USER_ID,
       txnId: 'txn-123',
       sourceAccountId: minimalAccount.id,

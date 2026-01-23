@@ -196,7 +196,7 @@ describe('getPayNoteDetailsHandler', () => {
       fetchedAt: '2024-02-01T12:00:00.000Z',
     });
 
-    const successLog = logger.info.mock.calls.find(
+    const successLog = logger.debug.mock.calls.find(
       ([message]) => message === 'PayNote details fetched successfully'
     );
     expect(successLog?.[1]).toEqual(

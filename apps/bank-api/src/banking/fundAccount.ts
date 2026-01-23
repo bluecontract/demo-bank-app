@@ -32,7 +32,7 @@ export const fundAccountHandler = async (
     });
   }
   try {
-    logger.info('Funding account', { userId, accountId, ...request.body });
+    logger.debug('Funding account', { userId, accountId, ...request.body });
     const txnId = await fundAccount(
       {
         accountId,
@@ -41,7 +41,7 @@ export const fundAccountHandler = async (
       },
       { repository }
     );
-    logger.info('Account funded', {
+    logger.debug('Account funded', {
       userId,
       accountId,
       txnId,

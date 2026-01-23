@@ -41,7 +41,7 @@ export const authorizeCardHandler = async (
   const panLast4 = request.body.pan.slice(-4);
 
   try {
-    logger.info('Authorizing card charge', {
+    logger.debug('Authorizing card charge', {
       processorChargeId: request.body.processorChargeId,
       amountMinor: request.body.amountMinor,
       cardLast4: panLast4,
@@ -69,7 +69,7 @@ export const authorizeCardHandler = async (
     );
 
     if (result.status === 'DECLINED') {
-      logger.info('Card authorization declined', {
+      logger.debug('Card authorization declined', {
         processorChargeId: request.body.processorChargeId,
         declineCode: result.declineCode,
         cardLast4: panLast4,
@@ -85,7 +85,7 @@ export const authorizeCardHandler = async (
       };
     }
 
-    logger.info('Card authorization approved', {
+    logger.debug('Card authorization approved', {
       processorChargeId: request.body.processorChargeId,
       authorizationId: result.hold.holdId,
       cardId: result.card.cardId,

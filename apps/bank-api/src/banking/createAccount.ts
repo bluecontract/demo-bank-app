@@ -22,7 +22,7 @@ export const createAccountHandler = async (
 
   const { name } = request.body;
 
-  logger.info('Creating new account', { userId, name });
+  logger.debug('Creating new account', { userId, name });
   const account = await createAccount(
     {
       ownerId: userId,
@@ -31,7 +31,7 @@ export const createAccountHandler = async (
     },
     { repository, accountNumberGenerator }
   );
-  logger.info('Account created', {
+  logger.debug('Account created', {
     userId,
     accountId: account.id,
     name: account.name,

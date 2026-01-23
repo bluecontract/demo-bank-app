@@ -25,7 +25,7 @@ export const issueCardHandler = async (
   const { accountId, cardholderName } = request.body;
 
   try {
-    logger.info('Issuing card', { userId, accountId });
+    logger.debug('Issuing card', { userId, accountId });
 
     const result = await issueCard(
       {
@@ -42,7 +42,7 @@ export const issueCardHandler = async (
       }
     );
 
-    logger.info('Card issued', {
+    logger.debug('Card issued', {
       userId,
       accountId,
       cardId: result.card.cardId,

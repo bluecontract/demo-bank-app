@@ -23,7 +23,7 @@ export const listCardsHandler = async (
   const accountId = request.query?.accountId;
 
   try {
-    logger.info('Listing cards', { userId, accountId });
+    logger.debug('Listing cards', { userId, accountId });
 
     const cards = await listCards(
       {
