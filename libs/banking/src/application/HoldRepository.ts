@@ -67,6 +67,11 @@ export interface HoldActivityRecord {
   currency: Hold['currency'];
   description?: string;
   counterpartyAccountNumber?: string;
+  cardId?: Hold['cardId'];
+  cardLast4?: Hold['cardLast4'];
+  merchantName?: Hold['merchantName'];
+  merchantStatementDescriptor?: Hold['merchantStatementDescriptor'];
+  processorChargeId?: Hold['processorChargeId'];
   eventId: string;
   event: HoldEvent;
 }
@@ -75,6 +80,12 @@ export interface HoldRepository {
   putHoldMeta(hold: Hold): Promise<void>;
   appendHoldEvent(holdId: Hold['holdId'], event: HoldEvent): Promise<void>;
   getHold(holdId: Hold['holdId']): Promise<Hold | null>;
+  getHoldByCardTransactionDetails(
+    details: Hold['cardTransactionDetails']
+  ): Promise<Hold | null>;
+  ensureCardTransactionMapping(hold: Hold): Promise<void>;
+  disableHoldCapture(holdId: Hold['holdId']): Promise<Hold | null>;
+  enableHoldCapture(holdId: Hold['holdId']): Promise<Hold | null>;
   listHoldEvents(holdId: Hold['holdId']): Promise<HoldEvent[]>;
   listHoldActivityByAccountNumber(
     accountNumber: Hold['payerAccountNumber'],

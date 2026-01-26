@@ -20,7 +20,7 @@ export function Spinner({
 
   const colorClasses = {
     white: 'border-white/30 border-t-white',
-    green: 'border-green-200 border-t-green-600',
+    green: 'border-emerald-200 border-t-emerald-500',
     blue: 'border-blue-200 border-t-blue-600',
     gray: 'border-gray-200 border-t-gray-600',
   };

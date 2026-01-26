@@ -48,6 +48,14 @@ export class HoldNotPendingError extends AppError {
   }
 }
 
+export class HoldCaptureDisabledError extends AppError {
+  readonly code = 'HOLD_CAPTURE_DISABLED';
+
+  constructor(holdId: string) {
+    super(`Hold ${holdId} capture is disabled`);
+  }
+}
+
 export class HoldCounterpartyMismatchError extends AppError {
   readonly code = 'HOLD_COUNTERPARTY_MISMATCH';
 
@@ -65,5 +73,37 @@ export class HoldCounterpartyRequiredError extends AppError {
 
   constructor(holdId: string) {
     super(`Hold ${holdId} capture requires a counterparty account number`);
+  }
+}
+
+export class IdempotencyConflictError extends AppError {
+  readonly code = 'IDEMPOTENCY_CONFLICT';
+
+  constructor(message = 'Idempotency key reuse with different payload') {
+    super(message);
+  }
+}
+
+export class CardPanCollisionError extends AppError {
+  readonly code = 'CARD_PAN_COLLISION';
+
+  constructor(panHash: string, cause?: Error) {
+    super(`Card PAN hash already exists: ${panHash}`, { cause });
+  }
+}
+
+export class CardIssuanceError extends AppError {
+  readonly code = 'CARD_ISSUANCE_FAILED';
+
+  constructor(message = 'Unable to issue card') {
+    super(message);
+  }
+}
+
+export class CardNotFoundError extends AppError {
+  readonly code = 'CARD_NOT_FOUND';
+
+  constructor(cardId: string) {
+    super(`Card ${cardId} not found`);
   }
 }

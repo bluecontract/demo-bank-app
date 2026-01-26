@@ -17,7 +17,7 @@ export interface TransferMoneyCommand {
   amountMinor: Money;
   description: string;
   ctx: TransactionContext;
-  payNoteEventId?: string;
+  payNoteDocumentId?: string;
 }
 
 export interface TransferMoneyDependencies {
@@ -37,7 +37,7 @@ export async function transferMoney(
     amountMinor,
     description,
     ctx,
-    payNoteEventId,
+    payNoteDocumentId,
   } = cmd;
 
   const timing = TimingUtils.startTiming(
@@ -107,7 +107,7 @@ export async function transferMoney(
     const txn = Transaction.create([debit, credit], {
       idempotencyKey: ctx.idempotencyKey,
       description,
-      payNoteEventId,
+      payNoteDocumentId,
     });
 
     const txnId = await repository.saveTransactionWithAccounts(

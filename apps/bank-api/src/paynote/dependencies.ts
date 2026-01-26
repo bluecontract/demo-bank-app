@@ -22,7 +22,13 @@ import {
   createRandomIdGenerator,
   createOpenAiValidationProvider,
   DynamoPayNoteVerificationRepository,
+  DynamoPayNoteDeliveryRepository,
+  DynamoPayNoteRepository,
+  DynamoPayNoteBootstrapRepository,
   type PayNoteVerificationRepository,
+  type PayNoteDeliveryRepository,
+  type PayNoteRepository,
+  type PayNoteBootstrapRepository,
   type BankingFacade,
   type MyOsClient,
   type BlueIdCalculator,
@@ -30,12 +36,20 @@ import {
   type IdGeneratorPort,
   type PayNoteValidationProvider,
 } from '@demo-bank-app/paynotes';
+import {
+  DynamoContractRepository,
+  type ContractRepository,
+} from '@demo-bank-app/contracts';
 
 export type PaynoteDependencies = {
   logger: PowertoolsLogger;
   getOpenAiApiKey: () => Promise<string>;
   getMyOsCredentials: () => Promise<MyOsCredentials>;
   payNoteVerificationRepository: PayNoteVerificationRepository;
+  payNoteDeliveryRepository: PayNoteDeliveryRepository;
+  payNoteRepository: PayNoteRepository;
+  payNoteBootstrapRepository: PayNoteBootstrapRepository;
+  contractRepository: ContractRepository;
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
   myOsClient: MyOsClient;
@@ -93,6 +107,30 @@ const initializeDependencies = (): PaynoteDependencies => {
     }
   );
 
+  const payNoteDeliveryRepository = new DynamoPayNoteDeliveryRepository({
+    tableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
+  const payNoteRepository = new DynamoPayNoteRepository({
+    tableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
+  const payNoteBootstrapRepository = new DynamoPayNoteBootstrapRepository({
+    tableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
+  const contractRepository = new DynamoContractRepository({
+    tableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
   const bankingRepository = new DynamoBankingRepository({
     tableName,
     region: awsRegion,
@@ -136,6 +174,10 @@ const initializeDependencies = (): PaynoteDependencies => {
     getOpenAiApiKey,
     getMyOsCredentials,
     payNoteVerificationRepository,
+    payNoteDeliveryRepository,
+    payNoteRepository,
+    payNoteBootstrapRepository,
+    contractRepository,
     bankingRepository,
     holdRepository,
     myOsClient,

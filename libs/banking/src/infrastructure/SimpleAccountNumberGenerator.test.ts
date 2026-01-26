@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SimpleAccountNumberGenerator } from './SimpleAccountNumberGenerator';
+import { CARD_SETTLEMENT, FUNDING_SOURCE } from '../domain/entities/Account';
 
 describe('AccountNumberGenerator', () => {
   describe('generate', () => {
@@ -38,6 +39,15 @@ describe('AccountNumberGenerator', () => {
       const second = generator.generate();
 
       expect(first).not.toBe(second);
+    });
+
+    it('should avoid reserved account numbers', () => {
+      const generator = new SimpleAccountNumberGenerator();
+      for (let i = 0; i < 50; i++) {
+        const accountNumber = generator.generate();
+        expect(accountNumber).not.toBe(FUNDING_SOURCE.ACCOUNT_NUMBER);
+        expect(accountNumber).not.toBe(CARD_SETTLEMENT.ACCOUNT_NUMBER);
+      }
     });
 
     it('should handle timestamp encoding correctly', () => {

@@ -66,6 +66,23 @@ const holdFailed: ActivityItem = {
   failureMessage: 'Available balance too low',
 };
 
+const cardTransaction: ActivityItem = {
+  kind: 'POSTED_TRANSACTION',
+  activityId: 'TXN#txn-999',
+  transactionId: 'txn-999',
+  amountMinor: 3200,
+  description: 'Demo Shop',
+  postedAt: '2023-01-20T11:00:00Z',
+  originHoldId: 'hold-999',
+  side: 'DEBIT',
+  type: 'TRANSFER',
+  status: 'POSTED',
+  counterpartyAccountNumber: '9999999999',
+  cardLast4: '4242',
+  merchantName: 'Demo Shop',
+  processorChargeId: 'ch_123',
+};
+
 describe('TransactionItem', () => {
   it('renders posted credit transaction with details and click handler', () => {
     const onSelect = vi.fn();
@@ -137,5 +154,29 @@ describe('TransactionItem', () => {
     expect(screen.getByText('HOLD FAILED')).toBeInTheDocument();
     expect(screen.getByText('Failure: INSUFFICIENT_FUNDS')).toBeInTheDocument();
     expect(screen.getByText('Available balance too low')).toBeInTheDocument();
+  });
+
+  it('renders card transactions with merchant and card context', () => {
+    render(
+      <TransactionItem item={cardTransaction} onActivitySelect={vi.fn()} />
+    );
+
+    expect(screen.getByText('Demo Shop')).toBeInTheDocument();
+    expect(screen.getByText('Card: **** 4242')).toBeInTheDocument();
+    expect(screen.getByText('Charge: ch_123')).toBeInTheDocument();
+    expect(screen.queryByText('To: 999 999 9999')).not.toBeInTheDocument();
+  });
+
+  it('renders a PayNote badge when paynote metadata is present', () => {
+    const payNoteTransaction: ActivityItem = {
+      ...debitTransaction,
+      payNote: { payNoteDocumentId: 'doc-paynote-1' },
+    };
+
+    render(
+      <TransactionItem item={payNoteTransaction} onActivitySelect={vi.fn()} />
+    );
+
+    expect(screen.getByText('PAYNOTE')).toBeInTheDocument();
   });
 });

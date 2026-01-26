@@ -72,7 +72,7 @@ describe('Avatar', () => {
     render(<Avatar name="Alice" data-testid="avatar" />);
 
     const avatar = screen.getByTestId('avatar');
-    expect(avatar).toHaveClass('bg-green-500');
+    expect(avatar).toHaveClass('bg-gradient-to-br');
   });
 
   it('should handle empty name gracefully', () => {

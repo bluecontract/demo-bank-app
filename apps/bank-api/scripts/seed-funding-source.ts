@@ -2,6 +2,7 @@ import type { Handler, Context } from 'aws-lambda';
 import {
   DynamoBankingRepository,
   Account,
+  CARD_SETTLEMENT,
   FUNDING_SOURCE,
   Money,
 } from '@demo-bank-app/banking';
@@ -93,22 +94,38 @@ const seedFundingSource = async () => {
 
   const repository = createRepository();
 
-  const fundingSourceAccount = new Account({
-    id: FUNDING_SOURCE.ACCOUNT_ID,
-    accountNumber: FUNDING_SOURCE.ACCOUNT_NUMBER,
-    name: 'System Funding Source',
-    ownerUserId: 'SYSTEM',
-    status: 'ACTIVE',
-    currency: 'USD',
-    createdAt: now,
-    isTest: false,
-    ledgerBalanceMinor: new Money(0),
-    availableBalanceMinor: new Money(0),
-    balanceVersion: 0,
-  });
+  const systemAccounts = [
+    new Account({
+      id: FUNDING_SOURCE.ACCOUNT_ID,
+      accountNumber: FUNDING_SOURCE.ACCOUNT_NUMBER,
+      name: 'System Funding Source',
+      ownerUserId: 'SYSTEM',
+      status: 'ACTIVE',
+      currency: 'USD',
+      createdAt: now,
+      isTest: false,
+      ledgerBalanceMinor: new Money(0),
+      availableBalanceMinor: new Money(0),
+      balanceVersion: 0,
+    }),
+    new Account({
+      id: CARD_SETTLEMENT.ACCOUNT_ID,
+      accountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
+      name: 'Card Settlement',
+      ownerUserId: 'SYSTEM',
+      status: 'ACTIVE',
+      currency: 'USD',
+      createdAt: now,
+      isTest: false,
+      ledgerBalanceMinor: new Money(0),
+      availableBalanceMinor: new Money(0),
+      balanceVersion: 0,
+    }),
+  ];
 
-  // Use the repository to save the account (handles all DynamoDB operations)
-  await repository.saveAccount(fundingSourceAccount);
+  for (const account of systemAccounts) {
+    await repository.saveAccount(account);
+  }
 };
 
 export const handler: CloudFormationCustomResourceHandler = async (
@@ -141,7 +158,10 @@ export const handler: CloudFormationCustomResourceHandler = async (
     await sendResponse(event, context, 'FAILED');
   }
 };
-if (process.env.AWS_ENDPOINT_URL === LOCALSTACK_ENDPOINT) {
+if (
+  process.env.NODE_ENV !== 'test' &&
+  process.env.AWS_ENDPOINT_URL === LOCALSTACK_ENDPOINT
+) {
   // Running under `sam local …` – no CloudFormation present
   seedFundingSource().catch(console.error);
 }

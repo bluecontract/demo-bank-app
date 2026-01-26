@@ -74,6 +74,18 @@ export function TransactionDetailsModal({
     txnId: fallbackTransactionId ?? '',
   });
 
+  const fallbackCardFields =
+    selectedActivity?.kind === 'POSTED_TRANSACTION'
+      ? {
+          cardId: selectedActivity.cardId,
+          cardLast4: selectedActivity.cardLast4,
+          merchantName: selectedActivity.merchantName,
+          merchantStatementDescriptor:
+            selectedActivity.merchantStatementDescriptor,
+          processorChargeId: selectedActivity.processorChargeId,
+        }
+      : {};
+
   const fallbackActivityDetail: ActivityDetail | null = fallbackTransaction
     ? {
         kind: 'POSTED_TRANSACTION',
@@ -92,6 +104,7 @@ export function TransactionDetailsModal({
         status: fallbackTransaction.status,
         counterpartyAccountNumber:
           fallbackTransaction.counterpartyAccountNumber,
+        ...fallbackCardFields,
       }
     : null;
 
@@ -104,7 +117,7 @@ export function TransactionDetailsModal({
       : fallbackActivityDetail;
 
   const holdDetail = activityDetail?.kind === 'HOLD' ? activityDetail : null;
-  const holdTimelinePayNoteEventId = useMemo(() => {
+  const holdTimelinePayNoteDocumentId = useMemo(() => {
     if (!holdDetail?.timeline) {
       return null;
     }
@@ -128,7 +141,7 @@ export function TransactionDetailsModal({
       event: (typeof holdDetail.timeline)[number]
     ) => {
       if (!selectedActivity) return false;
-      if (event.payNoteEventId == null) return false;
+      if (event.payNoteDocumentId == null) return false;
 
       switch (selectedActivity.kind) {
         case 'HOLD_CREATED':
@@ -150,17 +163,17 @@ export function TransactionDetailsModal({
 
     if (desiredType) {
       const matchedEvent = holdDetail.timeline.find(matchesSelectedActivity);
-      if (matchedEvent?.payNoteEventId) {
-        return matchedEvent.payNoteEventId;
+      if (matchedEvent?.payNoteDocumentId) {
+        return matchedEvent.payNoteDocumentId;
       }
     }
 
     const createdEventId = holdDetail.timeline.find(
-      event => event.type === 'CREATED' && event.payNoteEventId
-    )?.payNoteEventId;
+      event => event.type === 'CREATED' && event.payNoteDocumentId
+    )?.payNoteDocumentId;
     const fallbackEventId = holdDetail.timeline.find(
-      event => event.payNoteEventId
-    )?.payNoteEventId;
+      event => event.payNoteDocumentId
+    )?.payNoteDocumentId;
 
     return createdEventId ?? fallbackEventId ?? null;
   }, [holdDetail, selectedActivity]);
@@ -169,8 +182,14 @@ export function TransactionDetailsModal({
     if (activityDetail?.kind === 'POSTED_TRANSACTION') {
       return activityDetail.side;
     }
-    return resolvedTransaction?.side;
-  }, [activityDetail, resolvedTransaction]);
+    if (resolvedTransaction?.side) {
+      return resolvedTransaction.side;
+    }
+    if (selectedActivity?.kind === 'POSTED_TRANSACTION') {
+      return selectedActivity.side;
+    }
+    return undefined;
+  }, [activityDetail, resolvedTransaction, selectedActivity]);
 
   const shouldSuppressPayNote = transactionSide === 'CREDIT';
 
@@ -184,24 +203,38 @@ export function TransactionDetailsModal({
     if (resolvedTransaction?.payNote) {
       return resolvedTransaction.payNote;
     }
-    if (holdTimelinePayNoteEventId) {
-      return { myosEventId: holdTimelinePayNoteEventId };
+    if (holdTimelinePayNoteDocumentId) {
+      return { payNoteDocumentId: holdTimelinePayNoteDocumentId };
+    }
+    if (selectedActivity?.payNote) {
+      return selectedActivity.payNote;
     }
     return null;
   }, [
     activityDetail,
     resolvedTransaction,
-    holdTimelinePayNoteEventId,
+    holdTimelinePayNoteDocumentId,
     shouldSuppressPayNote,
+    selectedActivity,
   ]);
   const hasPayNote = !!payNoteReference;
   const transactionHasPayNote =
     !shouldSuppressPayNote &&
     !!(
       resolvedTransaction?.payNote ||
-      (activityDetail?.kind === 'POSTED_TRANSACTION' && activityDetail?.payNote)
+      (activityDetail?.kind === 'POSTED_TRANSACTION' &&
+        activityDetail?.payNote) ||
+      (selectedActivity?.kind === 'POSTED_TRANSACTION' &&
+        selectedActivity?.payNote)
     );
-  const holdHasPayNote = !shouldSuppressPayNote && !!holdTimelinePayNoteEventId;
+  const holdHasPayNote =
+    !shouldSuppressPayNote &&
+    !!(
+      holdTimelinePayNoteDocumentId ||
+      (activityDetail?.kind === 'HOLD' && activityDetail.payNote) ||
+      (selectedActivity?.kind !== 'POSTED_TRANSACTION' &&
+        selectedActivity?.payNote)
+    );
   useEffect(() => {
     if (!hasPayNote) {
       setView('activity');
@@ -230,7 +263,7 @@ export function TransactionDetailsModal({
     refetch: refetchPayNoteDetails,
   } = usePayNoteDetails({
     accountNumber: accountNumber ?? null,
-    myosEventId: payNoteReference?.myosEventId,
+    payNoteDocumentId: payNoteReference?.payNoteDocumentId,
     enabled: isOpen && isPayNoteView && hasPayNote,
   });
   const payNoteErrorStatus = (payNoteError as { status?: number } | undefined)
@@ -272,14 +305,14 @@ export function TransactionDetailsModal({
       >
         <div className="p-3">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-lg font-semibold text-gray-900">
+            <h2 className="text-lg font-semibold text-slate-900">
               {activityDetail?.kind === 'HOLD'
                 ? 'Hold Details'
                 : 'Transaction Details'}
             </h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-slate-400 hover:text-slate-600 transition-colors"
               aria-label="Close modal"
             >
               <svg
@@ -308,10 +341,10 @@ export function TransactionDetailsModal({
                   ⚠️
                 </span>
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">
+              <h2 className="text-xl font-bold text-slate-900 mb-2">
                 Account Required
               </h2>
-              <p className="text-gray-600 mb-6">
+              <p className="text-slate-600 mb-6">
                 Select an account to view activity details.
               </p>
               <Button onClick={onClose}>Close</Button>
@@ -321,7 +354,7 @@ export function TransactionDetailsModal({
           {accountNumber && isLoading && (
             <div className="p-8 text-center" data-testid="activity-loading">
               <Spinner size="lg" color="green" />
-              <p className="mt-4 text-gray-600">Loading activity details...</p>
+              <p className="mt-4 text-slate-600">Loading activity details...</p>
             </div>
           )}
 
@@ -332,10 +365,10 @@ export function TransactionDetailsModal({
                   ⚠️
                 </span>
               </div>
-              <h2 className="text-xl font-bold text-gray-900 mb-2">
+              <h2 className="text-xl font-bold text-slate-900 mb-2">
                 Activity Not Found
               </h2>
-              <p className="text-gray-600 mb-4">{errorMessage}</p>
+              <p className="text-slate-600 mb-4">{errorMessage}</p>
               <Button onClick={onClose}>Close</Button>
             </div>
           )}
@@ -382,7 +415,7 @@ export function TransactionDetailsModal({
           {(resolvedTransaction ||
             holdDetail ||
             isTransactionDetailLoading) && (
-            <div className="mt-3 pt-2 border-t border-gray-200">
+            <div className="mt-3 pt-2 border-t border-slate-200">
               <Button onClick={onClose} variant="primary" className="w-full">
                 Close
               </Button>

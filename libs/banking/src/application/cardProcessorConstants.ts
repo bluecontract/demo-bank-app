@@ -1,0 +1,1 @@
+export const CARD_PROCESSOR_USER_ID = 'CARD_PROCESSOR';

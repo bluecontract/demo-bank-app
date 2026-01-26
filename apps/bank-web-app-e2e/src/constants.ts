@@ -2,6 +2,7 @@
 import { expect, type Page } from '@playwright/test';
 
 export const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:4200';
+export const DEFAULT_TEST_ORIGIN = 'https://app.example.com';
 
 // URL constants
 export const URLS = {
@@ -162,7 +163,7 @@ export const expectFormValidationError = async (
 
   // Check if the input has validation constraint violation (HTML5 validation)
   const validationMessage = await input.evaluate(
-    (el: any) => el.validationMessage
+    (el: HTMLInputElement) => el.validationMessage
   );
 
   if (validationMessage) {
@@ -191,10 +192,9 @@ export const completeStandardTransferViaStepper = async (
     title?: string;
   }
 ) => {
-  await page.waitForSelector('text=Loading...', {
-    state: 'hidden',
-    timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
-  });
+  await page
+    .getByText('Loading...')
+    .waitFor({ state: 'hidden', timeout: TEST_DATA.TIMEOUTS.NAVIGATION });
 
   await expect(page.getByText('Initiate New Transfer')).toBeVisible({
     timeout: TEST_DATA.TIMEOUTS.NAVIGATION,

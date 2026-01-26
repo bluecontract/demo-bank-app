@@ -30,6 +30,10 @@ const mockRepository = {
   getAccountIdByNumber: vi.fn(),
 } as unknown as DynamoBankingRepository;
 
+const mockCardRepository = {} as any;
+const mockCardHasher = {} as any;
+const mockHoldRepository = {} as any;
+
 const mockAccountNumberGenerator = {
   generate: vi.fn(() => '1234567890'),
   counter: 0,
@@ -42,7 +46,12 @@ const mockMetrics = {
   setDefaultDimensions: vi.fn(),
 } as unknown as PowertoolsMetrics;
 
-const mockConfig = {};
+const mockConfig = {
+  cardConfig: {
+    cardBinPrefix: '123456',
+    cardProcessorToken: 'processor-token',
+  },
+};
 
 // Helper to generate a valid demoAuth JWT for tests
 const TEST_JWT_SECRET = 'test-secret';
@@ -60,6 +69,9 @@ describe('transferMoneyHandler', () => {
   beforeEach(() => {
     vi.spyOn(dependencies, 'getDependencies').mockResolvedValue({
       repository: mockRepository,
+      cardRepository: mockCardRepository,
+      cardHasher: mockCardHasher,
+      holdRepository: mockHoldRepository,
       accountNumberGenerator: mockAccountNumberGenerator,
       logger: mockLogger,
       metrics: mockMetrics,
@@ -124,13 +136,13 @@ describe('transferMoneyHandler', () => {
       },
       { repository: mockRepository }
     );
-    expect(mockLogger.info).toHaveBeenCalledWith('Transferring money', {
+    expect(mockLogger.debug).toHaveBeenCalledWith('Transferring money', {
       userId: TEST_USER_ID,
       sourceAccountId: minimalAccount.id,
       destinationAccountNumber: '1234567890',
       amountMinor: 100,
     });
-    expect(mockLogger.info).toHaveBeenCalledWith('Money transferred', {
+    expect(mockLogger.debug).toHaveBeenCalledWith('Money transferred', {
       userId: TEST_USER_ID,
       txnId: 'txn-123',
       sourceAccountId: minimalAccount.id,

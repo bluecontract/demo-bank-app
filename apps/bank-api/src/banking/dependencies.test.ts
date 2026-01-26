@@ -1,12 +1,37 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { getDependencies, resetDependencies } from './dependencies';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   PowertoolsLogger,
   PowertoolsMetrics,
 } from '@demo-bank-app/shared-observability';
+import { getDependencies, resetDependencies } from './dependencies';
+
+const hoisted = vi.hoisted(() => {
+  const mockRepositoryInstance = {
+    getAccountById: vi.fn(),
+    saveAccount: vi.fn(),
+  };
+  const DynamoBankingRepository = vi.fn(() => mockRepositoryInstance);
+  return {
+    mockRepositoryInstance,
+    DynamoBankingRepository,
+  };
+});
+
+vi.mock('@demo-bank-app/banking', async () => {
+  const actual = await vi.importActual<typeof import('@demo-bank-app/banking')>(
+    '@demo-bank-app/banking'
+  );
+  return {
+    ...actual,
+    DynamoBankingRepository: hoisted.DynamoBankingRepository,
+  };
+});
 
 describe('Banking Dependencies', () => {
   beforeEach(() => {
+    hoisted.mockRepositoryInstance.getAccountById.mockResolvedValue(null);
+    hoisted.mockRepositoryInstance.saveAccount.mockResolvedValue(undefined);
+    hoisted.DynamoBankingRepository.mockClear();
     resetDependencies();
   });
 
@@ -15,6 +40,9 @@ describe('Banking Dependencies', () => {
     expect(deps).toHaveProperty('repository');
     expect(deps).toHaveProperty('holdRepository');
     expect(deps).toHaveProperty('accountNumberGenerator');
+    expect(deps).toHaveProperty('cardRepository');
+    expect(deps).toHaveProperty('cardHasher');
+    expect(deps.config).toHaveProperty('cardConfig');
     expect(deps.logger).toBeInstanceOf(PowertoolsLogger);
     expect(deps.metrics).toBeInstanceOf(PowertoolsMetrics);
   });

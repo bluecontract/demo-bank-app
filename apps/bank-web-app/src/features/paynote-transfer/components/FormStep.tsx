@@ -98,7 +98,7 @@ export function FormStep({
         console.error('Failed to parse PayNote:', error);
       }
     }
-  }, [isPayNoteEnabled, payNoteCode, onFormDataChange]);
+  }, [isPayNoteEnabled, payNoteCode, accounts, onFormDataChange]);
 
   const selectedAccount = useMemo(() => {
     return accounts.find(

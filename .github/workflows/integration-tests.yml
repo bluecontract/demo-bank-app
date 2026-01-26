@@ -55,17 +55,7 @@ jobs:
           node-version: ${{ inputs.node-version }}
           cache: 'npm'
 
-      - name: Cache node_modules
-        id: cache-modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-modules-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-modules-
-
       - name: Install dependencies
-        if: steps.cache-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Setup Nx SHAs

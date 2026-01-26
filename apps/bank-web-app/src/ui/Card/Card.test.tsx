@@ -21,7 +21,7 @@ describe('Card', () => {
     );
 
     const card = screen.getByTestId('card');
-    expect(card).toHaveClass('bg-white', 'rounded-lg', 'shadow-md');
+    expect(card).toHaveClass('app-surface', 'p-6');
   });
 
   it('should apply additional className when provided', () => {
@@ -79,6 +79,6 @@ describe('Card', () => {
     );
 
     const card = screen.getByTestId('card');
-    expect(card).toHaveClass('cursor-pointer', 'hover:shadow-lg');
+    expect(card).toHaveClass('cursor-pointer', 'hover:-translate-y-1');
   });
 });

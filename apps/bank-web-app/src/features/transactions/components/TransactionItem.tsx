@@ -31,6 +31,8 @@ const getTransactionTypeDisplay = (
 type VisualState = {
   badgeLabel: string;
   badgeClass: string;
+  payNoteBadgeLabel?: string;
+  payNoteBadgeClass?: string;
   icon: string;
   iconClasses: string;
   title: string;
@@ -50,10 +52,45 @@ const formatCounterpartyLine = (
 
 const getHoldDirectionLabel = (): 'From' | 'To' => 'To';
 
+const formatCardLine = (last4?: string) =>
+  last4 ? `Card: **** ${last4}` : undefined;
+
+const formatChargeLine = (processorChargeId?: string) =>
+  processorChargeId ? `Charge: ${processorChargeId}` : undefined;
+
+const normalizeDescription = (description?: string, merchantName?: string) => {
+  if (!description) {
+    return undefined;
+  }
+  if (merchantName && description.trim() === merchantName.trim()) {
+    return undefined;
+  }
+  return description;
+};
+
 const buildVisualState = (item: ActivityItem): VisualState => {
+  const hasCardContext = Boolean(
+    item.cardLast4 || item.merchantName || item.processorChargeId
+  );
+  const hasPayNote = Boolean(item.payNote?.payNoteDocumentId);
+  const payNoteBadge = hasPayNote
+    ? {
+        payNoteBadgeLabel: 'PAYNOTE',
+        payNoteBadgeClass: 'bg-cyan-50 text-cyan-700 border border-cyan-100',
+      }
+    : {};
+
+  const cardSubtitleLines = [
+    formatCardLine(item.cardLast4),
+    formatChargeLine(item.processorChargeId),
+  ].filter((line): line is string => Boolean(line));
+
   if (item.kind === 'POSTED_TRANSACTION') {
     const isCredit = item.side === 'CREDIT';
     const amount = formatCurrency(item.amountMinor);
+    const title = hasCardContext
+      ? item.merchantName ?? 'Card Purchase'
+      : getTransactionTypeDisplay(item.type, item.side);
 
     return {
       badgeLabel:
@@ -62,18 +99,22 @@ const buildVisualState = (item: ActivityItem): VisualState => {
           : item.status.toUpperCase(),
       badgeClass:
         {
-          posted: 'bg-green-100 text-green-800',
-          completed: 'bg-green-100 text-green-800',
-          pending: 'bg-yellow-100 text-yellow-800',
-          failed: 'bg-red-100 text-red-800',
-        }[item.status.toLowerCase()] ?? 'bg-gray-100 text-gray-800',
+          posted: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+          completed: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+          pending: 'bg-amber-50 text-amber-700 border border-amber-100',
+          failed: 'bg-rose-50 text-rose-700 border border-rose-100',
+        }[item.status.toLowerCase()] ??
+        'bg-slate-100 text-slate-700 border border-slate-200',
+      ...payNoteBadge,
       icon: isCredit ? '↓' : '↑',
       iconClasses: isCredit
-        ? 'bg-green-100 text-green-600'
-        : 'bg-red-100 text-red-600',
-      title: getTransactionTypeDisplay(item.type, item.side),
+        ? 'bg-emerald-50 text-emerald-600'
+        : 'bg-rose-50 text-rose-600',
+      title,
       timestamp: item.postedAt,
-      subtitleLines: item.counterpartyAccountNumber
+      subtitleLines: hasCardContext
+        ? cardSubtitleLines
+        : item.counterpartyAccountNumber
         ? [
             formatCounterpartyLine(
               isCredit ? 'From' : 'To',
@@ -81,9 +122,9 @@ const buildVisualState = (item: ActivityItem): VisualState => {
             ),
           ]
         : [],
-      description: item.description,
+      description: normalizeDescription(item.description, item.merchantName),
       amountText: `${isCredit ? '+' : '-'}${amount}`,
-      amountClass: isCredit ? 'text-green-600' : 'text-red-600',
+      amountClass: isCredit ? 'text-emerald-600' : 'text-rose-600',
       clickable: true,
       activityId: item.activityId,
     };
@@ -95,7 +136,9 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       : undefined;
 
   const base = {
-    subtitleLines: counterpartyAccountNumber
+    subtitleLines: hasCardContext
+      ? cardSubtitleLines
+      : counterpartyAccountNumber
       ? [
           formatCounterpartyLine(
             getHoldDirectionLabel(),
@@ -103,7 +146,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
           ),
         ]
       : [],
-    description: item.description,
+    description: normalizeDescription(item.description, item.merchantName),
     amountText: formatCurrency(item.amountMinor),
   };
 
@@ -112,12 +155,13 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       return {
         ...base,
         badgeLabel: 'HOLD PLACED',
-        badgeClass: 'bg-yellow-100 text-yellow-800',
+        badgeClass: 'bg-amber-50 text-amber-700 border border-amber-100',
+        ...payNoteBadge,
         icon: '⏳',
-        iconClasses: 'bg-yellow-50 text-yellow-700',
-        title: 'Hold Created',
+        iconClasses: 'bg-amber-50 text-amber-700',
+        title: item.merchantName ?? 'Hold Created',
         timestamp: item.createdAt,
-        amountClass: 'text-yellow-700',
+        amountClass: 'text-amber-700',
         clickable: true,
         activityId: item.activityId,
       };
@@ -125,15 +169,16 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       return {
         ...base,
         badgeLabel: 'HOLD CAPTURED',
-        badgeClass: 'bg-green-100 text-green-800',
+        badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+        ...payNoteBadge,
         icon: '✔',
-        iconClasses: 'bg-green-50 text-green-700',
-        title: 'Hold Captured',
+        iconClasses: 'bg-emerald-50 text-emerald-700',
+        title: item.merchantName ?? 'Hold Captured',
         timestamp: item.capturedAt,
         subtitleLines: item.transactionId
           ? [...base.subtitleLines, `txn: ${item.transactionId}`]
           : base.subtitleLines,
-        amountClass: 'text-yellow-700',
+        amountClass: 'text-amber-700',
         clickable: true,
         activityId: item.activityId,
       };
@@ -141,15 +186,16 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       return {
         ...base,
         badgeLabel: 'HOLD RELEASED',
-        badgeClass: 'bg-blue-100 text-blue-800',
+        badgeClass: 'bg-sky-50 text-sky-700 border border-sky-100',
+        ...payNoteBadge,
         icon: '↺',
-        iconClasses: 'bg-blue-50 text-blue-700',
-        title: 'Hold Released',
+        iconClasses: 'bg-sky-50 text-sky-700',
+        title: item.merchantName ?? 'Hold Released',
         timestamp: item.releasedAt,
         subtitleLines: item.releaseReason
           ? [...base.subtitleLines, `Reason: ${item.releaseReason}`]
           : base.subtitleLines,
-        amountClass: 'text-blue-700',
+        amountClass: 'text-sky-700',
         clickable: true,
         activityId: item.activityId,
       };
@@ -157,14 +203,15 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       return {
         ...base,
         badgeLabel: 'HOLD FAILED',
-        badgeClass: 'bg-red-100 text-red-800',
+        badgeClass: 'bg-rose-50 text-rose-700 border border-rose-100',
+        ...payNoteBadge,
         icon: '✖',
-        iconClasses: 'bg-red-50 text-red-700',
-        title: 'Hold Failed',
+        iconClasses: 'bg-rose-50 text-rose-700',
+        title: item.merchantName ?? 'Hold Failed',
         timestamp: item.failedAt,
         subtitleLines: [`Failure: ${item.failureCode}`],
         description: item.failureMessage ?? base.description,
-        amountClass: 'text-red-700',
+        amountClass: 'text-rose-700',
         clickable: true,
         activityId: item.activityId,
       };
@@ -192,58 +239,65 @@ export function TransactionItem({
 
   return (
     <div
-      className={`flex items-center p-4 transition-colors ${
-        visualState.clickable ? 'cursor-pointer hover:bg-gray-50' : ''
+      className={`p-4 transition-colors ${
+        visualState.clickable ? 'cursor-pointer hover:bg-slate-50/80' : ''
       }`}
       onClick={visualState.clickable ? handleClick : undefined}
       data-testid={testId}
     >
-      {/* Left Section */}
-      <div className="flex items-center space-x-3 min-w-[350px] shrink-0">
-        <div
-          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${visualState.iconClasses}`}
-        >
-          {visualState.icon}
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span
-              className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${visualState.badgeClass}`}
-            >
-              {visualState.badgeLabel}
-            </span>
+      <div className="grid gap-4 items-start md:grid-cols-[260px_minmax(0,1fr)_120px]">
+        {/* Left Section */}
+        <div className="flex items-center gap-3 min-w-0">
+          <div
+            className={`w-9 h-9 rounded-full flex items-center justify-center text-sm ${visualState.iconClasses}`}
+          >
+            {visualState.icon}
           </div>
-          <div className="text-xs text-gray-500 whitespace-nowrap">
-            {formatDate(visualState.timestamp)}
-          </div>
-          {visualState.subtitleLines.map((line, index) => (
-            <div
-              key={`${line}-${index}`}
-              className="text-xs text-gray-500 whitespace-nowrap"
-            >
-              {line}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span
+                className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold ${visualState.badgeClass}`}
+              >
+                {visualState.badgeLabel}
+              </span>
+              {visualState.payNoteBadgeLabel && (
+                <span
+                  className={`inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold ${visualState.payNoteBadgeClass}`}
+                >
+                  {visualState.payNoteBadgeLabel}
+                </span>
+              )}
             </div>
-          ))}
+            <div className="text-xs text-slate-500 truncate">
+              {formatDate(visualState.timestamp)}
+            </div>
+            {visualState.subtitleLines.map((line, index) => (
+              <div
+                key={`${line}-${index}`}
+                className="text-xs text-slate-500 truncate"
+              >
+                {line}
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Middle Section */}
-      <div className="ml-4 shrink-0">
-        <h4 className="text-base font-medium text-gray-600 whitespace-nowrap">
-          {visualState.title}
-        </h4>
-      </div>
+        {/* Middle Section */}
+        <div className="min-w-0">
+          <div className="text-base font-semibold text-slate-900 truncate">
+            {visualState.title}
+          </div>
+          {visualState.description && (
+            <div className="text-sm text-slate-500 mt-1 break-words">
+              {visualState.description}
+            </div>
+          )}
+        </div>
 
-      {/* Description */}
-      <div className="ml-6 flex-1 min-w-0">
-        {visualState.description && (
-          <p className="text-base text-gray-600">{visualState.description}</p>
-        )}
-      </div>
-
-      {/* Amount */}
-      <div className="ml-4 text-right shrink-0">
-        <div className={`text-lg font-semibold ${visualState.amountClass}`}>
+        {/* Right Section */}
+        <div
+          className={`text-lg font-semibold md:text-right ${visualState.amountClass}`}
+        >
           {visualState.amountText}
         </div>
       </div>

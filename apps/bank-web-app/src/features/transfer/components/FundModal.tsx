@@ -136,12 +136,12 @@ export function FundModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+      className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
       onClick={handleBackdropClick}
       data-testid="modal-backdrop"
     >
       <div
-        className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white/90 rounded-2xl shadow-xl border border-slate-200 backdrop-blur max-w-md w-full max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
         data-testid="modal-content"
         role="dialog"
@@ -153,7 +153,7 @@ export function FundModal({
               <div className="space-y-4">
                 {/* Header */}
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">
+                  <h3 className="text-lg font-semibold text-slate-900">
                     Fund Account
                   </h3>
                 </div>
@@ -162,7 +162,7 @@ export function FundModal({
                 <div>
                   <label
                     htmlFor="targetAccount"
-                    className="block text-sm font-medium text-gray-700"
+                    className="block text-sm font-medium text-slate-700"
                   >
                     Select Account
                   </label>
@@ -176,7 +176,7 @@ export function FundModal({
                           accountId: e.target.value,
                         }))
                       }
-                      className="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 border-gray-300 text-gray-900 bg-white appearance-none"
+                      className="w-full px-3 py-2.5 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] border-slate-200 text-slate-900 bg-white/80 appearance-none"
                       style={{
                         backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                         backgroundPosition: 'right 0.5rem center',
@@ -201,10 +201,10 @@ export function FundModal({
                         acc => acc.accountId === formData.accountId
                       );
                       return selectedAccount ? (
-                        <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-                          <p className="text-sm text-green-800">
+                        <div className="mt-4 p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl">
+                          <p className="text-sm text-emerald-700">
                             <span className="font-medium">Available:</span>{' '}
-                            <span className="font-semibold text-green-900">
+                            <span className="font-semibold text-emerald-900">
                               {formatCurrency(
                                 selectedAccount.availableBalanceMinor
                               )}
@@ -220,7 +220,7 @@ export function FundModal({
                 <div>
                   <label
                     htmlFor="amount"
-                    className="block text-sm font-medium text-gray-700 text-center mb-3"
+                    className="block text-sm font-medium text-slate-700 text-center mb-3"
                   >
                     Amount
                   </label>
@@ -231,7 +231,7 @@ export function FundModal({
                       value={formData.amount ? `$${formData.amount}` : ''}
                       onChange={e => handleAmountChange(e.target.value)}
                       placeholder="$0"
-                      className="w-full text-center text-4xl font-bold text-gray-900 bg-transparent border-none focus:outline-none focus:ring-0 placeholder-gray-400 mb-5"
+                      className="w-full text-center text-4xl font-bold text-slate-900 bg-transparent border-none focus:outline-none focus:ring-0 placeholder-slate-400 mb-5"
                       style={{
                         textAlign: 'center',
                         fontSize: '2.25rem',
@@ -257,14 +257,14 @@ export function FundModal({
                 <button
                   type="button"
                   onClick={handleClose}
-                  className="flex-1 px-6 py-2 text-base font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 border-2 border-green-600 text-green-600 bg-transparent hover:bg-green-50 focus:ring-green-500"
+                  className="flex-1 px-6 py-2 text-base font-medium rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 focus:ring-[var(--color-primary)]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={fundAccount.isPending}
-                  className="flex-1 px-6 py-2 text-base font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 bg-green-600 text-white hover:bg-green-700 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-6 py-2 text-base font-medium rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-600)] focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {fundAccount.isPending ? 'Adding Funds...' : 'Fund Account'}
                 </button>

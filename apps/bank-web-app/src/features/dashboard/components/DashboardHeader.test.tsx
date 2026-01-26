@@ -54,7 +54,7 @@ describe('DashboardHeader', () => {
 
     const header = screen.getByTestId('dashboard-header');
     expect(header).toBeInTheDocument();
-    expect(header).toHaveClass('flex', 'justify-between', 'items-center');
+    expect(header).toHaveClass('flex', 'gap-6');
   });
 
   it('should render avatar when user name is provided', () => {

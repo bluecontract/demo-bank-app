@@ -59,8 +59,8 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
-    "@blue-labs/language": "2.0.0-rc.22",
-    "@blue-labs/shared-utils": "2.0.0-rc.22",
+    "@blue-labs/language": "3.4.1",
+    "@blue-labs/shared-utils": "3.4.1",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "^9.8.0",

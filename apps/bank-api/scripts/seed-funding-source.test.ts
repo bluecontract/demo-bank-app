@@ -14,25 +14,29 @@ const MockedMoney = vi.fn();
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-vi.doMock('@demo-bank-app/banking', () => ({
+const mockBankingModule = () => ({
   DynamoBankingRepository: MockedDynamoBankingRepository,
   Account: MockedAccount,
+  CARD_SETTLEMENT: {
+    ACCOUNT_ID: 'CARD_SETTLEMENT',
+    ACCOUNT_NUMBER: '9999999999',
+  },
   FUNDING_SOURCE: {
     ACCOUNT_ID: 'FUNDING_SOURCE',
     ACCOUNT_NUMBER: '0000000000',
   },
   Money: MockedMoney,
-}));
+});
 
-// Import the handler after mocking
-const { handler } = await import('./seed-funding-source.ts');
-const testHandler = handler as any;
+let testHandler: any;
 
 describe('seed-funding-source functional tests', () => {
   let mockContext: Context;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    vi.resetModules();
+    vi.doMock('@demo-bank-app/banking', mockBankingModule);
 
     // Mock Money constructor
     MockedMoney.mockImplementation(
@@ -77,6 +81,10 @@ describe('seed-funding-source functional tests', () => {
     process.env.TABLE = 'test-table';
     process.env.AWS_REGION = 'eu-west-1';
     process.env.AWS_ENDPOINT_URL = 'http://localhost:4566';
+    process.env.NODE_ENV = 'test';
+
+    const { handler } = await import('./seed-funding-source.ts');
+    testHandler = handler as any;
   });
 
   describe('repository configuration', () => {
@@ -91,7 +99,9 @@ describe('seed-funding-source functional tests', () => {
         ResourceProperties: {},
       };
 
-      mockRepositoryInstance.saveAccount.mockResolvedValueOnce({} as any);
+      mockRepositoryInstance.saveAccount
+        .mockResolvedValueOnce({} as any)
+        .mockResolvedValueOnce({} as any);
 
       await testHandler(event, mockContext);
 
@@ -115,7 +125,9 @@ describe('seed-funding-source functional tests', () => {
         ResourceProperties: {},
       };
 
-      mockRepositoryInstance.saveAccount.mockResolvedValueOnce({} as any);
+      mockRepositoryInstance.saveAccount
+        .mockResolvedValueOnce({} as any)
+        .mockResolvedValueOnce({} as any);
 
       await testHandler(event, mockContext);
 
@@ -127,7 +139,7 @@ describe('seed-funding-source functional tests', () => {
   });
 
   describe('Create event handling', () => {
-    it('should create funding source account with correct parameters', async () => {
+    it('should create system accounts with correct parameters', async () => {
       const event = {
         RequestType: 'Create' as const,
         ResponseURL: 'https://example.com/response',
@@ -138,7 +150,9 @@ describe('seed-funding-source functional tests', () => {
         ResourceProperties: {},
       };
 
-      mockRepositoryInstance.saveAccount.mockResolvedValueOnce({} as any);
+      mockRepositoryInstance.saveAccount
+        .mockResolvedValueOnce({} as any)
+        .mockResolvedValueOnce({} as any);
 
       await testHandler(event, mockContext);
 
@@ -156,8 +170,22 @@ describe('seed-funding-source functional tests', () => {
         balanceVersion: 0,
       });
 
+      expect(MockedAccount).toHaveBeenCalledWith({
+        id: 'CARD_SETTLEMENT',
+        accountNumber: '9999999999',
+        name: 'Card Settlement',
+        ownerUserId: 'SYSTEM',
+        status: 'ACTIVE',
+        currency: 'USD',
+        createdAt: expect.any(Date),
+        isTest: false,
+        ledgerBalanceMinor: expect.any(Object),
+        availableBalanceMinor: expect.any(Object),
+        balanceVersion: 0,
+      });
+
       expect(MockedMoney).toHaveBeenCalledWith(0);
-      expect(mockRepositoryInstance.saveAccount).toHaveBeenCalledTimes(1);
+      expect(mockRepositoryInstance.saveAccount).toHaveBeenCalledTimes(2);
     });
 
     it('should send SUCCESS response for successful creation', async () => {
@@ -171,7 +199,9 @@ describe('seed-funding-source functional tests', () => {
         ResourceProperties: {},
       };
 
-      mockRepositoryInstance.saveAccount.mockResolvedValueOnce({} as any);
+      mockRepositoryInstance.saveAccount
+        .mockResolvedValueOnce({} as any)
+        .mockResolvedValueOnce({} as any);
 
       await testHandler(event, mockContext);
 
@@ -201,11 +231,13 @@ describe('seed-funding-source functional tests', () => {
         ResourceProperties: {},
       };
 
-      mockRepositoryInstance.saveAccount.mockResolvedValueOnce({} as any);
+      mockRepositoryInstance.saveAccount
+        .mockResolvedValueOnce({} as any)
+        .mockResolvedValueOnce({} as any);
 
       await testHandler(event, mockContext);
 
-      expect(mockRepositoryInstance.saveAccount).toHaveBeenCalledTimes(1);
+      expect(mockRepositoryInstance.saveAccount).toHaveBeenCalledTimes(2);
       expect(MockedAccount).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 'FUNDING_SOURCE',

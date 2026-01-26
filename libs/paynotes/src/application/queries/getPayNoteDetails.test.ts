@@ -2,9 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { getPayNoteDetails } from './getPayNoteDetails';
 import type {
   BankingFacade,
-  MyOsClient,
   BlueIdCalculator,
   ClockPort,
+  PayNoteDeliveryRepository,
+  PayNoteRepository,
 } from '../ports';
 
 describe('getPayNoteDetails', () => {
@@ -20,19 +21,31 @@ describe('getPayNoteDetails', () => {
       captureHold: vi.fn(),
     };
 
-    const myOsClient: MyOsClient = {
-      getCredentials: vi.fn(),
-      bootstrapDocument: vi.fn(),
-      fetchEvent: vi.fn().mockResolvedValue({
-        kind: 'success',
-        payload: {
-          object: {
-            document: {
-              payerAccountNumber: { value: '1234567890' },
-            },
-          },
-        },
+    const payNoteRepository: PayNoteRepository = {
+      getPayNote: vi.fn().mockResolvedValue({
+        payNoteDocumentId: 'doc-1',
+        accountNumber: '1234567890',
+        userId: 'user-123',
+        document: { payerAccountNumber: { value: '1234567890' } },
+        transactionRequest: [],
+        triggerEvent: null,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
       }),
+      getPayNoteBySessionId: vi.fn(),
+      savePayNote: vi.fn(),
+    };
+
+    const payNoteDeliveryRepository: PayNoteDeliveryRepository = {
+      getDelivery: vi.fn(),
+      getDeliveryByDocumentId: vi.fn().mockResolvedValue(null),
+      getDeliveryBySessionId: vi.fn(),
+      getDeliveryByBootstrapSessionId: vi.fn(),
+      getDeliveryByPayNoteDocumentId: vi.fn(),
+      getDeliveryByCardTransactionDetails: vi.fn(),
+      saveDelivery: vi.fn(),
+      listDeliveriesByUserId: vi.fn(),
+      markEventProcessed: vi.fn(),
     };
 
     const blueIdCalculator: BlueIdCalculator = {
@@ -45,7 +58,13 @@ describe('getPayNoteDetails', () => {
       now: () => new Date('2024-01-01T00:00:00.000Z'),
     };
 
-    return { bankingFacade, myOsClient, blueIdCalculator, clock };
+    return {
+      bankingFacade,
+      payNoteRepository,
+      payNoteDeliveryRepository,
+      blueIdCalculator,
+      clock,
+    };
   };
 
   it('returns account-not-found when user has no account', async () => {
@@ -55,7 +74,7 @@ describe('getPayNoteDetails', () => {
     const result = await getPayNoteDetails(
       {
         accountNumber: '1234567890',
-        myOsEventId: 'event-1',
+        payNoteDocumentId: 'doc-1',
         userId: 'user-123',
       },
       deps
@@ -64,13 +83,61 @@ describe('getPayNoteDetails', () => {
     expect(result.type).toBe('account-not-found');
   });
 
-  it('returns success when event is fetched', async () => {
+  it('returns paynote-not-found when record is missing', async () => {
+    const deps = createDependencies();
+    vi.mocked(deps.payNoteRepository.getPayNote).mockResolvedValueOnce(null);
+    vi.mocked(
+      deps.payNoteDeliveryRepository.getDeliveryByDocumentId
+    ).mockResolvedValueOnce(null);
+
+    const result = await getPayNoteDetails(
+      {
+        accountNumber: '1234567890',
+        payNoteDocumentId: 'doc-missing',
+        userId: 'user-123',
+      },
+      deps
+    );
+
+    expect(result.type).toBe('paynote-not-found');
+  });
+
+  it('returns success when delivery record exists for document id', async () => {
+    const deps = createDependencies();
+    vi.mocked(deps.payNoteRepository.getPayNote).mockResolvedValueOnce(null);
+    vi.mocked(
+      deps.payNoteDeliveryRepository.getDeliveryByDocumentId
+    ).mockResolvedValueOnce({
+      deliveryId: 'delivery-1',
+      deliveryDocumentId: 'doc-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      deliveryDocument: {
+        payNoteBootstrapRequest: { document: { name: 'Delivery PayNote' } },
+      },
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const result = await getPayNoteDetails(
+      {
+        accountNumber: '1234567890',
+        payNoteDocumentId: 'doc-1',
+        userId: 'user-123',
+      },
+      deps
+    );
+
+    expect(result.type).toBe('success');
+  });
+
+  it('returns success when record is found', async () => {
     const deps = createDependencies();
 
     const result = await getPayNoteDetails(
       {
         accountNumber: '1234567890',
-        myOsEventId: 'event-1',
+        payNoteDocumentId: 'doc-1',
         userId: 'user-123',
       },
       deps
@@ -80,6 +147,6 @@ describe('getPayNoteDetails', () => {
       throw new Error('Expected success result');
     }
 
-    expect(result.detail.myosEventId).toBe('event-1');
+    expect(result.detail.payNoteDocumentId).toBe('doc-1');
   });
 });

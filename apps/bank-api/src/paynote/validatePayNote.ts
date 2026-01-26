@@ -32,7 +32,7 @@ export const validatePayNoteHandler = async (
   try {
     const { yamlContent, formData } = request.body;
 
-    logger.info('Validating PayNote', {
+    logger.debug('Validating PayNote', {
       userId,
       hasYamlContent: Boolean(yamlContent),
       fromAccount: formData.fromAccount,

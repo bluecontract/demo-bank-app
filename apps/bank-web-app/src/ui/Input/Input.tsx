@@ -9,15 +9,15 @@ interface InputProps
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ error, className = '', ...props }, ref) => {
     const baseClasses =
-      'w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500';
+      'w-full px-3 py-2.5 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] bg-white/90';
 
     const errorClasses = error
       ? 'border-red-300 text-red-900 placeholder-red-300 focus:ring-red-500 focus:border-red-500'
-      : 'border-gray-300 text-gray-900 placeholder-gray-400 focus:border-green-500';
+      : 'border-slate-200 text-slate-900 placeholder-slate-400 focus:border-[var(--color-primary)]';
 
     const disabledClasses = props.disabled
-      ? 'bg-gray-50 cursor-not-allowed'
-      : 'bg-white';
+      ? 'bg-slate-100 cursor-not-allowed'
+      : '';
 
     const finalClasses =
       `${baseClasses} ${errorClasses} ${disabledClasses} ${className}`.trim();

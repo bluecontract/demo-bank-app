@@ -155,7 +155,7 @@ contracts:
     channel: guarantorChannel
     # ... implementation triggers 'PayNote/PayNote Approved' event ...
 
-  rejectPayNote:
+  markPayNoteRejectedByClient:
     type: Conversation/Operation
     channel: guarantorChannel
     # ... implementation triggers 'PayNote/PayNote Rejected' event ...

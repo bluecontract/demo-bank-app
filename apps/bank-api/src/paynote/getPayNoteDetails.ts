@@ -15,14 +15,20 @@ export const getPayNoteDetailsHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { logger, myOsClient, bankingFacade, blueIdCalculator, clock } =
-    await getDependencies();
+  const {
+    logger,
+    bankingFacade,
+    payNoteRepository,
+    payNoteDeliveryRepository,
+    blueIdCalculator,
+    clock,
+  } = await getDependencies();
 
-  const { accountNumber, myosEventId } = request.params;
+  const { accountNumber, payNoteDocumentId } = request.params;
 
-  logger.info('Fetching PayNote details', {
+  logger.debug('Fetching PayNote details', {
     accountNumber,
-    myosEventId,
+    payNoteDocumentId,
   });
 
   try {
@@ -31,12 +37,13 @@ export const getPayNoteDetailsHandler = async (
     const result = await getPayNoteDetailsUseCase(
       {
         accountNumber,
-        myOsEventId: myosEventId,
+        payNoteDocumentId,
         userId,
       },
       {
         bankingFacade,
-        myOsClient,
+        payNoteRepository,
+        payNoteDeliveryRepository,
         blueIdCalculator,
         clock,
       }
@@ -48,7 +55,7 @@ export const getPayNoteDetailsHandler = async (
       } else if (entry.level === 'warn') {
         logger.warn(entry.message, entry.context);
       } else {
-        logger.info(entry.message, entry.context);
+        logger.debug(entry.message, entry.context);
       }
     });
 
@@ -61,20 +68,11 @@ export const getPayNoteDetailsHandler = async (
       });
     }
 
-    if (result.type === 'event-not-found') {
+    if (result.type === 'paynote-not-found') {
       return problemResponse({
         status: 404,
         code: ERROR_CODES.PAYNOTE_NOT_FOUND,
-        message: 'PayNote event not found for this account.',
-      });
-    }
-
-    if (result.type === 'external-error') {
-      return problemResponse({
-        status: 500,
-        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
-        message: 'Unable to fetch PayNote details from MyOS.',
-        detail: result.detail,
+        message: 'PayNote not found for this account.',
       });
     }
 
@@ -92,9 +90,12 @@ export const getPayNoteDetailsHandler = async (
     }
 
     logger.error('Unexpected error fetching PayNote details', {
-      accountNumber,
-      myosEventId,
+      payNoteDocumentId,
       error: error instanceof Error ? error.message : String(error),
+    });
+    logger.debug('Unexpected error fetching PayNote details', {
+      accountNumber,
+      payNoteDocumentId,
     });
 
     throw error;

@@ -54,7 +54,7 @@ export function Dropdown({
       <button
         type="button"
         onClick={toggleDropdown}
-        className="focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 rounded-full"
+        className="focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 rounded-full"
         aria-expanded={isOpen}
         aria-haspopup="true"
       >
@@ -63,7 +63,7 @@ export function Dropdown({
 
       {isOpen && (
         <div
-          className={`absolute z-50 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 ${alignmentClasses}`}
+          className={`absolute z-50 mt-2 w-52 bg-white rounded-2xl shadow-[var(--shadow-soft)] border border-slate-200 py-1 ${alignmentClasses}`}
           role="menu"
           aria-orientation="vertical"
         >
@@ -91,7 +91,7 @@ export function DropdownItem({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 flex items-center gap-2 ${className}`}
+      className={`w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 hover:text-slate-900 flex items-center gap-2 ${className}`}
       role="menuitem"
     >
       {icon && <span className="flex-shrink-0">{icon}</span>}

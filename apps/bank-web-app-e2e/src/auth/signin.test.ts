@@ -70,6 +70,7 @@ test.describe('Sign In Flow', () => {
 
     // Should be redirected to home page
     await page.waitForURL(`${BASE_URL}/`);
+    await expect(page).toHaveURL(`${BASE_URL}/`);
 
     // Now sign in with the same credentials
     await page.goto(`${BASE_URL}/signin`);
@@ -77,6 +78,7 @@ test.describe('Sign In Flow', () => {
     await page.click('button[type="submit"]');
 
     await waitForDashboard(page, testUserEmail);
+    await expect(page).toHaveURL(/\/dashboard(?:$|\?)/);
   });
 
   test('should show error for non-existent user', async ({ page }) => {
@@ -120,6 +122,7 @@ test.describe('Sign In Flow', () => {
     // Try to access dashboard directly - should stay on dashboard
     await page.goto(`${BASE_URL}/dashboard`);
     await waitForDashboard(page, testUserEmail);
+    await expect(page).toHaveURL(/\/dashboard(?:$|\?)/);
   });
 
   test('should redirect to signin when accessing protected route while unauthenticated', async ({
@@ -177,5 +180,6 @@ test.describe('Sign In Flow', () => {
 
     // Should still be authenticated and on dashboard
     await waitForDashboard(page, testUserEmail);
+    await expect(page.getByText(testUserEmail, { exact: true })).toBeVisible();
   });
 });

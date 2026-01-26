@@ -7,10 +7,16 @@
       "path": "../shared/observability"
     },
     {
-      "path": "../banking"
+      "path": "../shared/config"
     },
     {
-      "path": "../shared/config"
+      "path": "../shared/bank-api-contract"
+    },
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../banking"
     },
     {
       "path": "./tsconfig.lib.json"

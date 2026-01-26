@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 
 interface ButtonProps {
   children: ReactNode;
@@ -7,7 +7,7 @@ interface ButtonProps {
   fullWidth?: boolean;
   disabled?: boolean;
   className?: string;
-  onClick?: () => void;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   'data-testid'?: string;
 }
 
@@ -22,16 +22,17 @@ export function Button({
   'data-testid': testId,
 }: ButtonProps) {
   const baseClasses =
-    'font-bold rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
+    'font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2';
 
   const variantClasses = {
-    primary: 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500',
+    primary:
+      'bg-[var(--color-primary)] text-white shadow-sm hover:bg-[var(--color-primary-600)] focus:ring-[var(--color-primary)]',
     secondary:
-      'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500',
+      'bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:text-slate-900 focus:ring-[var(--color-primary)]',
     outline:
-      'border-2 border-green-600 text-green-600 bg-transparent hover:bg-green-50 focus:ring-green-500',
+      'border border-[var(--color-primary)] text-[var(--color-primary)] bg-transparent hover:bg-[rgba(43,190,156,0.08)] focus:ring-[var(--color-primary)]',
     gradient:
-      'bg-gradient-to-r from-green-400 to-yellow-400 text-white hover:from-green-500 hover:to-yellow-500 focus:ring-green-500',
+      'bg-gradient-to-r from-[#2bbe9c] to-[#f4b740] text-slate-900 hover:from-[#2aae91] hover:to-[#e6aa3b] focus:ring-[var(--color-primary)]',
   };
 
   const sizeClasses = {

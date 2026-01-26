@@ -76,14 +76,13 @@ test.describe('Banking Core Flows', () => {
 
     if (await scrollRightBtn.isVisible()) {
       await scrollRightBtn.click();
-      await page.waitForTimeout(300);
 
       // Should show left arrow after scrolling right
       await expect(scrollLeftBtn).toBeVisible();
 
       // Scroll back left
       await scrollLeftBtn.click();
-      await page.waitForTimeout(300);
+      await expect(scrollLeftBtn).toBeHidden();
     }
   });
 
@@ -475,7 +474,7 @@ test.describe('Banking Core Flows', () => {
     await waitForModalToClose(page, 'modal-content');
 
     // Wait for activity list to render mocked hold
-    const holdRow = page.getByTestId('activity-item-hold-hold-123');
+    const holdRow = page.getByTestId('activity-item-hold_created-hold-123');
     await expect(holdRow).toBeVisible();
 
     await holdRow.click();
@@ -509,7 +508,7 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     const accountName = createUniqueAccountName('paynote-activity');
-    const myosEventId = 'event-paynote-001';
+    const payNoteDocumentId = 'doc-paynote-001';
     const transactionActivity = {
       kind: 'POSTED_TRANSACTION',
       activityId: 'TXN#txn-paynote-001',
@@ -562,7 +561,7 @@ test.describe('Banking Core Flows', () => {
           status: transactionActivity.status,
           counterpartyAccountNumber:
             transactionActivity.counterpartyAccountNumber,
-          payNote: { myosEventId },
+          payNote: { payNoteDocumentId },
         }),
       });
     });
@@ -577,7 +576,7 @@ test.describe('Banking Core Flows', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          myosEventId,
+          payNoteDocumentId,
           documentYaml:
             '---\npayNote:\n  payer: 5555999911\n  payee: 0001122334\n  amountMinor: 9850',
           transactionRequest: {
@@ -741,15 +740,19 @@ test.describe('Banking Core Flows', () => {
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
 
-    // Wait a bit for the account switch to complete fully
-    await page.waitForTimeout(2000);
+    const account2Card = page
+      .getByRole('heading', { name: account2 })
+      .locator('xpath=ancestor::div[contains(@class,"app-surface")]');
+    await expect(account2Card).toHaveClass(/ring-2/);
 
     // Check if there are no transaction items for the second account
     // If the account switching is not working properly, just check that we have less transactions
-    const transactionCount = await page
-      .locator('[data-testid^="activity-item-"]')
-      .count();
-    expect(transactionCount).toBeLessThanOrEqual(1);
+    await expect
+      .poll(
+        async () => page.locator('[data-testid^="activity-item-"]').count(),
+        { timeout: TEST_DATA.TIMEOUTS.API_RESPONSE }
+      )
+      .toBeLessThanOrEqual(1);
 
     // Click back to first account
     await page.click(`text=${account1}`);
@@ -759,5 +762,10 @@ test.describe('Banking Core Flows', () => {
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
     await expect(page.locator('[data-testid^="activity-item-"]')).toBeVisible();
+
+    const account1Card = page
+      .getByRole('heading', { name: account1 })
+      .locator('xpath=ancestor::div[contains(@class,"app-surface")]');
+    await expect(account1Card).toHaveClass(/ring-2/);
   });
 });

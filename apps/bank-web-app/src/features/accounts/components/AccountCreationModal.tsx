@@ -80,12 +80,12 @@ export function AccountCreationModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+      className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
       onClick={handleBackdropClick}
       data-testid="modal-backdrop"
     >
       <div
-        className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+        className="bg-white/90 rounded-2xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto border border-slate-200 backdrop-blur"
         onClick={e => e.stopPropagation()}
         data-testid="modal-content"
         role="dialog"
@@ -96,10 +96,10 @@ export function AccountCreationModal({
             <div className="space-y-4">
               {/* Header */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-lg font-semibold text-slate-900">
                   Create New Account
                 </h3>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="text-sm text-slate-600 mt-1">
                   Enter a name for your new account
                 </p>
               </div>
@@ -108,7 +108,7 @@ export function AccountCreationModal({
               <div>
                 <label
                   htmlFor="accountName"
-                  className="block text-sm font-medium text-gray-700"
+                  className="block text-sm font-medium text-slate-700"
                 >
                   Account Name
                 </label>
@@ -118,8 +118,8 @@ export function AccountCreationModal({
                     id="accountName"
                     value={formData.name}
                     onChange={e => handleNameChange(e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 ${
-                      errors.name ? 'border-red-300' : 'border-gray-300'
+                    className={`w-full px-3 py-2.5 border rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] ${
+                      errors.name ? 'border-red-300' : 'border-slate-200'
                     }`}
                     placeholder="e.g., My Checking Account"
                     maxLength={100}
@@ -137,14 +137,14 @@ export function AccountCreationModal({
               <button
                 type="button"
                 onClick={handleClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-xl shadow-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]"
                 disabled={createAccount.isPending}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-sm font-medium text-white bg-green-600 border border-transparent rounded-md shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+                className="px-4 py-2 text-sm font-medium text-white bg-[var(--color-primary)] border border-transparent rounded-xl shadow-sm hover:bg-[var(--color-primary-600)] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)] disabled:opacity-50"
                 disabled={createAccount.isPending}
               >
                 {createAccount.isPending ? 'Creating...' : 'Create Account'}

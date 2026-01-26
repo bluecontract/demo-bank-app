@@ -26,7 +26,7 @@ export const getTransactionHandler = async (
   const txnId = request.params?.txnId;
 
   try {
-    logger.info('Getting transaction', { userId, accountId, txnId });
+    logger.debug('Getting transaction', { userId, accountId, txnId });
     const transaction = await getTransaction(
       { userId, accountId, transactionId: txnId },
       { repository }

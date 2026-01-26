@@ -30,7 +30,7 @@ const buildTransferRequest = (request: TransferFundsRequest) => ({
     userId: request.userId,
     idempotencyKey: request.idempotencyKey,
   },
-  payNoteEventId: request.payNoteEventId,
+  payNoteDocumentId: request.payNoteDocumentId,
 });
 
 const buildReserveRequest = (request: ReserveFundsRequest) => ({
@@ -40,7 +40,7 @@ const buildReserveRequest = (request: ReserveFundsRequest) => ({
   payerAccountNumber: request.payerAccountNumber,
   amountMinor: request.amountMinor,
   counterpartyAccountNumber: request.counterpartyAccountNumber,
-  payNoteEventId: request.payNoteEventId,
+  payNoteDocumentId: request.payNoteDocumentId,
 });
 
 const buildCaptureRequest = (request: CaptureHoldRequest) => ({
@@ -48,7 +48,7 @@ const buildCaptureRequest = (request: CaptureHoldRequest) => ({
   userId: request.userId,
   idempotencyKey: request.idempotencyKey,
   counterpartyAccountNumber: request.counterpartyAccountNumber,
-  payNoteEventId: request.payNoteEventId,
+  payNoteDocumentId: request.payNoteDocumentId,
 });
 
 export const createBankingFacade = (

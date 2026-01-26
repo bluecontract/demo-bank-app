@@ -187,12 +187,21 @@ Resources:
           JWT_SECRET_ARN: !Ref JwtSecret
           OPENAI_API_KEY_SECRET_ARN: !Ref OpenAiKeySecret
           MYOS_SECRET_ARN: !Ref MyOsSecret
+          MYOS_API_KEY: ''
+          MYOS_ACCOUNT_ID: ''
+          MYOS_BASE_URL: ''
           JWT_TTL_SECONDS: 604800
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
           SERVICE_NAME: !Sub 'bank-api-${Environment}'
           LOG_LEVEL: INFO
           METRICS_NAMESPACE: !Sub 'DemoBlue/${Environment}'
           AWS_ENDPOINT_URL: '' # only for local development
+          CARD_PAN_SECRET: 'demo-bank-pan-secret'
+          CARD_CVC_SECRET: 'demo-bank-cvc-secret'
+          CARD_PROCESSOR_TOKEN: 'demo-bank-processor-token'
+          CARD_BIN_PREFIX: '123456'
+          CARD_SETTLEMENT_ACCOUNT_ID: 'CARD_SETTLEMENT'
+          CARD_SETTLEMENT_ACCOUNT_NUMBER: '9999999999'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BankTable
@@ -215,192 +224,18 @@ Resources:
                 - cloudwatch:PutMetricData
               Resource: '*'
       Events:
-        HealthApi:
+        ApiRoot:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /health
-            Method: GET
-        HealthOptions:
+            Path: /
+            Method: ANY
+        ApiProxy:
           Type: Api
           Properties:
             RestApiId: !Ref BankApi
-            Path: /health
-            Method: OPTIONS
-        SignUpApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /auth/signup
-            Method: POST
-        SignUpOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /auth/signup
-            Method: OPTIONS
-        SignInApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /auth/signin
-            Method: POST
-        SignInOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /auth/signin
-            Method: OPTIONS
-        CreateAccountApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts
-            Method: POST
-        ListAccountsApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts
-            Method: GET
-        V1AccountsOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts
-            Method: OPTIONS
-        GetAccountApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountId}
-            Method: GET
-        GetAccountOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountId}
-            Method: OPTIONS
-        ListAccountActivityApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/activity/{accountNumber}
-            Method: GET
-        ListAccountActivityOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/activity/{accountNumber}
-            Method: OPTIONS
-        GetActivityDetailApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/activity/{accountNumber}/records/{activityId}
-            Method: GET
-        GetActivityDetailOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/activity/{accountNumber}/records/{activityId}
-            Method: OPTIONS
-        FundAccountApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountId}/funding
-            Method: POST
-        FundAccountOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountId}/funding
-            Method: OPTIONS
-        TransferMoneyApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/transfers
-            Method: POST
-        TransferMoneyOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/transfers
-            Method: OPTIONS
-        GetTransactionApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountId}/transactions/{txnId}
-            Method: GET
-        GetTransactionOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/accounts/{accountId}/transactions/{txnId}
-            Method: OPTIONS
-        ValidatePayNoteApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/paynotes/validate
-            Method: POST
-        ValidatePayNoteOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/paynotes/validate
-            Method: OPTIONS
-        ParsePayNotePdfApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/paynotes/parse-pdf
-            Method: POST
-        ParsePayNotePdfOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/paynotes/parse-pdf
-            Method: OPTIONS
-        GetPayNoteDetailsApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/activity/{accountNumber}/paynotes/{myosEventId}
-            Method: GET
-        GetPayNoteDetailsOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/activity/{accountNumber}/paynotes/{myosEventId}
-            Method: OPTIONS
-        BootstrapPayNoteApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/paynotes/bootstrap
-            Method: POST
-        BootstrapPayNoteOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/paynotes/bootstrap
-            Method: OPTIONS
-        PayNoteWebhookApi:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/paynotes/webhook
-            Method: POST
-        PayNoteWebhookOptions:
-          Type: Api
-          Properties:
-            RestApiId: !Ref BankApi
-            Path: /v1/paynotes/webhook
-            Method: OPTIONS
+            Path: /{proxy+}
+            Method: ANY
   # ------------------------------------------------------------------
   # Seed the FUNDING_SOURCE account and its BALANCE row (idempotent)
   # ------------------------------------------------------------------

@@ -18,6 +18,7 @@ describe('validatePayNoteHandler', () => {
   const logger = {
     info: vi.fn(),
     error: vi.fn(),
+    debug: vi.fn(),
   };
   const verificationRepository = {
     saveVerification: vi.fn(),
@@ -32,6 +33,7 @@ describe('validatePayNoteHandler', () => {
   beforeEach(() => {
     logger.info.mockReset();
     logger.error.mockReset();
+    logger.debug.mockReset();
     verificationRepository.saveVerification.mockReset();
     validationProvider.validate.mockReset();
     getOpenAiValidationProvider.mockClear();
@@ -42,6 +44,15 @@ describe('validatePayNoteHandler', () => {
       logger,
       getOpenAiValidationProvider,
       payNoteVerificationRepository: verificationRepository,
+      payNoteRepository: {
+        getPayNote: vi.fn(),
+        getPayNoteBySessionId: vi.fn(),
+        savePayNote: vi.fn(),
+      },
+      payNoteBootstrapRepository: {
+        getBootstrapBySessionId: vi.fn(),
+        saveBootstrap: vi.fn(),
+      },
       bankingRepository: {} as any,
       holdRepository: {} as any,
       bankingFacade: {} as any,

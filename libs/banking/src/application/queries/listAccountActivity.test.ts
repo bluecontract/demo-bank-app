@@ -63,6 +63,7 @@ describe('listAccountActivity', () => {
   };
   let holdRepositoryMock: {
     listHoldActivityByAccountNumber: ReturnType<typeof vi.fn>;
+    getHold: ReturnType<typeof vi.fn>;
   };
   let bankingRepository: BankingRepository;
   let holdRepository: HoldRepository;
@@ -84,6 +85,7 @@ describe('listAccountActivity', () => {
         nextToken: undefined,
         hasMore: false,
       }),
+      getHold: vi.fn().mockResolvedValue(null),
     };
 
     bankingRepository = bankingRepositoryMock as unknown as BankingRepository;
@@ -205,6 +207,53 @@ describe('listAccountActivity', () => {
       status: 'POSTED',
       counterpartyAccountNumber: '9876543210',
     });
+  });
+
+  it('orders posted before hold captured when timestamps are within the same second', async () => {
+    holdRepositoryMock.listHoldActivityByAccountNumber.mockResolvedValue({
+      items: [
+        holdActivityRecord({
+          holdId: 'hold-9',
+          eventId: 'event-9-captured',
+          event: {
+            at: '2024-01-03T08:00:00.100Z',
+            type: 'CAPTURED',
+            transactionId: 'txn-9',
+            counterpartyAccountNumber: '5555555555',
+          },
+        }),
+      ],
+      nextToken: undefined,
+      hasMore: false,
+    });
+
+    bankingRepositoryMock.getTransactionsByAccount.mockResolvedValue({
+      items: [
+        buildTransactionSummary({
+          transactionId: 'txn-9',
+          createdAt: new Date('2024-01-03T08:00:00.900Z'),
+          originHoldId: 'hold-9',
+        }),
+      ],
+      nextToken: undefined,
+      hasMore: false,
+    });
+
+    const result = await listAccountActivity(
+      {
+        userId: 'user-1',
+        accountNumber: '1234567890',
+      },
+      {
+        bankingRepository,
+        holdRepository,
+      }
+    );
+
+    expect(result.items.map(item => item.kind)).toEqual([
+      'POSTED_TRANSACTION',
+      'HOLD_CAPTURED',
+    ]);
   });
 
   it('supports pagination with cursor', async () => {

@@ -170,7 +170,7 @@ describe('TransactionDetailsModal', () => {
             at: '2024-01-02T00:00:00.000Z',
             createdByUserId: 'user-1',
             idempotencyKeyHash: 'hash',
-            payNoteEventId: 'event-hold-123',
+            payNoteDocumentId: 'doc-hold-123',
           },
         ],
       },
@@ -195,10 +195,15 @@ describe('TransactionDetailsModal', () => {
   });
 
   it('uses hold timeline PayNote id when available for created activity', () => {
-    let latestOptions: { enabled?: boolean; myosEventId?: string } | undefined;
+    let latestOptions:
+      | { enabled?: boolean; payNoteDocumentId?: string }
+      | undefined;
     const refetchMock = vi.fn();
     usePayNoteDetailsMock.mockImplementation(options => {
-      latestOptions = options as { enabled?: boolean; myosEventId?: string };
+      latestOptions = options as {
+        enabled?: boolean;
+        payNoteDocumentId?: string;
+      };
       return {
         data: undefined,
         isLoading: false,
@@ -224,7 +229,7 @@ describe('TransactionDetailsModal', () => {
             at: '2024-01-02T00:00:00.000Z',
             createdByUserId: 'user-1',
             idempotencyKeyHash: 'hash',
-            payNoteEventId: 'event-hold-123',
+            payNoteDocumentId: 'doc-hold-123',
           },
         ],
       },
@@ -247,14 +252,19 @@ describe('TransactionDetailsModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'See details' }));
 
-    expect(latestOptions?.myosEventId).toBe('event-hold-123');
+    expect(latestOptions?.payNoteDocumentId).toBe('doc-hold-123');
   });
 
   it('uses capture timeline PayNote id when viewing captured activity', () => {
-    let latestOptions: { enabled?: boolean; myosEventId?: string } | undefined;
+    let latestOptions:
+      | { enabled?: boolean; payNoteDocumentId?: string }
+      | undefined;
     const refetchMock = vi.fn();
     usePayNoteDetailsMock.mockImplementation(options => {
-      latestOptions = options as { enabled?: boolean; myosEventId?: string };
+      latestOptions = options as {
+        enabled?: boolean;
+        payNoteDocumentId?: string;
+      };
       return {
         data: undefined,
         isLoading: false,
@@ -280,14 +290,14 @@ describe('TransactionDetailsModal', () => {
           {
             type: 'CREATED',
             at: '2024-01-02T00:00:00.000Z',
-            payNoteEventId: 'event-hold-123',
+            payNoteDocumentId: 'doc-hold-123',
           },
           {
             type: 'CAPTURED',
             at: '2024-01-02T01:00:00.000Z',
             transactionId: 'txn-1',
             counterpartyAccountNumber: '1234567890',
-            payNoteEventId: 'event-capture-456',
+            payNoteDocumentId: 'doc-capture-456',
           },
         ],
       },
@@ -307,7 +317,7 @@ describe('TransactionDetailsModal', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'See details' }));
 
-    expect(latestOptions?.myosEventId).toBe('event-capture-456');
+    expect(latestOptions?.payNoteDocumentId).toBe('doc-capture-456');
   });
 
   it('displays loading state while fetching activity detail', () => {
@@ -371,7 +381,7 @@ describe('TransactionDetailsModal', () => {
         type: 'FUNDING',
         status: 'POSTED',
         counterpartyAccountNumber: '0987654321',
-        payNote: { myosEventId: 'event-123' },
+        payNote: { payNoteDocumentId: 'doc-123' },
       },
       isLoading: false,
       isError: false,
@@ -419,7 +429,7 @@ describe('TransactionDetailsModal', () => {
         type: 'FUNDING',
         status: 'POSTED',
         counterpartyAccountNumber: '0987654321',
-        payNote: { myosEventId: 'event-123' },
+        payNote: { payNoteDocumentId: 'doc-123' },
       },
       isLoading: false,
       isError: false,
@@ -436,7 +446,7 @@ describe('TransactionDetailsModal', () => {
 
   it('switches to PayNote view and displays details when helper is activated for payer view', async () => {
     const payNoteDetails = {
-      myosEventId: 'event-123',
+      payNoteDocumentId: 'doc-123',
       document: { sample: 'yaml' },
       transactionRequest: { foo: 'bar' },
       triggerEvent: { baz: 'qux' },
@@ -468,7 +478,7 @@ describe('TransactionDetailsModal', () => {
         type: 'FUNDING',
         status: 'POSTED',
         counterpartyAccountNumber: '0987654321',
-        payNote: { myosEventId: 'event-123' },
+        payNote: { payNoteDocumentId: 'doc-123' },
       },
       isLoading: false,
       isError: false,
@@ -534,7 +544,7 @@ describe('TransactionDetailsModal', () => {
         type: 'FUNDING',
         status: 'POSTED',
         counterpartyAccountNumber: '0987654321',
-        payNote: { myosEventId: 'event-123' },
+        payNote: { payNoteDocumentId: 'doc-123' },
       },
       isLoading: false,
       isError: false,
@@ -577,7 +587,7 @@ describe('TransactionDetailsModal', () => {
         type: 'FUNDING',
         status: 'POSTED',
         counterpartyAccountNumber: '0987654321',
-        payNote: { myosEventId: 'event-123' },
+        payNote: { payNoteDocumentId: 'doc-123' },
       },
       isLoading: false,
       isError: false,

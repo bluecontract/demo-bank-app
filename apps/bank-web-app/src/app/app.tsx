@@ -4,7 +4,9 @@ import { AuthProvider } from './providers/AuthProvider';
 import { ProtectedRoute } from './providers/ProtectedRoute';
 import { HomePage } from '../pages/HomePage';
 import { DashboardPage } from '../pages/DashboardPage';
+import { CardsPage } from '../pages/CardsPage';
 import { NewTransferPage } from '../pages/NewTransferPage';
+import { ContractsPage } from '../pages/ContractsPage';
 import { SignUpPage } from '../features/auth/pages/SignUpPage';
 import { SignInPage } from '../features/auth/pages/SignInPage';
 
@@ -25,10 +27,26 @@ export function App() {
             }
           />
           <Route
+            path="/cards"
+            element={
+              <ProtectedRoute>
+                <CardsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/transfer/new"
             element={
               <ProtectedRoute>
                 <NewTransferPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contracts"
+            element={
+              <ProtectedRoute>
+                <ContractsPage />
               </ProtectedRoute>
             }
           />

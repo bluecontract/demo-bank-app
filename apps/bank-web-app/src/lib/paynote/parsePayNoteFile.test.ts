@@ -4,10 +4,6 @@ import { apiClient } from '../../api/client.ts';
 import type { PdfTextItem } from '@demo-bank-app/shared-bank-api-contract';
 
 class MockFile extends File {
-  constructor(bits: BlobPart[], name: string, options?: FilePropertyBag) {
-    super(bits, name, options);
-  }
-
   // Fix node version of a text method to work similar to the browser
   override async text(): Promise<string> {
     return new Promise((resolve, reject) => {

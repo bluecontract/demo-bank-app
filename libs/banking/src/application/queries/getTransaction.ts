@@ -92,6 +92,11 @@ export async function getTransaction(
       description: transaction.description,
       transactionIdempotencyKey: transaction.transactionIdempotencyKey,
       createdAt: transaction.createdAt,
+      cardId: transaction.cardId,
+      cardLast4: transaction.cardLast4,
+      merchantName: transaction.merchantName,
+      merchantStatementDescriptor: transaction.merchantStatementDescriptor,
+      processorChargeId: transaction.processorChargeId,
     };
   } catch (error: unknown) {
     const failedTiming = TimingUtils.endTiming(timing);

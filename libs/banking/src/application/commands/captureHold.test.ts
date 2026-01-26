@@ -83,7 +83,7 @@ describe('captureHold', () => {
     userId: 'user-1',
     idempotencyKey: 'idem-321',
     counterpartyAccountNumber: baseHold.counterpartyAccountNumber,
-    payNoteEventId: 'event-capture',
+    payNoteDocumentId: 'doc-capture',
   };
 
   beforeEach(() => {
@@ -156,10 +156,12 @@ describe('captureHold', () => {
     expect(request.hold.relatedTransactionId).toBe('txn-789');
     expect(request.holdEvent.at).toBe('2024-01-05T00:00:00.000Z');
     expect(request.holdEvent.transactionId).toBe('txn-789');
-    expect(request.holdEvent.payNoteEventId).toBe(command.payNoteEventId);
+    expect(request.holdEvent.payNoteDocumentId).toBe(command.payNoteDocumentId);
     expect(request.transaction.id).toBe('txn-789');
     expect(request.transaction.originHoldId).toBe(baseHold.holdId);
-    expect(request.transaction.payNoteEventId).toBe(command.payNoteEventId);
+    expect(request.transaction.payNoteDocumentId).toBe(
+      command.payNoteDocumentId
+    );
     expect(request.idempotencyKeyHash).toBe(
       hashIdempotencyKey(command.idempotencyKey)
     );

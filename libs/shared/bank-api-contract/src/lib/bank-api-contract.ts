@@ -10,9 +10,23 @@ import {
   IdempotencyKeyHeaderSchema,
   TransferReqDto,
   TransactionDto,
+  CardDetailsDto,
+  IssueCardRequestDto,
+  IssueCardResponseDto,
+  CardListResponseDto,
+  CardAuthorizationRequestDto,
+  CardAuthorizationResponseDto,
+  CardCaptureRequestDto,
+  CardCaptureResponseDto,
   ActivityResponseDto,
   ActivityDetailDto,
   PayNoteDetailsDto,
+  PayNoteDeliveryListResponseDto,
+  PayNoteDeliveryDetailsDto,
+  ContractListResponseDto,
+  ContractDetailsDto,
+  ContractSummaryGenerationDto,
+  ContractOperationResponseDto,
   NotImplementedResponseDto,
 } from './schemas';
 
@@ -134,6 +148,40 @@ export const bankApiContract = c.router(
         summary: 'Get a bank account by ID',
       },
 
+      listCards: {
+        method: 'GET',
+        path: '/v1/cards',
+        query: z.object({
+          accountId: z.string().uuid().optional(),
+        }),
+        responses: {
+          200: CardListResponseDto,
+          403: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'List cards for a user or specific account',
+      },
+
+      issueCard: {
+        method: 'POST',
+        path: '/v1/cards',
+        body: IssueCardRequestDto,
+        responses: {
+          201: IssueCardResponseDto,
+          403: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Issue a new card for an account',
+      },
+
+      getCard: {
+        method: 'GET',
+        path: '/v1/cards/:cardId',
+        pathParams: z.object({ cardId: z.string().uuid() }),
+        responses: { 200: CardDetailsDto, 404: ProblemDto, 403: ProblemDto },
+        summary: 'Get a card by ID',
+      },
+
       fundAccount: {
         method: 'POST',
         path: '/v1/accounts/:accountId/funding',
@@ -207,18 +255,17 @@ export const bankApiContract = c.router(
 
       getPayNoteDetails: {
         method: 'GET',
-        path: '/v1/activity/:accountNumber/paynotes/:myosEventId',
+        path: '/v1/activity/:accountNumber/paynotes/:payNoteDocumentId',
         pathParams: z.object({
           accountNumber: z.string().length(10),
-          myosEventId: z.string(),
+          payNoteDocumentId: z.string(),
         }),
         responses: {
           200: PayNoteDetailsDto,
           404: ProblemDto,
           501: NotImplementedResponseDto,
         },
-        summary:
-          'Retrieve PayNote document and trigger payload for a given MyOS event',
+        summary: 'Retrieve PayNote details for a given PayNote document id',
       },
 
       validatePayNote: {
@@ -294,6 +341,123 @@ export const bankApiContract = c.router(
           200: z.object({ status: z.literal('ok') }),
         },
         summary: 'Webhook for PayNote events.',
+      },
+
+      listPayNoteDeliveries: {
+        method: 'GET',
+        path: '/v1/paynotes/deliveries',
+        responses: {
+          200: PayNoteDeliveryListResponseDto,
+          401: ProblemDto,
+        },
+        summary: 'List PayNote deliveries identified for the current user.',
+      },
+
+      getPayNoteDelivery: {
+        method: 'GET',
+        path: '/v1/paynotes/deliveries/:deliveryId',
+        pathParams: z.object({ deliveryId: z.string() }),
+        responses: {
+          200: PayNoteDeliveryDetailsDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Get PayNote Delivery details for the current user.',
+      },
+
+      listContracts: {
+        method: 'GET',
+        path: '/v1/contracts',
+        query: z
+          .object({
+            updatedSince: z.string().datetime({ offset: true }).optional(),
+          })
+          .optional(),
+        responses: {
+          200: ContractListResponseDto,
+          401: ProblemDto,
+        },
+        summary: 'List contracts available for the current user.',
+      },
+
+      getContractDetails: {
+        method: 'GET',
+        path: '/v1/contracts/:sessionId',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        responses: {
+          200: ContractDetailsDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Get contract details by session id.',
+      },
+
+      generateContractSummary: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/summary',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        body: z
+          .object({
+            force: z.boolean().optional(),
+          })
+          .optional(),
+        responses: {
+          200: ContractSummaryGenerationDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          500: ProblemDto,
+        },
+        summary:
+          'Generate (or return cached) contract summary for the current document state.',
+      },
+
+      runContractOperation: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/:operation',
+        pathParams: z.object({
+          sessionId: z.string(),
+          operation: z.string(),
+        }),
+        body: z.unknown().optional(),
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Run a MyOS document operation on a contract session.',
+      },
+
+      authorizeCard: {
+        method: 'POST',
+        path: '/v1/card-processor/authorizations',
+        body: CardAuthorizationRequestDto,
+        headers: IdempotencyKeyHeaderSchema,
+        responses: {
+          200: CardAuthorizationResponseDto,
+          401: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Authorize a card transaction (processor)',
+      },
+
+      captureCardAuthorization: {
+        method: 'POST',
+        path: '/v1/card-processor/authorizations/:authorizationId/capture',
+        pathParams: z.object({ authorizationId: z.string() }),
+        body: CardCaptureRequestDto,
+        headers: IdempotencyKeyHeaderSchema,
+        responses: {
+          200: CardCaptureResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Capture an authorized card transaction (processor)',
       },
     },
   },

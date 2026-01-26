@@ -124,9 +124,7 @@ describe('HorizontalAccountsList', () => {
       />
     );
 
-    const selectedCard = container.querySelector(
-      '.border-2.border-blue-300.bg-blue-50'
-    );
+    const selectedCard = container.querySelector('.ring-2');
     expect(selectedCard).toBeInTheDocument();
   });
 

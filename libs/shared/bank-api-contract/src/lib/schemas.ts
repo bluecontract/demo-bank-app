@@ -28,7 +28,7 @@ const ActivityIdSchema = z
   );
 
 const ActivityPayNoteReferenceSchema = z.object({
-  myosEventId: z.string(),
+  payNoteDocumentId: z.string(),
 });
 
 const HoldStatusSchema = z.enum([
@@ -45,27 +45,27 @@ const HoldTimelineEventSchema = z.discriminatedUnion('type', [
     at: z.string().datetime({ offset: true }),
     createdByUserId: z.string().optional(),
     idempotencyKeyHash: z.string().optional(),
-    payNoteEventId: z.string().optional(),
+    payNoteDocumentId: z.string().optional(),
   }),
   z.object({
     type: z.literal('CAPTURED'),
     at: z.string().datetime({ offset: true }),
     transactionId: z.string(),
     counterpartyAccountNumber: z.string().optional(),
-    payNoteEventId: z.string().optional(),
+    payNoteDocumentId: z.string().optional(),
   }),
   z.object({
     type: z.literal('RELEASED'),
     at: z.string().datetime({ offset: true }),
     reason: z.string().optional(),
-    payNoteEventId: z.string().optional(),
+    payNoteDocumentId: z.string().optional(),
   }),
   z.object({
     type: z.literal('FAILED'),
     at: z.string().datetime({ offset: true }),
     code: HoldFailureCodeSchema,
     message: z.string().optional(),
-    payNoteEventId: z.string().optional(),
+    payNoteDocumentId: z.string().optional(),
   }),
 ]);
 
@@ -122,6 +122,97 @@ export const TransactionDto = z.object({
   counterpartyAccountNumber: z.string(),
 });
 
+const CardStatusSchema = z.enum(['ACTIVE', 'BLOCKED', 'CLOSED', 'EXPIRED']);
+
+export const CardSummaryDto = z.object({
+  cardId: z.string(),
+  accountId: z.string().uuid(),
+  accountNumber: z.string().length(10),
+  cardholderName: z.string(),
+  panLast4: z.string().length(4),
+  expiryMonth: z.number().int().min(1).max(12),
+  expiryYear: z.number().int(),
+  status: CardStatusSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const IssueCardRequestDto = z.object({
+  accountId: z.string().uuid(),
+  cardholderName: createSanitizedOptionalStringSchema(
+    z.string().max(100).optional()
+  ),
+});
+
+export const CardDetailsDto = CardSummaryDto.extend({
+  pan: z.string().length(16),
+  cvc: z.string().length(3),
+});
+
+export const IssueCardResponseDto = CardDetailsDto;
+
+export const CardListResponseDto = z.object({
+  cards: z.array(CardSummaryDto),
+});
+
+export const CardMerchantDto = z.object({
+  name: createSanitizedStringSchema(z.string().min(1).max(140)),
+  statementDescriptor: createSanitizedOptionalStringSchema(
+    z.string().max(140).optional()
+  ),
+});
+
+const CardDeclineCodeSchema = z.enum([
+  'card_not_found',
+  'card_inactive',
+  'expired_card',
+  'invalid_cvc',
+  'insufficient_funds',
+  'invalid_amount',
+  'invalid_currency',
+]);
+
+export const CardTransactionDetailsDto = z.object({
+  retrievalReferenceNumber: z.string(),
+  systemTraceAuditNumber: z.string(),
+  transmissionDateTime: z.string(),
+  authorizationCode: z.string(),
+});
+
+export const CardAuthorizationRequestDto = z.object({
+  pan: z.string().length(16),
+  expiryMonth: z.number().int().min(1).max(12),
+  expiryYear: z.number().int(),
+  cvc: z.string().length(3),
+  amountMinor: MoneyMinor.positive(),
+  currency: z.literal('USD'),
+  merchant: CardMerchantDto,
+  processorChargeId: z.string().min(1),
+  description: createSanitizedOptionalStringSchema(
+    z.string().max(140).optional()
+  ),
+});
+
+export const CardAuthorizationResponseDto = z.object({
+  status: z.enum(['APPROVED', 'DECLINED']),
+  authorizationId: z.string().optional(),
+  cardId: z.string().optional(),
+  accountNumber: z.string().optional(),
+  cardTransactionDetails: CardTransactionDetailsDto.optional(),
+  declineCode: CardDeclineCodeSchema.optional(),
+  message: z.string().optional(),
+});
+
+export const CardCaptureRequestDto = z.object({
+  amountMinor: MoneyMinor.positive(),
+});
+
+export const CardCaptureResponseDto = z.object({
+  status: z.literal('CAPTURED'),
+  authorizationId: z.string(),
+  transactionId: z.string(),
+});
+
 export const ActivityPostedTransactionDto = z.object({
   kind: z.literal('POSTED_TRANSACTION'),
   activityId: ActivityIdSchema,
@@ -134,6 +225,12 @@ export const ActivityPostedTransactionDto = z.object({
   type: z.string(),
   status: z.string(),
   counterpartyAccountNumber: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  processorChargeId: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
 export const ActivityHoldCreatedDto = z.object({
@@ -146,6 +243,12 @@ export const ActivityHoldCreatedDto = z.object({
   counterpartyAccountNumber: z.string().optional(),
   createdByUserId: z.string().optional(),
   idempotencyKeyHash: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  processorChargeId: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
 export const ActivityHoldReleasedDto = z.object({
@@ -156,6 +259,12 @@ export const ActivityHoldReleasedDto = z.object({
   description: createSanitizedOptionalStringSchema(z.string().optional()),
   releasedAt: z.string().datetime({ offset: true }),
   releaseReason: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  processorChargeId: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
 export const ActivityHoldCapturedDto = z.object({
@@ -167,6 +276,12 @@ export const ActivityHoldCapturedDto = z.object({
   capturedAt: z.string().datetime({ offset: true }),
   transactionId: z.string(),
   counterpartyAccountNumber: z.string(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  processorChargeId: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
 export const ActivityHoldFailedDto = z.object({
@@ -178,6 +293,12 @@ export const ActivityHoldFailedDto = z.object({
   failedAt: z.string().datetime({ offset: true }),
   failureCode: HoldFailureCodeSchema,
   failureMessage: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  processorChargeId: z.string().optional(),
+  payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
 export const ActivityItemDto = z.discriminatedUnion('kind', [
@@ -205,6 +326,11 @@ const ActivityDetailPostedTransactionDto = z.object({
   type: z.string(),
   status: z.string(),
   counterpartyAccountNumber: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  processorChargeId: z.string().optional(),
   payNote: ActivityPayNoteReferenceSchema.optional(),
 });
 
@@ -226,6 +352,11 @@ const ActivityDetailHoldDto = z.object({
   failureCode: HoldFailureCodeSchema.optional(),
   failureMessage: z.string().optional(),
   counterpartyAccountNumber: z.string().optional(),
+  cardId: z.string().optional(),
+  cardLast4: z.string().optional(),
+  merchantName: z.string().optional(),
+  merchantStatementDescriptor: z.string().optional(),
+  processorChargeId: z.string().optional(),
   timeline: z.array(HoldTimelineEventSchema),
   payNote: ActivityPayNoteReferenceSchema.optional(),
 });
@@ -238,15 +369,130 @@ export const ActivityDetailDto = z.discriminatedUnion('kind', [
 export type ActivityDetailDto = z.infer<typeof ActivityDetailDto>;
 
 export const PayNoteDetailsDto = z.object({
-  myosEventId: z.string(),
+  payNoteDocumentId: z.string(),
   documentYaml: z.string().optional(),
   document: z.unknown().optional(),
-  transactionRequest: z.unknown(),
-  triggerEvent: z.unknown(),
+  transactionRequest: z.unknown().optional(),
+  triggerEvent: z.unknown().optional(),
   fetchedAt: z.string().datetime({ offset: true }),
 });
 
 export type PayNoteDetailsDto = z.infer<typeof PayNoteDetailsDto>;
+
+export const PayNoteSummaryDto = z.object({
+  name: z.string().optional(),
+  amountMinor: MoneyMinor.optional(),
+  currency: z.string().optional(),
+});
+
+export const PayNoteDeliverySummaryDto = z.object({
+  deliveryId: z.string(),
+  deliverySessionId: z.string().optional(),
+  name: z.string().optional(),
+  amountMinor: MoneyMinor.optional(),
+  currency: z.string().optional(),
+  deliveryStatus: z.string().optional(),
+  transactionIdentificationStatus: z.string().optional(),
+  clientDecisionStatus: z.string().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const PayNoteDeliveryListResponseDto = z.object({
+  items: z.array(PayNoteDeliverySummaryDto),
+});
+
+export const PayNoteDeliveryDetailsDto = z.object({
+  deliveryId: z.string(),
+  deliverySessionId: z.string().optional(),
+  deliveryStatus: z.string().optional(),
+  transactionIdentificationStatus: z.string().optional(),
+  clientDecisionStatus: z.string().optional(),
+  cardTransactionDetails: CardTransactionDetailsDto.optional(),
+  payNote: PayNoteSummaryDto.optional(),
+  deliveryDocument: z.unknown(),
+  payNoteDocument: z.unknown().optional(),
+  accountNumber: z.string().optional(),
+  holdId: z.string().optional(),
+  transactionId: z.string().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const ContractSummaryDto = z.object({
+  contractId: z.string(),
+  typeBlueId: z.string(),
+  displayName: z.string(),
+  documentName: z.string().optional(),
+  sessionId: z.string().optional(),
+  documentId: z.string().optional(),
+  status: z.string().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const ContractListResponseDto = z.object({
+  items: z.array(ContractSummaryDto),
+});
+
+export const ContractDocumentSummaryKeyFactDto = z.object({
+  label: z.string(),
+  value: z.string(),
+});
+
+export const ContractDocumentSummaryStateDto = z.object({
+  statusLabel: z.string(),
+  explanation: z.string(),
+  updatedAt: z.string().datetime({ offset: true }).nullable(),
+});
+
+export const ContractDocumentSummaryDto = z.object({
+  title: z.string(),
+  oneLiner: z.string(),
+  state: ContractDocumentSummaryStateDto,
+  keyFacts: z.array(ContractDocumentSummaryKeyFactDto),
+  warnings: z.array(z.string()),
+});
+
+export const ContractDetailsDto = z.object({
+  contractId: z.string(),
+  typeBlueId: z.string(),
+  displayName: z.string(),
+  sessionId: z.string().optional(),
+  documentId: z.string().optional(),
+  status: z.string().optional(),
+  statusUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  statusTimestamps: z.record(z.string()).optional(),
+  triggerEvent: z.unknown().optional(),
+  emittedEvents: z.array(z.unknown()).optional(),
+  relatedTransactionIds: z.array(z.string()).optional(),
+  relatedHoldIds: z.array(z.string()).optional(),
+  accountNumber: z.string().optional(),
+  document: z.unknown().optional(),
+  summary: ContractDocumentSummaryDto.optional(),
+  summaryUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  summarySourceUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  summaryInputBlueId: z.string().optional(),
+  summaryModel: z.string().optional(),
+  summaryError: z.string().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+});
+
+export const ContractSummaryGenerationDto = z.object({
+  summary: ContractDocumentSummaryDto,
+  summaryUpdatedAt: z.string().datetime({ offset: true }),
+  summarySourceUpdatedAt: z.string().datetime({ offset: true }),
+  summaryInputBlueId: z.string().optional(),
+  cached: z.boolean().optional(),
+  model: z.string().optional(),
+});
+
+export const ContractOperationResponseDto = z.object({
+  status: z.literal('ok'),
+  myosStatus: z.number().int(),
+  body: z.unknown().optional(),
+});
 
 export const NotImplementedResponseDto = z.object({
   message: z.string(),

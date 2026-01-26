@@ -21,6 +21,32 @@ export const createMyOsCredentialsResolver = ({
   let cachedCredentials: MyOsCredentials | null = null;
 
   return async (): Promise<MyOsCredentials> => {
+    const envApiKey = process.env.MYOS_API_KEY?.trim();
+    const envAccountId = process.env.MYOS_ACCOUNT_ID?.trim();
+    const envBaseUrl = process.env.MYOS_BASE_URL?.trim();
+    if (envApiKey || envAccountId || envBaseUrl) {
+      if (!envApiKey || !envAccountId || !envBaseUrl) {
+        throw new Error(
+          'MYOS_API_KEY, MYOS_ACCOUNT_ID, and MYOS_BASE_URL must all be set when using environment overrides.'
+        );
+      }
+      const normalizedBaseUrl = normalizeBaseUrl(envBaseUrl);
+      try {
+        void new URL(normalizedBaseUrl);
+      } catch (error) {
+        throw new Error(
+          `MYOS_BASE_URL must be a valid URL: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+      return {
+        apiKey: envApiKey,
+        accountId: envAccountId,
+        baseUrl: normalizedBaseUrl,
+      };
+    }
+
     if (!secretArn) {
       throw new Error('MYOS_SECRET_ARN environment variable is not set.');
     }

@@ -145,7 +145,9 @@ describe('TransactionList', () => {
     );
 
     expect(screen.getByTestId('activity-item-txn-txn-123')).toBeInTheDocument();
-    expect(screen.getByTestId('activity-item-hold-hold-1')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('activity-item-hold_created-hold-1')
+    ).toBeInTheDocument();
   });
 
   it('opens modal when posted transaction row is clicked', () => {
@@ -184,7 +186,7 @@ describe('TransactionList', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('activity-item-hold-hold-1'));
+    fireEvent.click(screen.getByTestId('activity-item-hold_created-hold-1'));
 
     expect(onActivitySelectSpy).toHaveBeenCalledWith(holdCreated);
     expect(

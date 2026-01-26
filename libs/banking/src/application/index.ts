@@ -4,3 +4,6 @@ export * from './dtos';
 export * from './errors';
 export * from './ports';
 export * from './HoldRepository';
+export * from './CardRepository';
+export * from './CardHasher';
+export * from './cardProcessorConstants';

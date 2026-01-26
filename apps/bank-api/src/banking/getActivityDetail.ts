@@ -40,8 +40,13 @@ const mapTransactionDetail = (
   type: transaction.type,
   status: transaction.status,
   counterpartyAccountNumber: posting.counterpartyAccountNumber,
-  ...(transaction.payNoteEventId
-    ? { payNote: { myosEventId: transaction.payNoteEventId } }
+  cardId: transaction.cardId,
+  cardLast4: transaction.cardLast4,
+  merchantName: transaction.merchantName,
+  merchantStatementDescriptor: transaction.merchantStatementDescriptor,
+  processorChargeId: transaction.processorChargeId,
+  ...(transaction.payNoteDocumentId
+    ? { payNote: { payNoteDocumentId: transaction.payNoteDocumentId } }
     : {}),
 });
 
@@ -54,7 +59,7 @@ const mapHoldTimeline = (events: HoldEvent[]) =>
           at: event.at,
           createdByUserId: event.createdByUserId,
           idempotencyKeyHash: event.idempotencyKeyHash,
-          payNoteEventId: event.payNoteEventId,
+          payNoteDocumentId: event.payNoteDocumentId,
         };
       case 'CAPTURED':
         return {
@@ -62,14 +67,14 @@ const mapHoldTimeline = (events: HoldEvent[]) =>
           at: event.at,
           transactionId: event.transactionId,
           counterpartyAccountNumber: event.counterpartyAccountNumber,
-          payNoteEventId: event.payNoteEventId,
+          payNoteDocumentId: event.payNoteDocumentId,
         };
       case 'RELEASED':
         return {
           type: 'RELEASED' as const,
           at: event.at,
           reason: event.reason,
-          payNoteEventId: event.payNoteEventId,
+          payNoteDocumentId: event.payNoteDocumentId,
         };
       case 'FAILED':
         return {
@@ -77,7 +82,7 @@ const mapHoldTimeline = (events: HoldEvent[]) =>
           at: event.at,
           code: event.code,
           message: event.message,
-          payNoteEventId: event.payNoteEventId,
+          payNoteDocumentId: event.payNoteDocumentId,
         };
     }
   });
@@ -89,6 +94,9 @@ const mapHoldDetail = (
 ): ActivityDetailDto => {
   const capturedEvent = events.find(event => event.type === 'CAPTURED');
   const failedEvent = events.find(event => event.type === 'FAILED');
+  const payNoteDocumentId =
+    hold.payNoteDocumentId ??
+    events.find(event => event.payNoteDocumentId)?.payNoteDocumentId;
 
   return {
     kind: 'HOLD',
@@ -110,7 +118,13 @@ const mapHoldDetail = (
     counterpartyAccountNumber:
       hold.counterpartyAccountNumber ??
       capturedEvent?.counterpartyAccountNumber,
+    cardId: hold.cardId,
+    cardLast4: hold.cardLast4,
+    merchantName: hold.merchantName,
+    merchantStatementDescriptor: hold.merchantStatementDescriptor,
+    processorChargeId: hold.processorChargeId,
     timeline: mapHoldTimeline(events),
+    ...(payNoteDocumentId ? { payNote: { payNoteDocumentId } } : {}),
   };
 };
 
@@ -145,7 +159,7 @@ export const getActivityDetailHandler = async (
     }
   })();
 
-  logger.info('Fetching activity detail', {
+  logger.debug('Fetching activity detail', {
     userId,
     accountNumber,
     activityId,
@@ -237,10 +251,14 @@ export const getActivityDetailHandler = async (
 
     logger.error('Failed to fetch activity detail', {
       userId,
-      accountNumber,
       activityId,
       rawActivityId,
       error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    logger.debug('Failed to fetch activity detail', {
+      accountNumber,
+      activityId,
+      rawActivityId,
     });
 
     throw error;

@@ -11,9 +11,6 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
-      "path": "../../libs/paynotes/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/shared/observability/tsconfig.lib.json"
     },
     {
@@ -24,6 +21,12 @@
     },
     {
       "path": "../../libs/shared/bank-api-contract/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/paynotes/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/contracts/tsconfig.lib.json"
     },
     {
       "path": "../../libs/banking/tsconfig.lib.json"

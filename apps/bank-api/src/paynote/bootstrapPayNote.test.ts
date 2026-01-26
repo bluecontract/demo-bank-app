@@ -8,10 +8,10 @@ const hoistedDeps = vi.hoisted(() => ({
 
 const hoistedAdapters = vi.hoisted(() => ({
   bootstrapDocumentMock: vi.fn(),
-  bootstrapResponse: { ok: true, status: 200, body: { documentId: 'doc-123' } },
-  idGeneratorMock: vi.fn().mockReturnValue('generated-id'),
+  bootstrapResponse: { ok: true, status: 200, body: { sessionId: 'boot-123' } },
   calculateBlueIdFromObjectMock: vi.fn().mockReturnValue('blue-id-123'),
   getCredentialsMock: vi.fn(),
+  saveBootstrapMock: vi.fn(),
 }));
 
 vi.mock('./dependencies', () => ({
@@ -26,15 +26,23 @@ describe('bootstrapPayNoteHandler', () => {
   const logger = {
     info: vi.fn(),
     error: vi.fn(),
+    debug: vi.fn(),
   };
   const verificationRepository = {
     getVerification: vi.fn(),
   };
+  const contractRepository = {
+    getContract: vi.fn(),
+    getContractBySessionId: vi.fn(),
+    getContractByDocumentId: vi.fn(),
+    saveContract: vi.fn(),
+    updateContractSummary: vi.fn(),
+    listContractsByUserId: vi.fn(),
+  };
 
   const createPayNote = () => ({
     name: 'Test PayNote',
-    payerAccountNumber: {},
-    payeeAccountNumber: {},
+    type: 'PayNote/PayNote',
     contracts: {
       payerChannel: { type: 'MyOS/MyOS Timeline Channel' },
       payeeChannel: {
@@ -50,17 +58,22 @@ describe('bootstrapPayNoteHandler', () => {
     hoistedDeps.extractAuthInfoMock.mockReset();
     logger.info.mockReset();
     logger.error.mockReset();
+    logger.debug.mockReset();
     verificationRepository.getVerification.mockReset();
+    contractRepository.getContract.mockReset();
+    contractRepository.getContractBySessionId.mockReset();
+    contractRepository.getContractByDocumentId.mockReset();
+    contractRepository.saveContract.mockReset();
+    contractRepository.listContractsByUserId.mockReset();
     hoistedAdapters.bootstrapDocumentMock.mockReset();
+    hoistedAdapters.saveBootstrapMock.mockReset();
     hoistedAdapters.bootstrapResponse = {
       ok: true,
       status: 200,
-      body: { documentId: 'doc-123' },
+      body: { sessionId: 'boot-123' },
     };
-    hoistedAdapters.idGeneratorMock.mockReset();
     hoistedAdapters.calculateBlueIdFromObjectMock.mockReset();
     hoistedAdapters.getCredentialsMock.mockReset();
-    hoistedAdapters.idGeneratorMock.mockReturnValue('generated-id');
     hoistedAdapters.calculateBlueIdFromObjectMock.mockReturnValue(
       'blue-id-123'
     );
@@ -76,7 +89,9 @@ describe('bootstrapPayNoteHandler', () => {
         hoistedAdapters.bootstrapDocumentMock(input);
         return hoistedAdapters.bootstrapResponse;
       },
+      runDocumentOperation: vi.fn(),
       fetchEvent: vi.fn(),
+      fetchDocument: vi.fn(),
     };
 
     hoistedDeps.getDependenciesMock.mockResolvedValue({
@@ -84,6 +99,16 @@ describe('bootstrapPayNoteHandler', () => {
       getMyOsCredentials: hoistedAdapters.getCredentialsMock,
       getOpenAiApiKey: vi.fn(),
       payNoteVerificationRepository: verificationRepository,
+      payNoteBootstrapRepository: {
+        getBootstrapBySessionId: vi.fn(),
+        saveBootstrap: hoistedAdapters.saveBootstrapMock,
+      },
+      contractRepository,
+      payNoteRepository: {
+        getPayNote: vi.fn(),
+        getPayNoteBySessionId: vi.fn(),
+        savePayNote: vi.fn(),
+      },
       myOsClient,
       bankingRepository: {} as any,
       holdRepository: {} as any,
@@ -93,8 +118,8 @@ describe('bootstrapPayNoteHandler', () => {
         fromObject: hoistedAdapters.calculateBlueIdFromObjectMock,
         toReversedJson: vi.fn(),
       },
-      clock: { now: () => new Date() },
-      idGenerator: { generate: hoistedAdapters.idGeneratorMock },
+      clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
+      idGenerator: { generate: vi.fn() },
     });
 
     hoistedDeps.extractAuthInfoMock.mockResolvedValue({
@@ -126,11 +151,12 @@ describe('bootstrapPayNoteHandler', () => {
 
     expect(result.status).toBe(200);
     expect(result.body).toEqual({ message: 'Bootstrap accepted' });
-    expect(logger.info).toHaveBeenCalledWith(
+    expect(logger.debug).toHaveBeenCalledWith(
       'Received PayNote bootstrap request',
       expect.objectContaining({
         userId: 'user-123',
-        userEmail: 'john.doe@example.com',
+        contractType: 'PayNote/PayNote',
+        payNoteSummary: expect.objectContaining({ payloadType: 'object' }),
       })
     );
 
@@ -142,8 +168,7 @@ describe('bootstrapPayNoteHandler', () => {
       },
       payload: expect.objectContaining({
         document: expect.objectContaining({
-          payNoteBankId: { type: 'Text', value: 'generated-id' },
-          payerAccountNumber: { type: 'Text', value: '137' },
+          name: 'Test PayNote',
         }),
         channelBindings: expect.objectContaining({
           payerChannel: { email: 'john.doe@example.com' },
@@ -152,10 +177,43 @@ describe('bootstrapPayNoteHandler', () => {
       }),
     });
 
+    expect(hoistedAdapters.saveBootstrapMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bootstrapSessionId: 'boot-123',
+        accountNumber: '137',
+      })
+    );
+    expect(contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'boot-123',
+        sessionId: 'boot-123',
+        displayName: 'PayNote',
+        accountNumber: '137',
+      })
+    );
+
     expect(verificationRepository.getVerification).toHaveBeenCalledWith({
       userId: 'user-123',
       blueId: 'blue-id-123',
     });
+  });
+
+  it('rejects unsupported contract types', async () => {
+    const result = await bootstrapPayNoteHandler(
+      {
+        body: {
+          payNote: {
+            type: 'PayNote/PayNote Delivery',
+          },
+          formData: { fromAccount: '137' },
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(400);
+    expect(result.body.error).toBe('UNSUPPORTED_CONTRACT_TYPE');
+    expect(hoistedAdapters.bootstrapDocumentMock).not.toHaveBeenCalled();
   });
 
   it('rejects when no successful verification exists', async () => {

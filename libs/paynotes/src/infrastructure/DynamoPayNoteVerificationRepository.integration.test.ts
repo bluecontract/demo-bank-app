@@ -19,6 +19,11 @@ const TEST_CONFIG = {
 
 let dynamoClient: DynamoDBClient;
 let repository: DynamoPayNoteVerificationRepository;
+let previousAwsProfile: string | undefined;
+let previousAccessKeyId: string | undefined;
+let previousSecretAccessKey: string | undefined;
+let previousRegion: string | undefined;
+let previousEndpoint: string | undefined;
 
 const verificationInput: SavePayNoteVerificationInput = {
   userId: 'user-123',
@@ -45,6 +50,18 @@ async function waitForTableReady() {
 
 describe('DynamoPayNoteVerificationRepository integration', () => {
   beforeAll(async () => {
+    previousAwsProfile = process.env.AWS_PROFILE;
+    previousAccessKeyId = process.env.AWS_ACCESS_KEY_ID;
+    previousSecretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+    previousRegion = process.env.AWS_REGION;
+    previousEndpoint = process.env.AWS_ENDPOINT_URL;
+
+    delete process.env.AWS_PROFILE;
+    process.env.AWS_ACCESS_KEY_ID = 'test';
+    process.env.AWS_SECRET_ACCESS_KEY = 'test';
+    process.env.AWS_REGION = TEST_CONFIG.region;
+    process.env.AWS_ENDPOINT_URL = TEST_CONFIG.localstackEndpoint;
+
     dynamoClient = new DynamoDBClient({
       region: TEST_CONFIG.region,
       endpoint: TEST_CONFIG.localstackEndpoint,
@@ -79,6 +96,36 @@ describe('DynamoPayNoteVerificationRepository integration', () => {
     await dynamoClient.send(
       new DeleteTableCommand({ TableName: TEST_CONFIG.tableName })
     );
+
+    if (previousAwsProfile === undefined) {
+      delete process.env.AWS_PROFILE;
+    } else {
+      process.env.AWS_PROFILE = previousAwsProfile;
+    }
+
+    if (previousAccessKeyId === undefined) {
+      delete process.env.AWS_ACCESS_KEY_ID;
+    } else {
+      process.env.AWS_ACCESS_KEY_ID = previousAccessKeyId;
+    }
+
+    if (previousSecretAccessKey === undefined) {
+      delete process.env.AWS_SECRET_ACCESS_KEY;
+    } else {
+      process.env.AWS_SECRET_ACCESS_KEY = previousSecretAccessKey;
+    }
+
+    if (previousRegion === undefined) {
+      delete process.env.AWS_REGION;
+    } else {
+      process.env.AWS_REGION = previousRegion;
+    }
+
+    if (previousEndpoint === undefined) {
+      delete process.env.AWS_ENDPOINT_URL;
+    } else {
+      process.env.AWS_ENDPOINT_URL = previousEndpoint;
+    }
   });
 
   it('saves and retrieves verification records', async () => {

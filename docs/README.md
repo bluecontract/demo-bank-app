@@ -7,6 +7,7 @@ This directory houses the design notes, ADRs, API references, and product requir
 - `GET /v1/activity/{accountNumber}` is the single merged feed for account timelines. It returns posted transactions alongside hold lifecycle events in timestamp order. The retired `/v1/accounts/{accountId}/transactions` list no longer exists in contracts or handlers.
 - API contracts are generated under `docs/api/` via `npm run generate-docs` and reflect the latest activity schema.
 - Requirements in `requirements/003-core-banking.md` and hold design notes track the migration milestones for the activity feed.
+- Card issuing work is tracked in `problem-exploration/006-card-issuing.md`, `requirements/006-card-issuing.md`, and `design/007-card-issuing.md`.
 
 Refer to the subdirectories for deeper details:
 

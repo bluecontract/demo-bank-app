@@ -23,7 +23,7 @@ describe('Spinner', () => {
     render(<Spinner color="green" data-testid="spinner" />);
 
     const spinner = screen.getByTestId('spinner');
-    expect(spinner).toHaveClass('border-green-200', 'border-t-green-600');
+    expect(spinner).toHaveClass('border-emerald-200', 'border-t-emerald-500');
   });
 
   it('should render with custom className', () => {
@@ -60,7 +60,7 @@ describe('Spinner', () => {
     const colors = ['white', 'green', 'blue', 'gray'] as const;
     const expectedClasses = [
       'border-white/30 border-t-white',
-      'border-green-200 border-t-green-600',
+      'border-emerald-200 border-t-emerald-500',
       'border-blue-200 border-t-blue-600',
       'border-gray-200 border-t-gray-600',
     ];
@@ -138,6 +138,6 @@ describe('SpinnerWithText', () => {
 
     const spinner = screen.getByRole('status');
     expect(spinner).toHaveClass('w-12', 'h-12'); // xl size
-    expect(spinner).toHaveClass('border-green-200', 'border-t-green-600'); // green color
+    expect(spinner).toHaveClass('border-emerald-200', 'border-t-emerald-500'); // green color
   });
 });

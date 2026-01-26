@@ -57,7 +57,7 @@ export function PayNoteDetailsPanel({
         >
           ← Back
         </Button>
-        <h2 className="text-lg font-semibold text-gray-900">
+        <h2 className="text-lg font-semibold text-slate-900">
           PayNote transfer details
         </h2>
       </div>
@@ -65,18 +65,18 @@ export function PayNoteDetailsPanel({
       {isLoading && (
         <div className="p-8 text-center" data-testid="paynote-loading">
           <Spinner size="lg" color="green" />
-          <p className="mt-4 text-gray-600">Loading PayNote details...</p>
+          <p className="mt-4 text-slate-600">Loading PayNote details...</p>
         </div>
       )}
 
       {!isLoading && isError && (
         <div
-          className="p-6 border border-gray-200 rounded-lg bg-gray-50 text-center space-y-3"
+          className="p-6 border border-slate-200 rounded-lg bg-white/70 text-center space-y-3"
           data-testid="paynote-error"
         >
-          <p className="text-sm text-gray-700">{resolvedErrorMessage}</p>
+          <p className="text-sm text-slate-700">{resolvedErrorMessage}</p>
           {isNotFound && (
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-slate-500">
               We&apos;ll load PayNote details as soon as they become available.
             </p>
           )}
@@ -94,11 +94,11 @@ export function PayNoteDetailsPanel({
       {!isLoading && !isError && (
         <div className="space-y-4">
           <section
-            className="border border-gray-200 rounded-lg overflow-hidden"
+            className="border border-slate-200 rounded-lg overflow-hidden"
             data-testid="paynote-document-section"
           >
-            <header className="px-4 py-2 border-b border-gray-200 bg-gray-50">
-              <h3 className="text-sm font-medium text-gray-900">
+            <header className="px-4 py-2 border-b border-slate-200 bg-white/70">
+              <h3 className="text-sm font-medium text-slate-900">
                 PayNote Document
               </h3>
             </header>
@@ -108,7 +108,7 @@ export function PayNoteDetailsPanel({
                   <code>{documentYaml}</code>
                 </pre>
               ) : (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-slate-600">
                   No PayNote Document available.
                 </p>
               )}
@@ -116,11 +116,11 @@ export function PayNoteDetailsPanel({
           </section>
 
           <section
-            className="border border-gray-200 rounded-lg overflow-hidden"
+            className="border border-slate-200 rounded-lg overflow-hidden"
             data-testid="paynote-transaction-request-section"
           >
-            <header className="px-4 py-2 border-b border-gray-200 bg-gray-50">
-              <h3 className="text-sm font-medium text-gray-900">
+            <header className="px-4 py-2 border-b border-slate-200 bg-white/70">
+              <h3 className="text-sm font-medium text-slate-900">
                 Transaction Request
               </h3>
             </header>
@@ -130,7 +130,7 @@ export function PayNoteDetailsPanel({
                   <code>{transactionRequest}</code>
                 </pre>
               ) : (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-slate-600">
                   Transaction request details are not available.
                 </p>
               )}
@@ -138,11 +138,11 @@ export function PayNoteDetailsPanel({
           </section>
 
           <section
-            className="border border-gray-200 rounded-lg overflow-hidden"
+            className="border border-slate-200 rounded-lg overflow-hidden"
             data-testid="paynote-trigger-event-section"
           >
-            <header className="px-4 py-2 border-b border-gray-200 bg-gray-50">
-              <h3 className="text-sm font-medium text-gray-900">
+            <header className="px-4 py-2 border-b border-slate-200 bg-white/70">
+              <h3 className="text-sm font-medium text-slate-900">
                 Triggering Event
               </h3>
             </header>
@@ -152,7 +152,7 @@ export function PayNoteDetailsPanel({
                   <code>{triggerEvent}</code>
                 </pre>
               ) : (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-slate-600">
                   Trigger event details are not available.
                 </p>
               )}

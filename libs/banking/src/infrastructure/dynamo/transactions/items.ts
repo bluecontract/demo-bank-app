@@ -11,7 +11,12 @@ export interface TransactionHeaderItem {
   transactionId: string;
   transactionIdempotencyKey?: string;
   originHoldId?: string;
-  payNoteEventId?: string;
+  payNoteDocumentId?: string;
+  cardId?: string;
+  cardLast4?: string;
+  merchantName?: string;
+  merchantStatementDescriptor?: string;
+  processorChargeId?: string;
 }
 
 export interface PostingItem {
@@ -30,7 +35,12 @@ export interface PostingItem {
   description: TransactionHeaderItem['description'];
   transactionId: TransactionHeaderItem['transactionId'];
   originHoldId?: string;
-  payNoteEventId?: string;
+  payNoteDocumentId?: string;
+  cardId?: string;
+  cardLast4?: string;
+  merchantName?: string;
+  merchantStatementDescriptor?: string;
+  processorChargeId?: string;
 }
 
 export function buildTransactionHeaderPutItem(
@@ -49,8 +59,19 @@ export function buildTransactionHeaderPutItem(
     ...(transaction.originHoldId
       ? { originHoldId: transaction.originHoldId }
       : {}),
-    ...(transaction.payNoteEventId
-      ? { payNoteEventId: transaction.payNoteEventId }
+    ...(transaction.payNoteDocumentId
+      ? { payNoteDocumentId: transaction.payNoteDocumentId }
+      : {}),
+    ...(transaction.cardId ? { cardId: transaction.cardId } : {}),
+    ...(transaction.cardLast4 ? { cardLast4: transaction.cardLast4 } : {}),
+    ...(transaction.merchantName
+      ? { merchantName: transaction.merchantName }
+      : {}),
+    ...(transaction.merchantStatementDescriptor
+      ? { merchantStatementDescriptor: transaction.merchantStatementDescriptor }
+      : {}),
+    ...(transaction.processorChargeId
+      ? { processorChargeId: transaction.processorChargeId }
       : {}),
   };
 
@@ -88,8 +109,22 @@ export function buildPostingPutItems(
       ...(transaction.originHoldId
         ? { originHoldId: transaction.originHoldId }
         : {}),
-      ...(transaction.payNoteEventId
-        ? { payNoteEventId: transaction.payNoteEventId }
+      ...(transaction.payNoteDocumentId
+        ? { payNoteDocumentId: transaction.payNoteDocumentId }
+        : {}),
+      ...(transaction.cardId ? { cardId: transaction.cardId } : {}),
+      ...(transaction.cardLast4 ? { cardLast4: transaction.cardLast4 } : {}),
+      ...(transaction.merchantName
+        ? { merchantName: transaction.merchantName }
+        : {}),
+      ...(transaction.merchantStatementDescriptor
+        ? {
+            merchantStatementDescriptor:
+              transaction.merchantStatementDescriptor,
+          }
+        : {}),
+      ...(transaction.processorChargeId
+        ? { processorChargeId: transaction.processorChargeId }
         : {}),
     };
 

@@ -19,11 +19,22 @@ import { transferMoneyHandler } from './banking/transferMoney';
 import { getTransactionHandler } from './banking/getTransaction';
 import { listAccountActivityHandler } from './banking/activity';
 import { getActivityDetailHandler } from './banking/getActivityDetail';
+import { issueCardHandler } from './banking/issueCard';
+import { listCardsHandler } from './banking/listCards';
+import { getCardHandler } from './banking/getCard';
+import { authorizeCardHandler } from './banking/authorizeCard';
+import { captureCardAuthorizationHandler } from './banking/captureCardAuthorization';
 import { validatePayNoteHandler } from './paynote/validatePayNote';
 import { parsePayNotePdfHandler } from './paynote/parsePayNotePdf';
 import { bootstrapPayNoteHandler } from './paynote/bootstrapPayNote';
 import { payNoteWebhookHandler } from './paynote/webhook';
 import { getPayNoteDetailsHandler } from './paynote/getPayNoteDetails';
+import { listPayNoteDeliveriesHandler } from './paynote/listPayNoteDeliveries';
+import { getPayNoteDeliveryHandler } from './paynote/getPayNoteDelivery';
+import { runContractOperationHandler } from './contracts/runContractOperation';
+import { listContractsHandler } from './contracts/listContracts';
+import { getContractDetailsHandler } from './contracts/getContractDetails';
+import { generateContractSummaryHandler } from './contracts/generateContractSummary';
 
 const metrics = getMetrics();
 const logger = getLogger();
@@ -54,6 +65,9 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       createAccount: createAccountHandler,
       listAccounts: listAccountsHandler,
       getAccount: getAccountHandler,
+      listCards: listCardsHandler,
+      issueCard: issueCardHandler,
+      getCard: getCardHandler,
       fundAccount: fundAccountHandler,
       transferMoney: transferMoneyHandler,
       listActivity: listAccountActivityHandler,
@@ -64,6 +78,14 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       parsePayNotePdf: parsePayNotePdfHandler,
       getPayNoteDetails: getPayNoteDetailsHandler,
       payNoteWebhook: payNoteWebhookHandler,
+      listPayNoteDeliveries: listPayNoteDeliveriesHandler,
+      getPayNoteDelivery: getPayNoteDeliveryHandler,
+      listContracts: listContractsHandler,
+      getContractDetails: getContractDetailsHandler,
+      generateContractSummary: generateContractSummaryHandler,
+      runContractOperation: runContractOperationHandler,
+      authorizeCard: authorizeCardHandler,
+      captureCardAuthorization: captureCardAuthorizationHandler,
     },
   }),
   {
@@ -75,13 +97,14 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
         'X-Amz-Date',
         'X-Api-Key',
         'X-Amz-Security-Token',
+        'Authorization',
         'idempotency-key',
       ],
       credentials: true,
     },
     requestMiddleware: [
       async request => {
-        logger.info('Received request', {
+        logger.debug('Received request', {
           method: request.method,
           path: request.url,
         });
@@ -92,6 +115,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
           { path: '/auth/signup', method: 'POST' },
           { path: '/auth/signin', method: 'POST' },
           { path: '/v1/paynotes/webhook', method: 'POST' },
+          { path: /^\/v1\/card-processor(\/.*)?$/, method: 'POST' },
         ],
       }),
     ],
@@ -114,7 +138,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
         return response;
       },
       async (response, request) => {
-        logger.info('Sending response', {
+        logger.debug('Sending response', {
           status: response.status,
           method: request.method,
           path: request.url,

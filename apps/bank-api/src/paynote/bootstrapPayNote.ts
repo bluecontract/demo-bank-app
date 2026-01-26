@@ -1,5 +1,8 @@
 import { ServerInferRequest } from '@ts-rest/core';
-import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
+import {
+  bankApiContract,
+  getSupportedContractForDocument,
+} from '@demo-bank-app/shared-bank-api-contract';
 import { bootstrapPayNote as bootstrapPayNoteUseCase } from '@demo-bank-app/paynotes';
 import { problemResponse, ERROR_CODES } from '../shared/errors';
 import {
@@ -8,6 +11,16 @@ import {
 } from '../auth/middleware';
 import { getDependencies } from './dependencies';
 import { MIN_PAYNOTE_VERIFICATION_SCORE } from './constants';
+
+const getPayloadSummary = (payload: unknown) => {
+  if (payload && typeof payload === 'object') {
+    return {
+      payloadType: Array.isArray(payload) ? 'array' : 'object',
+      payloadKeyCount: Object.keys(payload as Record<string, unknown>).length,
+    };
+  }
+  return { payloadType: typeof payload };
+};
 
 export const bootstrapPayNoteHandler = async (
   request: ServerInferRequest<
@@ -22,18 +35,32 @@ export const bootstrapPayNoteHandler = async (
     logger,
     payNoteVerificationRepository,
     myOsClient,
-    idGenerator,
     blueIdCalculator,
+    payNoteBootstrapRepository,
+    contractRepository,
+    clock,
   } = dependencies;
 
   try {
     const { userId, userEmail } = await extractAuthInfo(context.request);
     const { payNote, formData } = request.body;
+    const supportedContract = getSupportedContractForDocument(payNote);
 
-    logger.info('Received PayNote bootstrap request', {
+    if (
+      !supportedContract ||
+      supportedContract.typeName !== 'PayNote/PayNote'
+    ) {
+      return problemResponse({
+        status: 400 as const,
+        code: ERROR_CODES.UNSUPPORTED_CONTRACT_TYPE,
+        message: 'Unsupported contract type.',
+      });
+    }
+
+    logger.debug('Received PayNote bootstrap request', {
       userId,
-      userEmail,
-      payNote,
+      contractType: supportedContract.typeName,
+      payNoteSummary: getPayloadSummary(payNote),
     });
 
     const result = await bootstrapPayNoteUseCase(
@@ -46,8 +73,9 @@ export const bootstrapPayNoteHandler = async (
       {
         verificationRepository: payNoteVerificationRepository,
         myOsClient,
-        idGenerator,
         blueIdCalculator,
+        payNoteBootstrapRepository,
+        clock,
         minimumSuccessfulScore: MIN_PAYNOTE_VERIFICATION_SCORE,
       }
     );
@@ -55,7 +83,6 @@ export const bootstrapPayNoteHandler = async (
     if (result.type === 'verification-failed') {
       logger.error('PayNote bootstrap rejected due to missing verification', {
         userId,
-        userEmail,
         blueId: result.blueId,
         hasVerification: Boolean(result.verification),
         verificationScore: result.verification?.validationScore,
@@ -78,20 +105,18 @@ export const bootstrapPayNoteHandler = async (
 
     const responseBody = result.response.body;
 
-    logger.info('MyOS bootstrap response received', {
+    logger.debug('MyOS bootstrap response received', {
       userId,
-      userEmail,
       status: result.response.status,
       ok: result.response.ok,
-      responseBody,
+      responseBodySummary: getPayloadSummary(responseBody),
     });
 
     if (result.type === 'external-error') {
       logger.error('MyOS bootstrap request failed', {
         userId,
-        userEmail,
         status: result.response.status,
-        responseBody,
+        responseBodySummary: getPayloadSummary(responseBody),
       });
 
       const detail =
@@ -106,6 +131,23 @@ export const bootstrapPayNoteHandler = async (
         code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
         message: 'MyOS bootstrap request failed.',
         detail,
+      });
+    }
+
+    if (result.type === 'success' && result.bootstrapSessionId) {
+      const now = clock.now().toISOString();
+      await contractRepository.saveContract({
+        contractId: result.bootstrapSessionId,
+        typeBlueId: supportedContract.typeBlueId,
+        displayName: supportedContract.displayName,
+        sessionId: result.bootstrapSessionId,
+        document: payNote,
+        status: 'bootstrapped',
+        statusUpdatedAt: now,
+        accountNumber: formData?.fromAccount,
+        userId,
+        createdAt: now,
+        updatedAt: now,
       });
     }
 

@@ -72,24 +72,31 @@ export function TransactionDetails({
     ? getAccountNameByNumber(counterpartyAccountNumber)
     : '';
   const currentAccountName = getCurrentAccountName();
-  const methodLabel = showPayNoteHelper
+  const isCardTransaction = Boolean(
+    transaction.cardLast4 ||
+      transaction.merchantName ||
+      transaction.processorChargeId
+  );
+  const methodLabel = isCardTransaction
+    ? 'Card Purchase'
+    : showPayNoteHelper
     ? 'PayNote Transfer'
     : 'Standard Transfer';
 
   const getStatusBadge = (status: string) => {
     const baseClasses =
-      'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium';
+      'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border';
 
     switch (status.toLowerCase()) {
       case 'completed':
       case 'posted':
-        return `${baseClasses} bg-green-100 text-green-800`;
+        return `${baseClasses} bg-emerald-50 text-emerald-700 border-emerald-100`;
       case 'pending':
-        return `${baseClasses} bg-orange-100 text-orange-800`;
+        return `${baseClasses} bg-amber-50 text-amber-700 border-amber-100`;
       case 'failed':
-        return `${baseClasses} bg-red-100 text-red-800`;
+        return `${baseClasses} bg-rose-50 text-rose-700 border-rose-100`;
       default:
-        return `${baseClasses} bg-gray-100 text-gray-800`;
+        return `${baseClasses} bg-slate-100 text-slate-700 border-slate-200`;
     }
   };
 
@@ -105,17 +112,81 @@ export function TransactionDetails({
     return status.toLowerCase() === 'posted' ? 'Completed' : status;
   };
 
+  const detailRows: Array<{ label: string; value: string }> = [
+    {
+      label: 'Operation',
+      value: isCardTransaction
+        ? 'Card purchase'
+        : `${getTransactionDirection()} transfer`,
+    },
+    { label: 'Method', value: methodLabel },
+  ];
+
+  if (isCardTransaction) {
+    detailRows.push({
+      label: 'Card',
+      value: transaction.cardLast4 ? `**** ${transaction.cardLast4}` : '—',
+    });
+
+    if (transaction.merchantName) {
+      detailRows.push({ label: 'Merchant', value: transaction.merchantName });
+    }
+    if (transaction.merchantStatementDescriptor) {
+      detailRows.push({
+        label: 'Statement descriptor',
+        value: transaction.merchantStatementDescriptor,
+      });
+    }
+    if (transaction.processorChargeId) {
+      detailRows.push({
+        label: 'Processor charge',
+        value: transaction.processorChargeId,
+      });
+    }
+    if (transaction.originHoldId) {
+      detailRows.push({
+        label: 'Authorization',
+        value: transaction.originHoldId,
+      });
+    }
+  } else {
+    detailRows.push({
+      label: 'To account',
+      value: isCredit
+        ? formatAccountNumber(currentAccountNumber)
+        : counterpartyAccountNumber
+        ? formatAccountNumber(counterpartyAccountNumber)
+        : '—',
+    });
+    detailRows.push({
+      label: 'From account',
+      value: isCredit
+        ? counterpartyAccountNumber
+          ? formatAccountNumber(counterpartyAccountNumber)
+          : '—'
+        : formatAccountNumber(currentAccountNumber),
+    });
+  }
+
+  detailRows.push(
+    { label: 'Amount', value: formattedAmount },
+    { label: 'Payment creation date', value: formatDate(transaction.postedAt) },
+    { label: 'Payment number', value: transaction.transactionId }
+  );
+
   return (
     <div className="max-w-2xl mx-auto" data-testid={testId}>
       <Card className="p-0">
-        <div className="px-4 py-3 border-b border-gray-200">
+        <div className="px-4 py-3 border-b border-slate-200">
           <div className="mb-1">
-            <h1 className="text-lg font-semibold text-gray-900">
-              {getTransactionDirection()} transfer
+            <h1 className="text-lg font-semibold text-slate-900">
+              {isCardTransaction
+                ? 'Card purchase'
+                : `${getTransactionDirection()} transfer`}
             </h1>
           </div>
-          {counterpartyAccountNumber && (
-            <p className="text-sm text-gray-600">
+          {!isCardTransaction && counterpartyAccountNumber && (
+            <p className="text-sm text-slate-600">
               {isCredit ? 'From' : 'To'}{' '}
               {formatAccountWithName(
                 counterpartyAccountNumber,
@@ -123,11 +194,17 @@ export function TransactionDetails({
               )}
             </p>
           )}
+          {isCardTransaction && (
+            <p className="text-sm text-slate-600">
+              {transaction.merchantName ?? 'Card purchase'}
+              {transaction.cardLast4 ? ` • **** ${transaction.cardLast4}` : ''}
+            </p>
+          )}
         </div>
 
-        <div className="px-4 py-4 bg-gray-50">
+        <div className="px-4 py-4 bg-white/70">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-slate-600">
               {formatDate(transaction.postedAt)}
             </span>
             <span className={getStatusBadge(transaction.status)}>
@@ -138,24 +215,24 @@ export function TransactionDetails({
           <div className="flex items-center mb-3">
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
-                isCredit ? 'bg-green-100' : 'bg-red-100'
+                isCredit ? 'bg-emerald-50' : 'bg-rose-50'
               }`}
             >
               <span
                 className={`text-lg ${
-                  isCredit ? 'text-green-600' : 'text-red-600'
+                  isCredit ? 'text-emerald-600' : 'text-rose-600'
                 }`}
               >
                 {isCredit ? '↓' : '↑'}
               </span>
             </div>
-            <span className="text-3xl font-bold text-gray-900">
+            <span className="text-3xl font-bold text-slate-900">
               {displayAmount}
             </span>
           </div>
 
-          <div className="text-sm text-gray-600">
-            {counterpartyAccountNumber && (
+          <div className="text-sm text-slate-600">
+            {!isCardTransaction && counterpartyAccountNumber && (
               <>
                 {isCredit ? 'To' : 'From'}:{' '}
                 {formatAccountWithName(
@@ -170,70 +247,22 @@ export function TransactionDetails({
 
         <div className="px-4 py-4">
           <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Operation</span>
-              <span className="text-sm text-gray-900">
-                {getTransactionDirection()} transfer
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Method</span>
-              <span className="text-sm text-gray-900">{methodLabel}</span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">To account</span>
-              <span className="text-sm text-gray-900">
-                {isCredit
-                  ? formatAccountNumber(currentAccountNumber)
-                  : counterpartyAccountNumber
-                  ? formatAccountNumber(counterpartyAccountNumber)
-                  : '—'}
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">From account</span>
-              <span className="text-sm text-gray-900">
-                {isCredit
-                  ? counterpartyAccountNumber
-                    ? formatAccountNumber(counterpartyAccountNumber)
-                    : '—'
-                  : formatAccountNumber(currentAccountNumber)}
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Amount</span>
-              <span className="text-sm text-gray-900">{formattedAmount}</span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">
-                Payment creation date
-              </span>
-              <span className="text-sm text-gray-900">
-                {formatDate(transaction.postedAt)}
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-sm text-gray-600">Payment number</span>
-              <span className="text-sm text-gray-900">
-                {transaction.transactionId}
-              </span>
-            </div>
+            {detailRows.map(row => (
+              <div key={row.label} className="flex justify-between">
+                <span className="text-sm text-slate-600">{row.label}</span>
+                <span className="text-sm text-slate-900">{row.value}</span>
+              </div>
+            ))}
           </div>
         </div>
 
         {transaction.description && (
-          <div className="px-4 py-3 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-900 mb-1">
+          <div className="px-4 py-3 border-t border-slate-200">
+            <h3 className="text-sm font-medium text-slate-900 mb-1">
               Description
             </h3>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-sm text-gray-700 leading-relaxed">
+            <div className="bg-white/80 rounded-xl p-3 border border-slate-200">
+              <p className="text-sm text-slate-700 leading-relaxed">
                 {transaction.description}
               </p>
             </div>
@@ -241,12 +270,12 @@ export function TransactionDetails({
         )}
 
         {showPayNoteHelper && (
-          <div className="px-4 py-3 border-t border-gray-200">
-            <p className="text-sm text-gray-700">
+          <div className="px-4 py-3 border-t border-slate-200">
+            <p className="text-sm text-slate-700">
               This transaction is part of a PayNote transfer.{' '}
               <button
                 type="button"
-                className="text-green-700 font-medium hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 rounded"
+                className="text-emerald-700 font-medium hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] rounded"
                 onClick={() => onViewPayNoteDetails?.()}
               >
                 See details

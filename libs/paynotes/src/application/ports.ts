@@ -57,8 +57,37 @@ export interface MyOsBootstrapResponse {
   body?: unknown;
 }
 
+export interface MyOsOperationResponse {
+  ok: boolean;
+  status: number;
+  body?: unknown;
+}
+
 export type MyOsFetchEventResult =
   | { kind: 'success'; payload: unknown }
+  | { kind: 'not-found'; status: number; detail?: string }
+  | {
+      kind: 'http-error';
+      status: number;
+      statusText?: string;
+      detail?: string;
+    }
+  | {
+      kind: 'parse-error';
+      status: number;
+      error: unknown;
+    }
+  | { kind: 'network-error'; error: unknown };
+
+export type MyOsFetchDocumentResult =
+  | {
+      kind: 'success';
+      document: {
+        documentId: string;
+        sessionId: string;
+        document?: Record<string, unknown>;
+      };
+    }
   | { kind: 'not-found'; status: number; detail?: string }
   | {
       kind: 'http-error';
@@ -84,7 +113,119 @@ export interface MyOsClient {
     payload: MyOsBootstrapPayload;
   }): Promise<MyOsBootstrapResponse>;
 
+  runDocumentOperation(input: {
+    credentials: MyOsCredentials;
+    sessionId: string;
+    operation: string;
+    payload?: unknown;
+  }): Promise<MyOsOperationResponse>;
+
   fetchEvent(eventId: string): Promise<MyOsFetchEventResult>;
+
+  fetchDocument(sessionId: string): Promise<MyOsFetchDocumentResult>;
+}
+
+export interface PayNoteDeliveryRecord {
+  deliveryId: string;
+  deliveryDocumentId?: string;
+  deliverySessionId?: string;
+  deliverySessionIds?: string[];
+  synchronySessionId?: string;
+  cardTransactionDetails?: CardTransactionDetails;
+  cardTransactionDetailsKey?: string;
+  accountNumber?: string;
+  userId?: string;
+  holdId?: string;
+  transactionId?: string;
+  transactionIdentificationStatus?: string;
+  clientDecisionStatus?: string;
+  deliveryStatus?: string;
+  deliveryDocument?: Record<string, unknown>;
+  deliveryUpdatedAt?: string;
+  payNoteDocumentId?: string;
+  payNoteSessionIds?: string[];
+  payNoteBootstrapSessionId?: string;
+  payNoteDocument?: Record<string, unknown>;
+  payNoteUpdatedAt?: string;
+  identificationReportedAt?: string;
+  decisionRecordedAt?: string;
+  payNoteBootstrapRequestedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PayNoteDeliverySummary {
+  deliveryId: string;
+  deliverySessionId?: string;
+  name?: string;
+  amountMinor?: number;
+  currency?: string;
+  deliveryStatus?: string;
+  transactionIdentificationStatus?: string;
+  clientDecisionStatus?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PayNoteDeliveryRepository {
+  markEventProcessed(eventId: string): Promise<boolean>;
+  getDelivery(deliveryId: string): Promise<PayNoteDeliveryRecord | null>;
+  getDeliveryByDocumentId(
+    documentId: string
+  ): Promise<PayNoteDeliveryRecord | null>;
+  getDeliveryBySessionId(
+    sessionId: string
+  ): Promise<PayNoteDeliveryRecord | null>;
+  getDeliveryByBootstrapSessionId(
+    sessionId: string
+  ): Promise<PayNoteDeliveryRecord | null>;
+  getDeliveryByPayNoteDocumentId(
+    documentId: string
+  ): Promise<PayNoteDeliveryRecord | null>;
+  getDeliveryByCardTransactionDetails(
+    details: CardTransactionDetails
+  ): Promise<PayNoteDeliveryRecord | null>;
+  saveDelivery(record: PayNoteDeliveryRecord): Promise<void>;
+  listDeliveriesByUserId(userId: string): Promise<PayNoteDeliverySummary[]>;
+}
+
+export interface PayNoteRecord {
+  payNoteDocumentId: string;
+  sessionIds?: string[];
+  deliveryId?: string;
+  accountNumber?: string;
+  userId?: string;
+  holdId?: string;
+  transactionId?: string;
+  payerAccountNumber?: string;
+  payeeAccountNumber?: string;
+  document?: Record<string, unknown>;
+  transactionRequest?: unknown;
+  triggerEvent?: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PayNoteRepository {
+  getPayNote(documentId: string): Promise<PayNoteRecord | null>;
+  getPayNoteBySessionId(sessionId: string): Promise<PayNoteRecord | null>;
+  savePayNote(record: PayNoteRecord): Promise<void>;
+}
+
+export interface PayNoteBootstrapRecord {
+  bootstrapSessionId: string;
+  userId: string;
+  accountNumber: string;
+  payerAccountNumber: string;
+  payeeAccountNumber?: string;
+  createdAt: string;
+}
+
+export interface PayNoteBootstrapRepository {
+  getBootstrapBySessionId(
+    bootstrapSessionId: string
+  ): Promise<PayNoteBootstrapRecord | null>;
+  saveBootstrap(record: PayNoteBootstrapRecord): Promise<void>;
 }
 
 export interface BankingAccount {
@@ -100,7 +241,7 @@ export interface TransferFundsRequest {
   description: string;
   userId: string;
   idempotencyKey: string;
-  payNoteEventId?: string;
+  payNoteDocumentId?: string;
 }
 
 export interface ReserveFundsRequest {
@@ -109,7 +250,7 @@ export interface ReserveFundsRequest {
   amountMinor: number;
   description?: string;
   counterpartyAccountNumber?: string;
-  payNoteEventId?: string;
+  payNoteDocumentId?: string;
   userId: string;
   idempotencyKey: string;
 }
@@ -119,7 +260,7 @@ export interface CaptureHoldRequest {
   userId: string;
   idempotencyKey: string;
   counterpartyAccountNumber?: string;
-  payNoteEventId?: string;
+  payNoteDocumentId?: string;
 }
 
 export interface BankingFacade {
@@ -178,3 +319,4 @@ export interface PayNoteValidationProvider {
     explanation: string;
   }>;
 }
+import type { CardTransactionDetails } from '@demo-bank-app/banking';
