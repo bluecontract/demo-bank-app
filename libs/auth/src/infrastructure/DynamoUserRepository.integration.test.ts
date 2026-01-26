@@ -124,6 +124,24 @@ describe('DynamoUserRepository Integration', () => {
       expect(retrievedUser!.marketingEmailsOptIn).toBe(true);
     });
 
+    it('should save and retrieve a merchant user with merchantId', async () => {
+      const user = new User({
+        id: randomUUID(),
+        email: 'merchant.integration@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-integration',
+      });
+
+      const savedUser = await repository.save(user);
+
+      expect(savedUser.merchantId).toBe('merchant-integration');
+
+      const retrievedUser = await repository.findById(user.id);
+      expect(retrievedUser?.merchantId).toBe('merchant-integration');
+    });
+
     it('should save and retrieve a test user with TTL', async () => {
       // Given
       const testUser = new User({

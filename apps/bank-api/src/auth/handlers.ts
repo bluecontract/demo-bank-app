@@ -60,6 +60,7 @@ export const signUpHandler = async (
         email: body.email,
         isTest: query?.dev === 'true',
         marketingEmailsOptIn: body.marketingEmailsOptIn,
+        merchantId: body.merchantId,
       },
       deps
     );

@@ -80,6 +80,46 @@ describe('Auth Handlers', () => {
       expect(responseHeaders.get('Set-Cookie')).toContain('demoAuth=jwt-token');
     });
 
+    it('should forward merchantId when provided', async () => {
+      const mockDeps = {
+        logger: mockLogger,
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+      };
+      mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
+      mockSignUp.mockResolvedValue({
+        user: {
+          id: 'merchant-user-id',
+          email: 'merchant@example.com',
+          isTest: false,
+          createdAt: '2021-01-01',
+          marketingEmailsOptIn: true,
+        },
+        token: 'jwt-token',
+      });
+      const responseHeaders = createMockHeaders();
+
+      await signUpHandler(
+        {
+          body: {
+            email: 'merchant@example.com',
+            marketingEmailsOptIn: true,
+            merchantId: 'merchant-123',
+          },
+          query: {},
+        },
+        { responseHeaders } as any
+      );
+
+      expect(mockSignUp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'merchant@example.com',
+          marketingEmailsOptIn: true,
+          merchantId: 'merchant-123',
+        }),
+        expect.anything()
+      );
+    });
+
     it('should return 409 for UserAlreadyExistsError', async () => {
       const mockDeps = {
         logger: mockLogger,

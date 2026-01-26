@@ -6,6 +6,7 @@ export interface UserProps {
   createdAt: Date;
   isTest?: boolean;
   marketingEmailsOptIn: boolean;
+  merchantId?: string;
 }
 
 const USER_CONSTANTS = {
@@ -20,6 +21,7 @@ export class User {
   readonly createdAt: Date;
   readonly isTest: boolean;
   readonly marketingEmailsOptIn: boolean;
+  readonly merchantId?: string;
 
   constructor(props: UserProps) {
     if (!props.id || props.id.trim() === '') {
@@ -74,11 +76,20 @@ export class User {
       );
     }
 
+    const normalizedMerchantId = props.merchantId?.trim();
+    if (props.merchantId !== undefined && normalizedMerchantId === '') {
+      throw new UserValidationError(
+        'merchantId',
+        'Merchant ID cannot be empty'
+      );
+    }
+
     this.id = props.id;
     this.email = normalizedEmail;
     this.createdAt = props.createdAt;
     this.isTest = props.isTest ?? false;
     this.marketingEmailsOptIn = props.marketingEmailsOptIn;
+    this.merchantId = normalizedMerchantId;
   }
 
   equals(other: User): boolean {
@@ -87,7 +98,8 @@ export class User {
       this.email === other.email &&
       this.createdAt.getTime() === other.createdAt.getTime() &&
       this.isTest === other.isTest &&
-      this.marketingEmailsOptIn === other.marketingEmailsOptIn
+      this.marketingEmailsOptIn === other.marketingEmailsOptIn &&
+      this.merchantId === other.merchantId
     );
   }
 }

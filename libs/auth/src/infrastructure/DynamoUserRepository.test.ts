@@ -105,6 +105,38 @@ describe('DynamoUserRepository', () => {
       expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
+    it('should persist merchantId when provided', async () => {
+      const user = new User({
+        id: randomUUID(),
+        email: 'merchant.user@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-123',
+      });
+      mockSend.mockResolvedValueOnce({});
+
+      await repository.save(user);
+
+      expect(mockTransactWriteCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TransactItems: expect.arrayContaining([
+            {
+              Put: {
+                TableName: 'test-table',
+                Item: expect.objectContaining({
+                  PK: `USER#${user.id}`,
+                  SK: 'PROFILE',
+                  merchantId: 'merchant-123',
+                }),
+                ConditionExpression: 'attribute_not_exists(PK)',
+              },
+            },
+          ]),
+        })
+      );
+    });
+
     it('should throw UserAlreadyExistsError when user already exists (ConditionalCheckFailedException)', async () => {
       // Given
       const user = new User({
@@ -311,6 +343,35 @@ describe('DynamoUserRepository', () => {
       );
 
       expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('should map merchantId when present', async () => {
+      const user = new User({
+        id: randomUUID(),
+        email: 'merchant.lookup@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-lookup',
+      });
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          PK: `USER#${user.id}`,
+          SK: 'PROFILE',
+          AUTH_GSI1PK: `EMAIL#${user.email}`,
+          AUTH_GSI1SK: 'PROFILE',
+          id: user.id,
+          email: user.email,
+          createdAt: user.createdAt.toISOString(),
+          isTest: false,
+          marketingEmailsOptIn: true,
+          merchantId: 'merchant-lookup',
+        },
+      });
+
+      const foundUser = await repository.findById(user.id);
+
+      expect(foundUser?.merchantId).toBe('merchant-lookup');
     });
   });
 

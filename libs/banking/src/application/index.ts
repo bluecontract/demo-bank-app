@@ -7,3 +7,4 @@ export * from './HoldRepository';
 export * from './CardRepository';
 export * from './CardHasher';
 export * from './cardProcessorConstants';
+export * from './merchantIdentityResolver';

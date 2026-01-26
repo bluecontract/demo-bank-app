@@ -18,6 +18,7 @@ export interface SignUpCommand {
   email: string;
   isTest?: boolean;
   marketingEmailsOptIn: boolean;
+  merchantId?: string;
 }
 
 export interface SignUpDependencies {
@@ -46,7 +47,7 @@ export async function signUp(
 ): Promise<AuthResult> {
   const { userRepository, jwtService, logger, metrics } = dependencies;
 
-  const { email, isTest = false, marketingEmailsOptIn } = command;
+  const { email, isTest = false, marketingEmailsOptIn, merchantId } = command;
   const timing = TimingUtils.startTiming(OPERATION_NAMES.AUTH.SIGN_UP);
 
   logger.info('User sign-up started', {
@@ -64,6 +65,7 @@ export async function signUp(
       createdAt: new Date(),
       isTest,
       marketingEmailsOptIn,
+      merchantId,
     });
 
     savedUser = await userRepository.save(user);

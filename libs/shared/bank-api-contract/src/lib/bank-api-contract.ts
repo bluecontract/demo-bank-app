@@ -1,6 +1,9 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
-import { createSanitizedStringSchema } from './sanitization';
+import {
+  createSanitizedOptionalStringSchema,
+  createSanitizedStringSchema,
+} from './sanitization';
 import {
   AccountDto,
   CreateAccountRequestDto,
@@ -57,6 +60,9 @@ export const HealthCheckSchema = z.object({
 export const SignUpRequestSchema = z.object({
   email: createSanitizedStringSchema(z.string().email()),
   marketingEmailsOptIn: z.boolean(),
+  merchantId: createSanitizedOptionalStringSchema(
+    z.string().trim().min(1).optional()
+  ),
 });
 
 export const SignInRequestSchema = SignUpRequestSchema.pick({

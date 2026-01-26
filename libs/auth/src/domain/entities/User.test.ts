@@ -45,6 +45,15 @@ describe('User', () => {
 
       expect(user.email).toBe('test.user@example.com');
     });
+
+    it('accepts merchantId and trims whitespace', () => {
+      const user = new User({
+        ...validProps,
+        merchantId: '  merchant-123  ',
+      });
+
+      expect(user.merchantId).toBe('merchant-123');
+    });
   });
 
   describe('validation', () => {
@@ -189,6 +198,22 @@ describe('User', () => {
         expect(new User(props).marketingEmailsOptIn).toBe(false);
       });
     });
+
+    describe('merchantId validation', () => {
+      it('throws when merchantId is empty', () => {
+        const props = { ...validProps, merchantId: '' };
+
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow('Merchant ID cannot be empty');
+      });
+
+      it('throws when merchantId is whitespace', () => {
+        const props = { ...validProps, merchantId: '   ' };
+
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow('Merchant ID cannot be empty');
+      });
+    });
   });
 
   describe('equals', () => {
@@ -239,6 +264,13 @@ describe('User', () => {
         ...validProps,
         marketingEmailsOptIn: false,
       });
+
+      expect(user1.equals(user2)).toBe(false);
+    });
+
+    it('returns false for users with different merchantId values', () => {
+      const user1 = new User({ ...validProps, merchantId: 'merchant-1' });
+      const user2 = new User({ ...validProps, merchantId: 'merchant-2' });
 
       expect(user1.equals(user2)).toBe(false);
     });

@@ -15,7 +15,12 @@ export const MARKETING_CONSENT_COPY =
 export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
   const [email, setEmail] = useState('');
   const [marketingOptIn, setMarketingOptIn] = useState(true);
-  const [errors, setErrors] = useState<{ email?: string }>({});
+  const [isMerchant, setIsMerchant] = useState(false);
+  const [merchantId, setMerchantId] = useState('');
+  const [errors, setErrors] = useState<{
+    email?: string;
+    merchantId?: string;
+  }>({});
   const apiClient = useApiClient();
   const navigate = useNavigate();
   const { signIn } = useAuth();
@@ -24,6 +29,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
     mutationFn: async (userData: {
       email: string;
       marketingEmailsOptIn: boolean;
+      merchantId?: string;
     }) => {
       const isE2ETest =
         typeof window !== 'undefined' &&
@@ -89,12 +95,26 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
     return undefined;
   };
 
+  const validateMerchantId = (merchantIdValue: string): string | undefined => {
+    const trimmed = merchantIdValue.trim();
+    if (!trimmed) {
+      return 'Merchant ID is required when signing up as a merchant';
+    }
+    return undefined;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
     const emailError = validateEmail(email);
-    if (emailError) {
-      setErrors({ email: emailError });
+    const merchantIdError = isMerchant
+      ? validateMerchantId(merchantId)
+      : undefined;
+    if (emailError || merchantIdError) {
+      setErrors({
+        email: emailError,
+        merchantId: merchantIdError,
+      });
       return;
     }
 
@@ -102,6 +122,7 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
     signUpMutation.mutate({
       email: email.trim().toLowerCase(),
       marketingEmailsOptIn: marketingOptIn,
+      ...(isMerchant ? { merchantId: merchantId.trim() } : {}),
     });
   };
 
@@ -144,6 +165,53 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
             </p>
           )}
         </div>
+
+        <label className="flex items-start gap-3 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            name="isMerchant"
+            checked={isMerchant}
+            onChange={event => {
+              setIsMerchant(event.target.checked);
+              clearErrors();
+            }}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            disabled={signUpMutation.isPending}
+          />
+          <span className="leading-5">I am a merchant</span>
+        </label>
+
+        {isMerchant && (
+          <div>
+            <label
+              htmlFor="merchantId"
+              className="block text-sm font-medium text-gray-700 mb-2"
+            >
+              Merchant ID
+            </label>
+            <input
+              id="merchantId"
+              name="merchantId"
+              type="text"
+              value={merchantId}
+              onChange={e => {
+                setMerchantId(e.target.value);
+                clearErrors();
+              }}
+              className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                errors.merchantId ? 'border-red-500' : 'border-gray-300'
+              }`}
+              placeholder="Enter your merchant ID"
+              disabled={signUpMutation.isPending}
+              required={isMerchant}
+            />
+            {errors.merchantId && (
+              <p className="mt-1 text-sm text-red-600" role="alert">
+                {errors.merchantId}
+              </p>
+            )}
+          </div>
+        )}
 
         <label className="flex items-start gap-3 text-sm text-gray-600">
           <input

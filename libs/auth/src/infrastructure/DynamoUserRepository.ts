@@ -45,6 +45,7 @@ interface UserProfileDbItem {
   createdAt: string;
   isTest: boolean;
   marketingEmailsOptIn: boolean;
+  merchantId?: User['merchantId'];
   ttl?: number; // Optional TTL for test users
 }
 
@@ -59,6 +60,7 @@ interface UnknownDbItem {
   createdAt?: string;
   isTest?: boolean;
   marketingEmailsOptIn?: boolean;
+  merchantId?: string;
   ttl?: number;
   [key: string]: unknown; // Allow additional properties
 }
@@ -368,6 +370,7 @@ export class DynamoUserRepository implements UserRepository {
       createdAt: user.createdAt.toISOString(),
       isTest: user.isTest,
       marketingEmailsOptIn: user.marketingEmailsOptIn,
+      ...(user.merchantId ? { merchantId: user.merchantId } : {}),
     };
 
     // Add TTL for test users
@@ -420,12 +423,26 @@ export class DynamoUserRepository implements UserRepository {
       }
       const marketingEmailsOptIn = marketingOptInValue ?? false;
 
+      const merchantIdValue = item.merchantId;
+      if (
+        merchantIdValue !== undefined &&
+        merchantIdValue !== null &&
+        typeof merchantIdValue !== 'string'
+      ) {
+        throw new Error('Invalid user item: merchantId must be string');
+      }
+      const normalizedMerchantId = merchantIdValue?.trim();
+      if (merchantIdValue !== undefined && normalizedMerchantId === '') {
+        throw new Error('Invalid user item: merchantId cannot be empty');
+      }
+
       return new User({
         id: item.id,
         email: item.email,
         createdAt,
         isTest,
         marketingEmailsOptIn,
+        merchantId: normalizedMerchantId || undefined,
       });
     } catch (error: unknown) {
       throw new AuthRepositoryError(
