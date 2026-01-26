@@ -102,6 +102,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     };
     const contractRepository = {
       getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
       saveContract: vi.fn(),
     };
 
@@ -203,6 +204,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     };
     const contractRepository = {
       getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
       saveContract: vi.fn(),
     };
 
@@ -316,6 +318,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     };
     const contractRepository = {
       getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
       saveContract: vi.fn(),
     };
 
@@ -413,6 +416,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     };
     const contractRepository = {
       getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
       saveContract: vi.fn(),
     };
 
@@ -528,6 +532,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     };
     const contractRepository = {
       getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
       saveContract: vi.fn(),
     };
 

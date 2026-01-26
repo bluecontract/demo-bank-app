@@ -444,6 +444,7 @@ export const handleWebhookEvent = async (
   }
 
   const eventPayload = resolvedPayload as {
+    type?: string;
     object?: {
       sessionId?: string;
       document?: Record<string, unknown>;
@@ -456,6 +457,7 @@ export const handleWebhookEvent = async (
   };
 
   const eventObject = eventPayload?.object;
+  const eventType = eventPayload?.type;
   const document = eventObject?.document;
   const emittedEvents = Array.isArray(eventObject?.emitted)
     ? eventObject?.emitted
@@ -597,6 +599,7 @@ export const handleWebhookEvent = async (
     document: updatedRecord.document,
     sessionId,
     documentId: payNoteDocumentId,
+    eventType,
     userId: updatedRecord.userId,
     accountNumber: updatedRecord.accountNumber,
     triggerEvent: eventObject?.triggeredBy,
@@ -774,6 +777,7 @@ export const handleWebhookEvent = async (
             document: updatedRecord.document,
             sessionId,
             documentId: payNoteDocumentId,
+            eventType,
             userId: updatedRecord.userId,
             accountNumber: updatedRecord.accountNumber,
             triggerEvent: eventObject?.triggeredBy,

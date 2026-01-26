@@ -49,6 +49,7 @@ export const getContractDetailsHandler = async (
       summary: contract.summary,
       summaryUpdatedAt: contract.summaryUpdatedAt,
       summarySourceUpdatedAt: contract.summarySourceUpdatedAt,
+      summaryInputBlueId: contract.summaryInputBlueId,
       summaryModel: contract.summaryModel,
       summaryError: contract.summaryError,
       createdAt: contract.createdAt,

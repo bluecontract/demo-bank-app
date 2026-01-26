@@ -64,6 +64,7 @@ Input format:
   - \`typeNameByBlueId\` maps type blueIds to human-readable aliases.
   - When you see an object like \`{ "type": { "blueId": "..." }, ... }\`, interpret the semantics using \`definitionsByBlueId[blueId]\` (and \`typeNameByBlueId\`).
 - Aside from type references (type/itemType/keyType/valueType), the input does not contain Blue node reference stubs of the shape \`{ "blueId": "..." }\`.
+- Exception: timeline entries may include \`prevEntry: { "blueId": "..." }\`, which is an opaque linkage id. Do not interpret it.
 
 Your task:
 - Explain what the contract document represents, who the participants are, and the overall lifecycle.
@@ -129,6 +130,11 @@ type ContractFactsV2 = {
   integrationNotes?: string[];
 };
 
+type ContractFactsV2Result = {
+  facts: ContractFactsV2;
+  summaryInputBlueId: string;
+};
+
 const toBlueNode = (value: unknown): BlueNode | null => {
   if (value === undefined || value === null) {
     return null;
@@ -177,10 +183,15 @@ const stripResolvedTypeNodes = (node: BlueNode): BlueNode => {
 type BlueIdStub = { blueId: string; path: string };
 const findNonTypeBlueIdStubs = (
   value: unknown,
-  options?: { parentKey?: string; path?: string[] }
+  options?: {
+    parentKey?: string;
+    path?: string[];
+    ignoredStubKeys?: Set<string>;
+  }
 ): BlueIdStub[] => {
   const parentKey = options?.parentKey;
   const path = options?.path ?? [];
+  const ignoredStubKeys = options?.ignoredStubKeys;
   const stubs: BlueIdStub[] = [];
 
   if (Array.isArray(value)) {
@@ -189,6 +200,7 @@ const findNonTypeBlueIdStubs = (
         ...findNonTypeBlueIdStubs(item, {
           parentKey: undefined,
           path: [...path, String(index)],
+          ignoredStubKeys,
         })
       );
     });
@@ -213,13 +225,20 @@ const findNonTypeBlueIdStubs = (
     parentKey === 'valueType';
 
   if (isBlueIdOnly && !isTypeContext) {
+    if (parentKey && ignoredStubKeys?.has(parentKey)) {
+      return stubs;
+    }
     stubs.push({ blueId: record.blueId as string, path: '/' + path.join('/') });
     return stubs;
   }
 
   for (const [key, child] of Object.entries(record)) {
     stubs.push(
-      ...findNonTypeBlueIdStubs(child, { parentKey: key, path: [...path, key] })
+      ...findNonTypeBlueIdStubs(child, {
+        parentKey: key,
+        path: [...path, key],
+        ignoredStubKeys,
+      })
     );
   }
 
@@ -409,7 +428,7 @@ const buildFactsV2 = (input: {
     emittedEvents?: unknown[];
     previousSummary?: z.infer<typeof ContractDocumentSummaryDto>;
   };
-}): ContractFactsV2 => {
+}): ContractFactsV2Result => {
   const supportedContract = getSupportedContractByTypeBlueId(
     input.contract.typeBlueId
   );
@@ -492,15 +511,18 @@ const buildFactsV2 = (input: {
     );
   }
 
+  const transitionIgnoredStubKeys = new Set(['prevEntry']);
   const transitionStubs = [
     ...(triggerSimple
       ? findNonTypeBlueIdStubs(triggerSimple, {
           path: ['transition', 'triggerEvent'],
+          ignoredStubKeys: transitionIgnoredStubKeys,
         })
       : []),
     ...emittedSimple.flatMap((event, index) =>
       findNonTypeBlueIdStubs(event, {
         path: ['transition', 'emittedEvents', String(index)],
+        ignoredStubKeys: transitionIgnoredStubKeys,
       })
     ),
   ];
@@ -515,6 +537,26 @@ const buildFactsV2 = (input: {
           ? ` (+${transitionStubs.length - 5} more)`
           : ''
       }`
+    );
+  }
+
+  let summaryInputBlueId: string;
+  try {
+    const summaryInputPayload: Record<string, unknown> = {
+      document: mergedDocument,
+    };
+    if (triggerSimple !== undefined) {
+      summaryInputPayload.triggerEvent = triggerSimple;
+    }
+    if (emittedSimple.length) {
+      summaryInputPayload.emittedEvents = emittedSimple;
+    }
+    const summaryInputNode = blue.jsonValueToNode(summaryInputPayload);
+    summaryInputBlueId = blue.calculateBlueIdSync(summaryInputNode);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new ContractSummaryInputError(
+      `Unable to calculate summary input blueId: ${message}`
     );
   }
 
@@ -567,38 +609,41 @@ const buildFactsV2 = (input: {
   }
 
   return {
-    contract: {
-      contractId: input.contract.contractId,
-      displayName: input.contract.displayName,
-      typeBlueId: input.contract.typeBlueId,
-      sessionId: input.contract.sessionId,
-      documentId: input.contract.documentId,
-      status: input.contract.status,
-      statusUpdatedAt: input.contract.statusUpdatedAt,
-      statusTimestamps: input.contract.statusTimestamps,
-      updatedAt: input.contract.updatedAt,
+    summaryInputBlueId,
+    facts: {
+      contract: {
+        contractId: input.contract.contractId,
+        displayName: input.contract.displayName,
+        typeBlueId: input.contract.typeBlueId,
+        sessionId: input.contract.sessionId,
+        documentId: input.contract.documentId,
+        status: input.contract.status,
+        statusUpdatedAt: input.contract.statusUpdatedAt,
+        statusTimestamps: input.contract.statusTimestamps,
+        updatedAt: input.contract.updatedAt,
+      },
+      ...(input.contract.previousSummary
+        ? { previousSummary: input.contract.previousSummary }
+        : {}),
+      document: mergedDocument,
+      ...(triggerSimple || emittedSimple.length
+        ? {
+            transition: {
+              ...(triggerSimple ? { triggerEvent: triggerSimple } : {}),
+              ...(emittedSimple.length ? { emittedEvents: emittedSimple } : {}),
+            },
+          }
+        : {}),
+      ...(viewerChannelKey
+        ? {
+            viewer: {
+              channelKey: viewerChannelKey,
+            },
+          }
+        : {}),
+      types: typesPack,
+      ...(integrationNotes.length ? { integrationNotes } : {}),
     },
-    ...(input.contract.previousSummary
-      ? { previousSummary: input.contract.previousSummary }
-      : {}),
-    document: mergedDocument,
-    ...(triggerSimple || emittedSimple.length
-      ? {
-          transition: {
-            ...(triggerSimple ? { triggerEvent: triggerSimple } : {}),
-            ...(emittedSimple.length ? { emittedEvents: emittedSimple } : {}),
-          },
-        }
-      : {}),
-    ...(viewerChannelKey
-      ? {
-          viewer: {
-            channelKey: viewerChannelKey,
-          },
-        }
-      : {}),
-    types: typesPack,
-    ...(integrationNotes.length ? { integrationNotes } : {}),
   };
 };
 
@@ -642,6 +687,7 @@ type ContractSummaryGenerationResult = {
   summary: z.infer<typeof ContractDocumentSummaryDto>;
   summaryUpdatedAt: string;
   summarySourceUpdatedAt: string;
+  summaryInputBlueId?: string;
   cached: boolean;
   model?: string;
 };
@@ -658,26 +704,10 @@ const generateOrLoadContractSummary = async (input: {
     throw new ContractSummaryInputError('Contract document not available');
   }
 
-  if (
-    !input.force &&
-    contract.summary &&
-    contract.summarySourceUpdatedAt === contract.updatedAt &&
-    !contract.summaryError &&
-    contract.summaryUpdatedAt
-  ) {
-    return {
-      summary: contract.summary,
-      summaryUpdatedAt: contract.summaryUpdatedAt,
-      summarySourceUpdatedAt: contract.summarySourceUpdatedAt,
-      cached: true,
-      model: contract.summaryModel,
-    };
-  }
-
   const model = process.env.CONTRACT_SUMMARY_MODEL || DEFAULT_MODEL;
 
   try {
-    const facts = buildFactsV2({
+    const { facts, summaryInputBlueId } = buildFactsV2({
       contract: {
         contractId: contract.contractId,
         typeBlueId: contract.typeBlueId,
@@ -694,6 +724,31 @@ const generateOrLoadContractSummary = async (input: {
         previousSummary: contract.summary,
       },
     });
+
+    if (
+      !input.force &&
+      contract.summary &&
+      !contract.summaryError &&
+      contract.summaryUpdatedAt
+    ) {
+      const hasMatchingSummaryInput =
+        contract.summaryInputBlueId &&
+        contract.summaryInputBlueId === summaryInputBlueId;
+      const hasMatchingTimestamp =
+        !contract.summaryInputBlueId &&
+        contract.summarySourceUpdatedAt === contract.updatedAt;
+      if (hasMatchingSummaryInput || hasMatchingTimestamp) {
+        return {
+          summary: contract.summary,
+          summaryUpdatedAt: contract.summaryUpdatedAt,
+          summarySourceUpdatedAt:
+            contract.summarySourceUpdatedAt ?? contract.updatedAt,
+          summaryInputBlueId: contract.summaryInputBlueId ?? summaryInputBlueId,
+          cached: true,
+          model: contract.summaryModel,
+        };
+      }
+    }
 
     const apiKey = await input.getOpenAiApiKey();
     const client = new OpenAI({ apiKey });
@@ -732,6 +787,7 @@ const generateOrLoadContractSummary = async (input: {
       summary,
       summaryUpdatedAt: now,
       summarySourceUpdatedAt: contract.updatedAt,
+      summaryInputBlueId,
       summaryModel: model,
       summaryError: null,
     });
@@ -740,6 +796,7 @@ const generateOrLoadContractSummary = async (input: {
       summary,
       summaryUpdatedAt: now,
       summarySourceUpdatedAt: contract.updatedAt,
+      summaryInputBlueId,
       cached: false,
       model,
     };
@@ -849,6 +906,7 @@ export const generateContractSummaryHandler = async (
         summary: result.summary,
         summaryUpdatedAt: result.summaryUpdatedAt,
         summarySourceUpdatedAt: result.summarySourceUpdatedAt,
+        summaryInputBlueId: result.summaryInputBlueId,
         cached: result.cached,
         model: result.model,
       },

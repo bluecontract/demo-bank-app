@@ -86,7 +86,9 @@ export function ContractsListPanel({
               const primaryName =
                 contract.documentName?.trim() || contract.displayName;
               const typeLabel = contract.displayName;
-              const changeType = getContractChangeType(contract, reviewedMap);
+              const changeType = isActive
+                ? null
+                : getContractChangeType(contract, reviewedMap);
               const changeLabel = changeType === 'new' ? 'New' : 'Updated';
               const changeStyle =
                 changeType === 'new'

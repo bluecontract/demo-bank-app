@@ -64,6 +64,7 @@ interface ContractItem {
   summary?: ContractDocumentSummary;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summaryInputBlueId?: string;
   summaryModel?: string;
   summaryError?: string;
   createdAt: string;
@@ -159,6 +160,7 @@ export class DynamoContractRepository implements ContractRepository {
       summary: item.summary,
       summaryUpdatedAt: item.summaryUpdatedAt,
       summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+      summaryInputBlueId: item.summaryInputBlueId,
       summaryModel: item.summaryModel,
       summaryError: item.summaryError,
       createdAt: item.createdAt,
@@ -252,6 +254,7 @@ export class DynamoContractRepository implements ContractRepository {
       summary: record.summary,
       summaryUpdatedAt: record.summaryUpdatedAt,
       summarySourceUpdatedAt: record.summarySourceUpdatedAt,
+      summaryInputBlueId: record.summaryInputBlueId,
       summaryModel: record.summaryModel,
       summaryError: record.summaryError,
       createdAt: record.createdAt,
@@ -378,6 +381,12 @@ export class DynamoContractRepository implements ContractRepository {
       'summarySourceUpdatedAt',
       ':summarySourceUpdatedAt',
       update.summarySourceUpdatedAt
+    );
+    handleField(
+      '#summaryInputBlueId',
+      'summaryInputBlueId',
+      ':summaryInputBlueId',
+      update.summaryInputBlueId
     );
     handleField(
       '#summaryModel',

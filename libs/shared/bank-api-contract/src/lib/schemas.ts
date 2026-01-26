@@ -472,6 +472,7 @@ export const ContractDetailsDto = z.object({
   summary: ContractDocumentSummaryDto.optional(),
   summaryUpdatedAt: z.string().datetime({ offset: true }).optional(),
   summarySourceUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  summaryInputBlueId: z.string().optional(),
   summaryModel: z.string().optional(),
   summaryError: z.string().optional(),
   createdAt: z.string().datetime({ offset: true }),
@@ -482,6 +483,7 @@ export const ContractSummaryGenerationDto = z.object({
   summary: ContractDocumentSummaryDto,
   summaryUpdatedAt: z.string().datetime({ offset: true }),
   summarySourceUpdatedAt: z.string().datetime({ offset: true }),
+  summaryInputBlueId: z.string().optional(),
   cached: z.boolean().optional(),
   model: z.string().optional(),
 });

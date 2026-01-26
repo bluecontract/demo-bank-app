@@ -200,12 +200,21 @@ export function ContractDetailsPanel({
     getDocumentName(restoredDocument) ?? contract?.displayName ?? 'Contract';
   const documentSummary =
     getDocumentDescription(restoredDocument) ?? documentTitle;
+  const summaryIsFresh = Boolean(
+    contract?.summary &&
+      contract?.summarySourceUpdatedAt &&
+      contract?.summarySourceUpdatedAt === contract?.updatedAt
+  );
+  const shouldFetchSummary = Boolean(
+    contract?.sessionId && contract?.updatedAt && !summaryIsFresh
+  );
   const summaryQuery = useContractSummary(
     contract?.sessionId ?? null,
-    contract?.updatedAt ?? null
+    shouldFetchSummary ? contract?.updatedAt ?? null : null
   );
   const regenerateSummary = useRegenerateContractSummary();
   const generatedSummary = summaryQuery.data?.summary ?? contract?.summary;
+  const summaryModel = summaryQuery.data?.model ?? contract?.summaryModel;
   const summaryErrorMessage =
     (summaryQuery.error instanceof Error ? summaryQuery.error.message : null) ??
     contract?.summaryError ??
@@ -485,9 +494,9 @@ export function ContractDetailsPanel({
               >
                 {regenerateSummary.isPending ? 'Regenerating...' : 'Regenerate'}
               </Button>
-              {summaryQuery.data?.model && (
+              {summaryModel && (
                 <span className="text-xs text-slate-500">
-                  Model: {summaryQuery.data.model}
+                  Model: {summaryModel}
                 </span>
               )}
             </div>

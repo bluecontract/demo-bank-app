@@ -24,6 +24,7 @@ export type ContractSummaryUpdate = {
   summary?: ContractDocumentSummary | null;
   summaryUpdatedAt?: string | null;
   summarySourceUpdatedAt?: string | null;
+  summaryInputBlueId?: string | null;
   summaryModel?: string | null;
   summaryError?: string | null;
 };
@@ -48,6 +49,7 @@ export interface ContractRecord {
   summary?: ContractDocumentSummary;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summaryInputBlueId?: string;
   summaryModel?: string;
   summaryError?: string;
   createdAt: string;

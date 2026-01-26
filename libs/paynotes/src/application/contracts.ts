@@ -46,11 +46,51 @@ const getDocumentName = (document?: Record<string, unknown>) => {
   return trimmed ? trimmed : undefined;
 };
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const areJsonValuesEqual = (left: unknown, right: unknown): boolean => {
+  if (left === right) {
+    return true;
+  }
+  if (left === null || right === null) {
+    return left === right;
+  }
+  if (typeof left !== typeof right) {
+    return false;
+  }
+  if (Array.isArray(left)) {
+    if (!Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((value, index) =>
+      areJsonValuesEqual(value, right[index])
+    );
+  }
+  if (isPlainObject(left)) {
+    if (!isPlainObject(right)) {
+      return false;
+    }
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+    return leftKeys.every(
+      key =>
+        Object.prototype.hasOwnProperty.call(right, key) &&
+        areJsonValuesEqual(left[key], right[key])
+    );
+  }
+  return false;
+};
+
 export const upsertContractRecord = async (input: {
   contractRepository: ContractRepository;
   document: Record<string, unknown> | undefined;
   sessionId?: string;
   documentId?: string;
+  eventType?: string;
   userId?: string;
   accountNumber?: string;
   relatedTransactionIds?: string[];
@@ -70,53 +110,102 @@ export const upsertContractRecord = async (input: {
     return null;
   }
 
-  const contractId = input.sessionId ?? input.documentId;
+  const existingByDocumentId = input.documentId
+    ? await input.contractRepository.getContractByDocumentId(input.documentId)
+    : null;
+  if (
+    existingByDocumentId &&
+    input.sessionId &&
+    existingByDocumentId.sessionId &&
+    input.sessionId !== existingByDocumentId.sessionId
+  ) {
+    return existingByDocumentId.contractId;
+  }
+
+  const contractId =
+    existingByDocumentId?.contractId ?? input.sessionId ?? input.documentId;
   if (!contractId) {
     return null;
   }
 
-  const existing = await input.contractRepository.getContract(contractId);
+  const existing =
+    existingByDocumentId ??
+    (await input.contractRepository.getContract(contractId));
+  if (!existing && input.eventType === 'DOCUMENT_EPOCH_ADVANCED') {
+    return null;
+  }
   const status = input.status ?? existing?.status;
   const statusUpdatedAt =
     input.status && input.status !== existing?.status
       ? input.now
       : existing?.statusUpdatedAt;
+  const nextStatusTimestamps = mergeStatusTimestamps(
+    existing?.statusTimestamps,
+    input.statusTimestamps
+  );
   const documentName =
     getDocumentName(input.document) ?? existing?.documentName;
+  const nextSessionId = input.sessionId ?? existing?.sessionId;
+  const nextDocumentId = input.documentId ?? existing?.documentId;
+  const nextDocument = input.document ?? existing?.document;
+  const nextTriggerEvent = resolveEventField(
+    existing?.triggerEvent,
+    input.triggerEvent
+  );
+  const nextEmittedEvents = resolveEventField(
+    existing?.emittedEvents,
+    input.emittedEvents
+  );
+  const nextRelatedTransactionIds = mergeUnique(
+    existing?.relatedTransactionIds,
+    input.relatedTransactionIds
+  );
+  const nextRelatedHoldIds = mergeUnique(
+    existing?.relatedHoldIds,
+    input.relatedHoldIds
+  );
+  const nextAccountNumber = input.accountNumber ?? existing?.accountNumber;
+  const nextUserId = input.userId ?? existing?.userId;
+
+  const summaryInputsChanged =
+    !areJsonValuesEqual(nextDocument, existing?.document) ||
+    nextDocumentId !== existing?.documentId ||
+    nextSessionId !== existing?.sessionId ||
+    status !== existing?.status ||
+    statusUpdatedAt !== existing?.statusUpdatedAt ||
+    !areJsonValuesEqual(nextStatusTimestamps, existing?.statusTimestamps) ||
+    !areJsonValuesEqual(nextTriggerEvent, existing?.triggerEvent) ||
+    !areJsonValuesEqual(nextEmittedEvents, existing?.emittedEvents);
+  const updatedAt =
+    existing?.updatedAt && !summaryInputsChanged
+      ? existing.updatedAt
+      : input.now;
 
   await input.contractRepository.saveContract({
     contractId,
     typeBlueId: supported.typeBlueId,
     displayName: supported.displayName,
     documentName,
-    sessionId: input.sessionId ?? existing?.sessionId,
-    documentId: input.documentId ?? existing?.documentId,
-    document: input.document ?? existing?.document,
+    sessionId: nextSessionId,
+    documentId: nextDocumentId,
+    document: nextDocument,
     status,
     statusUpdatedAt,
-    statusTimestamps: mergeStatusTimestamps(
-      existing?.statusTimestamps,
-      input.statusTimestamps
-    ),
-    triggerEvent: resolveEventField(existing?.triggerEvent, input.triggerEvent),
-    emittedEvents: resolveEventField(
-      existing?.emittedEvents,
-      input.emittedEvents
-    ),
-    relatedTransactionIds: mergeUnique(
-      existing?.relatedTransactionIds,
-      input.relatedTransactionIds
-    ),
-    relatedHoldIds: mergeUnique(existing?.relatedHoldIds, input.relatedHoldIds),
-    accountNumber: input.accountNumber ?? existing?.accountNumber,
-    userId: input.userId ?? existing?.userId,
+    statusTimestamps: nextStatusTimestamps,
+    triggerEvent: nextTriggerEvent,
+    emittedEvents: nextEmittedEvents,
+    relatedTransactionIds: nextRelatedTransactionIds,
+    relatedHoldIds: nextRelatedHoldIds,
+    accountNumber: nextAccountNumber,
+    userId: nextUserId,
     summary: existing?.summary,
     summaryUpdatedAt: existing?.summaryUpdatedAt,
     summarySourceUpdatedAt: existing?.summarySourceUpdatedAt,
+    summaryInputBlueId: existing?.summaryInputBlueId,
     summaryModel: existing?.summaryModel,
     summaryError: existing?.summaryError,
     createdAt: existing?.createdAt ?? input.now,
-    updatedAt: input.now,
+    updatedAt,
   });
 
   return contractId;

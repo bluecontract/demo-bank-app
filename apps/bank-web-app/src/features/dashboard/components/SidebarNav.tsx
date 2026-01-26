@@ -1,6 +1,10 @@
 import { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
-import { useContracts, useContractReviewState } from '../../contracts/hooks';
+import {
+  useContracts,
+  useContractReviewState,
+  useActiveContractSession,
+} from '../../contracts/hooks';
 import { dedupeContracts } from '../../contracts/lib/dedupeContracts';
 import { getContractChangeType } from '../../contracts/lib/contractReview';
 
@@ -80,6 +84,7 @@ const navItems = [
 
 export function SidebarNav() {
   const { reviewedMap } = useContractReviewState();
+  const { activeSessionId } = useActiveContractSession();
   const newContractsQuery = useContracts({ refetchInterval: 15000 });
 
   const newCount = useMemo(() => {
@@ -87,10 +92,13 @@ export function SidebarNav() {
       return 0;
     }
     const deduped = dedupeContracts(newContractsQuery.data);
-    return deduped.filter(contract =>
-      getContractChangeType(contract, reviewedMap)
-    ).length;
-  }, [newContractsQuery.data, reviewedMap]);
+    return deduped.filter(contract => {
+      if (activeSessionId && contract.sessionId === activeSessionId) {
+        return false;
+      }
+      return Boolean(getContractChangeType(contract, reviewedMap));
+    }).length;
+  }, [activeSessionId, newContractsQuery.data, reviewedMap]);
 
   return (
     <aside className="hidden lg:flex w-64 flex-col px-6 py-8 border-r border-white/40 bg-white/70 backdrop-blur-xl">

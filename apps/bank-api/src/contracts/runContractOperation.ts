@@ -82,7 +82,6 @@ export const runContractOperationHandler = async (
     await contractRepository.saveContract({
       ...contract,
       sessionId: contract.sessionId ?? sessionId,
-      updatedAt: now,
     });
 
     return {
@@ -229,7 +228,6 @@ export const runContractOperationHandler = async (
     ),
     accountNumber: updatedDelivery.accountNumber ?? contract.accountNumber,
     userId: updatedDelivery.userId ?? contract.userId,
-    updatedAt: now,
   });
 
   return {

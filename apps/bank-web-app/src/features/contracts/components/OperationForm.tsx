@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { blue } from '../../../lib/blue';
 import { Button } from '../../../ui/Button';
 import { Spinner } from '../../../ui/Spinner';
@@ -131,6 +131,8 @@ export function OperationForm({
   const [dictionaryDrafts, setDictionaryDrafts] = useState<
     Record<string, { key: string; value: unknown; error?: string }>
   >({});
+  const previousOperationName = useRef<string | null>(null);
+  const previousIsOpen = useRef(false);
 
   const model = useMemo(() => {
     if (!operation.request) {
@@ -142,20 +144,24 @@ export function OperationForm({
   const hasRequest = Boolean(operation.request && model);
 
   useEffect(() => {
-    if (!isOpen) {
-      return;
+    const didOpen = isOpen && !previousIsOpen.current;
+    const operationChanged = operation.name !== previousOperationName.current;
+
+    if (isOpen && (didOpen || operationChanged)) {
+      if (!model) {
+        setValues({});
+      } else {
+        setValues(createEmptyValue(model));
+      }
+      setErrors({});
+      setBreadcrumbs([]);
+      setDictionaryDrafts({});
+      setPayloadPreview({});
+      setMode(hasRequest ? 'form' : 'confirm');
     }
 
-    if (!model) {
-      setValues({});
-    } else {
-      setValues(createEmptyValue(model));
-    }
-    setErrors({});
-    setBreadcrumbs([]);
-    setDictionaryDrafts({});
-    setPayloadPreview({});
-    setMode(hasRequest ? 'form' : 'confirm');
+    previousIsOpen.current = isOpen;
+    previousOperationName.current = operation.name;
   }, [hasRequest, isOpen, model, operation.name]);
   const isConfirming = mode === 'confirm';
   const isSuccess = mode === 'success';

@@ -434,6 +434,7 @@ export const handlePayNoteDeliveryWebhookEvent = async (
   };
 
   const eventId = input.eventId ?? payload?.id;
+  const eventType = payload?.type;
 
   if (!eventId) {
     log(logs, 'warn', 'Webhook payload missing event id', {
@@ -1128,6 +1129,7 @@ export const handlePayNoteDeliveryWebhookEvent = async (
       document: deliveryRecord.deliveryDocument,
       sessionId,
       documentId: deliveryRecord.deliveryDocumentId ?? deliveryDocumentId,
+      eventType,
       userId: deliveryRecord.userId,
       accountNumber: deliveryRecord.accountNumber,
       triggerEvent: eventObject?.triggeredBy,

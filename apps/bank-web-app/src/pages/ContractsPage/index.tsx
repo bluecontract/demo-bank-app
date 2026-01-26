@@ -12,6 +12,7 @@ import {
   useContracts,
   useContractDetails,
   useContractReviewState,
+  useActiveContractSession,
 } from '../../features/contracts/hooks';
 import type { ContractSummary } from '../../types/api';
 import { dedupeContracts } from '../../features/contracts/lib/dedupeContracts';
@@ -19,6 +20,7 @@ import { dedupeContracts } from '../../features/contracts/lib/dedupeContracts';
 export function ContractsPage() {
   const { user } = useAuth();
   const { markReviewed } = useContractReviewState();
+  const { setActiveSession } = useActiveContractSession();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
   );
@@ -42,6 +44,11 @@ export function ContractsPage() {
       markReviewed(firstWithSession);
     }
   }, [dedupedContracts, markReviewed, selectedSessionId]);
+
+  useEffect(() => {
+    setActiveSession(selectedSessionId);
+    return () => setActiveSession(null);
+  }, [selectedSessionId, setActiveSession]);
 
   const handleSelectContract = (contract: ContractSummary) => {
     if (contract.sessionId) {
