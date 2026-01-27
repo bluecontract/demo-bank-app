@@ -44,7 +44,7 @@ const baseRequest = {
     cvc: '123',
     amountMinor: 1500,
     currency: 'USD',
-    merchant: { name: 'Demo Shop' },
+    merchant: { name: 'Demo Shop', merchantId: 'merchant-123' },
     processorChargeId: 'ch_123',
     description: 'Demo purchase',
   },

@@ -730,6 +730,7 @@ export class DynamoBankingRepository implements BankingRepository {
         cardId: item.cardId,
         cardLast4: item.cardLast4,
         merchantName: item.merchantName,
+        merchantId: item.merchantId,
         merchantStatementDescriptor: item.merchantStatementDescriptor,
         processorChargeId: item.processorChargeId,
       }));
@@ -804,6 +805,7 @@ export class DynamoBankingRepository implements BankingRepository {
         cardId: headerItem.cardId,
         cardLast4: headerItem.cardLast4,
         merchantName: headerItem.merchantName,
+        merchantId: headerItem.merchantId,
         merchantStatementDescriptor: headerItem.merchantStatementDescriptor,
         processorChargeId: headerItem.processorChargeId,
       });

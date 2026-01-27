@@ -20,6 +20,7 @@ export interface TransactionProps {
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
 }
@@ -33,6 +34,7 @@ export interface TransactionMeta {
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
 }
@@ -54,6 +56,7 @@ export class Transaction {
   readonly cardId?: string;
   readonly cardLast4?: string;
   readonly merchantName?: string;
+  readonly merchantId?: string;
   readonly merchantStatementDescriptor?: string;
   readonly processorChargeId?: string;
 
@@ -81,6 +84,7 @@ export class Transaction {
     this.cardId = props.cardId;
     this.cardLast4 = props.cardLast4;
     this.merchantName = props.merchantName;
+    this.merchantId = props.merchantId;
     this.merchantStatementDescriptor = props.merchantStatementDescriptor;
     this.processorChargeId = props.processorChargeId;
 
@@ -134,6 +138,7 @@ export class Transaction {
       cardId: meta.cardId,
       cardLast4: meta.cardLast4,
       merchantName: meta.merchantName,
+      merchantId: meta.merchantId,
       merchantStatementDescriptor: meta.merchantStatementDescriptor,
       processorChargeId: meta.processorChargeId,
     });
@@ -175,6 +180,7 @@ export class Transaction {
       this.cardId !== other.cardId ||
       this.cardLast4 !== other.cardLast4 ||
       this.merchantName !== other.merchantName ||
+      this.merchantId !== other.merchantId ||
       this.merchantStatementDescriptor !== other.merchantStatementDescriptor ||
       this.processorChargeId !== other.processorChargeId ||
       this.postings.length !== other.postings.length

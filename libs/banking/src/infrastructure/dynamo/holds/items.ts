@@ -48,6 +48,7 @@ export interface HoldMetaItem {
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
   cardTransactionDetails?: CardTransactionDetails;
@@ -77,6 +78,7 @@ export interface HoldEventItem {
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
   cardTransactionDetails?: CardTransactionDetails;
@@ -104,6 +106,7 @@ export function buildHoldMetaItem(hold: Hold): HoldMetaItem {
     cardId: hold.cardId,
     cardLast4: hold.cardLast4,
     merchantName: hold.merchantName,
+    merchantId: hold.merchantId,
     merchantStatementDescriptor: hold.merchantStatementDescriptor,
     processorChargeId: hold.processorChargeId,
     cardTransactionDetails: hold.cardTransactionDetails,
@@ -129,6 +132,7 @@ export function mapHoldMetaItemToHold(item: HoldMetaItem): Hold {
     cardId: item.cardId,
     cardLast4: item.cardLast4,
     merchantName: item.merchantName,
+    merchantId: item.merchantId,
     merchantStatementDescriptor: item.merchantStatementDescriptor,
     processorChargeId: item.processorChargeId,
     cardTransactionDetails: item.cardTransactionDetails,
@@ -182,6 +186,7 @@ export function buildHoldEventItem(
     cardId: hold.cardId,
     cardLast4: hold.cardLast4,
     merchantName: hold.merchantName,
+    merchantId: hold.merchantId,
     merchantStatementDescriptor: hold.merchantStatementDescriptor,
     processorChargeId: hold.processorChargeId,
     payload: holdEventPayload(event),

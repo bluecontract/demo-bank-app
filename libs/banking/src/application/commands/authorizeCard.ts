@@ -192,6 +192,7 @@ export async function authorizeCard(
     cardId: card.cardId,
     cardLast4: card.panLast4,
     merchantName: command.merchant.name,
+    merchantId: command.merchant.merchantId,
     merchantStatementDescriptor: command.merchant.statementDescriptor,
     processorChargeId: command.processorChargeId,
     cardTransactionDetails: cardTransactionDetailsGenerator(),
@@ -245,6 +246,7 @@ export async function authorizeCard(
       existing.cardLast4 !== hold.cardLast4 ||
       existing.processorChargeId !== hold.processorChargeId ||
       existing.merchantName !== hold.merchantName ||
+      existing.merchantId !== hold.merchantId ||
       existing.merchantStatementDescriptor !== hold.merchantStatementDescriptor;
 
     if (mismatch) {

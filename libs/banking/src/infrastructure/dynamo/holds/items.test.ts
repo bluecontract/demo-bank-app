@@ -22,6 +22,7 @@ describe('Hold Dynamo item mappers', () => {
     relatedTransactionId: 'txn-789',
     releasedAt: '2024-01-05T00:00:00.000Z',
     releaseReason: 'Cancelled',
+    merchantId: 'merchant-abc',
     payNoteDocumentId: 'doc-123',
   };
 
@@ -44,6 +45,7 @@ describe('Hold Dynamo item mappers', () => {
       relatedTransactionId: 'txn-789',
       releasedAt: '2024-01-05T00:00:00.000Z',
       releaseReason: 'Cancelled',
+      merchantId: 'merchant-abc',
       payNoteDocumentId: 'doc-123',
     });
 

@@ -52,6 +52,7 @@ export interface TransactionSummary {
   cardId?: Transaction['cardId'];
   cardLast4?: Transaction['cardLast4'];
   merchantName?: Transaction['merchantName'];
+  merchantId?: Transaction['merchantId'];
   merchantStatementDescriptor?: Transaction['merchantStatementDescriptor'];
   processorChargeId?: Transaction['processorChargeId'];
 }

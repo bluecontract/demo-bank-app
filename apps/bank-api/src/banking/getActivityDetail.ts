@@ -43,6 +43,7 @@ const mapTransactionDetail = (
   cardId: transaction.cardId,
   cardLast4: transaction.cardLast4,
   merchantName: transaction.merchantName,
+  merchantId: transaction.merchantId,
   merchantStatementDescriptor: transaction.merchantStatementDescriptor,
   processorChargeId: transaction.processorChargeId,
   ...(transaction.payNoteDocumentId
@@ -121,6 +122,7 @@ const mapHoldDetail = (
     cardId: hold.cardId,
     cardLast4: hold.cardLast4,
     merchantName: hold.merchantName,
+    merchantId: hold.merchantId,
     merchantStatementDescriptor: hold.merchantStatementDescriptor,
     processorChargeId: hold.processorChargeId,
     timeline: mapHoldTimeline(events),

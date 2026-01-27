@@ -127,6 +127,7 @@ export const TransactionDto = z.object({
   timestamp: z.string().datetime({ offset: true }),
   description: z.string().optional(),
   counterpartyAccountNumber: z.string(),
+  merchantId: z.string().optional(),
 });
 
 const CardStatusSchema = z.enum(['ACTIVE', 'BLOCKED', 'CLOSED', 'EXPIRED']);
@@ -164,6 +165,7 @@ export const CardListResponseDto = z.object({
 
 export const CardMerchantDto = z.object({
   name: createSanitizedStringSchema(z.string().min(1).max(140)),
+  merchantId: createSanitizedStringSchema(z.string().min(1)),
   statementDescriptor: createSanitizedOptionalStringSchema(
     z.string().max(140).optional()
   ),
@@ -235,6 +237,7 @@ export const ActivityPostedTransactionDto = z.object({
   cardId: z.string().optional(),
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
+  merchantId: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
   processorChargeId: z.string().optional(),
   payNote: ActivityPayNoteReferenceSchema.optional(),
@@ -253,6 +256,7 @@ export const ActivityHoldCreatedDto = z.object({
   cardId: z.string().optional(),
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
+  merchantId: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
   processorChargeId: z.string().optional(),
   payNote: ActivityPayNoteReferenceSchema.optional(),
@@ -269,6 +273,7 @@ export const ActivityHoldReleasedDto = z.object({
   cardId: z.string().optional(),
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
+  merchantId: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
   processorChargeId: z.string().optional(),
   payNote: ActivityPayNoteReferenceSchema.optional(),
@@ -286,6 +291,7 @@ export const ActivityHoldCapturedDto = z.object({
   cardId: z.string().optional(),
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
+  merchantId: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
   processorChargeId: z.string().optional(),
   payNote: ActivityPayNoteReferenceSchema.optional(),
@@ -303,6 +309,7 @@ export const ActivityHoldFailedDto = z.object({
   cardId: z.string().optional(),
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
+  merchantId: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
   processorChargeId: z.string().optional(),
   payNote: ActivityPayNoteReferenceSchema.optional(),
@@ -336,6 +343,7 @@ const ActivityDetailPostedTransactionDto = z.object({
   cardId: z.string().optional(),
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
+  merchantId: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
   processorChargeId: z.string().optional(),
   payNote: ActivityPayNoteReferenceSchema.optional(),
@@ -362,6 +370,7 @@ const ActivityDetailHoldDto = z.object({
   cardId: z.string().optional(),
   cardLast4: z.string().optional(),
   merchantName: z.string().optional(),
+  merchantId: z.string().optional(),
   merchantStatementDescriptor: z.string().optional(),
   processorChargeId: z.string().optional(),
   timeline: z.array(HoldTimelineEventSchema),

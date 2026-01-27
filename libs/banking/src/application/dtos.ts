@@ -40,6 +40,7 @@ export interface TransactionResult {
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
 }

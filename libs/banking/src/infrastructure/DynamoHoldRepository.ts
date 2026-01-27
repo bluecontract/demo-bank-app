@@ -524,6 +524,7 @@ export class DynamoHoldRepository implements HoldRepository {
       cardId: item.cardId,
       cardLast4: item.cardLast4,
       merchantName: item.merchantName,
+      merchantId: item.merchantId,
       merchantStatementDescriptor: item.merchantStatementDescriptor,
       processorChargeId: item.processorChargeId,
       eventId: item.eventId,

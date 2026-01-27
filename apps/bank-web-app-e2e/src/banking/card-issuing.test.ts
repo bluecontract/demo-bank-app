@@ -88,6 +88,7 @@ test.describe('Card Issuing Flow', () => {
     await waitForModalToClose(page, 'issue-card-modal-content');
 
     const processorChargeId = `ch_${Date.now()}`;
+    const merchantId = 'merchant-demo';
     const authResponse = await request.post(
       `${BANK_API_URL}/v1/card-processor/authorizations`,
       {
@@ -106,6 +107,7 @@ test.describe('Card Issuing Flow', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
+            merchantId,
           },
           processorChargeId,
         },

@@ -149,6 +149,56 @@ describe('getTransactionHandler', () => {
     });
   });
 
+  it('should include merchantId when present on the transaction', async () => {
+    const accountId = 'acc-123';
+    const txnId = 'txn-merchant';
+    const mockPosting = {
+      accountId,
+      side: 'DEBIT' as const,
+      amount: {
+        toCents: () => 2500,
+      },
+      counterpartyAccountNumber: '5555555555',
+    };
+
+    const mockTransaction = {
+      id: txnId,
+      type: 'TRANSFER' as const,
+      status: 'POSTED' as const,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+      description: 'Merchant transaction',
+      postings: [mockPosting],
+      merchantId: 'merchant-42',
+    } as unknown as import('@demo-bank-app/banking').Transaction;
+
+    vi.mocked(banking.getTransaction).mockResolvedValueOnce(mockTransaction);
+
+    const result = await getTransactionHandler(
+      {
+        params: { accountId, txnId },
+      },
+      {
+        request: {
+          headers: setAuthHeader(new Headers()),
+        } as unknown as MaybeAuthenticatedTsRestRequestContext,
+      }
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({
+      txnId,
+      type: 'TRANSFER',
+      status: 'POSTED',
+      description: 'Merchant transaction',
+      accountId,
+      side: 'DEBIT',
+      amountMinor: 2500,
+      timestamp: '2024-01-01T00:00:00.000Z',
+      counterpartyAccountNumber: '5555555555',
+      merchantId: 'merchant-42',
+    });
+  });
+
   it('should return 401 if JWT token is missing', async () => {
     await expect(
       getTransactionHandler(

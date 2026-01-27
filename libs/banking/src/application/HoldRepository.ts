@@ -70,6 +70,7 @@ export interface HoldActivityRecord {
   cardId?: Hold['cardId'];
   cardLast4?: Hold['cardLast4'];
   merchantName?: Hold['merchantName'];
+  merchantId?: Hold['merchantId'];
   merchantStatementDescriptor?: Hold['merchantStatementDescriptor'];
   processorChargeId?: Hold['processorChargeId'];
   eventId: string;

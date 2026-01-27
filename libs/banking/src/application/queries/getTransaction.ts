@@ -95,6 +95,7 @@ export async function getTransaction(
       cardId: transaction.cardId,
       cardLast4: transaction.cardLast4,
       merchantName: transaction.merchantName,
+      merchantId: transaction.merchantId,
       merchantStatementDescriptor: transaction.merchantStatementDescriptor,
       processorChargeId: transaction.processorChargeId,
     };

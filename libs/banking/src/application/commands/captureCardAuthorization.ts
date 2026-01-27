@@ -138,6 +138,7 @@ export async function captureCardAuthorization(
       cardId: hold.cardId,
       cardLast4: hold.cardLast4,
       merchantName: hold.merchantName,
+      merchantId: hold.merchantId,
       merchantStatementDescriptor: hold.merchantStatementDescriptor,
       processorChargeId: hold.processorChargeId,
     },

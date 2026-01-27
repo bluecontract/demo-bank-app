@@ -2319,6 +2319,7 @@ describe('Bank API Integration Tests', () => {
 
     it('authorizes and captures card transactions via processor', async () => {
       const processorChargeId = `ch_${crypto.randomUUID()}`;
+      const merchantId = 'merchant-demo';
       const authorizationIdempotency = crypto.randomUUID();
 
       const authResponse = await invokeApi({
@@ -2339,6 +2340,7 @@ describe('Bank API Integration Tests', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
+            merchantId,
           },
           processorChargeId,
         },
@@ -2367,6 +2369,7 @@ describe('Bank API Integration Tests', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
+            merchantId,
           },
           processorChargeId,
         },
@@ -2393,6 +2396,7 @@ describe('Bank API Integration Tests', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
+            merchantId,
           },
           processorChargeId,
         },
@@ -2464,18 +2468,21 @@ describe('Bank API Integration Tests', () => {
           expect.objectContaining({
             kind: 'HOLD_CREATED',
             merchantName: 'Demo Shop',
+            merchantId,
             processorChargeId,
             cardLast4: issuedCard.panLast4,
           }),
           expect.objectContaining({
             kind: 'HOLD_CAPTURED',
             merchantName: 'Demo Shop',
+            merchantId,
             processorChargeId,
             cardLast4: issuedCard.panLast4,
           }),
           expect.objectContaining({
             kind: 'POSTED_TRANSACTION',
             merchantName: 'Demo Shop',
+            merchantId,
             processorChargeId,
             cardLast4: issuedCard.panLast4,
           }),
