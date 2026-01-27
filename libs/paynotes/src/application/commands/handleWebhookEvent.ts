@@ -1094,13 +1094,64 @@ export const handleWebhookEvent = async (
           },
         });
 
-        await deps.bankingFacade.captureHold({
+        const capturedHold = await deps.bankingFacade.captureHold({
           holdId: payNoteDocumentId,
           userId: account.ownerUserId,
           idempotencyKey: payNoteDocumentId,
           counterpartyAccountNumber: payeeAccountNumber,
           payNoteDocumentId,
         });
+
+        const capturedTransactionId = capturedHold.relatedTransactionId;
+        const capturedHoldId = capturedHold.holdId;
+        const shouldUpdateHoldId = !updatedRecord.holdId && capturedHoldId;
+        const shouldUpdateTransactionId =
+          Boolean(capturedTransactionId) &&
+          capturedTransactionId !== updatedRecord.transactionId;
+
+        if (shouldUpdateHoldId || shouldUpdateTransactionId) {
+          if (shouldUpdateHoldId) {
+            updatedRecord.holdId = capturedHoldId;
+          }
+          if (shouldUpdateTransactionId) {
+            updatedRecord.transactionId = capturedTransactionId;
+          }
+          const updatedAt = deps.clock.now().toISOString();
+          updatedRecord.updatedAt = updatedAt;
+          await deps.payNoteRepository.savePayNote(updatedRecord);
+
+          await upsertContractRecord({
+            contractRepository: deps.contractRepository,
+            document: updatedRecord.document,
+            sessionId,
+            documentId: payNoteDocumentId,
+            eventType,
+            userId: updatedRecord.userId,
+            accountNumber: updatedRecord.accountNumber,
+            triggerEvent: eventObject?.triggeredBy,
+            emittedEvents,
+            relatedTransactionIds: updatedRecord.transactionId
+              ? [updatedRecord.transactionId]
+              : undefined,
+            relatedHoldIds: updatedRecord.holdId
+              ? [updatedRecord.holdId]
+              : undefined,
+            status: updatedRecord.transactionId
+              ? 'processed'
+              : updatedRecord.holdId
+              ? 'reserved'
+              : undefined,
+            now: updatedAt,
+          });
+
+          if (deliveryRecord && shouldUpdateTransactionId) {
+            await deps.payNoteDeliveryRepository.saveDelivery({
+              ...deliveryRecord,
+              transactionId: updatedRecord.transactionId,
+              updatedAt,
+            });
+          }
+        }
       } else if (eventType === RESERVE_FUNDS_EVENT_NAME) {
         logs.push({
           level: 'info',

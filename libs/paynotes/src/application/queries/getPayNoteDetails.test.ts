@@ -18,7 +18,9 @@ describe('getPayNoteDetails', () => {
       getAccountByNumber: vi.fn(),
       transferFunds: vi.fn(),
       reserveFunds: vi.fn(),
-      captureHold: vi.fn(),
+      captureHold: vi.fn().mockResolvedValue({
+        holdId: 'hold-1',
+      }),
     };
 
     const payNoteRepository: PayNoteRepository = {

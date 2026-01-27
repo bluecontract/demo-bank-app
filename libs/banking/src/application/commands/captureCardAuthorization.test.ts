@@ -48,6 +48,7 @@ describe('captureCardAuthorization', () => {
         holdId: 'hold-1',
         payerAccountNumber: '1234567890',
         amountMinor: 500,
+        payNoteDocumentId: 'paynote-123',
         currency: 'USD',
         status: 'PENDING',
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -71,6 +72,8 @@ describe('captureCardAuthorization', () => {
     expect(result.status).toBe('CAPTURED');
     expect(result.transactionId).toBe('txn-1');
     expect(holdRepository.captureHold).toHaveBeenCalledTimes(1);
+    const request = vi.mocked(holdRepository.captureHold).mock.calls[0][0];
+    expect(request.transaction.payNoteDocumentId).toBe('paynote-123');
   });
 
   it('partially captures a pending authorization', async () => {

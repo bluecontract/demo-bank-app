@@ -416,6 +416,32 @@ export const bankApiContract = c.router(
         summary: 'Get contract details by session id.',
       },
 
+      listTransactionContracts: {
+        method: 'GET',
+        path: '/v1/transactions/:txnId/contracts',
+        pathParams: z.object({
+          txnId: z.string(),
+        }),
+        responses: {
+          200: ContractListResponseDto,
+          401: ProblemDto,
+        },
+        summary: 'List contracts related to a transaction.',
+      },
+
+      listHoldContracts: {
+        method: 'GET',
+        path: '/v1/holds/:holdId/contracts',
+        pathParams: z.object({
+          holdId: z.string(),
+        }),
+        responses: {
+          200: ContractListResponseDto,
+          401: ProblemDto,
+        },
+        summary: 'List contracts related to a hold.',
+      },
+
       generateContractSummary: {
         method: 'POST',
         path: '/v1/contracts/:sessionId/summary',

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import {
   DashboardHeader,
@@ -20,7 +21,10 @@ import { dedupeContracts } from '../../features/contracts/lib/dedupeContracts';
 export function ContractsPage() {
   const { user } = useAuth();
   const { markReviewed } = useContractReviewState();
-  const { setActiveSession } = useActiveContractSession();
+  const { activeSessionId, setActiveSession } = useActiveContractSession();
+  const [searchParams] = useSearchParams();
+  const requestedSessionId = searchParams.get('sessionId');
+  const lastAppliedRequestedSessionId = useRef<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null
   );
@@ -34,8 +38,35 @@ export function ContractsPage() {
   );
 
   useEffect(() => {
-    if (selectedSessionId || dedupedContracts.length === 0) {
+    if (!requestedSessionId) {
+      lastAppliedRequestedSessionId.current = null;
       return;
+    }
+    if (requestedSessionId === lastAppliedRequestedSessionId.current) {
+      return;
+    }
+    lastAppliedRequestedSessionId.current = requestedSessionId;
+    setSelectedSessionId(requestedSessionId);
+  }, [requestedSessionId]);
+
+  useEffect(() => {
+    if (
+      selectedSessionId ||
+      dedupedContracts.length === 0 ||
+      requestedSessionId
+    ) {
+      return;
+    }
+
+    if (activeSessionId) {
+      const matchingContract = dedupedContracts.find(
+        contract => contract.sessionId === activeSessionId
+      );
+      if (matchingContract?.sessionId) {
+        setSelectedSessionId(matchingContract.sessionId);
+        markReviewed(matchingContract);
+        return;
+      }
     }
 
     const firstWithSession = dedupedContracts.find(item => item.sessionId);
@@ -43,12 +74,23 @@ export function ContractsPage() {
       setSelectedSessionId(firstWithSession.sessionId);
       markReviewed(firstWithSession);
     }
-  }, [dedupedContracts, markReviewed, selectedSessionId]);
+  }, [
+    activeSessionId,
+    dedupedContracts,
+    markReviewed,
+    selectedSessionId,
+    requestedSessionId,
+  ]);
 
   useEffect(() => {
-    setActiveSession(selectedSessionId);
+    if (selectedSessionId && selectedSessionId !== activeSessionId) {
+      setActiveSession(selectedSessionId);
+    }
+  }, [activeSessionId, selectedSessionId, setActiveSession]);
+
+  useEffect(() => {
     return () => setActiveSession(null);
-  }, [selectedSessionId, setActiveSession]);
+  }, [setActiveSession]);
 
   const handleSelectContract = (contract: ContractSummary) => {
     if (contract.sessionId) {

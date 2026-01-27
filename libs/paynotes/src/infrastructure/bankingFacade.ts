@@ -118,7 +118,7 @@ export const createBankingFacade = (
   },
 
   async captureHold(request) {
-    await captureHold(buildCaptureRequest(request), {
+    return captureHold(buildCaptureRequest(request), {
       bankingRepository: deps.bankingRepository,
       holdRepository: deps.holdRepository,
       logger: deps.logger,

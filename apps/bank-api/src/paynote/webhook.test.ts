@@ -65,6 +65,7 @@ describe('payNoteWebhookHandler', () => {
       kind: 'success',
       document: { documentId: 'doc-default', sessionId: 'session-default' },
     });
+    hoistedAdapters.captureHoldMock.mockResolvedValue({ holdId: 'hold-1' });
 
     const myOsClient = {
       getCredentials: vi.fn(),

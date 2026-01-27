@@ -20,6 +20,7 @@ const ENTITY_TYPES = {
   SESSION: 'CONTRACT_SESSION',
   DOCUMENT: 'CONTRACT_DOCUMENT',
   USER: 'CONTRACT_USER',
+  RELATIONSHIP: 'CONTRACT_RELATIONSHIP',
 } as const;
 
 const TABLE_PREFIXES = {
@@ -27,6 +28,8 @@ const TABLE_PREFIXES = {
   SESSION: 'CONTRACT_SESSION#',
   DOCUMENT: 'CONTRACT_DOCUMENT#',
   USER: 'USER#',
+  TRANSACTION: 'TXN#',
+  HOLD: 'HOLD#',
 } as const;
 
 const SORT_KEYS = {
@@ -34,6 +37,7 @@ const SORT_KEYS = {
 } as const;
 
 const USER_SORT_KEY_PREFIX = 'CONTRACT#';
+const RELATIONSHIP_SORT_KEY_PREFIX = 'CONTRACT#';
 
 type DynamoContractRepositoryConfig = {
   tableName: string;
@@ -104,6 +108,22 @@ interface ContractUserItem {
   updatedAt: string;
 }
 
+interface ContractRelationshipItem {
+  PK: string;
+  SK: string;
+  entityType: typeof ENTITY_TYPES.RELATIONSHIP;
+  contractId: string;
+  typeBlueId: string;
+  displayName: string;
+  documentName?: string;
+  sessionId?: string;
+  documentId?: string;
+  status?: string;
+  userId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class DynamoContractRepository implements ContractRepository {
   private readonly tableName: string;
   private readonly client: DynamoDBDocumentClient;
@@ -137,6 +157,18 @@ export class DynamoContractRepository implements ContractRepository {
 
   private buildUserSk(contractId: string) {
     return `${USER_SORT_KEY_PREFIX}${contractId}`;
+  }
+
+  private buildTransactionPk(transactionId: string) {
+    return `${TABLE_PREFIXES.TRANSACTION}${transactionId}`;
+  }
+
+  private buildHoldPk(holdId: string) {
+    return `${TABLE_PREFIXES.HOLD}${holdId}`;
+  }
+
+  private buildRelationshipSk(contractId: string) {
+    return `${RELATIONSHIP_SORT_KEY_PREFIX}${contractId}`;
   }
 
   private mapItemToRecord(item: ContractItem): ContractRecord {
@@ -324,6 +356,45 @@ export class DynamoContractRepository implements ContractRepository {
       );
     }
 
+    const relationshipItems: ContractRelationshipItem[] = [];
+    const buildRelationshipItem = (pk: string): ContractRelationshipItem => ({
+      PK: pk,
+      SK: this.buildRelationshipSk(record.contractId),
+      entityType: ENTITY_TYPES.RELATIONSHIP,
+      contractId: record.contractId,
+      typeBlueId: record.typeBlueId,
+      displayName: record.displayName,
+      documentName: record.documentName,
+      sessionId: record.sessionId,
+      documentId: record.documentId,
+      status: record.status,
+      userId: record.userId,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    });
+
+    if (record.relatedTransactionIds?.length) {
+      record.relatedTransactionIds.forEach(transactionId => {
+        relationshipItems.push(
+          buildRelationshipItem(this.buildTransactionPk(transactionId))
+        );
+      });
+    }
+
+    if (record.relatedHoldIds?.length) {
+      record.relatedHoldIds.forEach(holdId => {
+        relationshipItems.push(buildRelationshipItem(this.buildHoldPk(holdId)));
+      });
+    }
+
+    relationshipItems.forEach(item => {
+      writes.push(
+        this.client.send(
+          new PutCommand({ TableName: this.tableName, Item: item })
+        )
+      );
+    });
+
     if (writes.length) {
       await Promise.all(writes);
     }
@@ -456,6 +527,84 @@ export class DynamoContractRepository implements ContractRepository {
       : items;
 
     return filtered
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map(item => ({
+        contractId: item.contractId,
+        typeBlueId: item.typeBlueId,
+        displayName: item.displayName,
+        documentName: item.documentName,
+        sessionId: item.sessionId,
+        documentId: item.documentId,
+        status: item.status,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }));
+  }
+
+  async listContractsByTransactionId(
+    transactionId: string,
+    options?: { userId?: string }
+  ): Promise<ContractSummary[]> {
+    const query = await this.client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
+        ...(options?.userId ? { FilterExpression: '#userId = :userId' } : {}),
+        ExpressionAttributeNames: {
+          '#pk': 'PK',
+          '#sk': 'SK',
+          ...(options?.userId ? { '#userId': 'userId' } : {}),
+        },
+        ExpressionAttributeValues: {
+          ':pk': this.buildTransactionPk(transactionId),
+          ':skPrefix': RELATIONSHIP_SORT_KEY_PREFIX,
+          ...(options?.userId ? { ':userId': options.userId } : {}),
+        },
+      })
+    );
+
+    const items = (query.Items ?? []) as ContractRelationshipItem[];
+
+    return items
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .map(item => ({
+        contractId: item.contractId,
+        typeBlueId: item.typeBlueId,
+        displayName: item.displayName,
+        documentName: item.documentName,
+        sessionId: item.sessionId,
+        documentId: item.documentId,
+        status: item.status,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      }));
+  }
+
+  async listContractsByHoldId(
+    holdId: string,
+    options?: { userId?: string }
+  ): Promise<ContractSummary[]> {
+    const query = await this.client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
+        ...(options?.userId ? { FilterExpression: '#userId = :userId' } : {}),
+        ExpressionAttributeNames: {
+          '#pk': 'PK',
+          '#sk': 'SK',
+          ...(options?.userId ? { '#userId': 'userId' } : {}),
+        },
+        ExpressionAttributeValues: {
+          ':pk': this.buildHoldPk(holdId),
+          ':skPrefix': RELATIONSHIP_SORT_KEY_PREFIX,
+          ...(options?.userId ? { ':userId': options.userId } : {}),
+        },
+      })
+    );
+
+    const items = (query.Items ?? []) as ContractRelationshipItem[];
+
+    return items
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .map(item => ({
         contractId: item.contractId,

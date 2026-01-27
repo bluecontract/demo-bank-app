@@ -1,7 +1,10 @@
 import { ActivityDetail } from '../hooks/useActivityDetail';
+import type { ContractSummary } from '../../../types/api';
 import { Card } from '../../../ui/Card';
 import { formatCurrency } from '../../../lib/formatCurrency';
 import { formatAccountNumber } from '../../../lib/formatAccountNumber';
+import { Spinner } from '../../../ui/Spinner';
+import { useActiveContractSession } from '../../contracts/hooks';
 
 type Account = {
   accountId: string;
@@ -22,6 +25,9 @@ interface TransactionDetailsProps {
   'data-testid'?: string;
   showPayNoteHelper?: boolean;
   onViewPayNoteDetails?: () => void;
+  relatedContracts?: ContractSummary[] | null;
+  isRelatedContractsLoading?: boolean;
+  relatedContractsError?: string;
 }
 
 export function TransactionDetails({
@@ -32,7 +38,11 @@ export function TransactionDetails({
   'data-testid': testId,
   showPayNoteHelper = false,
   onViewPayNoteDetails,
+  relatedContracts,
+  isRelatedContractsLoading = false,
+  relatedContractsError,
 }: TransactionDetailsProps) {
+  const { setActiveSession } = useActiveContractSession();
   const getTransactionDirection = () => {
     return transaction.side === 'CREDIT' ? 'Incoming' : 'Outgoing';
   };
@@ -110,6 +120,35 @@ export function TransactionDetails({
 
   const getDisplayStatus = (status: string) => {
     return status.toLowerCase() === 'posted' ? 'Completed' : status;
+  };
+
+  const relatedContractsList = relatedContracts ?? [];
+
+  const formatContractStatus = (value?: string) => {
+    if (!value) return 'Unknown';
+    return value
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, char => char.toUpperCase());
+  };
+
+  const contractStatusStyles: Record<string, string> = {
+    accepted: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+    rejected: 'bg-rose-50 text-rose-700 border border-rose-100',
+    pending: 'bg-amber-50 text-amber-700 border border-amber-100',
+    bootstrapped: 'bg-sky-50 text-sky-700 border border-sky-100',
+  };
+
+  const handleContractClick = (contract: ContractSummary) => {
+    if (!contract.sessionId) {
+      return;
+    }
+    setActiveSession(contract.sessionId);
+    if (typeof window !== 'undefined') {
+      const target = `/contracts?sessionId=${encodeURIComponent(
+        contract.sessionId
+      )}`;
+      window.location.assign(target);
+    }
   };
 
   const detailRows: Array<{ label: string; value: string }> = [
@@ -268,6 +307,83 @@ export function TransactionDetails({
             </div>
           </div>
         )}
+
+        <div className="px-4 py-3 border-t border-slate-200">
+          <h3 className="text-sm font-medium text-slate-900 mb-2">
+            Related contracts
+          </h3>
+
+          {isRelatedContractsLoading && (
+            <div className="flex items-center justify-center py-4">
+              <Spinner size="md" color="green" />
+            </div>
+          )}
+
+          {!isRelatedContractsLoading && relatedContractsError && (
+            <div className="rounded-xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-600">
+              {relatedContractsError}
+            </div>
+          )}
+
+          {!isRelatedContractsLoading &&
+            !relatedContractsError &&
+            relatedContractsList.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm text-slate-500">
+                No related contracts found.
+              </div>
+            )}
+
+          {!isRelatedContractsLoading &&
+            !relatedContractsError &&
+            relatedContractsList.length > 0 && (
+              <div className="space-y-2">
+                {relatedContractsList.map(contract => {
+                  const isSelectable = Boolean(contract.sessionId);
+                  const primaryName =
+                    contract.documentName?.trim() || contract.displayName;
+                  const statusKey = contract.status?.toLowerCase() ?? '';
+                  const statusStyle =
+                    contractStatusStyles[statusKey] ??
+                    'bg-slate-100 text-slate-700 border border-slate-200';
+
+                  return (
+                    <button
+                      key={contract.contractId}
+                      type="button"
+                      className={`w-full text-left rounded-xl border p-3 shadow-sm transition ${
+                        isSelectable
+                          ? 'border-slate-200 bg-white/80 hover:border-emerald-200 hover:shadow-md'
+                          : 'border-slate-200 bg-white/50 opacity-60 cursor-not-allowed'
+                      }`}
+                      onClick={() => {
+                        if (!isSelectable) {
+                          return;
+                        }
+                        handleContractClick(contract);
+                      }}
+                      disabled={!isSelectable}
+                    >
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold text-slate-900 truncate">
+                          {primaryName}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="app-chip app-chip-neutral">
+                            {contract.displayName}
+                          </span>
+                          <span
+                            className={`text-xs font-semibold px-2 py-1 rounded-full ${statusStyle}`}
+                          >
+                            {formatContractStatus(contract.status)}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+        </div>
 
         {showPayNoteHelper && (
           <div className="px-4 py-3 border-t border-slate-200">

@@ -116,6 +116,7 @@ The existing PayNote flow in the bank already follows this pattern for PayNote. 
 - Webhook deliveries may be duplicated; bank-side processing must be idempotent by MyOS event id.
 - Bank calls into voucher for reporting may be duplicated; voucher must dedupe by `transactionId`.
 - Bootstrap webhook events must not be “consumed” by the wrong handler (see below).
+- Contract ↔ transaction/hold relationships are append-only in v1. If a future flow allows shrinking related ids, the reverse index (TXN#/HOLD# → CONTRACT#) must delete orphaned links to avoid stale related-contract UI.
 
 ## Key Design Tension: Bootstrap Webhook Idempotency Across Multiple Contract Types
 

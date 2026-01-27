@@ -229,4 +229,36 @@ describe('TransactionDetails', () => {
     expect(screen.getByText('ch_123')).toBeInTheDocument();
     expect(screen.getByText('hold-123')).toBeInTheDocument();
   });
+
+  it('should show empty related contracts state by default', () => {
+    render(<TransactionDetails {...defaultProps} />);
+
+    expect(screen.getByText('Related contracts')).toBeInTheDocument();
+    expect(screen.getByText('No related contracts found.')).toBeInTheDocument();
+  });
+
+  it('should render related contracts list when provided', () => {
+    render(
+      <TransactionDetails
+        {...defaultProps}
+        relatedContracts={[
+          {
+            contractId: 'contract-1',
+            typeBlueId: 'type-1',
+            displayName: 'PayNote Voucher',
+            sessionId: 'session-1',
+            status: 'accepted',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-02T12:00:00.000Z',
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getAllByText('PayNote Voucher')).toHaveLength(2);
+    expect(screen.getByText('Accepted')).toBeInTheDocument();
+    expect(
+      screen.queryByText('No related contracts found.')
+    ).not.toBeInTheDocument();
+  });
 });

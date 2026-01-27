@@ -3,6 +3,8 @@ import { TransactionDetails } from './TransactionDetails';
 import { HoldDetails } from './HoldDetails';
 import { useActivityDetail, ActivityDetail } from '../hooks/useActivityDetail';
 import { useTransaction } from '../hooks/useTransaction';
+import { useTransactionContracts } from '../hooks/useTransactionContracts';
+import { useHoldContracts } from '../hooks/useHoldContracts';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
 import { Spinner } from '../../../ui/Spinner';
 import { Button } from '../../../ui/Button';
@@ -116,7 +118,35 @@ export function TransactionDetailsModal({
       ? activityDetail
       : fallbackActivityDetail;
 
+  const {
+    data: relatedContracts,
+    isLoading: isRelatedContractsLoading,
+    isError: isRelatedContractsError,
+    error: relatedContractsError,
+  } = useTransactionContracts({
+    transactionId: resolvedTransaction?.transactionId ?? null,
+    enabled: isOpen && !!resolvedTransaction,
+  });
+
+  const relatedContractsErrorMessage =
+    isRelatedContractsError && relatedContractsError instanceof Error
+      ? relatedContractsError.message
+      : undefined;
+
   const holdDetail = activityDetail?.kind === 'HOLD' ? activityDetail : null;
+  const {
+    data: relatedHoldContracts,
+    isLoading: isHoldContractsLoading,
+    isError: isHoldContractsError,
+    error: holdContractsError,
+  } = useHoldContracts({
+    holdId: holdDetail?.holdId ?? null,
+    enabled: isOpen && !!holdDetail,
+  });
+  const holdContractsErrorMessage =
+    isHoldContractsError && holdContractsError instanceof Error
+      ? holdContractsError.message
+      : undefined;
   const holdTimelinePayNoteDocumentId = useMemo(() => {
     if (!holdDetail?.timeline) {
       return null;
@@ -396,6 +426,9 @@ export function TransactionDetailsModal({
               data-testid="modal-transaction-details"
               showPayNoteHelper={transactionHasPayNote}
               onViewPayNoteDetails={handleShowPayNoteDetails}
+              relatedContracts={relatedContracts ?? []}
+              isRelatedContractsLoading={isRelatedContractsLoading}
+              relatedContractsError={relatedContractsErrorMessage}
             />
           )}
 
@@ -409,6 +442,9 @@ export function TransactionDetailsModal({
               data-testid="modal-hold-details"
               showPayNoteHelper={holdHasPayNote}
               onViewPayNoteDetails={handleShowPayNoteDetails}
+              relatedContracts={relatedHoldContracts ?? []}
+              isRelatedContractsLoading={isHoldContractsLoading}
+              relatedContractsError={holdContractsErrorMessage}
             />
           )}
 

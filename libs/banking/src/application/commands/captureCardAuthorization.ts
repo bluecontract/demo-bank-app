@@ -144,6 +144,7 @@ export async function captureCardAuthorization(
       description: hold.description ?? 'Card purchase capture',
       createdAt: capturedAt,
       originHoldId: hold.holdId,
+      payNoteDocumentId: hold.payNoteDocumentId,
       cardId: hold.cardId,
       cardLast4: hold.cardLast4,
       merchantName: hold.merchantName,

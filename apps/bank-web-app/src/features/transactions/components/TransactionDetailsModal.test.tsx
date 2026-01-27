@@ -7,6 +7,8 @@ const useActivityDetailMock = vi.hoisted(() => vi.fn());
 const useAccountsMock = vi.hoisted(() => vi.fn());
 const useTransactionMock = vi.hoisted(() => vi.fn());
 const usePayNoteDetailsMock = vi.hoisted(() => vi.fn());
+const useTransactionContractsMock = vi.hoisted(() => vi.fn());
+const useHoldContractsMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../hooks/useActivityDetail', () => ({
   useActivityDetail: useActivityDetailMock,
@@ -22,6 +24,14 @@ vi.mock('../../accounts/hooks/useAccounts', () => ({
 
 vi.mock('../hooks/usePayNoteDetails', () => ({
   usePayNoteDetails: usePayNoteDetailsMock,
+}));
+
+vi.mock('../hooks/useTransactionContracts', () => ({
+  useTransactionContracts: useTransactionContractsMock,
+}));
+
+vi.mock('../hooks/useHoldContracts', () => ({
+  useHoldContracts: useHoldContractsMock,
 }));
 
 describe('TransactionDetailsModal', () => {
@@ -81,9 +91,22 @@ describe('TransactionDetailsModal', () => {
     useActivityDetailMock.mockReset();
     useTransactionMock.mockReset();
     usePayNoteDetailsMock.mockReset();
+    useTransactionContractsMock.mockReset();
     defaultProps.onClose.mockClear();
     useTransactionMock.mockReturnValue({
       data: undefined,
+      isLoading: false,
+      isError: false,
+      error: undefined,
+    });
+    useTransactionContractsMock.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      error: undefined,
+    });
+    useHoldContractsMock.mockReturnValue({
+      data: [],
       isLoading: false,
       isError: false,
       error: undefined,

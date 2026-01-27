@@ -174,6 +174,8 @@ Add reverse index items for query efficiency:
 - `TXN#<transactionId> -> CONTRACT#<contractId>`
 - `HOLD#<holdId> -> CONTRACT#<contractId>`
 
+Note: V1 writes relationship rows as append-only. If `relatedTransactionIds` or `relatedHoldIds` can be removed in the future, add a diff+delete step to remove stale TXN#/HOLD# relationship items.
+
 ## Bank API Changes
 
 ### Auth / Signup

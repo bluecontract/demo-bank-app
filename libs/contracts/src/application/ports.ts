@@ -78,4 +78,12 @@ export interface ContractRepository {
     userId: string,
     options?: { updatedSince?: string }
   ): Promise<ContractSummary[]>;
+  listContractsByTransactionId(
+    transactionId: string,
+    options?: { userId?: string }
+  ): Promise<ContractSummary[]>;
+  listContractsByHoldId(
+    holdId: string,
+    options?: { userId?: string }
+  ): Promise<ContractSummary[]>;
 }

@@ -48,7 +48,9 @@ const createDependencies = () => {
     getAccountForUser: vi.fn(),
     transferFunds: vi.fn(),
     reserveFunds: vi.fn(),
-    captureHold: vi.fn(),
+    captureHold: vi.fn().mockResolvedValue({
+      holdId: 'hold-1',
+    }),
   };
 
   const payNoteRepository: HandleWebhookEventDependencies['payNoteRepository'] =
@@ -86,6 +88,8 @@ const createDependencies = () => {
       saveContract: vi.fn(),
       updateContractSummary: vi.fn(),
       listContractsByUserId: vi.fn(),
+      listContractsByTransactionId: vi.fn(),
+      listContractsByHoldId: vi.fn(),
     };
 
   const clock = { now: () => new Date('2024-01-01T00:00:00.000Z') };
@@ -156,6 +160,54 @@ describe('handleWebhookEvent', () => {
       expect.objectContaining({
         payNoteDocumentId: 'doc-1',
         payerAccountNumber: '1234567890',
+      })
+    );
+  });
+
+  it('adds transaction relationship after capture hold succeeds', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+          },
+          emitted: [
+            {
+              type: { name: 'PayNote/Capture Funds Requested' },
+              amount: { value: 1200 },
+            },
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    deps.bankingFacade.captureHold = vi.fn().mockResolvedValue({
+      holdId: 'doc-1',
+      relatedTransactionId: 'txn-1',
+    } as any);
+
+    await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(deps.contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relatedTransactionIds: ['txn-1'],
       })
     );
   });

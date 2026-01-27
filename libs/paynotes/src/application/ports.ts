@@ -291,7 +291,7 @@ export interface BankingFacade {
   /**
    * Captures a previously reserved hold.
    */
-  captureHold(request: CaptureHoldRequest): Promise<void>;
+  captureHold(request: CaptureHoldRequest): Promise<Hold>;
 }
 
 export interface ClockPort {
@@ -319,4 +319,4 @@ export interface PayNoteValidationProvider {
     explanation: string;
   }>;
 }
-import type { CardTransactionDetails } from '@demo-bank-app/banking';
+import type { CardTransactionDetails, Hold } from '@demo-bank-app/banking';

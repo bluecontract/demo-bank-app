@@ -12,6 +12,16 @@ import { getDependencies } from './dependencies';
 import { requireProcessorAuth } from '../auth/processorAuth';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 
+const mergeUnique = (existing?: string[], incoming?: string[]) => {
+  const set = new Set<string>(existing ?? []);
+  (incoming ?? []).forEach(value => {
+    if (value) {
+      set.add(value);
+    }
+  });
+  return set.size ? Array.from(set) : undefined;
+};
+
 export const captureCardAuthorizationHandler = async (
   request: ServerInferRequest<
     (typeof bankApiContract)['banking']['captureCardAuthorization']
@@ -20,7 +30,7 @@ export const captureCardAuthorizationHandler = async (
     request: { headers: Headers };
   }
 ) => {
-  const { repository, holdRepository, logger, config } =
+  const { repository, holdRepository, contractRepository, logger, config } =
     await getDependencies();
 
   requireProcessorAuth(context.request, config.cardConfig.cardProcessorToken);
@@ -58,6 +68,44 @@ export const captureCardAuthorizationHandler = async (
       authorizationId: result.holdId,
       transactionId: result.transactionId,
     });
+
+    try {
+      const relatedContracts = await contractRepository.listContractsByHoldId(
+        result.holdId
+      );
+      if (relatedContracts.length) {
+        const now = new Date().toISOString();
+        await Promise.all(
+          relatedContracts.map(async contractSummary => {
+            const contract = await contractRepository.getContract(
+              contractSummary.contractId
+            );
+            if (!contract) {
+              return;
+            }
+            if (
+              contract.relatedTransactionIds?.includes(result.transactionId)
+            ) {
+              return;
+            }
+            await contractRepository.saveContract({
+              ...contract,
+              relatedTransactionIds: mergeUnique(
+                contract.relatedTransactionIds,
+                [result.transactionId]
+              ),
+              updatedAt: now,
+            });
+          })
+        );
+      }
+    } catch (error) {
+      logger.warn('Failed to link captured transaction to contracts', {
+        holdId: result.holdId,
+        transactionId: result.transactionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return {
       status: 200 as const,
