@@ -9,6 +9,7 @@ import {
 import {
   AccountCreationModal,
   AccountsSection,
+  CreditLimitModal,
 } from '../../features/accounts/components';
 import { FundModal, TransactionHistory } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
@@ -31,6 +32,18 @@ export function DashboardPage() {
     isOpen: false,
     sourceAccount: null,
   });
+  const [creditLimitModal, setCreditLimitModal] = useState<{
+    isOpen: boolean;
+    sourceAccount: Account | null;
+  }>({
+    isOpen: false,
+    sourceAccount: null,
+  });
+
+  const depositAccounts =
+    accounts?.filter(account => account.accountType !== 'CREDIT_LINE') ?? [];
+  const creditLineAccounts =
+    accounts?.filter(account => account.accountType === 'CREDIT_LINE') ?? [];
 
   const handleCreateAccount = () => {
     setAccountCreationModal({ isOpen: true });
@@ -45,7 +58,7 @@ export function DashboardPage() {
   };
 
   const handleFund = (accountId: string) => {
-    const account = accounts?.find(acc => acc.accountId === accountId);
+    const account = depositAccounts.find(acc => acc.accountId === accountId);
     if (account) {
       setFundModal({
         isOpen: true,
@@ -56,6 +69,23 @@ export function DashboardPage() {
 
   const closeFundModal = () => {
     setFundModal({
+      isOpen: false,
+      sourceAccount: null,
+    });
+  };
+
+  const handleEditCreditLimit = (accountId: string) => {
+    const account = creditLineAccounts.find(acc => acc.accountId === accountId);
+    if (account) {
+      setCreditLimitModal({
+        isOpen: true,
+        sourceAccount: account,
+      });
+    }
+  };
+
+  const closeCreditLimitModal = () => {
+    setCreditLimitModal({
       isOpen: false,
       sourceAccount: null,
     });
@@ -101,6 +131,7 @@ export function DashboardPage() {
               onCreateAccount={handleCreateAccount}
               onTransfer={handleTransfer}
               onFund={handleFund}
+              onEditCreditLimit={handleEditCreditLimit}
             />
 
             <section className="flex-1 min-h-0">
@@ -120,8 +151,15 @@ export function DashboardPage() {
       <FundModal
         isOpen={fundModal.isOpen}
         onClose={closeFundModal}
-        accounts={accounts || []}
+        accounts={depositAccounts}
         defaultAccountId={fundModal.sourceAccount?.accountId}
+      />
+
+      <CreditLimitModal
+        isOpen={creditLimitModal.isOpen}
+        onClose={closeCreditLimitModal}
+        accounts={creditLineAccounts}
+        defaultAccountId={creditLimitModal.sourceAccount?.accountId}
       />
     </SelectedAccountProvider>
   );

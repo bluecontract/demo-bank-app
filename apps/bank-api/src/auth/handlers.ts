@@ -5,10 +5,12 @@ import {
   UserNotFoundError,
   UserAlreadyExistsError,
 } from '@demo-bank-app/auth';
+import { createAccount } from '@demo-bank-app/banking';
 
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 
 import { getDependencies } from './dependencies';
+import { getDependencies as getBankingDependencies } from '../banking/dependencies';
 import { ServerInferRequest } from '@ts-rest/core';
 import { toUnauthorizedResponse } from '../shared/errors';
 import { toUserAlreadyExistsError } from './errors';
@@ -47,6 +49,37 @@ const toAuthResponse = (
   };
 };
 
+const ensureMerchantCreditLineAccount = async (user: AuthResult['user']) => {
+  const bankingDeps = await getBankingDependencies();
+  const { repository, accountNumberGenerator, logger, metrics, config } =
+    bankingDeps;
+
+  const accounts = await repository.getAccountsByUserId(user.id);
+  const hasCreditLine = accounts.some(
+    account => account.accountType === 'CREDIT_LINE'
+  );
+
+  if (hasCreditLine) {
+    return;
+  }
+
+  await createAccount(
+    {
+      ownerId: user.id,
+      name: 'Merchant Credit Line',
+      isTest: user.isTest,
+      accountType: 'CREDIT_LINE',
+      creditLimitMinor: config.defaultMerchantCreditLimitMinor,
+    },
+    {
+      repository,
+      accountNumberGenerator,
+      logger,
+      metrics,
+    }
+  );
+};
+
 export const signUpHandler = async (
   { body, query }: ServerInferRequest<(typeof bankApiContract)['signUp']>,
   { responseHeaders }: { responseHeaders: Headers }
@@ -64,10 +97,19 @@ export const signUpHandler = async (
       },
       deps
     );
+
+    if (body.merchantId) {
+      await ensureMerchantCreditLineAccount(result.user);
+    }
     return toAuthResponse(201, result, config, responseHeaders);
   } catch (error: unknown) {
     logger.error('Sign-up failed', { error: String(error) });
     if (error instanceof UserAlreadyExistsError) {
+      if (body.merchantId) {
+        const result = await signIn({ email: body.email }, deps);
+        await ensureMerchantCreditLineAccount(result.user);
+        return toAuthResponse(201, result, config, responseHeaders);
+      }
       return toUserAlreadyExistsError(
         'A user with this email already exists. Please use a different email.'
       );

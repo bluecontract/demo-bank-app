@@ -2,24 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { AccountCard } from './AccountCard';
 import { AddAccountCard } from './AddAccountCard';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
-
-// Define Account type based on API contract
-type Account = {
-  accountId: string;
-  accountNumber: string;
-  name: string;
-  currency: 'USD';
-  createdAt: string;
-  ledgerBalanceMinor: number;
-  availableBalanceMinor: number;
-  status: string;
-};
+import type { Account } from '../../../types/api';
 
 interface HorizontalAccountsListProps {
   accounts: Account[];
   onCreateAccount: () => void;
   onTransfer: (accountId: string) => void;
   onFund?: (accountId: string) => void;
+  onEditCreditLimit?: (accountId: string) => void;
   isCreatingAccount?: boolean;
   'data-testid'?: string;
 }
@@ -29,6 +19,7 @@ export function HorizontalAccountsList({
   onCreateAccount,
   onTransfer,
   onFund,
+  onEditCreditLimit,
   isCreatingAccount = false,
   'data-testid': testId,
 }: HorizontalAccountsListProps) {
@@ -154,6 +145,7 @@ export function HorizontalAccountsList({
               onDetailsClick={handleAccountDetails}
               onTransferClick={onTransfer}
               onFundClick={onFund}
+              onEditCreditLimitClick={onEditCreditLimit}
             />
           </div>
         ))}

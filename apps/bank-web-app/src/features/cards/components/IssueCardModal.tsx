@@ -129,6 +129,7 @@ export function IssueCardModal({
                 <Button
                   variant="secondary"
                   size="sm"
+                  type="button"
                   onClick={handleClose}
                   disabled={issueCard.isPending}
                 >
@@ -137,6 +138,7 @@ export function IssueCardModal({
                 <Button
                   variant="primary"
                   size="sm"
+                  type="submit"
                   disabled={issueCard.isPending}
                 >
                   {issueCard.isPending ? 'Issuing...' : 'Issue Card'}

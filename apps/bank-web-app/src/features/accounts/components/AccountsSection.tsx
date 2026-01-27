@@ -6,6 +6,7 @@ interface AccountsSectionProps {
   onCreateAccount: () => void;
   onTransfer: (accountId: string) => void;
   onFund?: (accountId: string) => void;
+  onEditCreditLimit?: (accountId: string) => void;
   isCreatingAccount?: boolean;
 }
 
@@ -14,6 +15,7 @@ export function AccountsSection({
   onCreateAccount,
   onTransfer,
   onFund,
+  onEditCreditLimit,
   isCreatingAccount = false,
 }: AccountsSectionProps) {
   return (
@@ -39,6 +41,7 @@ export function AccountsSection({
         onCreateAccount={onCreateAccount}
         onTransfer={onTransfer}
         onFund={onFund}
+        onEditCreditLimit={onEditCreditLimit}
         isCreatingAccount={isCreatingAccount}
       />
     </section>

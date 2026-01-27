@@ -7,6 +7,7 @@ import {
 import {
   AccountDto,
   CreateAccountRequestDto,
+  SetCreditLimitRequestDto,
   FundingReqDto,
   ProblemDto,
   TransferResponseDto,
@@ -152,6 +153,21 @@ export const bankApiContract = c.router(
         pathParams: z.object({ accountId: z.string().uuid() }),
         responses: { 200: AccountDto, 404: ProblemDto },
         summary: 'Get a bank account by ID',
+      },
+
+      setCreditLimit: {
+        method: 'POST',
+        path: '/v1/accounts/:accountId/credit-limit',
+        pathParams: z.object({ accountId: z.string().uuid() }),
+        body: SetCreditLimitRequestDto,
+        responses: {
+          200: AccountDto,
+          400: ProblemDto,
+          403: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Update credit limit for a credit line account',
       },
 
       listCards: {

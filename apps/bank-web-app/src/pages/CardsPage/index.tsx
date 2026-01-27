@@ -9,6 +9,7 @@ import {
 import {
   AccountCreationModal,
   AccountsSection,
+  CreditLimitModal,
 } from '../../features/accounts/components';
 import { FundModal } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
@@ -38,6 +39,18 @@ export function CardsPage() {
     isOpen: false,
     sourceAccount: null,
   });
+  const [creditLimitModal, setCreditLimitModal] = useState<{
+    isOpen: boolean;
+    sourceAccount: Account | null;
+  }>({
+    isOpen: false,
+    sourceAccount: null,
+  });
+
+  const depositAccounts =
+    accounts?.filter(account => account.accountType !== 'CREDIT_LINE') ?? [];
+  const creditLineAccounts =
+    accounts?.filter(account => account.accountType === 'CREDIT_LINE') ?? [];
 
   const handleCreateAccount = () => {
     setAccountCreationModal({ isOpen: true });
@@ -52,7 +65,7 @@ export function CardsPage() {
   };
 
   const handleFund = (accountId: string) => {
-    const account = accounts?.find(acc => acc.accountId === accountId);
+    const account = depositAccounts.find(acc => acc.accountId === accountId);
     if (account) {
       setFundModal({
         isOpen: true,
@@ -63,6 +76,23 @@ export function CardsPage() {
 
   const closeFundModal = () => {
     setFundModal({
+      isOpen: false,
+      sourceAccount: null,
+    });
+  };
+
+  const handleEditCreditLimit = (accountId: string) => {
+    const account = creditLineAccounts.find(acc => acc.accountId === accountId);
+    if (account) {
+      setCreditLimitModal({
+        isOpen: true,
+        sourceAccount: account,
+      });
+    }
+  };
+
+  const closeCreditLimitModal = () => {
+    setCreditLimitModal({
       isOpen: false,
       sourceAccount: null,
     });
@@ -112,6 +142,7 @@ export function CardsPage() {
               onCreateAccount={handleCreateAccount}
               onTransfer={handleTransfer}
               onFund={handleFund}
+              onEditCreditLimit={handleEditCreditLimit}
             />
 
             <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] min-h-0">
@@ -145,8 +176,15 @@ export function CardsPage() {
       <FundModal
         isOpen={fundModal.isOpen}
         onClose={closeFundModal}
-        accounts={accounts || []}
+        accounts={depositAccounts}
         defaultAccountId={fundModal.sourceAccount?.accountId}
+      />
+
+      <CreditLimitModal
+        isOpen={creditLimitModal.isOpen}
+        onClose={closeCreditLimitModal}
+        accounts={creditLineAccounts}
+        defaultAccountId={creditLimitModal.sourceAccount?.accountId}
       />
     </SelectedAccountProvider>
   );

@@ -10,6 +10,7 @@ interface AccountCardProps {
   onDetailsClick?: (accountId: string) => void;
   onTransferClick?: (accountId: string) => void;
   onFundClick?: (accountId: string) => void;
+  onEditCreditLimitClick?: (accountId: string) => void;
 }
 
 export function AccountCard({
@@ -18,7 +19,10 @@ export function AccountCard({
   onDetailsClick,
   onTransferClick,
   onFundClick,
+  onEditCreditLimitClick,
 }: AccountCardProps) {
+  const isCreditLine = account.accountType === 'CREDIT_LINE';
+
   const handleDetailsClick = () => {
     onDetailsClick?.(account.accountId);
   };
@@ -29,6 +33,10 @@ export function AccountCard({
 
   const handleFundClick = () => {
     onFundClick?.(account.accountId);
+  };
+
+  const handleEditCreditLimitClick = () => {
+    onEditCreditLimitClick?.(account.accountId);
   };
 
   const cardClassName = isSelected
@@ -49,26 +57,55 @@ export function AccountCard({
                 {account.name}
               </h3>
             </Tooltip>
+            {isCreditLine && (
+              <span className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                Credit Line
+              </span>
+            )}
             <p className="account-number mt-2">
               {formatAccountNumber(account.accountNumber)}
             </p>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={event => {
-              event.stopPropagation();
-              handleFundClick();
-            }}
-            className="px-3 whitespace-normal leading-tight text-sm py-2 mt-1"
-          >
-            Fund Account
-          </Button>
+          {isCreditLine ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={event => {
+                event.stopPropagation();
+                handleEditCreditLimitClick();
+              }}
+              className="px-3 whitespace-normal leading-tight text-sm py-2 mt-1"
+            >
+              Edit Credit Limit
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={event => {
+                event.stopPropagation();
+                handleFundClick();
+              }}
+              className="px-3 whitespace-normal leading-tight text-sm py-2 mt-1"
+            >
+              Fund Account
+            </Button>
+          )}
         </div>
 
         {/* Balance */}
-        <div className="balance-display text-slate-900">
-          {formatCurrency(account.availableBalanceMinor)}
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+            {isCreditLine ? 'Remaining Credit' : 'Available Balance'}
+          </p>
+          <div className="balance-display text-slate-900">
+            {formatCurrency(account.availableBalanceMinor)}
+          </div>
+          {isCreditLine && account.creditLimitMinor !== undefined && (
+            <p className="text-sm text-slate-600">
+              Limit: {formatCurrency(account.creditLimitMinor)}
+            </p>
+          )}
         </div>
 
         {/* Action Buttons */}

@@ -51,6 +51,7 @@ const mockConfig = {
     cardBinPrefix: '123456',
     cardProcessorToken: 'processor-token',
   },
+  defaultMerchantCreditLimitMinor: 500_000,
 };
 
 // Helper to generate a valid demoAuth JWT for tests

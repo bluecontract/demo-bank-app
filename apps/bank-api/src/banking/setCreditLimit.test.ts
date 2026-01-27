@@ -8,11 +8,10 @@ import type {
   PowertoolsLogger,
   PowertoolsMetrics,
 } from '@demo-bank-app/shared-observability';
-import { Account } from '@demo-bank-app/banking';
+import { Account, Money } from '@demo-bank-app/banking';
 import { MaybeAuthenticatedTsRestRequestContext } from '../auth/middleware';
-import { Money } from '@demo-bank-app/banking';
 import type { SimpleAccountNumberGenerator } from '@demo-bank-app/banking';
-import { getAccountHandler } from './getAccount';
+import { setCreditLimitHandler } from './setCreditLimit';
 import { ERROR_CODES } from '../shared/errors';
 
 const mockLogger: PowertoolsLogger = {
@@ -40,11 +39,13 @@ const mockAccountNumberGenerator = {
 const mockAccount = new Account({
   id: 'acc-123',
   accountNumber: '1234567890',
-  name: 'Test Account',
+  name: 'Merchant Credit Line',
   ownerUserId: 'user-1',
   status: 'ACTIVE',
   currency: 'USD',
   createdAt: new Date('2024-01-01T00:00:00.000Z'),
+  accountType: 'CREDIT_LINE',
+  creditLimitMinor: new Money(1000),
   ledgerBalanceMinor: new Money(1000),
   availableBalanceMinor: new Money(1000),
   isTest: false,
@@ -78,7 +79,7 @@ const setAuthHeader = (headers: Headers) => {
   return headers;
 };
 
-describe('getAccountHandler', () => {
+describe('setCreditLimitHandler', () => {
   beforeEach(() => {
     vi.spyOn(dependencies, 'getDependencies').mockResolvedValue({
       repository: mockRepository,
@@ -90,7 +91,7 @@ describe('getAccountHandler', () => {
       metrics: mockMetrics,
       config: mockConfig,
     });
-    vi.spyOn(banking, 'getAccount').mockResolvedValue(mockAccount);
+    vi.spyOn(banking, 'setCreditLimit').mockResolvedValue(mockAccount);
     vi.clearAllMocks();
   });
 
@@ -98,15 +99,19 @@ describe('getAccountHandler', () => {
     vi.restoreAllMocks();
   });
 
-  it('should return account with correct balance', async () => {
-    const result = await getAccountHandler(
-      { params: { accountId: mockAccount.id } },
+  it('should return updated account on success', async () => {
+    const result = await setCreditLimitHandler(
+      {
+        params: { accountId: mockAccount.id },
+        body: { creditLimitMinor: 1500 },
+      },
       {
         request: {
           headers: setAuthHeader(new Headers()),
         } as unknown as MaybeAuthenticatedTsRestRequestContext,
       }
     );
+
     expect(result.status).toBe(200);
     expect(result.body).toEqual({
       accountId: mockAccount.id,
@@ -122,31 +127,23 @@ describe('getAccountHandler', () => {
     });
   });
 
-  it('should return 401 if JWT token is missing', async () => {
-    await expect(
-      getAccountHandler(
-        { params: { accountId: mockAccount.id } },
-        {
-          request: {
-            headers: new Headers(),
-          } as unknown as MaybeAuthenticatedTsRestRequestContext,
-        }
-      )
-    ).rejects.toThrow('Failed to extract auth info from the request');
-  });
-
-  it('should return 404 if AccountNotFoundError thrown', async () => {
-    (banking.getAccount as any).mockRejectedValueOnce(
-      new banking.AccountNotFoundError('not-existent-account')
+  it('should return 404 for AccountNotFoundError', async () => {
+    (banking.setCreditLimit as any).mockRejectedValueOnce(
+      new banking.AccountNotFoundError('missing')
     );
-    const result = await getAccountHandler(
-      { params: { accountId: mockAccount.id } },
+
+    const result = await setCreditLimitHandler(
+      {
+        params: { accountId: 'missing' },
+        body: { creditLimitMinor: 1000 },
+      },
       {
         request: {
           headers: setAuthHeader(new Headers()),
         } as unknown as MaybeAuthenticatedTsRestRequestContext,
       }
     );
+
     expect(result.status).toBe(404);
     expect(result.body).toEqual({
       error: ERROR_CODES.ACCOUNT_NOT_FOUND,
@@ -154,17 +151,51 @@ describe('getAccountHandler', () => {
     });
   });
 
-  it('should propagate unexpected errors', async () => {
-    (banking.getAccount as any).mockRejectedValueOnce(new Error('fail'));
-    await expect(
-      getAccountHandler(
-        { params: { accountId: mockAccount.id } },
-        {
-          request: {
-            headers: setAuthHeader(new Headers()),
-          } as unknown as MaybeAuthenticatedTsRestRequestContext,
-        }
-      )
-    ).rejects.toThrow('fail');
+  it('should return 400 for InvalidAccountError', async () => {
+    (banking.setCreditLimit as any).mockRejectedValueOnce(
+      new banking.InvalidAccountError('creditLimitMinor', 'Invalid limit')
+    );
+
+    const result = await setCreditLimitHandler(
+      {
+        params: { accountId: mockAccount.id },
+        body: { creditLimitMinor: 1000 },
+      },
+      {
+        request: {
+          headers: setAuthHeader(new Headers()),
+        } as unknown as MaybeAuthenticatedTsRestRequestContext,
+      }
+    );
+
+    expect(result.status).toBe(400);
+    expect(result.body).toEqual({
+      error: ERROR_CODES.VALIDATION_ERROR,
+      message: 'Account validation failed - creditLimitMinor: Invalid limit',
+    });
+  });
+
+  it('should return 409 for OptimisticLockError', async () => {
+    (banking.setCreditLimit as any).mockRejectedValueOnce(
+      new banking.OptimisticLockError('account_balance_acc-123')
+    );
+
+    const result = await setCreditLimitHandler(
+      {
+        params: { accountId: mockAccount.id },
+        body: { creditLimitMinor: 1500 },
+      },
+      {
+        request: {
+          headers: setAuthHeader(new Headers()),
+        } as unknown as MaybeAuthenticatedTsRestRequestContext,
+      }
+    );
+
+    expect(result.status).toBe(409);
+    expect(result.body).toEqual({
+      error: ERROR_CODES.ACCOUNT_CONFLICT,
+      message: 'Account was updated concurrently. Please retry.',
+    });
   });
 });

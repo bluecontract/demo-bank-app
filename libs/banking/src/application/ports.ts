@@ -14,6 +14,7 @@ export interface TransactionContext {
 export interface BankingRepository {
   // Account operations
   saveAccount(account: Account): Promise<Account>;
+  updateAccountBalance(account: Account): Promise<Account>;
   getAccountById(id: string): Promise<Account | null>;
   getAccountIdByNumber(accountNumber: string): Promise<Account['id'] | null>;
   getAccountsByUserId(userId: string): Promise<Account[]>;

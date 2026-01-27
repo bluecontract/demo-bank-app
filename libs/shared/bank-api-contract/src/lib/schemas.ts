@@ -13,6 +13,7 @@ export const ProblemDto = z.object({
 export type ProblemDto = z.infer<typeof ProblemDto>;
 
 const MoneyMinor = z.number().int();
+const CreditLimitMinor = z.number().int().min(0);
 const HoldFailureCodeSchema = z.enum([
   'INSUFFICIENT_FUNDS',
   'STATE_MISMATCH',
@@ -75,9 +76,15 @@ export const AccountDto = z.object({
   name: z.string(),
   currency: z.literal('USD'),
   createdAt: z.string().datetime({ offset: true }),
+  accountType: z.enum(['DEPOSIT', 'CREDIT_LINE']),
+  creditLimitMinor: CreditLimitMinor.optional(),
   ledgerBalanceMinor: MoneyMinor,
   availableBalanceMinor: MoneyMinor,
   status: z.string(),
+});
+
+export const SetCreditLimitRequestDto = z.object({
+  creditLimitMinor: CreditLimitMinor,
 });
 
 export const CreateAccountRequestDto = z.object({

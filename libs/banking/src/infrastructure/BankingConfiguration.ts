@@ -3,6 +3,7 @@ import type { BaseConfig } from '@demo-bank-app/shared-config';
 
 export interface BankingConfiguration extends BaseConfig {
   dynamoTableName: string;
+  defaultMerchantCreditLimitMinor: number;
 }
 
 export class BankingEnvironmentConfiguration
@@ -14,6 +15,7 @@ export class BankingEnvironmentConfiguration
   readonly serviceName: string;
   readonly logLevel: BaseConfig['logLevel'];
   readonly metricsNamespace: string;
+  readonly defaultMerchantCreditLimitMinor: number;
 
   constructor() {
     super();
@@ -26,6 +28,10 @@ export class BankingEnvironmentConfiguration
       'BANKING_DYNAMO_TABLE_NAME',
       'banking-table'
     );
+    this.defaultMerchantCreditLimitMinor = this.getNumberEnv(
+      'DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR',
+      500_000
+    );
     this.environment = baseConfig.environment;
     this.serviceName = this.getStringEnv('SERVICE_NAME', 'banking');
     this.logLevel = baseConfig.logLevel;
@@ -33,6 +39,17 @@ export class BankingEnvironmentConfiguration
   }
 
   protected performCustomValidation(errors: string[]): void {
+    const defaultCreditLimit = this.getNumberEnv(
+      'DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR',
+      500_000
+    );
+    this.validateRange(
+      'DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR',
+      defaultCreditLimit,
+      0,
+      100_000_000,
+      errors
+    );
     // Validate log level
     this.validateLogLevel(errors);
   }

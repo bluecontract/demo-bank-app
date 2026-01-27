@@ -45,6 +45,8 @@ export const createAccountHandler = async (
       name: account.name,
       currency: account.currency as 'USD',
       createdAt: account.createdAt.toISOString(),
+      accountType: account.accountType,
+      creditLimitMinor: account.creditLimitMinor?.toCents(),
       ledgerBalanceMinor: account.ledgerBalanceMinor.toCents(),
       availableBalanceMinor: account.availableBalanceMinor.toCents(),
       status: account.status,

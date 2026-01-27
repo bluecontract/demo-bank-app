@@ -8,9 +8,21 @@ const mockAccount = {
   name: 'Checking Account',
   currency: 'USD' as const,
   createdAt: '2023-01-01T00:00:00Z',
+  accountType: 'DEPOSIT' as const,
+  creditLimitMinor: undefined,
   ledgerBalanceMinor: 50000,
   availableBalanceMinor: 45000,
   status: 'active',
+};
+
+const creditLineAccount = {
+  ...mockAccount,
+  accountId: 'acc-456',
+  name: 'Merchant Credit Line',
+  accountType: 'CREDIT_LINE' as const,
+  creditLimitMinor: 500000,
+  ledgerBalanceMinor: 400000,
+  availableBalanceMinor: 350000,
 };
 
 describe('AccountCard', () => {
@@ -63,7 +75,7 @@ describe('AccountCard', () => {
     expect(onFundClick).toHaveBeenCalledWith(mockAccount.accountId);
   });
 
-  it('renders all three action buttons', () => {
+  it('renders action buttons for deposit accounts', () => {
     render(<AccountCard account={mockAccount} />);
 
     expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument();
@@ -73,6 +85,37 @@ describe('AccountCard', () => {
     expect(
       screen.getByRole('button', { name: 'Fund Account' })
     ).toBeInTheDocument();
+  });
+
+  it('renders credit line details and edit button', () => {
+    render(<AccountCard account={creditLineAccount} />);
+
+    expect(screen.getByText('Credit Line')).toBeInTheDocument();
+    expect(screen.getByText('Remaining Credit')).toBeInTheDocument();
+    expect(screen.getByText('$3,500')).toBeInTheDocument();
+    expect(screen.getByText('Limit: $5,000')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Edit Credit Limit' })
+    ).toBeInTheDocument();
+  });
+
+  it('calls onEditCreditLimitClick when Edit Credit Limit button is clicked', () => {
+    const onEditCreditLimitClick = vi.fn();
+    render(
+      <AccountCard
+        account={creditLineAccount}
+        onEditCreditLimitClick={onEditCreditLimitClick}
+      />
+    );
+
+    const editButton = screen.getByRole('button', {
+      name: 'Edit Credit Limit',
+    });
+    fireEvent.click(editButton);
+
+    expect(onEditCreditLimitClick).toHaveBeenCalledWith(
+      creditLineAccount.accountId
+    );
   });
 
   it('does not call handlers when not provided', () => {

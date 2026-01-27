@@ -1,5 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react';
 
+type ButtonType = 'button' | 'submit' | 'reset';
+
 interface ButtonProps {
   children: ReactNode;
   variant?: 'primary' | 'secondary' | 'outline' | 'gradient';
@@ -7,6 +9,7 @@ interface ButtonProps {
   fullWidth?: boolean;
   disabled?: boolean;
   className?: string;
+  type?: ButtonType;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   'data-testid'?: string;
 }
@@ -18,6 +21,7 @@ export function Button({
   fullWidth = false,
   disabled = false,
   className = '',
+  type = 'button',
   onClick,
   'data-testid': testId,
 }: ButtonProps) {
@@ -53,6 +57,7 @@ export function Button({
   return (
     <button
       className={finalClasses}
+      type={type}
       onClick={onClick}
       disabled={disabled}
       data-testid={testId}

@@ -52,6 +52,7 @@ const TEST_CONFIG = {
   region: 'us-east-1',
   jwtTtlSeconds: 604800,
   testUserTtlSeconds: 600,
+  defaultMerchantCreditLimitMinor: 500_000,
 };
 
 // AWS clients configured for LocalStack
@@ -106,6 +107,8 @@ describe('Bank API Integration Tests', () => {
       TEST_CONFIG.testUserTtlSeconds.toString();
     process.env.MYOS_SECRET_ARN = TEST_CONFIG.myOsSecretArn;
     process.env.OPENAI_API_KEY_SECRET_ARN = TEST_CONFIG.openAiSecretArn;
+    process.env.DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR =
+      TEST_CONFIG.defaultMerchantCreditLimitMinor.toString();
     process.env.SERVICE_NAME = 'bank-api-integration-test';
     process.env.LOG_LEVEL = 'INFO';
     process.env.METRICS_NAMESPACE = 'IntegrationTest';
@@ -135,6 +138,7 @@ describe('Bank API Integration Tests', () => {
     delete process.env.TEST_USER_TTL_SECONDS;
     delete process.env.MYOS_SECRET_ARN;
     delete process.env.OPENAI_API_KEY_SECRET_ARN;
+    delete process.env.DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR;
     delete process.env.SERVICE_NAME;
     delete process.env.LOG_LEVEL;
     delete process.env.METRICS_NAMESPACE;
@@ -292,6 +296,177 @@ describe('Bank API Integration Tests', () => {
       expect(signUp.statusCode).toBe(400);
       expect(signUp.body.error).toBe('VALIDATION_ERROR');
       expect(signUp.body.message).toBe('Request validation failed');
+    });
+  });
+
+  describe('Merchant sign-up + credit line account', () => {
+    it('should create a credit line account when merchantId is provided', async () => {
+      const merchantEmail = generateUniqueTestUserName('merchant-user');
+      const merchantId = `merchant-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}`;
+
+      const signUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: {
+          email: merchantEmail,
+          marketingEmailsOptIn: true,
+          merchantId,
+        },
+      });
+
+      expect(signUp.statusCode).toBe(201);
+      const jwtCookie = signUp.headers?.['set-cookie'];
+      if (!jwtCookie) {
+        throw new Error(
+          'Missing set-cookie header in merchant signup response'
+        );
+      }
+
+      const accountsResponse = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+        jwtCookie,
+      });
+
+      expect(accountsResponse.statusCode).toBe(200);
+      const creditLineAccount = accountsResponse.body.accounts.find(
+        (account: { accountType: string }) =>
+          account.accountType === 'CREDIT_LINE'
+      );
+
+      expect(creditLineAccount).toBeDefined();
+      if (!creditLineAccount) {
+        throw new Error('Credit line account was not created for merchant');
+      }
+
+      expect(creditLineAccount).toMatchObject({
+        accountType: 'CREDIT_LINE',
+        name: 'Merchant Credit Line',
+        creditLimitMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+        ledgerBalanceMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+        availableBalanceMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+      });
+    });
+
+    it('should create a credit line account when signing up an existing user with merchantId', async () => {
+      const merchantEmail = generateUniqueTestUserName('merchant-existing');
+      const merchantId = `merchant-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}`;
+
+      const initialSignUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: {
+          email: merchantEmail,
+          marketingEmailsOptIn: true,
+        },
+      });
+
+      expect(initialSignUp.statusCode).toBe(201);
+
+      const recoverySignUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: {
+          email: merchantEmail,
+          marketingEmailsOptIn: true,
+          merchantId,
+        },
+      });
+
+      expect(recoverySignUp.statusCode).toBe(201);
+      const jwtCookie = recoverySignUp.headers?.['set-cookie'];
+      if (!jwtCookie) {
+        throw new Error(
+          'Missing set-cookie header in merchant signup response'
+        );
+      }
+
+      const accountsResponse = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+        jwtCookie,
+      });
+
+      expect(accountsResponse.statusCode).toBe(200);
+      const creditLineAccount = accountsResponse.body.accounts.find(
+        (account: { accountType: string }) =>
+          account.accountType === 'CREDIT_LINE'
+      );
+
+      expect(creditLineAccount).toBeDefined();
+      if (!creditLineAccount) {
+        throw new Error('Credit line account was not created for merchant');
+      }
+
+      expect(creditLineAccount).toMatchObject({
+        accountType: 'CREDIT_LINE',
+        name: 'Merchant Credit Line',
+        creditLimitMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+        ledgerBalanceMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+        availableBalanceMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+      });
+    });
+
+    it('should allow updating the credit limit for merchant credit line account', async () => {
+      const merchantEmail = generateUniqueTestUserName('merchant-credit-limit');
+      const merchantId = `merchant-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}`;
+
+      const signUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: {
+          email: merchantEmail,
+          marketingEmailsOptIn: true,
+          merchantId,
+        },
+      });
+
+      expect(signUp.statusCode).toBe(201);
+      const jwtCookie = signUp.headers?.['set-cookie'];
+      if (!jwtCookie) {
+        throw new Error(
+          'Missing set-cookie header in merchant signup response'
+        );
+      }
+
+      const accountsResponse = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+        jwtCookie,
+      });
+      expect(accountsResponse.statusCode).toBe(200);
+
+      const creditLineAccount = accountsResponse.body.accounts.find(
+        (account: { accountType: string }) =>
+          account.accountType === 'CREDIT_LINE'
+      );
+      if (!creditLineAccount) {
+        throw new Error('Credit line account was not created for merchant');
+      }
+
+      const updatedLimit =
+        TEST_CONFIG.defaultMerchantCreditLimitMinor + 100_000;
+      const updateResponse = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${creditLineAccount.accountId}/credit-limit`,
+        body: { creditLimitMinor: updatedLimit },
+        jwtCookie,
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      expect(updateResponse.body).toMatchObject({
+        accountId: creditLineAccount.accountId,
+        accountType: 'CREDIT_LINE',
+        creditLimitMinor: updatedLimit,
+        ledgerBalanceMinor: updatedLimit,
+        availableBalanceMinor: updatedLimit,
+      });
     });
   });
 

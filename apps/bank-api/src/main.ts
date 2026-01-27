@@ -14,6 +14,7 @@ import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { createAccountHandler } from './banking/createAccount';
 import { listAccountsHandler } from './banking/listAccounts';
 import { getAccountHandler } from './banking/getAccount';
+import { setCreditLimitHandler } from './banking/setCreditLimit';
 import { fundAccountHandler } from './banking/fundAccount';
 import { transferMoneyHandler } from './banking/transferMoney';
 import { getTransactionHandler } from './banking/getTransaction';
@@ -65,6 +66,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       createAccount: createAccountHandler,
       listAccounts: listAccountsHandler,
       getAccount: getAccountHandler,
+      setCreditLimit: setCreditLimitHandler,
       listCards: listCardsHandler,
       issueCard: issueCardHandler,
       getCard: getCardHandler,

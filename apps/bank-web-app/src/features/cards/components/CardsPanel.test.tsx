@@ -51,6 +51,13 @@ describe('CardsPanel', () => {
         accountId: 'acc-1',
         accountNumber: '1234567890',
         name: 'Primary',
+        currency: 'USD',
+        createdAt: '2023-01-01T00:00:00Z',
+        accountType: 'DEPOSIT',
+        creditLimitMinor: undefined,
+        ledgerBalanceMinor: 100000,
+        availableBalanceMinor: 100000,
+        status: 'ACTIVE',
       },
     });
     (useCards as any).mockReturnValue({

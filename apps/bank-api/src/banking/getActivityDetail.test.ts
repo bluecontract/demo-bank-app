@@ -50,6 +50,7 @@ const mockConfig = {
     cardBinPrefix: '123456',
     cardProcessorToken: 'processor-token',
   },
+  defaultMerchantCreditLimitMinor: 500_000,
 };
 
 const TEST_JWT_SECRET = 'test-secret';

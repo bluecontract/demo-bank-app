@@ -6,11 +6,17 @@ import {
   UserValidationError,
 } from '@demo-bank-app/auth';
 import { signUp, signIn } from '@demo-bank-app/auth';
+import { createAccount } from '@demo-bank-app/banking';
+import { getDependencies as getBankingDependencies } from '../banking/dependencies';
 
 // Mock dependencies for unit tests
 vi.mock('./dependencies', () => ({
   getDependencies: vi.fn(),
   resetDependencies: vi.fn(),
+}));
+
+vi.mock('../banking/dependencies', () => ({
+  getDependencies: vi.fn(),
 }));
 
 vi.mock('@demo-bank-app/auth', () => ({
@@ -21,9 +27,15 @@ vi.mock('@demo-bank-app/auth', () => ({
   UserValidationError: vi.fn(),
 }));
 
+vi.mock('@demo-bank-app/banking', () => ({
+  createAccount: vi.fn(),
+}));
+
 const mockSignUp = vi.mocked(signUp);
 const mockSignIn = vi.mocked(signIn);
 const mockGetDependencies = vi.mocked(getDependencies);
+const mockGetBankingDependencies = vi.mocked(getBankingDependencies);
+const mockCreateAccount = vi.mocked(createAccount);
 
 const mockLogger = { error: vi.fn(), info: vi.fn(), debug: vi.fn() };
 
@@ -86,6 +98,14 @@ describe('Auth Handlers', () => {
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
+      mockGetBankingDependencies.mockResolvedValueOnce({
+        repository: { getAccountsByUserId: vi.fn().mockResolvedValue([]) },
+        accountNumberGenerator: {},
+        logger: mockLogger,
+        metrics: {},
+        config: { defaultMerchantCreditLimitMinor: 500_000 },
+      } as any);
+      mockCreateAccount.mockResolvedValue({} as any);
       mockSignUp.mockResolvedValue({
         user: {
           id: 'merchant-user-id',
@@ -115,6 +135,14 @@ describe('Auth Handlers', () => {
           email: 'merchant@example.com',
           marketingEmailsOptIn: true,
           merchantId: 'merchant-123',
+        }),
+        expect.anything()
+      );
+      expect(mockCreateAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerId: 'merchant-user-id',
+          accountType: 'CREDIT_LINE',
+          creditLimitMinor: 500_000,
         }),
         expect.anything()
       );
@@ -148,6 +176,71 @@ describe('Auth Handlers', () => {
         message:
           'A user with this email already exists. Please use a different email.',
       });
+    });
+
+    it('should recover merchant signup when user already exists', async () => {
+      const mockDeps = {
+        logger: mockLogger,
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+      };
+      const mockRepository = {
+        getAccountsByUserId: vi.fn().mockResolvedValue([]),
+      };
+
+      mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
+      mockGetBankingDependencies.mockResolvedValueOnce({
+        repository: mockRepository,
+        accountNumberGenerator: {},
+        logger: mockLogger,
+        metrics: {},
+        config: { defaultMerchantCreditLimitMinor: 500_000 },
+      } as any);
+
+      mockSignUp.mockRejectedValue(
+        new UserAlreadyExistsError('merchant@example.com')
+      );
+      mockSignIn.mockResolvedValue({
+        user: {
+          id: 'merchant-user-id',
+          email: 'merchant@example.com',
+          isTest: false,
+          createdAt: '2021-01-01',
+          marketingEmailsOptIn: true,
+        },
+        token: 'jwt-token',
+      });
+      mockCreateAccount.mockResolvedValue({} as any);
+
+      const responseHeaders = createMockHeaders();
+      const result = await signUpHandler(
+        {
+          body: {
+            email: 'merchant@example.com',
+            marketingEmailsOptIn: true,
+            merchantId: 'merchant-123',
+          },
+          query: {},
+        },
+        { responseHeaders } as any
+      );
+
+      expect(mockSignIn).toHaveBeenCalledWith(
+        { email: 'merchant@example.com' },
+        mockDeps
+      );
+      expect(mockRepository.getAccountsByUserId).toHaveBeenCalledWith(
+        'merchant-user-id'
+      );
+      expect(mockCreateAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerId: 'merchant-user-id',
+          accountType: 'CREDIT_LINE',
+          creditLimitMinor: 500_000,
+        }),
+        expect.anything()
+      );
+      expect(result.status).toBe(201);
+      expect(responseHeaders.get('Set-Cookie')).toContain('demoAuth=jwt-token');
     });
 
     it('should return 400 for UserValidationError', async () => {

@@ -24,6 +24,7 @@ describe('BankingEnvironmentConfiguration', () => {
       process.env.SERVICE_NAME = 'my-banking-service';
       process.env.LOG_LEVEL = 'WARN';
       process.env.METRICS_NAMESPACE = 'MyApp/Banking';
+      process.env.DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR = '750000';
 
       const bankingConfig = new BankingEnvironmentConfiguration();
 
@@ -32,6 +33,7 @@ describe('BankingEnvironmentConfiguration', () => {
       expect(bankingConfig.serviceName).toBe('my-banking-service');
       expect(bankingConfig.logLevel).toBe('WARN');
       expect(bankingConfig.metricsNamespace).toBe('MyApp/Banking');
+      expect(bankingConfig.defaultMerchantCreditLimitMinor).toBe(750000);
     });
 
     it('should return banking configuration with defaults when optional variables are not set', () => {
@@ -42,10 +44,19 @@ describe('BankingEnvironmentConfiguration', () => {
       expect(bankingConfig.serviceName).toBe('banking');
       expect(bankingConfig.logLevel).toBe('INFO');
       expect(bankingConfig.metricsNamespace).toBe('Banking');
+      expect(bankingConfig.defaultMerchantCreditLimitMinor).toBe(500_000);
     });
 
     it('should throw ConfigurationValidationError when LOG_LEVEL is invalid', () => {
       process.env.LOG_LEVEL = 'INVALID_LEVEL';
+
+      expect(() => new BankingEnvironmentConfiguration()).toThrow(
+        ConfigurationValidationError
+      );
+    });
+
+    it('should throw ConfigurationValidationError when credit limit is invalid', () => {
+      process.env.DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR = '-1';
 
       expect(() => new BankingEnvironmentConfiguration()).toThrow(
         ConfigurationValidationError

@@ -62,6 +62,8 @@ export async function listAccounts(
       status: account.status,
       currency: account.currency,
       createdAt: account.createdAt,
+      accountType: account.accountType,
+      creditLimitMinor: account.creditLimitMinor,
       ledgerBalanceMinor: account.ledgerBalanceMinor,
       availableBalanceMinor: account.availableBalanceMinor,
       balanceVersion: account.balanceVersion,

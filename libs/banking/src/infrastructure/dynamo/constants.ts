@@ -36,6 +36,8 @@ export const CONDITION_EXPRESSIONS = {
 export const UPDATE_EXPRESSIONS = {
   UPDATE_BALANCE:
     'ADD ledgerBalanceMinor :ledger, availableBalanceMinor :available SET #version = #version + :inc',
+  UPDATE_CREDIT_LIMIT:
+    'SET ledgerBalanceMinor = :ledger, availableBalanceMinor = :available, creditLimitMinor = :creditLimit, #version = #version + :inc',
 } as const;
 
 export const EXPRESSION_ATTRIBUTE_NAMES = {

@@ -1,4 +1,5 @@
 export * from './createAccount';
+export * from './setCreditLimit';
 export * from './transferMoney';
 export * from './fundAccount';
 export * from './reserveFunds';

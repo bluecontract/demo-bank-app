@@ -8,6 +8,7 @@ interface AccountsListProps {
   onAccountDetails: (accountId: string) => void;
   onTransfer: (accountId: string) => void;
   onFund?: (accountId: string) => void;
+  onEditCreditLimit?: (accountId: string) => void;
   isCreatingAccount?: boolean;
   'data-testid'?: string;
 }
@@ -18,6 +19,7 @@ export function AccountsList({
   onAccountDetails,
   onTransfer,
   onFund,
+  onEditCreditLimit,
   isCreatingAccount = false,
   'data-testid': testId,
 }: AccountsListProps) {
@@ -34,6 +36,7 @@ export function AccountsList({
           onDetailsClick={onAccountDetails}
           onTransferClick={onTransfer}
           onFundClick={onFund}
+          onEditCreditLimitClick={onEditCreditLimit}
         />
       ))}
 

@@ -96,6 +96,16 @@ vi.mock('../../features/accounts/components', () => ({
       </div>
     ) : null
   ),
+  CreditLimitModal: vi.fn(({ isOpen, onClose }) =>
+    isOpen ? (
+      <div data-testid="credit-limit-modal">
+        Credit Limit Modal
+        <button onClick={onClose} data-testid="close-credit-limit-modal">
+          Close
+        </button>
+      </div>
+    ) : null
+  ),
 }));
 
 vi.mock('../../features/cards/components', () => ({
@@ -116,6 +126,8 @@ const mockAccounts = [
     name: 'Primary Account',
     currency: 'USD' as const,
     createdAt: '2023-01-01T00:00:00Z',
+    accountType: 'DEPOSIT' as const,
+    creditLimitMinor: undefined,
     ledgerBalanceMinor: 100000,
     availableBalanceMinor: 100000,
     status: 'ACTIVE',
@@ -126,6 +138,8 @@ const mockAccounts = [
     name: 'Savings Account',
     currency: 'USD' as const,
     createdAt: '2023-01-02T00:00:00Z',
+    accountType: 'DEPOSIT' as const,
+    creditLimitMinor: undefined,
     ledgerBalanceMinor: 250000,
     availableBalanceMinor: 250000,
     status: 'ACTIVE',

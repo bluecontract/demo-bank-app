@@ -4,6 +4,7 @@
  */
 
 import { Money } from '../domain/valueObjects/Money';
+import type { AccountType } from '../domain/entities/Account';
 
 export interface AccountResult {
   id: string;
@@ -13,6 +14,8 @@ export interface AccountResult {
   status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
   currency: string;
   createdAt: Date;
+  accountType: AccountType;
+  creditLimitMinor?: Money;
   ledgerBalanceMinor: Money;
   availableBalanceMinor: Money;
   balanceVersion: number;

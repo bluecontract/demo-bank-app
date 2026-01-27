@@ -68,6 +68,8 @@ const initializeDependencies = async (
     metrics,
     config: {
       cardConfig,
+      defaultMerchantCreditLimitMinor:
+        envConfig.defaultMerchantCreditLimitMinor,
     },
   };
 };

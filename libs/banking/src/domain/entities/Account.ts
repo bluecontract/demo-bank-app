@@ -7,6 +7,7 @@ import { Posting } from '../valueObjects/Posting';
 import { Money } from '../valueObjects/Money';
 
 export type AccountStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+export type AccountType = 'DEPOSIT' | 'CREDIT_LINE';
 export type Currency = 'USD';
 export const FUNDING_SOURCE = {
   ACCOUNT_ID: 'FUNDING_SOURCE',
@@ -27,6 +28,8 @@ export interface AccountProps {
   currency: Currency;
   createdAt: Date;
   isTest?: boolean;
+  accountType?: AccountType;
+  creditLimitMinor?: Money;
   ledgerBalanceMinor: Money;
   availableBalanceMinor: Money;
   balanceVersion: number;
@@ -41,6 +44,8 @@ export class Account {
   readonly currency: Currency;
   readonly createdAt: Date;
   readonly isTest: boolean;
+  readonly accountType: AccountType;
+  public creditLimitMinor?: Money;
   public ledgerBalanceMinor: Money;
   public availableBalanceMinor: Money;
   public balanceVersion: number;
@@ -108,6 +113,31 @@ export class Account {
       );
     }
 
+    const accountType = props.accountType ?? 'DEPOSIT';
+
+    if (accountType === 'CREDIT_LINE') {
+      if (!props.creditLimitMinor) {
+        throw new InvalidAccountError(
+          'creditLimitMinor',
+          'Credit limit must be provided for credit line accounts'
+        );
+      }
+
+      if (props.ledgerBalanceMinor.isGreaterThan(props.creditLimitMinor)) {
+        throw new InvalidAccountError(
+          'ledgerBalanceMinor',
+          'Ledger balance cannot exceed credit limit'
+        );
+      }
+
+      if (props.availableBalanceMinor.isGreaterThan(props.ledgerBalanceMinor)) {
+        throw new InvalidAccountError(
+          'availableBalanceMinor',
+          'Available balance cannot exceed ledger balance'
+        );
+      }
+    }
+
     this.id = props.id;
     this.accountNumber = props.accountNumber;
     this.name = props.name;
@@ -116,6 +146,8 @@ export class Account {
     this.currency = props.currency;
     this.createdAt = props.createdAt;
     this.isTest = props.isTest ?? false;
+    this.accountType = accountType;
+    this.creditLimitMinor = props.creditLimitMinor;
     this.ledgerBalanceMinor = props.ledgerBalanceMinor;
     this.availableBalanceMinor = props.availableBalanceMinor;
     this.balanceVersion = props.balanceVersion;
@@ -192,7 +224,57 @@ export class Account {
     this._deltaAvailableMinor = 0;
   }
 
+  updateCreditLimit(newLimit: Money): void {
+    if (this.accountType !== 'CREDIT_LINE') {
+      throw new InvalidAccountError(
+        'accountType',
+        'Credit limit can only be updated for credit line accounts'
+      );
+    }
+
+    if (!this.creditLimitMinor) {
+      throw new InvalidAccountError(
+        'creditLimitMinor',
+        'Credit limit must be set for credit line accounts'
+      );
+    }
+
+    const oldLimitMinor = this.creditLimitMinor.toCents();
+    const newLimitMinor = newLimit.toCents();
+    const usedPosted = oldLimitMinor - this.ledgerBalanceMinor.toCents();
+    const usedReserved = oldLimitMinor - this.availableBalanceMinor.toCents();
+
+    if (newLimitMinor < usedPosted || newLimitMinor < usedReserved) {
+      throw new InvalidAccountError(
+        'creditLimitMinor',
+        'Credit limit cannot be lower than used credit'
+      );
+    }
+
+    const delta = newLimitMinor - oldLimitMinor;
+    if (delta > 0) {
+      this.ledgerBalanceMinor = this.ledgerBalanceMinor.add(new Money(delta));
+      this.availableBalanceMinor = this.availableBalanceMinor.add(
+        new Money(delta)
+      );
+    } else if (delta < 0) {
+      this.ledgerBalanceMinor = this.ledgerBalanceMinor.subtract(
+        new Money(-delta)
+      );
+      this.availableBalanceMinor = this.availableBalanceMinor.subtract(
+        new Money(-delta)
+      );
+    }
+
+    this.creditLimitMinor = newLimit;
+  }
+
   equals(other: Account): boolean {
+    const creditLimitMatches =
+      this.creditLimitMinor && other.creditLimitMinor
+        ? this.creditLimitMinor.equals(other.creditLimitMinor)
+        : this.creditLimitMinor === other.creditLimitMinor;
+
     return (
       this.id === other.id &&
       this.accountNumber === other.accountNumber &&
@@ -201,7 +283,9 @@ export class Account {
       this.status === other.status &&
       this.currency === other.currency &&
       this.createdAt.getTime() === other.createdAt.getTime() &&
-      this.isTest === other.isTest
+      this.isTest === other.isTest &&
+      this.accountType === other.accountType &&
+      creditLimitMatches
     );
   }
 
