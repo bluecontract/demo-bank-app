@@ -14,6 +14,7 @@ describe('Hold Dynamo item mappers', () => {
     payerAccountNumber: 'ACC-100',
     counterpartyAccountNumber: 'ACC-200',
     amountMinor: 12_500,
+    capturedAmountMinor: 0,
     currency: 'USD',
     status: 'PENDING',
     description: 'Test hold',
@@ -37,6 +38,7 @@ describe('Hold Dynamo item mappers', () => {
       holdId: 'hold-123',
       payerAccountNumber: 'ACC-100',
       amountMinor: 12_500,
+      capturedAmountMinor: 0,
       currency: 'USD',
       status: 'PENDING',
       description: 'Test hold',
@@ -131,6 +133,31 @@ describe('Hold Dynamo item mappers', () => {
       code: 'VALIDATION',
       message: 'Invalid amount',
       payNoteDocumentId: 'paynote-failed',
+    });
+    expect(mapHoldEventItemToHoldEvent(item)).toEqual(event);
+  });
+
+  it('should round-trip partial capture events', () => {
+    const event: HoldEvent = {
+      at: '2024-01-01T04:00:00.000Z',
+      type: 'CAPTURED_PARTIAL',
+      transactionId: 'txn-partial',
+      counterpartyAccountNumber: 'ACC-200',
+      amountMinor: 2_500,
+      remainingAmountMinor: 10_000,
+      payNoteDocumentId: 'paynote-partial',
+    };
+
+    const item = buildHoldEventItem(hold, event, {
+      eventId: 'event-partial',
+    });
+
+    expect(item.payload).toEqual({
+      transactionId: 'txn-partial',
+      counterpartyAccountNumber: 'ACC-200',
+      amountMinor: 2_500,
+      remainingAmountMinor: 10_000,
+      payNoteDocumentId: 'paynote-partial',
     });
     expect(mapHoldEventItemToHoldEvent(item)).toEqual(event);
   });

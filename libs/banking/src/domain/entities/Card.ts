@@ -2,7 +2,7 @@ export type CardStatus = 'ACTIVE' | 'BLOCKED' | 'CLOSED' | 'EXPIRED';
 
 export interface CardMerchant {
   name: string;
-  merchantId: string;
+  merchantId?: string;
   statementDescriptor?: string;
 }
 

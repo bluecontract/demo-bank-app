@@ -11,6 +11,7 @@ import type {
   HoldRepository,
   CaptureHoldRequest,
   CaptureHoldResult,
+  PartialCaptureHoldRequest,
 } from '../HoldRepository';
 import { CARD_SETTLEMENT } from '../../domain/entities/Account';
 import { Money } from '../../domain/valueObjects/Money';
@@ -54,13 +55,12 @@ export async function captureCardAuthorization(
     throw new HoldNotFoundError(command.authorizationId);
   }
 
-  if (hold.amountMinor !== command.amountMinor) {
-    throw new IdempotencyConflictError(
-      'Capture amount does not match authorized amount'
-    );
-  }
-
   if (hold.status === 'CAPTURED') {
+    if (hold.amountMinor !== command.amountMinor) {
+      throw new IdempotencyConflictError(
+        'Capture already processed with different amount'
+      );
+    }
     if (!hold.relatedTransactionId) {
       throw new IdempotencyConflictError(
         'Capture already processed without transaction reference'
@@ -73,7 +73,16 @@ export async function captureCardAuthorization(
     };
   }
 
-  if (hold.status !== 'PENDING') {
+  const capturedAmountMinor = hold.capturedAmountMinor ?? 0;
+  const remainingAmountMinor = hold.amountMinor - capturedAmountMinor;
+
+  if (command.amountMinor > remainingAmountMinor) {
+    throw new IdempotencyConflictError(
+      'Capture amount exceeds remaining authorized amount'
+    );
+  }
+
+  if (hold.status !== 'PENDING' && hold.status !== 'PARTIALLY_CAPTURED') {
     throw new HoldNotPendingError(hold.holdId, hold.status);
   }
 
@@ -103,11 +112,11 @@ export async function captureCardAuthorization(
   payerAccount.ensureActive();
   settlementAccount.ensureActive();
 
-  const amount = new Money(hold.amountMinor);
+  const captureAmount = new Money(command.amountMinor);
 
   const debit = new Posting({
     accountId: payerAccount.id,
-    amount,
+    amount: captureAmount,
     side: 'DEBIT',
     accountNumber: payerAccount.accountNumber,
     counterpartyAccountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
@@ -115,7 +124,7 @@ export async function captureCardAuthorization(
 
   const credit = new Posting({
     accountId: settlementAccount.id,
-    amount,
+    amount: captureAmount,
     side: 'CREDIT',
     accountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
     counterpartyAccountNumber: payerAccount.accountNumber,
@@ -146,34 +155,101 @@ export async function captureCardAuthorization(
   );
   const idempotencyKeyHash = hashIdempotencyKey(command.idempotencyKey);
 
+  const isInitialFullCapture =
+    hold.status === 'PENDING' && command.amountMinor === hold.amountMinor;
+
+  if (isInitialFullCapture) {
+    const updatedHold = {
+      ...hold,
+      status: 'CAPTURED' as const,
+      capturedAmountMinor: hold.amountMinor,
+      counterpartyAccountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
+      relatedTransactionId: transaction.id,
+    };
+
+    const captureRequest: CaptureHoldRequest = {
+      payerAccountId: payerAccount.id,
+      payerAccountBalanceVersion: payerAccount.balanceVersion,
+      counterpartyAccountId: settlementAccount.id,
+      counterpartyAccountBalanceVersion: settlementAccount.balanceVersion,
+      hold: updatedHold,
+      holdEvent: {
+        at: capturedAtIso,
+        type: 'CAPTURED',
+        transactionId: transaction.id,
+        counterpartyAccountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
+        amountMinor: hold.amountMinor,
+        remainingAmountMinor: 0,
+      },
+      transaction,
+      idempotencyKey: command.idempotencyKey,
+      idempotencyKeyHash,
+      userId: CARD_PROCESSOR_USER_ID,
+    };
+
+    const result: CaptureHoldResult = await holdRepository.captureHold(
+      captureRequest
+    );
+
+    return {
+      status: 'CAPTURED',
+      holdId: result.hold.holdId,
+      transactionId: result.transactionId,
+    };
+  }
+
+  const updatedCapturedAmount = capturedAmountMinor + command.amountMinor;
+  const remainingAfterCapture = Math.max(
+    hold.amountMinor - updatedCapturedAmount,
+    0
+  );
+  const fullyCaptured = updatedCapturedAmount >= hold.amountMinor;
+
+  const updatedStatus: 'CAPTURED' | 'PARTIALLY_CAPTURED' = fullyCaptured
+    ? 'CAPTURED'
+    : 'PARTIALLY_CAPTURED';
+
   const updatedHold = {
     ...hold,
-    status: 'CAPTURED' as const,
+    status: updatedStatus,
+    capturedAmountMinor: updatedCapturedAmount,
     counterpartyAccountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
     relatedTransactionId: transaction.id,
   };
 
-  const captureRequest: CaptureHoldRequest = {
+  const holdEvent = fullyCaptured
+    ? {
+        at: capturedAtIso,
+        type: 'CAPTURED' as const,
+        transactionId: transaction.id,
+        counterpartyAccountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
+        amountMinor: command.amountMinor,
+        remainingAmountMinor: remainingAfterCapture,
+      }
+    : {
+        at: capturedAtIso,
+        type: 'CAPTURED_PARTIAL' as const,
+        transactionId: transaction.id,
+        counterpartyAccountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
+        amountMinor: command.amountMinor,
+        remainingAmountMinor: remainingAfterCapture,
+      };
+
+  const partialCaptureRequest: PartialCaptureHoldRequest = {
     payerAccountId: payerAccount.id,
     payerAccountBalanceVersion: payerAccount.balanceVersion,
     counterpartyAccountId: settlementAccount.id,
     counterpartyAccountBalanceVersion: settlementAccount.balanceVersion,
     hold: updatedHold,
-    holdEvent: {
-      at: capturedAtIso,
-      type: 'CAPTURED',
-      transactionId: transaction.id,
-      counterpartyAccountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
-    },
+    holdEvent,
     transaction,
+    captureAmountMinor: command.amountMinor,
     idempotencyKey: command.idempotencyKey,
     idempotencyKeyHash,
     userId: CARD_PROCESSOR_USER_ID,
   };
 
-  const result: CaptureHoldResult = await holdRepository.captureHold(
-    captureRequest
-  );
+  const result = await holdRepository.partialCaptureHold(partialCaptureRequest);
 
   return {
     status: 'CAPTURED',

@@ -34,6 +34,7 @@ const ActivityPayNoteReferenceSchema = z.object({
 
 const HoldStatusSchema = z.enum([
   'PENDING',
+  'PARTIALLY_CAPTURED',
   'CAPTURED',
   'RELEASED',
   'EXPIRED',
@@ -53,6 +54,17 @@ const HoldTimelineEventSchema = z.discriminatedUnion('type', [
     at: z.string().datetime({ offset: true }),
     transactionId: z.string(),
     counterpartyAccountNumber: z.string().optional(),
+    amountMinor: MoneyMinor.optional(),
+    remainingAmountMinor: MoneyMinor.optional(),
+    payNoteDocumentId: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal('CAPTURED_PARTIAL'),
+    at: z.string().datetime({ offset: true }),
+    transactionId: z.string(),
+    counterpartyAccountNumber: z.string().optional(),
+    amountMinor: MoneyMinor,
+    remainingAmountMinor: MoneyMinor,
     payNoteDocumentId: z.string().optional(),
   }),
   z.object({
@@ -165,7 +177,9 @@ export const CardListResponseDto = z.object({
 
 export const CardMerchantDto = z.object({
   name: createSanitizedStringSchema(z.string().min(1).max(140)),
-  merchantId: createSanitizedStringSchema(z.string().min(1)),
+  merchantId: createSanitizedOptionalStringSchema(
+    z.string().trim().min(1).optional()
+  ),
   statementDescriptor: createSanitizedOptionalStringSchema(
     z.string().max(140).optional()
   ),
@@ -284,6 +298,7 @@ export const ActivityHoldCapturedDto = z.object({
   activityId: ActivityIdSchema,
   holdId: z.string(),
   amountMinor: MoneyMinor,
+  remainingAmountMinor: MoneyMinor.optional(),
   description: createSanitizedOptionalStringSchema(z.string().optional()),
   capturedAt: z.string().datetime({ offset: true }),
   transactionId: z.string(),
@@ -354,6 +369,8 @@ const ActivityDetailHoldDto = z.object({
   activityId: ActivityIdSchema,
   holdId: z.string(),
   amountMinor: MoneyMinor,
+  capturedAmountMinor: MoneyMinor.optional(),
+  remainingAmountMinor: MoneyMinor.optional(),
   currency: z.literal('USD'),
   status: HoldStatusSchema,
   description: createSanitizedOptionalStringSchema(z.string().optional()),

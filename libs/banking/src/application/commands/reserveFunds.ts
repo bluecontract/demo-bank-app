@@ -110,6 +110,7 @@ export async function reserveFunds(
       payerAccountNumber: account.accountNumber,
       counterpartyAccountNumber: cmd.counterpartyAccountNumber,
       amountMinor: amount.toCents(),
+      capturedAmountMinor: 0,
       currency: account.currency,
       status: 'PENDING',
       description: cmd.description,

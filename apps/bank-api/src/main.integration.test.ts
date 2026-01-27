@@ -2489,6 +2489,252 @@ describe('Bank API Integration Tests', () => {
         ])
       );
     }, 20000);
+
+    it('supports partial captures via processor', async () => {
+      const processorChargeId = `ch_${crypto.randomUUID()}`;
+      const merchantId = 'merchant-demo';
+      const authorizationIdempotency = crypto.randomUUID();
+
+      const authResponse = await invokeApi({
+        method: 'POST',
+        path: '/v1/card-processor/authorizations',
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': authorizationIdempotency,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          pan: issuedCard.pan,
+          expiryMonth: issuedCard.expiryMonth,
+          expiryYear: issuedCard.expiryYear,
+          cvc: issuedCard.cvc,
+          amountMinor: 1_200,
+          currency: 'USD',
+          merchant: {
+            name: 'Demo Shop',
+            statementDescriptor: 'DEMO SHOP',
+            merchantId,
+          },
+          processorChargeId,
+        },
+      });
+
+      expect(authResponse.statusCode).toBe(200);
+      expect(authResponse.body.status).toBe('APPROVED');
+      expect(authResponse.body.authorizationId).toBeDefined();
+      const authorizationId = authResponse.body.authorizationId;
+
+      const captureResponse = await invokeApi({
+        method: 'POST',
+        path: `/v1/card-processor/authorizations/${authorizationId}/capture`,
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 100 },
+      });
+
+      expect(captureResponse.statusCode).toBe(200);
+      expect(captureResponse.body.status).toBe('CAPTURED');
+
+      let activityResponse: Awaited<ReturnType<typeof invokeApi>> | null = null;
+      let lastResponse: Awaited<ReturnType<typeof invokeApi>> | null = null;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const response = await invokeApi({
+          method: 'GET',
+          path: `/v1/activity/${accountNumber}`,
+          jwtCookie,
+        });
+        lastResponse = response;
+        const items = Array.isArray(response.body?.items)
+          ? response.body.items
+          : [];
+        const cardItems = items.filter(
+          (item: any) => item.processorChargeId === processorChargeId
+        );
+        const hasHold = cardItems.some(
+          (item: any) =>
+            item.kind === 'HOLD_CREATED' &&
+            item.processorChargeId === processorChargeId
+        );
+        const hasCapture = cardItems.some(
+          (item: any) =>
+            item.kind === 'HOLD_CAPTURED' &&
+            item.processorChargeId === processorChargeId
+        );
+        const hasPosted = cardItems.some(
+          (item: any) =>
+            item.kind === 'POSTED_TRANSACTION' &&
+            item.processorChargeId === processorChargeId
+        );
+
+        if (hasHold && hasCapture && hasPosted) {
+          activityResponse = response;
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      const resolvedActivity = activityResponse ?? lastResponse;
+      expect(resolvedActivity).toBeDefined();
+      const cardItems = resolvedActivity?.body.items.filter(
+        (item: any) => item.processorChargeId === processorChargeId
+      );
+      expect(cardItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'HOLD_CREATED',
+            merchantName: 'Demo Shop',
+            merchantId,
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+          expect.objectContaining({
+            kind: 'HOLD_CAPTURED',
+            merchantName: 'Demo Shop',
+            merchantId,
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+            amountMinor: 100,
+          }),
+          expect.objectContaining({
+            kind: 'POSTED_TRANSACTION',
+            merchantName: 'Demo Shop',
+            merchantId,
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+            amountMinor: 100,
+          }),
+        ])
+      );
+    }, 20000);
+
+    it('authorizes and captures card transactions without merchantId', async () => {
+      const processorChargeId = `ch_${crypto.randomUUID()}`;
+      const authorizationIdempotency = crypto.randomUUID();
+
+      const authResponse = await invokeApi({
+        method: 'POST',
+        path: '/v1/card-processor/authorizations',
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': authorizationIdempotency,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          pan: issuedCard.pan,
+          expiryMonth: issuedCard.expiryMonth,
+          expiryYear: issuedCard.expiryYear,
+          cvc: issuedCard.cvc,
+          amountMinor: 1_300,
+          currency: 'USD',
+          merchant: {
+            name: 'Demo Shop',
+            statementDescriptor: 'DEMO SHOP',
+          },
+          processorChargeId,
+        },
+      });
+
+      expect(authResponse.statusCode).toBe(200);
+      expect(authResponse.body.status).toBe('APPROVED');
+      expect(authResponse.body.authorizationId).toBeDefined();
+      const authorizationId = authResponse.body.authorizationId;
+
+      const captureResponse = await invokeApi({
+        method: 'POST',
+        path: `/v1/card-processor/authorizations/${authorizationId}/capture`,
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 1_300 },
+      });
+
+      expect(captureResponse.statusCode).toBe(200);
+      expect(captureResponse.body.status).toBe('CAPTURED');
+
+      let activityResponse: Awaited<ReturnType<typeof invokeApi>> | null = null;
+      let lastResponse: Awaited<ReturnType<typeof invokeApi>> | null = null;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const response = await invokeApi({
+          method: 'GET',
+          path: `/v1/activity/${accountNumber}`,
+          jwtCookie,
+        });
+        lastResponse = response;
+        const items = Array.isArray(response.body?.items)
+          ? response.body.items
+          : [];
+        const cardItems = items.filter(
+          (item: any) => item.processorChargeId === processorChargeId
+        );
+        const hasHold = cardItems.some(
+          (item: any) =>
+            item.kind === 'HOLD_CREATED' &&
+            item.processorChargeId === processorChargeId
+        );
+        const hasCapture = cardItems.some(
+          (item: any) =>
+            item.kind === 'HOLD_CAPTURED' &&
+            item.processorChargeId === processorChargeId
+        );
+        const hasPosted = cardItems.some(
+          (item: any) =>
+            item.kind === 'POSTED_TRANSACTION' &&
+            item.processorChargeId === processorChargeId
+        );
+
+        if (hasHold && hasCapture && hasPosted) {
+          activityResponse = response;
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      const resolvedActivity = activityResponse ?? lastResponse;
+      expect(resolvedActivity).toBeDefined();
+      const cardItems = resolvedActivity?.body.items.filter(
+        (item: any) => item.processorChargeId === processorChargeId
+      );
+      expect(cardItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'HOLD_CREATED',
+            merchantName: 'Demo Shop',
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+          expect.objectContaining({
+            kind: 'HOLD_CAPTURED',
+            merchantName: 'Demo Shop',
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+          expect.objectContaining({
+            kind: 'POSTED_TRANSACTION',
+            merchantName: 'Demo Shop',
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+        ])
+      );
+
+      const relevantKinds = new Set([
+        'HOLD_CREATED',
+        'HOLD_CAPTURED',
+        'POSTED_TRANSACTION',
+      ]);
+      for (const item of cardItems ?? []) {
+        if (relevantKinds.has(item.kind)) {
+          expect(item.merchantId).toBeUndefined();
+        }
+      }
+    }, 20000);
   });
 
   describe('PayNote Detail Endpoint', () => {

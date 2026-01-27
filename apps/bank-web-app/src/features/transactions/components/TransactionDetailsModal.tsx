@@ -148,7 +148,7 @@ export function TransactionDetailsModal({
           return event.type === 'CREATED';
         case 'HOLD_CAPTURED':
           return (
-            event.type === 'CAPTURED' &&
+            (event.type === 'CAPTURED' || event.type === 'CAPTURED_PARTIAL') &&
             'transactionId' in event &&
             event.transactionId === selectedActivity.transactionId
           );

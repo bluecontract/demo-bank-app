@@ -5,6 +5,7 @@ export * from './fundAccount';
 export * from './reserveFunds';
 export * from './releaseHold';
 export * from './captureHold';
+export * from './partialCaptureHold';
 export * from './issueCard';
 export * from './listCards';
 export * from './getCard';

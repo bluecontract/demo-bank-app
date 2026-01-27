@@ -185,6 +185,7 @@ export async function authorizeCard(
     holdId,
     payerAccountNumber: account.accountNumber,
     amountMinor: command.amountMinor,
+    capturedAmountMinor: 0,
     currency: 'USD',
     status: 'PENDING',
     description: command.description ?? command.merchant.name,

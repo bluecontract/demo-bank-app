@@ -55,6 +55,26 @@ export interface CaptureHoldResult {
   created: boolean;
 }
 
+export interface PartialCaptureHoldRequest {
+  payerAccountId: string;
+  payerAccountBalanceVersion: number;
+  counterpartyAccountId: string;
+  counterpartyAccountBalanceVersion: number;
+  hold: Hold;
+  holdEvent: Extract<HoldEvent, { type: 'CAPTURED' | 'CAPTURED_PARTIAL' }>;
+  transaction: Transaction;
+  captureAmountMinor: number;
+  idempotencyKey: string;
+  idempotencyKeyHash: string;
+  userId: string;
+}
+
+export interface PartialCaptureHoldResult {
+  hold: Hold;
+  transactionId: Transaction['id'];
+  created: boolean;
+}
+
 /**
  * Repository interface for Hold persistence.
  * Implementations are responsible for storing hold metadata,
@@ -95,4 +115,7 @@ export interface HoldRepository {
   reserveHold(request: ReserveHoldRequest): Promise<ReserveHoldResult>;
   releaseHold(request: ReleaseHoldRequest): Promise<ReleaseHoldResult>;
   captureHold(request: CaptureHoldRequest): Promise<CaptureHoldResult>;
+  partialCaptureHold(
+    request: PartialCaptureHoldRequest
+  ): Promise<PartialCaptureHoldResult>;
 }

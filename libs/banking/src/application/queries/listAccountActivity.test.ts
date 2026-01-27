@@ -256,6 +256,84 @@ describe('listAccountActivity', () => {
     ]);
   });
 
+  it('surfaces partial capture amounts on activity items', async () => {
+    holdRepositoryMock.listHoldActivityByAccountNumber.mockResolvedValue({
+      items: [
+        holdActivityRecord({
+          holdId: 'hold-partial',
+          eventId: 'event-partial',
+          amountMinor: 6_000,
+          event: {
+            at: '2024-01-03T08:00:00.000Z',
+            type: 'CAPTURED_PARTIAL',
+            transactionId: 'txn-partial',
+            counterpartyAccountNumber: '5555555555',
+            amountMinor: 2_000,
+            remainingAmountMinor: 4_000,
+          },
+        }),
+      ],
+      nextToken: undefined,
+      hasMore: false,
+    });
+
+    const result = await listAccountActivity(
+      {
+        userId: 'user-1',
+        accountNumber: '1234567890',
+      },
+      { bankingRepository, holdRepository }
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      kind: 'HOLD_CAPTURED',
+      holdId: 'hold-partial',
+      amountMinor: 2_000,
+      remainingAmountMinor: 4_000,
+      transactionId: 'txn-partial',
+    });
+  });
+
+  it('uses capture delta on final capture events', async () => {
+    holdRepositoryMock.listHoldActivityByAccountNumber.mockResolvedValue({
+      items: [
+        holdActivityRecord({
+          holdId: 'hold-final',
+          eventId: 'event-final',
+          amountMinor: 6_000,
+          event: {
+            at: '2024-01-04T08:00:00.000Z',
+            type: 'CAPTURED',
+            transactionId: 'txn-final',
+            counterpartyAccountNumber: '5555555555',
+            amountMinor: 1_000,
+            remainingAmountMinor: 0,
+          },
+        }),
+      ],
+      nextToken: undefined,
+      hasMore: false,
+    });
+
+    const result = await listAccountActivity(
+      {
+        userId: 'user-1',
+        accountNumber: '1234567890',
+      },
+      { bankingRepository, holdRepository }
+    );
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      kind: 'HOLD_CAPTURED',
+      holdId: 'hold-final',
+      amountMinor: 1_000,
+      remainingAmountMinor: 0,
+      transactionId: 'txn-final',
+    });
+  });
+
   it('supports pagination with cursor', async () => {
     const holdEvents: HoldActivityRecord[] = [
       holdActivityRecord({

@@ -7,7 +7,11 @@ const USER_PARTITION_KEY_PREFIX = 'USER#';
 const HOLD_IDEMPOTENCY_SORT_KEY_PREFIX = `${IDEMPOTENCY_SORT_KEY_PREFIX}HOLD#`;
 const HOLD_IDEMPOTENCY_COMMAND_SEPARATOR = '#';
 
-export type HoldIdempotencyCommand = 'RESERVE' | 'CAPTURE' | 'RELEASE';
+export type HoldIdempotencyCommand =
+  | 'RESERVE'
+  | 'CAPTURE'
+  | 'CAPTURE_PARTIAL'
+  | 'RELEASE';
 
 export interface HoldIdempotencyItem {
   PK: string;

@@ -92,6 +92,7 @@ type HoldEventActivityItem =
       activityId: string;
       holdId: string;
       amountMinor: number;
+      remainingAmountMinor?: number;
       description?: string;
       capturedAt: string;
       transactionId: string;
@@ -229,6 +230,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       activityId: z.string(),
       holdId: z.string(),
       amountMinor: z.number(),
+      remainingAmountMinor: z.number().optional(),
       description: z.string().optional(),
       capturedAt: z.string(),
       transactionId: z.string(),
@@ -414,6 +416,8 @@ const buildHoldEventFeedItem = (
         event.counterpartyAccountNumber ??
         record.counterpartyAccountNumber ??
         '';
+      const captureAmount = event.amountMinor ?? record.amountMinor;
+      const remainingAmountMinor = event.remainingAmountMinor;
       return {
         kind: 'HOLD_EVENT',
         id: `${record.holdId}#${record.eventId}`,
@@ -424,7 +428,36 @@ const buildHoldEventFeedItem = (
           kind: 'HOLD_CAPTURED',
           activityId: `HOLD#${record.holdId}`,
           holdId: record.holdId,
-          amountMinor: record.amountMinor,
+          amountMinor: captureAmount,
+          ...(remainingAmountMinor !== undefined
+            ? { remainingAmountMinor }
+            : {}),
+          description: record.description,
+          capturedAt: event.at,
+          transactionId: event.transactionId,
+          counterpartyAccountNumber: counterparty,
+          ...payNoteFields,
+          ...cardMeta,
+        },
+      };
+    }
+    case 'CAPTURED_PARTIAL': {
+      const counterparty =
+        event.counterpartyAccountNumber ??
+        record.counterpartyAccountNumber ??
+        '';
+      return {
+        kind: 'HOLD_EVENT',
+        id: `${record.holdId}#${record.eventId}`,
+        holdId: record.holdId,
+        eventId: record.eventId,
+        time: event.at,
+        item: {
+          kind: 'HOLD_CAPTURED',
+          activityId: `HOLD#${record.holdId}`,
+          holdId: record.holdId,
+          amountMinor: event.amountMinor,
+          remainingAmountMinor: event.remainingAmountMinor,
           description: record.description,
           capturedAt: event.at,
           transactionId: event.transactionId,

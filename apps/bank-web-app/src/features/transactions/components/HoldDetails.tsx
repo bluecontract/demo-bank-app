@@ -30,6 +30,7 @@ const statusStyles: Record<
   string
 > = {
   PENDING: 'bg-amber-50 text-amber-700 border border-amber-100',
+  PARTIALLY_CAPTURED: 'bg-lime-50 text-lime-700 border border-lime-100',
   CAPTURED: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
   RELEASED: 'bg-sky-50 text-sky-700 border border-sky-100',
   EXPIRED: 'bg-slate-100 text-slate-700 border border-slate-200',
@@ -42,6 +43,7 @@ const timelineIcons: Record<
 > = {
   CREATED: '⏳',
   CAPTURED: '✔',
+  CAPTURED_PARTIAL: '➗',
   RELEASED: '↺',
   FAILED: '✖',
 };
@@ -101,6 +103,9 @@ type HoldStatus = Extract<ActivityDetail, { kind: 'HOLD' }>['status'];
 const deriveStatus = (
   hold: Extract<ActivityDetail, { kind: 'HOLD' }>
 ): HoldStatus => {
+  if (hold.status === 'PARTIALLY_CAPTURED') {
+    return 'PARTIALLY_CAPTURED';
+  }
   if (hold.failedAt || hold.status === 'FAILED') {
     return 'FAILED';
   }
@@ -114,6 +119,23 @@ const deriveStatus = (
     return 'EXPIRED';
   }
   return 'PENDING';
+};
+
+const formatStatusLabel = (status: HoldStatus) => {
+  switch (status) {
+    case 'PARTIALLY_CAPTURED':
+      return 'Partially captured';
+    case 'CAPTURED':
+      return 'Captured';
+    case 'RELEASED':
+      return 'Released';
+    case 'FAILED':
+      return 'Failed';
+    case 'EXPIRED':
+      return 'Expired';
+    default:
+      return 'Pending';
+  }
 };
 
 export function HoldDetails({
@@ -163,6 +185,21 @@ export function HoldDetails({
     { label: 'Amount', value: formattedAmount },
     { label: 'Hold created', value: formatDateTime(hold.createdAt) },
   ];
+
+  if (displayStatus !== 'PENDING') {
+    if (typeof hold.capturedAmountMinor === 'number') {
+      detailRows.push({
+        label: 'Captured amount',
+        value: formatCurrency(hold.capturedAmountMinor),
+      });
+    }
+    if (typeof hold.remainingAmountMinor === 'number') {
+      detailRows.push({
+        label: 'Remaining amount',
+        value: formatCurrency(hold.remainingAmountMinor),
+      });
+    }
+  }
 
   if (isCardHold) {
     detailRows.push({
@@ -253,7 +290,7 @@ export function HoldDetails({
             <span
               className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusStyles[displayStatus]}`}
             >
-              {displayStatus.charAt(0) + displayStatus.slice(1).toLowerCase()}
+              {formatStatusLabel(displayStatus)}
             </span>
           </div>
         </div>
@@ -321,6 +358,8 @@ export function HoldDetails({
                   <div className="text-sm font-medium text-slate-900">
                     {event.type === 'CREATED' && 'Hold placed'}
                     {event.type === 'CAPTURED' && 'Hold captured'}
+                    {event.type === 'CAPTURED_PARTIAL' &&
+                      'Hold partially captured'}
                     {event.type === 'RELEASED' && 'Hold released'}
                     {event.type === 'FAILED' && 'Hold failed'}
                   </div>
@@ -344,6 +383,42 @@ export function HoldDetails({
                     {event.type === 'CAPTURED' && (
                       <>
                         <div>Captured hold: {hold.holdId}</div>
+                        {typeof event.amountMinor === 'number' && (
+                          <div>Amount: {formatCurrency(event.amountMinor)}</div>
+                        )}
+                        {typeof event.remainingAmountMinor === 'number' && (
+                          <div>
+                            Remaining:{' '}
+                            {formatCurrency(event.remainingAmountMinor)}
+                          </div>
+                        )}
+                        <div>
+                          Transaction ID:{' '}
+                          {event.transactionId ?? 'Not provided'}
+                        </div>
+                        {event.counterpartyAccountNumber && (
+                          <div>
+                            To account:{' '}
+                            {buildCounterpartyDisplay(
+                              accounts,
+                              event.counterpartyAccountNumber,
+                              isLoadingAccounts
+                            )}
+                          </div>
+                        )}
+                        {hold.processorChargeId && (
+                          <div>Charge: {hold.processorChargeId}</div>
+                        )}
+                      </>
+                    )}
+                    {event.type === 'CAPTURED_PARTIAL' && (
+                      <>
+                        <div>Captured hold: {hold.holdId}</div>
+                        <div>Amount: {formatCurrency(event.amountMinor)}</div>
+                        <div>
+                          Remaining:{' '}
+                          {formatCurrency(event.remainingAmountMinor)}
+                        </div>
                         <div>
                           Transaction ID:{' '}
                           {event.transactionId ?? 'Not provided'}

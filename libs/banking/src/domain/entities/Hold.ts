@@ -1,5 +1,6 @@
 export type HoldStatus =
   | 'PENDING'
+  | 'PARTIALLY_CAPTURED'
   | 'CAPTURED'
   | 'RELEASED'
   | 'EXPIRED'
@@ -18,6 +19,7 @@ export interface Hold {
   payerAccountNumber: string;
   counterpartyAccountNumber?: string;
   amountMinor: number;
+  capturedAmountMinor?: number;
   currency: 'USD';
   status: HoldStatus;
   description?: string;
@@ -50,6 +52,17 @@ export type HoldEvent =
       type: 'CAPTURED';
       transactionId: string;
       counterpartyAccountNumber: string;
+      amountMinor?: number;
+      remainingAmountMinor?: number;
+      payNoteDocumentId?: string;
+    }
+  | {
+      at: string;
+      type: 'CAPTURED_PARTIAL';
+      transactionId: string;
+      counterpartyAccountNumber: string;
+      amountMinor: number;
+      remainingAmountMinor: number;
       payNoteDocumentId?: string;
     }
   | {

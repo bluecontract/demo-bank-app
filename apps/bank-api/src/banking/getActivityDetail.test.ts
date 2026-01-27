@@ -370,6 +370,8 @@ describe('getActivityDetailHandler', () => {
       activityId: `HOLD#${holdId}`,
       holdId,
       amountMinor: 5_000,
+      capturedAmountMinor: 0,
+      remainingAmountMinor: 5_000,
       currency: 'USD',
       status: 'PENDING',
       description: 'Test hold',
