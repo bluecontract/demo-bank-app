@@ -7,14 +7,10 @@ import {
   handleWebhookEvent as handleWebhookEventUseCase,
   handlePayNoteDeliveryWebhookEvent,
   handlePayNoteBootstrapWebhookEvent,
+  getPayloadSummary,
 } from '@demo-bank-app/paynotes';
 import { Blue } from '@blue-labs/language';
-import type { BlueNode } from '@blue-labs/language';
 import { repository } from '@blue-repository/types';
-import {
-  DocumentBootstrapRequestedSchema,
-  EventSchema,
-} from '@blue-repository/types/packages/conversation/schemas';
 import { DocumentSessionBootstrapSchema } from '@blue-repository/types/packages/myos/schemas';
 import { getDependencies } from './dependencies';
 import { prefetchContractSummaryForSessionId } from '../contracts/generateContractSummary';
@@ -23,23 +19,9 @@ const blue = new Blue({
   repositories: [repository],
 });
 
-const BOOTSTRAP_EVENT_NAMES = [
-  'PayNote/PayNote Delivery Bootstrap Requested',
-  'PayNote Delivery Bootstrap Requested',
-];
 const isTraceEnabled =
   process.env.PAYNOTE_WEBHOOK_TRACE === '1' ||
   (process.env.LOG_LEVEL ?? '').toUpperCase() === 'DEBUG';
-
-const getPayloadSummary = (payload: unknown) => {
-  if (payload && typeof payload === 'object') {
-    return {
-      payloadType: Array.isArray(payload) ? 'array' : 'object',
-      payloadKeyCount: Object.keys(payload as Record<string, unknown>).length,
-    };
-  }
-  return { payloadType: typeof payload };
-};
 
 const getEventTypeName = (event: unknown): string | undefined => {
   if (!event || typeof event !== 'object') {
@@ -57,70 +39,6 @@ const getEventTypeName = (event: unknown): string | undefined => {
     return typeRecord.name;
   }
   return typeof typeRecord.value === 'string' ? typeRecord.value : undefined;
-};
-
-const toBlueNode = (value: unknown): BlueNode | null => {
-  if (!value) {
-    return null;
-  }
-  try {
-    return blue.jsonValueToNode(value);
-  } catch {
-    return null;
-  }
-};
-
-const getEventKindNameFromNode = (node: BlueNode): string | undefined => {
-  const simple = blue.nodeToJson(node, 'simple') as
-    | Record<string, unknown>
-    | undefined;
-  if (!simple) {
-    return undefined;
-  }
-  const kind = simple.kind;
-  if (typeof kind === 'string') {
-    return kind;
-  }
-  if (!kind || typeof kind !== 'object') {
-    return undefined;
-  }
-  const kindRecord = kind as { value?: unknown; name?: unknown };
-  if (typeof kindRecord.value === 'string') {
-    return kindRecord.value;
-  }
-  return typeof kindRecord.name === 'string' ? kindRecord.name : undefined;
-};
-
-const isDeliveryBootstrapEvent = (event: unknown): boolean => {
-  const node = toBlueNode(event);
-  if (!node) {
-    return false;
-  }
-  if (
-    blue.isTypeOf(node, DocumentBootstrapRequestedSchema, {
-      checkSchemaExtensions: true,
-    })
-  ) {
-    return true;
-  }
-  if (
-    !blue.isTypeOf(node, EventSchema, {
-      checkSchemaExtensions: true,
-    })
-  ) {
-    return false;
-  }
-  const kindName = getEventKindNameFromNode(node);
-  return kindName ? BOOTSTRAP_EVENT_NAMES.includes(kindName) : false;
-};
-
-const hasDeliveryBootstrapRequest = (payload: unknown): boolean => {
-  const emitted = (payload as { object?: { emitted?: unknown[] } })?.object
-    ?.emitted;
-  if (!Array.isArray(emitted)) {
-    return false;
-  }
-  return emitted.some(event => isDeliveryBootstrapEvent(event));
 };
 
 const classifyDocumentType = (document: unknown) => {
@@ -166,6 +84,31 @@ export const payNoteWebhookHandler = async (
       return;
     }
     logger.debug(message, context);
+  };
+  const logHandlerResult = (
+    result: {
+      logs: Array<{
+        level: string;
+        message: string;
+        context?: Record<string, unknown>;
+      }>;
+    } | null,
+    skippedMessage: string
+  ) => {
+    if (!result) {
+      trace(skippedMessage, { eventId });
+      return;
+    }
+
+    result.logs.forEach(entry => {
+      if (entry.level === 'error') {
+        logger.error(entry.message, entry.context);
+      } else if (entry.level === 'warn') {
+        logger.warn(entry.message, entry.context);
+      } else {
+        logger.debug(entry.message, entry.context);
+      }
+    });
   };
 
   const hasFullPayload =
@@ -242,8 +185,7 @@ export const payNoteWebhookHandler = async (
     ? classifyDocumentType(documentPayload)
     : { isPayNote: false, isDelivery: false, isBootstrap: false };
 
-  const shouldHandleDelivery =
-    documentType.isDelivery || hasDeliveryBootstrapRequest(payload);
+  const shouldHandleDelivery = documentType.isDelivery;
 
   trace('PayNote webhook classification', {
     eventId,
@@ -277,19 +219,7 @@ export const payNoteWebhookHandler = async (
       )
     : null;
 
-  if (!deliveryResult) {
-    trace('PayNote delivery handler skipped', { eventId });
-  }
-
-  deliveryResult?.logs.forEach(entry => {
-    if (entry.level === 'error') {
-      logger.error(entry.message, entry.context);
-    } else if (entry.level === 'warn') {
-      logger.warn(entry.message, entry.context);
-    } else {
-      logger.debug(entry.message, entry.context);
-    }
-  });
+  logHandlerResult(deliveryResult, 'PayNote delivery handler skipped');
 
   const bootstrapResult = documentType.isBootstrap
     ? await handlePayNoteBootstrapWebhookEvent(
@@ -306,19 +236,7 @@ export const payNoteWebhookHandler = async (
       )
     : null;
 
-  if (!bootstrapResult) {
-    trace('PayNote bootstrap handler skipped', { eventId });
-  }
-
-  bootstrapResult?.logs.forEach(entry => {
-    if (entry.level === 'error') {
-      logger.error(entry.message, entry.context);
-    } else if (entry.level === 'warn') {
-      logger.warn(entry.message, entry.context);
-    } else {
-      logger.debug(entry.message, entry.context);
-    }
-  });
+  logHandlerResult(bootstrapResult, 'PayNote bootstrap handler skipped');
 
   const payNoteResult = documentType.isPayNote
     ? await handleWebhookEventUseCase(
@@ -338,19 +256,7 @@ export const payNoteWebhookHandler = async (
       )
     : null;
 
-  if (!payNoteResult) {
-    trace('PayNote handler skipped', { eventId });
-  }
-
-  payNoteResult?.logs.forEach(entry => {
-    if (entry.level === 'error') {
-      logger.error(entry.message, entry.context);
-    } else if (entry.level === 'warn') {
-      logger.warn(entry.message, entry.context);
-    } else {
-      logger.debug(entry.message, entry.context);
-    }
-  });
+  logHandlerResult(payNoteResult, 'PayNote handler skipped');
 
   const note =
     payNoteResult?.note ?? bootstrapResult?.note ?? deliveryResult?.note;

@@ -1,14 +1,11 @@
-import type { BlueNode } from '@blue-labs/language';
 import {
   DocumentSessionBootstrapSchema,
   TargetDocumentSessionStartedSchema,
 } from '@blue-repository/types/packages/myos/schemas';
-import { PayNoteSchema } from '@blue-repository/types/packages/paynote/schemas';
 import type {
   ClockPort,
   LogEntry,
   MyOsClient,
-  MyOsFetchDocumentResult,
   PayNoteBootstrapRepository,
   PayNoteDeliveryRepository,
   PayNoteRepository,
@@ -17,21 +14,13 @@ import type {
 import type { HoldRepository } from '@demo-bank-app/banking';
 import type { ContractRepository } from '@demo-bank-app/contracts';
 import { blue } from '../../blue';
-import { upsertContractRecord } from '../contracts';
-
-const isTraceEnabled =
-  process.env.PAYNOTE_WEBHOOK_TRACE === '1' ||
-  (process.env.LOG_LEVEL ?? '').toUpperCase() === 'DEBUG';
-
-const getPayloadSummary = (payload: unknown) => {
-  if (payload && typeof payload === 'object') {
-    return {
-      payloadType: Array.isArray(payload) ? 'array' : 'object',
-      payloadKeyCount: Object.keys(payload as Record<string, unknown>).length,
-    };
-  }
-  return { payloadType: typeof payload };
-};
+import { isPayNoteDocument } from '../payNoteDelivery/blueUtils';
+import { upsertPayNoteContractRecord } from './payNoteContractUtils';
+import { updateHoldPayNoteDocumentId } from './payNoteHoldUtils';
+import { mergeSessionIds } from './payNoteSessionUtils';
+import { log, trace } from './paynoteWebhook/logging';
+import { logMyOsFetchError } from './paynoteWebhook/myosErrors';
+import { getPayloadSummary, toBlueNode } from './webhookUtils';
 
 export interface HandlePayNoteBootstrapWebhookInput {
   payload: unknown;
@@ -54,27 +43,7 @@ export interface HandlePayNoteBootstrapWebhookResult {
   logs: LogEntry[];
 }
 
-const log = (
-  logs: LogEntry[],
-  level: LogEntry['level'],
-  message: string,
-  context?: Record<string, unknown>
-) => {
-  logs.push({ level, message, context });
-};
-
-const trace = (
-  logs: LogEntry[],
-  message: string,
-  context?: Record<string, unknown>
-) => {
-  if (!isTraceEnabled) {
-    return;
-  }
-  log(logs, 'info', message, context);
-};
-
-const updateHoldPayNoteDocumentId = async (
+const updateHoldPayNoteDocumentIdForBootstrap = async (
   logs: LogEntry[],
   holdId: string,
   payNoteDocumentId: string,
@@ -93,33 +62,14 @@ const updateHoldPayNoteDocumentId = async (
     });
     return;
   }
-  if (hold.payNoteDocumentId === payNoteDocumentId) {
-    return;
-  }
-
-  await deps.holdRepository.putHoldMeta({
-    ...hold,
+  await updateHoldPayNoteDocumentId({
+    logs,
+    hold,
+    holdRepository: deps.holdRepository,
     payNoteDocumentId,
+    context,
+    message: 'Hold PayNote reference updated after bootstrap',
   });
-
-  trace(logs, 'Hold PayNote reference updated after bootstrap', {
-    eventId: context?.eventId,
-    deliveryId: context?.deliveryId,
-    holdId,
-    payNoteDocumentId,
-    previousPayNoteDocumentId: hold.payNoteDocumentId ?? null,
-  });
-};
-
-const toBlueNode = (value: unknown): BlueNode | null => {
-  if (!value) {
-    return null;
-  }
-  try {
-    return blue.jsonValueToNode(value);
-  } catch {
-    return null;
-  }
 };
 
 const getTargetSessionIds = (event: unknown): string[] | null => {
@@ -168,69 +118,11 @@ const isDocumentSessionBootstrap = (document: unknown): boolean => {
   });
 };
 
-const isPayNoteDocument = (document: unknown): boolean => {
-  const node = toBlueNode(document);
-  if (!node) {
-    return false;
-  }
-  return blue.isTypeOf(node, PayNoteSchema, {
-    checkSchemaExtensions: true,
-  });
-};
-
-const mergeSessionIds = (
-  existing: string[] | undefined,
-  next: string[] | undefined
-): string[] | undefined => {
-  const set = new Set(existing ?? []);
-  (next ?? []).forEach(id => {
-    if (id) {
-      set.add(id);
-    }
-  });
-  return set.size ? Array.from(set) : existing;
-};
-
-const logFetchDocumentError = (
-  logs: LogEntry[],
-  result: MyOsFetchDocumentResult,
-  sessionId: string
-) => {
-  switch (result.kind) {
-    case 'not-found':
-      log(logs, 'error', 'Failed to resolve PayNote document from MyOS', {
-        sessionId,
-        status: result.status,
-      });
-      return;
-    case 'http-error':
-      log(logs, 'error', 'Failed to resolve PayNote document from MyOS', {
-        sessionId,
-        status: result.status,
-        statusText: result.statusText,
-      });
-      return;
-    case 'parse-error':
-      log(logs, 'error', 'Failed to parse PayNote document response', {
-        sessionId,
-        error:
-          result.error instanceof Error
-            ? result.error.message
-            : String(result.error),
-      });
-      return;
-    case 'network-error':
-      log(logs, 'error', 'Unexpected error resolving PayNote document', {
-        sessionId,
-        error:
-          result.error instanceof Error
-            ? result.error.message
-            : String(result.error),
-      });
-      return;
-    default:
-      return;
-  }
+const fetchDocumentMessages = {
+  notFound: 'Failed to resolve PayNote document from MyOS',
+  httpError: 'Failed to resolve PayNote document from MyOS',
+  parseError: 'Failed to parse PayNote document response',
+  networkError: 'Unexpected error resolving PayNote document',
 };
 
 const resolvePayNoteDocument = async (
@@ -243,7 +135,7 @@ const resolvePayNoteDocument = async (
 } | null> => {
   const result = await deps.myOsClient.fetchDocument(sessionId);
   if (result.kind !== 'success') {
-    logFetchDocumentError(logs, result, sessionId);
+    logMyOsFetchError(result, logs, { sessionId }, fetchDocumentMessages);
     return null;
   }
 
@@ -455,25 +347,13 @@ export const handlePayNoteBootstrapWebhookEvent = async (
       });
 
       await deps.payNoteRepository.savePayNote(updatedRecord);
-      await upsertContractRecord({
+      await upsertPayNoteContractRecord({
         contractRepository: deps.contractRepository,
-        document: resolved.document,
+        updatedRecord,
         sessionId,
         documentId: payNoteDocumentId,
-        userId: updatedRecord.userId,
-        accountNumber: updatedRecord.accountNumber,
+        document: resolved.document,
         emittedEvents,
-        relatedTransactionIds: updatedRecord.transactionId
-          ? [updatedRecord.transactionId]
-          : undefined,
-        relatedHoldIds: updatedRecord.holdId
-          ? [updatedRecord.holdId]
-          : undefined,
-        status: updatedRecord.transactionId
-          ? 'processed'
-          : updatedRecord.holdId
-          ? 'reserved'
-          : undefined,
         now,
       });
 
@@ -496,7 +376,7 @@ export const handlePayNoteBootstrapWebhookEvent = async (
       }
 
       if (deliveryRecord?.holdId) {
-        await updateHoldPayNoteDocumentId(
+        await updateHoldPayNoteDocumentIdForBootstrap(
           logs,
           deliveryRecord.holdId,
           payNoteDocumentId,

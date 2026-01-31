@@ -4,6 +4,7 @@ export * from './commands/validatePayNote';
 export * from './commands/handleWebhookEvent';
 export * from './commands/handlePayNoteDeliveryWebhookEvent';
 export * from './commands/handlePayNoteBootstrapWebhookEvent';
+export * from './commands/webhookUtils';
 export * from './queries/getPayNoteDetails';
 export * from './payNoteDelivery/blueUtils';
 export * from './payNoteDelivery/schema';

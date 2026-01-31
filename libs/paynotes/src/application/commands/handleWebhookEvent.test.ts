@@ -286,6 +286,57 @@ describe('handleWebhookEvent', () => {
     );
   });
 
+  it('transfers funds when capture immediately is requested', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Quick PayNote',
+          },
+          emitted: [
+            {
+              type: {
+                name: 'PayNote/Reserve Funds and Capture Immediately Requested',
+              },
+              amount: { value: 2500 },
+            },
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(deps.bankingFacade.transferFunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceAccountId: 'account-id',
+        destinationAccountNumber: '9876543210',
+        amountMinor: 2500,
+        description: 'Quick PayNote',
+        userId: 'user-123',
+        payNoteDocumentId: 'doc-1',
+      })
+    );
+  });
+
   it('ignores card transaction capture lock request when details mismatch', async () => {
     const { deps, fetchEvent } = createDependencies();
     fetchEvent.mockResolvedValueOnce({
