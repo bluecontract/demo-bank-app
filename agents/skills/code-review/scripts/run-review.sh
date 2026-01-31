@@ -7,6 +7,7 @@ ts=$(date -u +"%Y%m%dT%H%M%SZ")
 review_dir="agents/skills/code-review/reviews/${task}_${ts}"
 prompt_file="${review_dir}/context.md"
 result_file="${review_dir}/result.md"
+# Default: 300s (5 minutes) per model unless overridden via REVIEW_TIMEOUT_SECONDS.
 timeout_seconds="${REVIEW_TIMEOUT_SECONDS:-300}"
 
 if git diff --cached --quiet; then
@@ -51,27 +52,47 @@ detect_timeout_cmd() {
 run_model() {
   local label=$1
   local outfile=$2
-  shift 2
+  local tool=$3
+  shift 3
 
   local errfile="${outfile}.err"
   local timeout_cmd
   timeout_cmd=$(detect_timeout_cmd || true)
+  local cmd=("$tool" "$@")
+
+  if ! command -v "$tool" >/dev/null 2>&1; then
+    {
+      echo "Review skipped for ${label}."
+      echo "Reason: '${tool}' not found in PATH."
+    } > "$outfile"
+    return 0
+  fi
 
   if [[ -n "$timeout_cmd" ]]; then
-    "$timeout_cmd" "$timeout_seconds" "$@" > "$outfile" 2> "$errfile"
+    "$timeout_cmd" "$timeout_seconds" "${cmd[@]}" > "$outfile" 2> "$errfile"
   else
-    "$@" > "$outfile" 2> "$errfile"
+    "${cmd[@]}" > "$outfile" 2> "$errfile"
   fi
 
   local exit_code=$?
   if [[ $exit_code -ne 0 ]]; then
     {
       echo "Review failed for ${label}."
-      echo "Command: $*"
+      echo "Command: ${cmd[*]}"
       echo "Exit code: ${exit_code}"
       if [[ $exit_code -eq 124 || $exit_code -eq 137 ]]; then
         echo "Note: command timed out after ${timeout_seconds}s."
       fi
+      if [[ -s "$errfile" ]]; then
+        echo ""
+        echo "Error output:"
+        cat "$errfile"
+      fi
+    } > "$outfile"
+  elif [[ ! -s "$outfile" ]]; then
+    {
+      echo "Review completed with empty output for ${label}."
+      echo "Command: ${cmd[*]}"
       if [[ -s "$errfile" ]]; then
         echo ""
         echo "Error output:"
