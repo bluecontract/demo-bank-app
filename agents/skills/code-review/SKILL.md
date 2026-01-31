@@ -41,7 +41,20 @@ if git diff --cached --quiet; then echo "No staged changes to review."; exit 1; 
   - Codex: `codex.md`
   - Review resolution: `result.md`
 
-# Command Template
+# Preferred Script
+
+Use the script below to ensure timeouts and model failures are recorded without breaking the review flow:
+
+```bash
+agents/skills/code-review/scripts/run-review.sh short-slug
+```
+
+Notes:
+
+- Configure timeout with `REVIEW_TIMEOUT_SECONDS` (default: 120 seconds per model).
+- If a model fails or times out, its output file will contain the error details.
+
+# Command Template (manual fallback)
 
 ```bash
 ts=$(date -u +"%Y%m%dT%H%M%SZ")
