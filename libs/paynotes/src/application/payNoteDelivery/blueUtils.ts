@@ -5,7 +5,10 @@ import {
   PayNoteDeliverySchema,
   PayNoteSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
+import type { AnyZodObject, infer as ZodInfer } from 'zod';
 import { blue } from '../../blue';
+
+type SchemaOutput<TSchema extends AnyZodObject> = ZodInfer<TSchema>;
 
 const toBlueNode = (value: unknown): BlueNode | null => {
   if (!value) {
@@ -47,39 +50,49 @@ const getRecordString = (
   return record ? getString(record[key]) : undefined;
 };
 
-const parsePayNoteDelivery = (document: unknown) => {
+const parseDocumentWithSchema = <TSchema extends AnyZodObject>(
+  document: unknown,
+  schema: TSchema,
+  options?: { includeSimple?: boolean }
+): {
+  node: BlueNode;
+  output: SchemaOutput<TSchema>;
+  simple?: Record<string, unknown>;
+} | null => {
   const node = toBlueNode(document);
   if (
     !node ||
-    !blue.isTypeOf(node, PayNoteDeliverySchema, {
+    !blue.isTypeOf(node, schema, {
       checkSchemaExtensions: true,
     })
   ) {
     return null;
   }
-  const simple = blue.nodeToJson(node, 'simple') as
-    | Record<string, unknown>
-    | undefined;
-  return {
-    node,
-    output: blue.nodeToSchemaOutput(node, PayNoteDeliverySchema),
-    simple,
-  };
+
+  const output = blue.nodeToSchemaOutput(node, schema) as SchemaOutput<TSchema>;
+  if (options?.includeSimple) {
+    const simple = blue.nodeToJson(node, 'simple') as
+      | Record<string, unknown>
+      | undefined;
+    return { node, output, simple };
+  }
+
+  return { node, output };
 };
 
-const parsePayNote = (document: unknown) => {
-  const node = toBlueNode(document);
-  if (
-    !node ||
-    !blue.isTypeOf(node, PayNoteSchema, { checkSchemaExtensions: true })
-  ) {
-    return null;
-  }
-  return {
-    node,
-    output: blue.nodeToSchemaOutput(node, PayNoteSchema),
-  };
-};
+const parsePayNoteDelivery = (document: unknown) =>
+  parseDocumentWithSchema(document, PayNoteDeliverySchema, {
+    includeSimple: true,
+  });
+
+const parsePayNote = (document: unknown) =>
+  parseDocumentWithSchema(document, PayNoteSchema);
+
+export const isPayNoteDeliveryDocument = (document: unknown): boolean =>
+  Boolean(parsePayNoteDelivery(document));
+
+export const isPayNoteDocument = (document: unknown): boolean =>
+  Boolean(parsePayNote(document));
 
 const parseTimelineChannel = (value: unknown) => {
   const node = toBlueNode(value);

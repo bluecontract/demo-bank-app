@@ -36,8 +36,8 @@ const supportedContractDefinitions: SupportedContractDefinition[] = [
     typeBlueId: paynoteBlueIds['PayNote/PayNote Delivery'],
     typeName: 'PayNote/PayNote Delivery',
     displayName: buildDisplayName('PayNote/PayNote Delivery'),
-    operationsChannelKey: 'payNoteReceiver',
-    userChannelKey: 'payNoteReceiver',
+    operationsChannelKey: 'payNoteDeliverer',
+    userChannelKey: 'payNoteDeliverer',
     schema: PayNoteDeliverySchema,
   },
   {

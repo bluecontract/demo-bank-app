@@ -51,7 +51,7 @@ agents/skills/code-review/scripts/run-review.sh short-slug
 
 Notes:
 
-- Configure timeout with `REVIEW_TIMEOUT_SECONDS` (default: 120 seconds per model).
+- Configure timeout with `REVIEW_TIMEOUT_SECONDS` (default: 300 seconds per model).
 - If a model fails or times out, its output file will contain the error details.
 
 # Command Template (manual fallback)

@@ -7,7 +7,7 @@ ts=$(date -u +"%Y%m%dT%H%M%SZ")
 review_dir="agents/skills/code-review/reviews/${task}_${ts}"
 prompt_file="${review_dir}/context.md"
 result_file="${review_dir}/result.md"
-timeout_seconds="${REVIEW_TIMEOUT_SECONDS:-120}"
+timeout_seconds="${REVIEW_TIMEOUT_SECONDS:-300}"
 
 if git diff --cached --quiet; then
   echo "No staged changes to review." >&2
