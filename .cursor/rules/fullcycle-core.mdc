@@ -45,6 +45,9 @@ Leverage available tools and MCP servers as needed
 ## Skills
 Use agents/skills/* for tests, logs, debug, deploy, and code review. Open each SKILL.md before use.
 
+## Code Review (Required)
+- Before handing over changes to the user (even without a commit), run the code review skill and address any high-priority items.
+
 ## Rules
 1. Load specific rules according to the development step and context.
 2. Always explicitly list all loaded rules in the chat at the very end of the response
