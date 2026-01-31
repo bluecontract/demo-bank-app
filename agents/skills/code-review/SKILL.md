@@ -18,16 +18,17 @@ Key files:
 Relevant docs:
 Tests run:
 Primary risks:
+Review instructions:
+- Review staged files only (ignore unstaged/untracked).
+- Do not propose code changes; report issues only.
 Focus areas: High-priority issues only (DRY/SRP, reuse opportunities, regressions, missing tests, security).
 ```
 
 # Staged-Only Enforcement
 
-Review only staged changes. If anything is unstaged or untracked, stop and fix it.
+Review only staged changes. Unstaged/untracked files are allowed, but **all agent-implemented changes that are meant to be reviewed must be staged** before running the review.
 
 ```bash
-if git status --porcelain | rg -q '^\?\?'; then echo "Untracked files found. Stage or remove them first."; exit 1; fi
-if git status --porcelain | rg -q '^.[^ ]'; then echo "Unstaged changes found. Stage or stash them first."; exit 1; fi
 if git diff --cached --quiet; then echo "No staged changes to review."; exit 1; fi
 ```
 
@@ -42,7 +43,7 @@ if git diff --cached --quiet; then echo "No staged changes to review."; exit 1; 
 
 # Command Template
 
-````bash
+```bash
 ts=$(date -u +"%Y%m%dT%H%M%SZ")
 task="short-slug"
 review_dir="agents/skills/code-review/reviews/${task}_${ts}"
@@ -58,20 +59,21 @@ Key files:
 Relevant docs:
 Tests run:
 Primary risks:
+Review instructions:
+- Review staged files only (ignore unstaged/untracked).
+- Do not propose code changes; report issues only.
 Focus areas: High-priority issues only (DRY/SRP, reuse opportunities, regressions, missing tests, security).
 
-Diff:
-```diff
+Staged files (review only these):
 EOF
-  git diff --staged
-  echo '```'
+  git diff --name-only --staged
 } > "$prompt_file"
 
 prompt=$(cat "$prompt_file")
 
 claude --model sonnet -p "$prompt" > "${review_dir}/claude.md"
 gemini -m gemini-2.5-pro "$prompt" > "${review_dir}/gemini.md"
-codex review --uncommitted -c model="codex-5.2-codex" "$prompt" > "${review_dir}/codex.md"
+codex review -c model="codex-5.2-codex" "$prompt" > "${review_dir}/codex.md"
 
 cat <<'EOF' > "$result_file"
 # Review Resolution
@@ -90,7 +92,7 @@ cat <<'EOF' > "$result_file"
   - Rationale:
   - Action taken (if any):
 EOF
-````
+```
 
 # Base Branch Reviews
 

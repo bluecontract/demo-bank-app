@@ -58,3 +58,6 @@ test-output
 
 # Working docs
 IMPLEMENTATION_PLAN.md
+
+# Code review artifacts
+agents/skills/code-review/reviews/
