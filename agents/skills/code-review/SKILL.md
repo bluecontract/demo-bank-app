@@ -85,7 +85,8 @@ EOF
 prompt=$(cat "$prompt_file")
 
 claude --model sonnet -p "$prompt" > "${review_dir}/claude.md"
-gemini -m gemini-2.5-pro "$prompt" > "${review_dir}/gemini.md"
+gemini -m gemini-3-pro-preview --allowed-tools= "$prompt" > "${review_dir}/gemini.md" \
+  || gemini -m gemini-3-flash-preview --allowed-tools= "$prompt" > "${review_dir}/gemini.md"
 codex review -c model="codex-5.2-codex" "$prompt" > "${review_dir}/codex.md"
 
 cat <<'EOF' > "$result_file"

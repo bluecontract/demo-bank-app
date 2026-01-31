@@ -65,7 +65,7 @@ run_model() {
       echo "Review skipped for ${label}."
       echo "Reason: '${tool}' not found in PATH."
     } > "$outfile"
-    return 0
+    return 1
   fi
 
   if [[ -n "$timeout_cmd" ]]; then
@@ -89,6 +89,7 @@ run_model() {
         cat "$errfile"
       fi
     } > "$outfile"
+    return 1
   elif [[ ! -s "$outfile" ]]; then
     {
       echo "Review completed with empty output for ${label}."
@@ -99,13 +100,22 @@ run_model() {
         cat "$errfile"
       fi
     } > "$outfile"
+    return 1
   fi
 
   rm -f "$errfile"
+  return 0
 }
 
 run_model "claude" "${review_dir}/claude.md" claude --model sonnet -p "$prompt"
-run_model "gemini" "${review_dir}/gemini.md" gemini -m gemini-2.5-pro "$prompt"
+run_gemini_with_fallback() {
+  if run_model "gemini" "${review_dir}/gemini.md" gemini -m gemini-3-pro-preview --allowed-tools= "$prompt"; then
+    return 0
+  fi
+  run_model "gemini (fallback)" "${review_dir}/gemini.md" gemini -m gemini-3-flash-preview --allowed-tools= "$prompt"
+}
+
+run_gemini_with_fallback
 run_model "codex" "${review_dir}/codex.md" codex review -c model="codex-5.2-codex" "$prompt"
 
 cat <<'EOF' > "$result_file"
