@@ -20,6 +20,8 @@
     "lint:all": "nx run-many --target=lint --all",
     "lint:fix": "nx affected --target=lint --fix",
     "typecheck": "nx run-many --target=typecheck --all",
+    "verify:quick": "npx tsx scripts/verify-quick.ts",
+    "verify:full": "npx tsx scripts/verify-full.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "format:staged": "lint-staged",
@@ -48,6 +50,7 @@
     "@demo-bank-app/shared-config": "*",
     "@demo-bank-app/shared-core": "*",
     "@demo-bank-app/shared-observability": "*",
+    "@blue-repository/types": "0.9.0",
     "@tanstack/react-query": "^5.17.10",
     "@ts-rest/core": "^3.52.1",
     "@ts-rest/serverless": "^3.52.1",
@@ -120,6 +123,9 @@
   },
   "overrides": {
     "@remix-run/router": "1.23.2",
+    "fast-xml-parser": "5.3.4",
+    "koa": "3.1.1",
+    "lodash": "4.17.23",
     "qs": "^6.14.1"
   },
   "workspaces": [

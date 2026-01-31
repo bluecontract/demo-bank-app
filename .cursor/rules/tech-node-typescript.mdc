@@ -1,6 +1,6 @@
 ---
-description: 
-globs: *.ts
+description:
+globs: **/*.ts, **/*.tsx
 alwaysApply: false
 ---
 # Node.js 22 + TypeScript - Cursor Rules

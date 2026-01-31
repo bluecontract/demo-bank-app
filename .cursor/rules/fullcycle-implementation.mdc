@@ -1,0 +1,12 @@
+---
+description: Implementation guardrails for demo-bank-app
+globs: apps/**, libs/**, scripts/**
+alwaysApply: false
+---
+# Implementation Guardrails
+- Reuse existing code paths; avoid duplication.
+- Keep files focused and small; SRP first.
+- Contract-first: update shared contract/types before API/client changes.
+- Validate external inputs at the boundary; map to domain errors once.
+- UI: keep styling consistent with existing tokens and layout patterns.
+- Tests: add or update tests for behavior changes.

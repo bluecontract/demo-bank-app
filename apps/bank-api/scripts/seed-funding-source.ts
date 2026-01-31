@@ -38,6 +38,14 @@ const createRepository = () => {
     ...(process.env.AWS_ENDPOINT_URL
       ? { endpoint: process.env.AWS_ENDPOINT_URL }
       : {}),
+    ...(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+      ? {
+          credentials: {
+            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+          },
+        }
+      : {}),
   });
 };
 
@@ -94,6 +102,30 @@ const seedFundingSource = async () => {
 
   const repository = createRepository();
 
+  const isConditionalCheckFailure = (error: unknown): boolean => {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const cause = (error as { cause?: unknown }).cause;
+    if (!cause || typeof cause !== 'object') {
+      return false;
+    }
+
+    const reasons = (cause as { CancellationReasons?: unknown })
+      .CancellationReasons;
+    if (!Array.isArray(reasons) || reasons.length === 0) {
+      return false;
+    }
+
+    return reasons.every(reason => {
+      if (!reason || typeof reason !== 'object') {
+        return false;
+      }
+      return (reason as { Code?: string }).Code === 'ConditionalCheckFailed';
+    });
+  };
+
   const systemAccounts = [
     new Account({
       id: FUNDING_SOURCE.ACCOUNT_ID,
@@ -124,7 +156,18 @@ const seedFundingSource = async () => {
   ];
 
   for (const account of systemAccounts) {
-    await repository.saveAccount(account);
+    try {
+      await repository.saveAccount(account);
+    } catch (error) {
+      if (isConditionalCheckFailure(error)) {
+        console.warn('Account already exists, skipping seed.', {
+          accountId: account.id,
+          accountNumber: account.accountNumber,
+        });
+        continue;
+      }
+      throw error;
+    }
   }
 };
 

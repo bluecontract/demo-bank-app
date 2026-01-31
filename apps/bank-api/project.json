@@ -11,10 +11,18 @@
           "nx build bank-api --configuration=development",
           "mv dist/apps/bank-api/lambda/main.cjs dist/apps/bank-api/lambda/main.js",
           "cd apps/bank-api && samlocal deploy --no-confirm-changeset --resolve-s3",
+          "cd apps/bank-api && npm run seed-secrets",
           "cd apps/bank-api && npm run seed-funding-source",
           "cd apps/bank-api && sam local start-api --port 3000 --no-memory-limit --docker-volume-basedir . --env-vars env.local.json"
         ],
-        "parallel": false
+        "parallel": false,
+        "env": {
+          "AWS_PROFILE": "localstack",
+          "AWS_CONFIG_FILE": ".aws/config",
+          "AWS_SHARED_CREDENTIALS_FILE": ".aws/credentials",
+          "AWS_EC2_METADATA_DISABLED": "true",
+          "AWS_REGION": "eu-west-1"
+        }
       },
       "dependsOn": ["localstack:serve"]
     },
