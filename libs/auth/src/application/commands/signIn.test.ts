@@ -60,6 +60,7 @@ describe('signIn', () => {
       isTest: false,
       createdAt: new Date(),
       marketingEmailsOptIn: true,
+      merchantId: 'merchant-123',
     });
     const mockToken = 'jwt-token-123';
 
@@ -97,6 +98,7 @@ describe('signIn', () => {
         createdAt: mockUser.createdAt.toISOString(),
         isTest: false,
         marketingEmailsOptIn: true,
+        merchantId: 'merchant-123',
       },
       token: mockToken,
     };

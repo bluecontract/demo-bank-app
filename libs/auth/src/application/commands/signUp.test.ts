@@ -128,6 +128,7 @@ describe('signUp', () => {
     const result = await signUp(command, dependencies);
 
     expect(result.user.id).toBe('merchant-user-123');
+    expect(result.user.merchantId).toBe('merchant-123');
     expect(mockUserRepository.save).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'merchant@example.com',

@@ -74,6 +74,7 @@ export const AuthSuccessResponseSchema = z.object({
   userId: z.string(),
   email: z.string().email(),
   marketingEmailsOptIn: z.boolean(),
+  merchantId: z.string().optional(),
 });
 
 export const AuthErrorResponseSchema = z.object({

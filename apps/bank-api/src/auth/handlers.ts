@@ -45,6 +45,7 @@ const toAuthResponse = (
       userId: user.id,
       email: user.email,
       marketingEmailsOptIn: user.marketingEmailsOptIn,
+      ...(user.merchantId ? { merchantId: user.merchantId } : {}),
     },
   };
 };
@@ -80,12 +81,25 @@ const ensureMerchantCreditLineAccount = async (user: AuthResult['user']) => {
   );
 };
 
+const finalizeMerchantSignUp = async (
+  result: AuthResult,
+  isMerchantSignup: boolean,
+  config: { jwtTtlSeconds: number; testUserTtlSeconds: number },
+  responseHeaders: Headers
+) => {
+  if (isMerchantSignup) {
+    await ensureMerchantCreditLineAccount(result.user);
+  }
+  return toAuthResponse(201, result, config, responseHeaders);
+};
+
 export const signUpHandler = async (
   { body, query }: ServerInferRequest<(typeof bankApiContract)['signUp']>,
   { responseHeaders }: { responseHeaders: Headers }
 ) => {
   const deps = await getDependencies();
   const { logger, config } = deps;
+  const isMerchantSignup = Boolean(body.merchantId);
 
   try {
     const result = await signUp(
@@ -98,17 +112,23 @@ export const signUpHandler = async (
       deps
     );
 
-    if (body.merchantId) {
-      await ensureMerchantCreditLineAccount(result.user);
-    }
-    return toAuthResponse(201, result, config, responseHeaders);
+    return finalizeMerchantSignUp(
+      result,
+      isMerchantSignup,
+      config,
+      responseHeaders
+    );
   } catch (error: unknown) {
     logger.error('Sign-up failed', { error: String(error) });
     if (error instanceof UserAlreadyExistsError) {
-      if (body.merchantId) {
+      if (isMerchantSignup) {
         const result = await signIn({ email: body.email }, deps);
-        await ensureMerchantCreditLineAccount(result.user);
-        return toAuthResponse(201, result, config, responseHeaders);
+        return finalizeMerchantSignUp(
+          result,
+          isMerchantSignup,
+          config,
+          responseHeaders
+        );
       }
       return toUserAlreadyExistsError(
         'A user with this email already exists. Please use a different email.'

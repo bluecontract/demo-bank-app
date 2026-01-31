@@ -3,9 +3,11 @@ import { signUpHandler, signInHandler } from './handlers';
 import { getDependencies, resetDependencies } from './dependencies';
 import {
   UserAlreadyExistsError,
+  UserNotFoundError,
   UserValidationError,
+  signUp,
+  signIn,
 } from '@demo-bank-app/auth';
-import { signUp, signIn } from '@demo-bank-app/auth';
 import { createAccount } from '@demo-bank-app/banking';
 import { getDependencies as getBankingDependencies } from '../banking/dependencies';
 
@@ -19,13 +21,16 @@ vi.mock('../banking/dependencies', () => ({
   getDependencies: vi.fn(),
 }));
 
-vi.mock('@demo-bank-app/auth', () => ({
-  signIn: vi.fn(),
-  signUp: vi.fn(),
-  UserAlreadyExistsError: vi.fn(),
-  UserNotFoundError: vi.fn(),
-  UserValidationError: vi.fn(),
-}));
+vi.mock('@demo-bank-app/auth', async () => {
+  const actual = await vi.importActual<typeof import('@demo-bank-app/auth')>(
+    '@demo-bank-app/auth'
+  );
+  return {
+    ...actual,
+    signIn: vi.fn(),
+    signUp: vi.fn(),
+  };
+});
 
 vi.mock('@demo-bank-app/banking', () => ({
   createAccount: vi.fn(),
@@ -113,12 +118,13 @@ describe('Auth Handlers', () => {
           isTest: false,
           createdAt: '2021-01-01',
           marketingEmailsOptIn: true,
+          merchantId: 'merchant-123',
         },
         token: 'jwt-token',
       });
       const responseHeaders = createMockHeaders();
 
-      await signUpHandler(
+      const result = await signUpHandler(
         {
           body: {
             email: 'merchant@example.com',
@@ -130,6 +136,12 @@ describe('Auth Handlers', () => {
         { responseHeaders } as any
       );
 
+      expect(result.body).toMatchObject({
+        userId: 'merchant-user-id',
+        email: 'merchant@example.com',
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-123',
+      });
       expect(mockSignUp).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'merchant@example.com',
@@ -326,6 +338,7 @@ describe('Auth Handlers', () => {
           isTest: false,
           createdAt: '2021-01-01',
           marketingEmailsOptIn: true,
+          merchantId: 'merchant-789',
         },
         token: 'jwt-token',
       });
@@ -341,31 +354,31 @@ describe('Auth Handlers', () => {
         userId: 'test-user-id',
         email: 'testuser@example.com',
         marketingEmailsOptIn: true,
+        merchantId: 'merchant-789',
       });
       expect(responseHeaders.get('Set-Cookie')).toContain('demoAuth=jwt-token');
     });
 
-    it('should return 404 for UserNotFoundError', async () => {
+    it('should return 401 for UserNotFoundError', async () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
-      class UserNotFoundError extends Error {
-        code = 'USER_NOT_FOUND';
-        constructor(email: string) {
-          super(email);
-        }
-      }
       mockSignIn.mockRejectedValue(
         new UserNotFoundError('missinguser@example.com')
       );
       const responseHeaders = createMockHeaders();
-      await expect(
-        signInHandler({ body: { email: 'missinguser@example.com' } }, {
-          responseHeaders,
-        } as any)
-      ).rejects.toThrow('missinguser@example.com');
+      const result = await signInHandler(
+        { body: { email: 'missinguser@example.com' } },
+        { responseHeaders } as any
+      );
+      expect(result.status).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message:
+          'User not found. Please check the email and try again or sign up.',
+      });
     });
 
     it('should return 400 for UserValidationError', async () => {
