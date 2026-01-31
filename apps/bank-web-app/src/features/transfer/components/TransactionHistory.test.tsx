@@ -6,6 +6,7 @@ import { TransactionHistory } from './TransactionHistory';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
 import { useActivity } from '../../transactions/hooks/useActivity';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
+import { routerFutureConfig } from '../../../app/routerFutureConfig';
 
 vi.mock('../../../app/providers/SelectedAccountProvider', () => ({
   useSelectedAccount: vi.fn(),
@@ -181,7 +182,9 @@ const mockCardGroupedActivity = [
 ];
 
 const renderWithRouter = (component: React.ReactElement) => {
-  return render(<MemoryRouter>{component}</MemoryRouter>);
+  return render(
+    <MemoryRouter future={routerFutureConfig}>{component}</MemoryRouter>
+  );
 };
 
 describe('TransactionHistory', () => {

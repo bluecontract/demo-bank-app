@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { useAccounts } from './useAccounts';
 import { apiClient } from '../../../api/client';
 import { ReactNode } from 'react';
+import { routerFutureConfig } from '../../../app/routerFutureConfig';
 
 // Mock the API client
 vi.mock('../../../api/client');
@@ -25,7 +26,7 @@ const createWrapper = () => {
   });
 
   return ({ children }: { children: ReactNode }) => (
-    <BrowserRouter>
+    <BrowserRouter future={routerFutureConfig}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </BrowserRouter>
   );

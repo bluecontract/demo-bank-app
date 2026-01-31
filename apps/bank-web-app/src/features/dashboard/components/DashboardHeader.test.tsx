@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { BrowserRouter } from 'react-router-dom';
 import { DashboardHeader } from './DashboardHeader';
+import { routerFutureConfig } from '../../../app/routerFutureConfig';
 
 const mockSignOut = vi.fn();
 
@@ -12,7 +13,9 @@ vi.mock('../../../app/providers/AuthProvider', () => ({
 }));
 
 const renderWithRouter = (component: React.ReactElement) => {
-  return render(<BrowserRouter>{component}</BrowserRouter>);
+  return render(
+    <BrowserRouter future={routerFutureConfig}>{component}</BrowserRouter>
+  );
 };
 
 describe('DashboardHeader', () => {

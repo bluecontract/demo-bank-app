@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Avatar } from './Avatar';
 
@@ -31,7 +31,7 @@ describe('Avatar', () => {
     expect(image).toBeInTheDocument();
 
     // Trigger image load error
-    image.dispatchEvent(new Event('error'));
+    fireEvent.error(image);
 
     // Wait for the state to update and re-render
     await screen.findByText('A');

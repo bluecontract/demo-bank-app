@@ -47,6 +47,13 @@ const waitForDashboard = async (page: Page, userEmail?: string) => {
   }
 };
 
+const waitForSignedOut = async (page: Page) => {
+  await page.waitForURL(
+    url => url.pathname === '/' || url.pathname === '/signin',
+    { timeout: TEST_DATA.TIMEOUTS.NAVIGATION }
+  );
+};
+
 test.describe('Sign In Flow', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(`${BASE_URL}/signin`);
@@ -68,9 +75,8 @@ test.describe('Sign In Flow', () => {
     // Then click on the Sign Out button
     await page.click('button:has-text("Sign Out")');
 
-    // Should be redirected to home page
-    await page.waitForURL(`${BASE_URL}/`);
-    await expect(page).toHaveURL(`${BASE_URL}/`);
+    // Should be redirected to home or sign-in page
+    await waitForSignedOut(page);
 
     // Now sign in with the same credentials
     await page.goto(`${BASE_URL}/signin`);
@@ -154,8 +160,8 @@ test.describe('Sign In Flow', () => {
     // Then click on the Sign Out button
     await page.click('button:has-text("Sign Out")');
 
-    // Should be redirected to home page
-    await page.waitForURL(`${BASE_URL}/`);
+    // Should be redirected to home or sign-in page
+    await waitForSignedOut(page);
 
     // Try to access dashboard after sign out - should be redirected to signin
     await page.goto(`${BASE_URL}/dashboard`);

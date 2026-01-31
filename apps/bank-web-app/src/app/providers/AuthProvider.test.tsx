@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from './AuthProvider';
+import { routerFutureConfig } from '../routerFutureConfig';
 
 // Mock localStorage
 const localStorageMock = {
@@ -67,7 +68,7 @@ const createTestWrapper = () => {
   });
 
   return ({ children }: { children: React.ReactNode }) => (
-    <BrowserRouter>
+    <BrowserRouter future={routerFutureConfig}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>{children}</AuthProvider>
       </QueryClientProvider>
