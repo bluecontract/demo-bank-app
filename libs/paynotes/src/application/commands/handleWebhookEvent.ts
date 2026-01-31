@@ -98,6 +98,20 @@ const toBlueNode = (value: unknown): BlueNode | null => {
   }
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const toSimpleRecord = (value: unknown): Record<string, unknown> | null => {
+  const node = toBlueNode(value);
+  if (node) {
+    const simple = blue.nodeToJson(node, 'simple');
+    if (isRecord(simple)) {
+      return simple;
+    }
+  }
+  return isRecord(value) ? value : null;
+};
+
 const parsePayNoteDocument = (value: unknown) => {
   const node = toBlueNode(value);
   if (
@@ -122,19 +136,6 @@ const getString = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const unwrapNodeValue = (value: unknown): unknown => {
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-  const record = value as Record<string, unknown>;
-  return 'value' in record ? record.value : value;
-};
-
-const getUnwrappedString = (value: unknown): string | undefined => {
-  const unwrapped = unwrapNodeValue(value);
-  return getString(unwrapped);
-};
-
 const getRecordString = (
   record: Record<string, unknown> | undefined,
   key: string
@@ -147,19 +148,19 @@ type PartialCardTransactionDetails = Partial<CardTransactionDetails>;
 const extractCardTransactionDetails = (
   value: unknown
 ): PartialCardTransactionDetails | undefined => {
-  const unwrapped = unwrapNodeValue(value);
-  if (!unwrapped || typeof unwrapped !== 'object') {
+  const record = toSimpleRecord(value);
+  if (!record) {
     return undefined;
   }
 
-  const record = unwrapped as Record<string, unknown>;
   const details: PartialCardTransactionDetails = {
-    retrievalReferenceNumber: getUnwrappedString(
-      record.retrievalReferenceNumber
+    retrievalReferenceNumber: getRecordString(
+      record,
+      'retrievalReferenceNumber'
     ),
-    systemTraceAuditNumber: getUnwrappedString(record.systemTraceAuditNumber),
-    transmissionDateTime: getUnwrappedString(record.transmissionDateTime),
-    authorizationCode: getUnwrappedString(record.authorizationCode),
+    systemTraceAuditNumber: getRecordString(record, 'systemTraceAuditNumber'),
+    transmissionDateTime: getRecordString(record, 'transmissionDateTime'),
+    authorizationCode: getRecordString(record, 'authorizationCode'),
   };
 
   if (

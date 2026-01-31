@@ -112,20 +112,11 @@ const toBlueNode = (value: unknown): BlueNode | null => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-const unwrapNodeValue = (value: unknown): unknown => {
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-  const record = value as Record<string, unknown>;
-  return 'value' in record ? record.value : value;
-};
-
 const getString = (value: unknown): string | undefined => {
-  const unwrapped = unwrapNodeValue(value);
-  if (typeof unwrapped !== 'string') {
+  if (typeof value !== 'string') {
     return undefined;
   }
-  const trimmed = unwrapped.trim();
+  const trimmed = value.trim();
   return trimmed.length ? trimmed : undefined;
 };
 
@@ -174,14 +165,13 @@ const normalizeChannelBindings = (
       return;
     }
 
-    const binding = unwrapNodeValue(value);
-    if (!binding || typeof binding !== 'object') {
+    const binding = getContractsRecord(value);
+    if (!binding) {
       return;
     }
 
-    const bindingRecord = binding as Record<string, unknown>;
-    const accountId = getString(bindingRecord.accountId);
-    const email = getString(bindingRecord.email);
+    const accountId = getString(binding.accountId);
+    const email = getString(binding.email);
 
     if (accountId) {
       output[key] = { accountId };
