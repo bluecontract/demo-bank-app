@@ -5,6 +5,7 @@ import {
   type MaybeAuthenticatedTsRestRequestContext,
 } from '../auth/middleware';
 import { getDependencies } from '../paynote/dependencies';
+import { filterCustomerVisibleContracts } from './contractVisibility';
 
 export const listTransactionContractsHandler = async (
   request: ServerInferRequest<
@@ -28,7 +29,7 @@ export const listTransactionContractsHandler = async (
   return {
     status: 200 as const,
     body: {
-      items,
+      items: filterCustomerVisibleContracts(items),
     },
   };
 };

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { listTransactionContractsHandler } from './listTransactionContracts';
+import { createContractSummaryFixtures } from './contractSummaryFixtures';
 
 const hoisted = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
@@ -40,17 +41,7 @@ describe('listTransactionContractsHandler', () => {
   });
 
   it('returns related contracts for the transaction', async () => {
-    const summaries = [
-      {
-        contractId: 'contract-1',
-        typeBlueId: 'type-1',
-        displayName: 'PayNote',
-        sessionId: 'session-1',
-        status: 'accepted',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        updatedAt: '2024-01-02T12:00:00.000Z',
-      },
-    ];
+    const { all: summaries, visible } = createContractSummaryFixtures();
 
     contractRepository.listContractsByTransactionId.mockResolvedValue(
       summaries
@@ -64,7 +55,7 @@ describe('listTransactionContractsHandler', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.body.items).toEqual(summaries);
+    expect(response.body.items).toEqual(visible);
     expect(
       contractRepository.listContractsByTransactionId
     ).toHaveBeenCalledWith('txn-123', { userId: 'user-1' });
