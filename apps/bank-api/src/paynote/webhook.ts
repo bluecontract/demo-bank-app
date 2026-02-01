@@ -7,6 +7,7 @@ import {
   handleWebhookEvent as handleWebhookEventUseCase,
   handlePayNoteDeliveryWebhookEvent,
   handlePayNoteBootstrapWebhookEvent,
+  getDocumentBootstrapRequestFromEvent,
   getPayloadSummary,
 } from '@demo-bank-app/paynotes';
 import { Blue } from '@blue-labs/language';
@@ -55,6 +56,17 @@ const classifyDocumentType = (document: unknown) => {
   } catch {
     return { isPayNote: false, isDelivery: false, isBootstrap: false };
   }
+};
+
+const hasDocumentBootstrapRequest = (payload: unknown): boolean => {
+  const emitted = (payload as { object?: { emitted?: unknown[] } })?.object
+    ?.emitted;
+  if (!Array.isArray(emitted)) {
+    return false;
+  }
+  return emitted.some(event =>
+    Boolean(getDocumentBootstrapRequestFromEvent(event))
+  );
 };
 
 export const payNoteWebhookHandler = async (
@@ -185,7 +197,8 @@ export const payNoteWebhookHandler = async (
     ? classifyDocumentType(documentPayload)
     : { isPayNote: false, isDelivery: false, isBootstrap: false };
 
-  const shouldHandleDelivery = documentType.isDelivery;
+  const shouldHandleDelivery =
+    documentType.isDelivery || hasDocumentBootstrapRequest(payload);
 
   trace('PayNote webhook classification', {
     eventId,

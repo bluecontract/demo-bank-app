@@ -7,23 +7,30 @@ import {
 import { getDependencies } from './dependencies';
 
 export const listPayNoteDeliveriesHandler = async (
-  _request: ServerInferRequest<
+  request: ServerInferRequest<
     (typeof bankApiContract)['banking']['listPayNoteDeliveries']
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
   const { logger, payNoteDeliveryRepository } = await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
+  const clientDecisionStatus = request.query?.clientDecisionStatus;
 
-  logger.info('Listing PayNote deliveries', { userId });
+  logger.info('Listing PayNote deliveries', { userId, clientDecisionStatus });
 
   const deliveries = await payNoteDeliveryRepository.listDeliveriesByUserId(
     userId
   );
 
-  const visibleDeliveries = deliveries.filter(
+  let visibleDeliveries = deliveries.filter(
     delivery => delivery.transactionIdentificationStatus === 'identified'
   );
+
+  if (clientDecisionStatus) {
+    visibleDeliveries = visibleDeliveries.filter(
+      d => (d.clientDecisionStatus ?? 'pending') === clientDecisionStatus
+    );
+  }
 
   return {
     status: 200 as const,

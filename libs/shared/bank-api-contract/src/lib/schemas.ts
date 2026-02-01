@@ -427,6 +427,7 @@ export const PayNoteDeliverySummaryDto = z.object({
   deliveryStatus: z.string().optional(),
   transactionIdentificationStatus: z.string().optional(),
   clientDecisionStatus: z.string().optional(),
+  transactionId: z.string().optional(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
 });
@@ -451,6 +452,18 @@ export const PayNoteDeliveryDetailsDto = z.object({
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
 });
+
+export const PayNoteDeliveryDetailsSanitizedDto =
+  PayNoteDeliveryDetailsDto.omit({
+    deliveryDocument: true,
+    payNoteDocument: true,
+  });
+
+export const RejectPayNoteDeliveryRequestDto = z
+  .object({
+    reason: z.string().optional(),
+  })
+  .optional();
 
 export const ContractSummaryDto = z.object({
   contractId: z.string(),

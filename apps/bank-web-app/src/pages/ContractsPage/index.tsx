@@ -8,15 +8,25 @@ import {
 import {
   ContractsListPanel,
   ContractDetailsPanel,
+  ProposalDetailsPanel,
 } from '../../features/contracts/components';
+import { Card } from '../../ui/Card';
+import { Spinner } from '../../ui/Spinner';
 import {
   useContracts,
+  useProposals,
   useContractDetails,
+  useProposalDetails,
   useContractReviewState,
   useActiveContractSession,
 } from '../../features/contracts/hooks';
-import type { ContractSummary } from '../../types/api';
+import type { ContractOrProposalItem } from '../../features/contracts/lib/contractsAndProposals';
 import { dedupeContracts } from '../../features/contracts/lib/dedupeContracts';
+import {
+  mergeContractsAndProposals,
+  getItemSessionId,
+  isProposalItem,
+} from '../../features/contracts/lib/contractsAndProposals';
 
 export function ContractsPage() {
   const { user } = useAuth();
@@ -30,11 +40,37 @@ export function ContractsPage() {
   );
 
   const contractsQuery = useContracts();
-  const contractDetailsQuery = useContractDetails(selectedSessionId);
-
+  const proposalsQuery = useProposals();
   const dedupedContracts = useMemo(
     () => (contractsQuery.data ? dedupeContracts(contractsQuery.data) : []),
     [contractsQuery.data]
+  );
+  const proposals = useMemo(
+    () => proposalsQuery.data ?? [],
+    [proposalsQuery.data]
+  );
+  const listItems = useMemo(
+    () => mergeContractsAndProposals(dedupedContracts, proposals),
+    [dedupedContracts, proposals]
+  );
+
+  const selectedItem = useMemo(
+    () =>
+      listItems.find(item => getItemSessionId(item) === selectedSessionId) ??
+      null,
+    [listItems, selectedSessionId]
+  );
+  const selectedKind = selectedItem
+    ? isProposalItem(selectedItem)
+      ? 'proposal'
+      : 'contract'
+    : null;
+
+  const contractDetailsQuery = useContractDetails(
+    selectedSessionId && selectedKind === 'contract' ? selectedSessionId : null
+  );
+  const proposalDetailsQuery = useProposalDetails(
+    selectedSessionId && selectedKind === 'proposal' ? selectedSessionId : null
   );
 
   useEffect(() => {
@@ -50,33 +86,37 @@ export function ContractsPage() {
   }, [requestedSessionId]);
 
   useEffect(() => {
-    if (
-      selectedSessionId ||
-      dedupedContracts.length === 0 ||
-      requestedSessionId
-    ) {
+    if (selectedSessionId || listItems.length === 0 || requestedSessionId) {
       return;
     }
 
     if (activeSessionId) {
-      const matchingContract = dedupedContracts.find(
-        contract => contract.sessionId === activeSessionId
+      const matching = listItems.find(
+        item => getItemSessionId(item) === activeSessionId
       );
-      if (matchingContract?.sessionId) {
-        setSelectedSessionId(matchingContract.sessionId);
-        markReviewed(matchingContract);
-        return;
+      if (matching) {
+        const sid = getItemSessionId(matching);
+        if (sid) {
+          setSelectedSessionId(sid);
+          if (!isProposalItem(matching)) {
+            markReviewed(matching);
+          }
+          return;
+        }
       }
     }
 
-    const firstWithSession = dedupedContracts.find(item => item.sessionId);
-    if (firstWithSession?.sessionId) {
-      setSelectedSessionId(firstWithSession.sessionId);
-      markReviewed(firstWithSession);
+    const firstWithSession = listItems.find(item => getItemSessionId(item));
+    const sid = firstWithSession ? getItemSessionId(firstWithSession) : null;
+    if (sid) {
+      setSelectedSessionId(sid);
+      if (firstWithSession && !isProposalItem(firstWithSession)) {
+        markReviewed(firstWithSession);
+      }
     }
   }, [
     activeSessionId,
-    dedupedContracts,
+    listItems,
     markReviewed,
     selectedSessionId,
     requestedSessionId,
@@ -92,11 +132,15 @@ export function ContractsPage() {
     return () => setActiveSession(null);
   }, [setActiveSession]);
 
-  const handleSelectContract = (contract: ContractSummary) => {
-    if (contract.sessionId) {
-      setSelectedSessionId(contract.sessionId);
+  const handleSelectItem = (item: ContractOrProposalItem) => {
+    const sid = getItemSessionId(item);
+    if (sid) {
+      setSelectedSessionId(sid);
     }
   };
+
+  const isListLoading = contractsQuery.isLoading || proposalsQuery.isLoading;
+  const isListError = contractsQuery.isError || proposalsQuery.isError;
 
   return (
     <div className="app-shell flex" data-testid="contracts-main-container">
@@ -114,23 +158,42 @@ export function ContractsPage() {
         <main className="flex-1 px-6 pb-8 lg:px-10 flex flex-col gap-6 min-h-0">
           <section className="grid gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] min-h-0">
             <ContractsListPanel
-              contracts={dedupedContracts}
-              isLoading={contractsQuery.isLoading}
-              isError={contractsQuery.isError}
+              items={listItems}
+              isLoading={isListLoading}
+              isError={isListError}
               selectedSessionId={selectedSessionId}
-              onSelect={handleSelectContract}
+              onSelect={handleSelectItem}
             />
 
-            <ContractDetailsPanel
-              contract={contractDetailsQuery.data ?? null}
-              isLoading={contractDetailsQuery.isLoading}
-              isError={contractDetailsQuery.isError}
-              errorMessage={
-                contractDetailsQuery.error instanceof Error
-                  ? contractDetailsQuery.error.message
-                  : undefined
-              }
-            />
+            {selectedKind === 'proposal' ? (
+              <ProposalDetailsPanel
+                proposal={proposalDetailsQuery.data ?? null}
+                sessionId={selectedSessionId}
+                isLoading={proposalDetailsQuery.isLoading}
+                isError={proposalDetailsQuery.isError}
+                errorMessage={
+                  proposalDetailsQuery.error instanceof Error
+                    ? proposalDetailsQuery.error.message
+                    : undefined
+                }
+                onDecisionComplete={() => setSelectedSessionId(null)}
+              />
+            ) : selectedSessionId && !selectedItem && isListLoading ? (
+              <Card className="flex items-center justify-center min-h-[420px]">
+                <Spinner size="lg" color="green" />
+              </Card>
+            ) : (
+              <ContractDetailsPanel
+                contract={contractDetailsQuery.data ?? null}
+                isLoading={contractDetailsQuery.isLoading}
+                isError={contractDetailsQuery.isError}
+                errorMessage={
+                  contractDetailsQuery.error instanceof Error
+                    ? contractDetailsQuery.error.message
+                    : undefined
+                }
+              />
+            )}
           </section>
         </main>
       </div>

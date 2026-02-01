@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ContractsListPanel } from './ContractsListPanel';
+import type { ProposalListItem } from '../lib/contractsAndProposals';
 
 const contracts = [
   {
@@ -24,10 +25,23 @@ const contracts = [
   },
 ];
 
+const proposal: ProposalListItem = {
+  kind: 'proposal',
+  deliveryId: 'delivery-1',
+  deliverySessionId: 'session-delivery-1',
+  name: 'Invoice 42',
+  amountMinor: 1200,
+  currency: 'USD',
+  clientDecisionStatus: 'pending',
+  transactionId: 'txn-9',
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-03T00:00:00.000Z',
+};
+
 describe('ContractsListPanel', () => {
   it('renders contracts', () => {
     render(
-      <ContractsListPanel contracts={contracts} selectedSessionId="session-1" />
+      <ContractsListPanel items={contracts} selectedSessionId="session-1" />
     );
 
     expect(screen.getByText('PayNote')).toBeInTheDocument();
@@ -40,7 +54,7 @@ describe('ContractsListPanel', () => {
 
     render(
       <ContractsListPanel
-        contracts={contracts}
+        items={contracts}
         selectedSessionId={null}
         onSelect={onSelect}
       />
@@ -49,5 +63,13 @@ describe('ContractsListPanel', () => {
     fireEvent.click(screen.getByText('Atlas Payroll'));
 
     expect(onSelect).toHaveBeenCalledWith(contracts[0]);
+  });
+
+  it('renders proposal context', () => {
+    render(<ContractsListPanel items={[proposal]} selectedSessionId={null} />);
+
+    expect(screen.getByText('Invoice 42')).toBeInTheDocument();
+    expect(screen.getAllByText('Proposal').length).toBeGreaterThan(0);
+    expect(screen.getByText('Transaction txn-9')).toBeInTheDocument();
   });
 });

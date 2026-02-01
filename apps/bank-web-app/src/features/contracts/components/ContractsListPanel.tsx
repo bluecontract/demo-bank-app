@@ -1,15 +1,21 @@
 import { Card } from '../../../ui/Card';
 import { Spinner } from '../../../ui/Spinner';
-import type { ContractSummary } from '../../../types/api';
 import { useContractReviewState } from '../hooks/useContractReviewState';
 import { getContractChangeType } from '../lib/contractReview';
+import {
+  type ContractOrProposalItem,
+  isProposalItem,
+  getItemSessionId,
+  getItemUpdatedAt,
+} from '../lib/contractsAndProposals';
+import { formatCurrency } from '../../../lib/formatCurrency';
 
 interface ContractsListPanelProps {
-  contracts?: ContractSummary[] | null;
+  items?: ContractOrProposalItem[] | null;
   isLoading?: boolean;
   isError?: boolean;
   selectedSessionId?: string | null;
-  onSelect?: (contract: ContractSummary) => void;
+  onSelect?: (item: ContractOrProposalItem) => void;
 }
 
 const statusStyles: Record<string, string> = {
@@ -34,8 +40,15 @@ const formatTimestamp = (value: string) => {
   });
 };
 
+const formatProposalAmount = (item: ContractOrProposalItem) => {
+  if (!isProposalItem(item)) return null;
+  if (item.amountMinor == null) return 'Amount pending';
+  const currency = item.currency ? ` ${item.currency}` : '';
+  return `${formatCurrency(item.amountMinor)}${currency}`;
+};
+
 export function ContractsListPanel({
-  contracts,
+  items,
   isLoading = false,
   isError = false,
   selectedSessionId,
@@ -67,37 +80,51 @@ export function ContractsListPanel({
           </div>
         )}
 
-        {!isLoading && !isError && (!contracts || contracts.length === 0) && (
+        {!isLoading && !isError && (!items || items.length === 0) && (
           <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 p-6 text-center text-sm text-slate-500">
             No contracts available yet.
           </div>
         )}
 
-        {!isLoading && !isError && contracts && contracts.length > 0 && (
+        {!isLoading && !isError && items && items.length > 0 && (
           <div className="space-y-3 max-h-full overflow-y-auto pr-1">
-            {contracts.map(contract => {
-              const isActive =
-                contract.sessionId && contract.sessionId === selectedSessionId;
-              const statusKey = contract.status?.toLowerCase() ?? '';
+            {items.map(item => {
+              const sessionId = getItemSessionId(item);
+              const isActive = sessionId && sessionId === selectedSessionId;
+              const isProposal = isProposalItem(item);
+              const statusValue = isProposal
+                ? item.clientDecisionStatus ?? 'pending'
+                : item.status;
+              const statusKey = (statusValue ?? '').toLowerCase();
               const statusStyle =
                 statusStyles[statusKey] ??
                 'bg-slate-100 text-slate-700 border border-slate-200';
-              const isSelectable = Boolean(contract.sessionId);
-              const primaryName =
-                contract.documentName?.trim() || contract.displayName;
-              const typeLabel = contract.displayName;
-              const changeType = isActive
-                ? null
-                : getContractChangeType(contract, reviewedMap);
+              const isSelectable = Boolean(sessionId);
+              const primaryName = isProposal
+                ? item.name?.trim() || 'PayNote proposal'
+                : item.documentName?.trim() || item.displayName;
+              const typeLabel = isProposal ? 'Proposal' : item.displayName;
+              const changeType =
+                !isProposal && !isActive
+                  ? getContractChangeType(item, reviewedMap)
+                  : null;
               const changeLabel = changeType === 'new' ? 'New' : 'Updated';
               const changeStyle =
                 changeType === 'new'
                   ? 'bg-teal-50 text-teal-700 border border-teal-100'
                   : 'bg-cyan-50 text-cyan-700 border border-cyan-100';
+              const amountLine = isProposal ? formatProposalAmount(item) : null;
+              const transactionLine =
+                isProposal && item.transactionId
+                  ? `Transaction ${item.transactionId}`
+                  : null;
+              const itemKey = isProposal
+                ? `proposal-${item.deliveryId}`
+                : item.contractId;
 
               return (
                 <button
-                  key={contract.contractId}
+                  key={itemKey}
                   type="button"
                   className={`w-full text-left rounded-2xl border p-4 shadow-sm transition ${
                     isActive
@@ -108,8 +135,10 @@ export function ContractsListPanel({
                     if (!isSelectable) {
                       return;
                     }
-                    markReviewed(contract);
-                    onSelect?.(contract);
+                    if (!isProposal) {
+                      markReviewed(item);
+                    }
+                    onSelect?.(item);
                   }}
                   disabled={!isSelectable}
                 >
@@ -117,19 +146,34 @@ export function ContractsListPanel({
                     <p className="text-sm font-semibold text-slate-900 truncate">
                       {primaryName}
                     </p>
+                    {amountLine && (
+                      <p className="text-sm text-slate-600">{amountLine}</p>
+                    )}
+                    {transactionLine && (
+                      <p className="text-xs text-slate-500">
+                        {transactionLine}
+                      </p>
+                    )}
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="app-chip app-chip-neutral">
                         {typeLabel}
                       </span>
+                      {isProposal && (
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-100">
+                          Proposal
+                        </span>
+                      )}
                       <span
                         className={`text-xs font-semibold px-2 py-1 rounded-full ${statusStyle}`}
                       >
-                        {formatStatus(contract.status)}
+                        {formatStatus(statusValue)}
                       </span>
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                    <span>Updated {formatTimestamp(contract.updatedAt)}</span>
+                    <span>
+                      Updated {formatTimestamp(getItemUpdatedAt(item))}
+                    </span>
                     {changeType && (
                       <span
                         className={`text-xs font-semibold px-2 py-1 rounded-full ${changeStyle}`}

@@ -163,6 +163,7 @@ export interface PayNoteDeliverySummary {
   deliveryStatus?: string;
   transactionIdentificationStatus?: string;
   clientDecisionStatus?: string;
+  transactionId?: string;
   createdAt: string;
   updatedAt: string;
 }

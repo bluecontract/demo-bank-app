@@ -27,6 +27,8 @@ import {
   PayNoteDetailsDto,
   PayNoteDeliveryListResponseDto,
   PayNoteDeliveryDetailsDto,
+  PayNoteDeliveryDetailsSanitizedDto,
+  RejectPayNoteDeliveryRequestDto,
   ContractListResponseDto,
   ContractDetailsDto,
   ContractSummaryGenerationDto,
@@ -369,6 +371,13 @@ export const bankApiContract = c.router(
       listPayNoteDeliveries: {
         method: 'GET',
         path: '/v1/paynotes/deliveries',
+        query: z
+          .object({
+            clientDecisionStatus: z
+              .enum(['pending', 'accepted', 'rejected'])
+              .optional(),
+          })
+          .optional(),
         responses: {
           200: PayNoteDeliveryListResponseDto,
           401: ProblemDto,
@@ -386,6 +395,47 @@ export const bankApiContract = c.router(
           404: ProblemDto,
         },
         summary: 'Get PayNote Delivery details for the current user.',
+      },
+
+      getPayNoteDeliveryBySessionId: {
+        method: 'GET',
+        path: '/v1/paynotes/deliveries/by-session/:sessionId',
+        pathParams: z.object({ sessionId: z.string() }),
+        responses: {
+          200: PayNoteDeliveryDetailsSanitizedDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary:
+          'Get PayNote Delivery (proposal) details by session id; sanitized view without raw document.',
+      },
+
+      acceptPayNoteDelivery: {
+        method: 'POST',
+        path: '/v1/paynotes/deliveries/:sessionId/accept',
+        pathParams: z.object({ sessionId: z.string() }),
+        body: z.unknown().optional(),
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Accept a PayNote delivery (proposal).',
+      },
+
+      rejectPayNoteDelivery: {
+        method: 'POST',
+        path: '/v1/paynotes/deliveries/:sessionId/reject',
+        pathParams: z.object({ sessionId: z.string() }),
+        body: RejectPayNoteDeliveryRequestDto,
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Reject a PayNote delivery (proposal).',
       },
 
       listContracts: {

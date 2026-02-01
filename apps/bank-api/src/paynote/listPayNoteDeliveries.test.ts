@@ -73,4 +73,41 @@ describe('listPayNoteDeliveriesHandler', () => {
       userId: 'user-1',
     });
   });
+
+  it('filters by clientDecisionStatus when provided', async () => {
+    payNoteDeliveryRepository.listDeliveriesByUserId.mockResolvedValue([
+      {
+        deliveryId: 'd1',
+        deliverySessionId: 's1',
+        transactionIdentificationStatus: 'identified',
+        clientDecisionStatus: 'pending',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      },
+      {
+        deliveryId: 'd2',
+        deliverySessionId: 's2',
+        transactionIdentificationStatus: 'identified',
+        clientDecisionStatus: 'accepted',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      },
+    ]);
+
+    const response = await listPayNoteDeliveriesHandler(
+      { query: { clientDecisionStatus: 'pending' } } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.items).toHaveLength(1);
+    expect(response.body.items[0]).toMatchObject({
+      deliveryId: 'd1',
+      clientDecisionStatus: 'pending',
+    });
+    expect(logger.info).toHaveBeenCalledWith('Listing PayNote deliveries', {
+      userId: 'user-1',
+      clientDecisionStatus: 'pending',
+    });
+  });
 });

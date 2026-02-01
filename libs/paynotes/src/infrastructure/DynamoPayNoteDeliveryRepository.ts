@@ -611,11 +611,16 @@ export class DynamoPayNoteDeliveryRepository
     return deliveries
       .filter((record): record is PayNoteDeliveryRecord => record !== null)
       .map(record => {
-        const payNoteSummary = record.deliveryDocument
-          ? getPayNoteSummaryFromDocument(
-              record.deliveryDocument.payNote as Record<string, unknown>
-            )
-          : {};
+        const deliveryDocument = record.deliveryDocument as
+          | {
+              payNoteBootstrapRequest?: { document?: unknown };
+              payNote?: unknown;
+            }
+          | undefined;
+        const payNotePayload =
+          deliveryDocument?.payNoteBootstrapRequest?.document ??
+          deliveryDocument?.payNote;
+        const payNoteSummary = getPayNoteSummaryFromDocument(payNotePayload);
 
         return {
           deliveryId: record.deliveryId,
@@ -629,6 +634,7 @@ export class DynamoPayNoteDeliveryRepository
           transactionIdentificationStatus:
             record.transactionIdentificationStatus,
           clientDecisionStatus: record.clientDecisionStatus,
+          transactionId: record.transactionId,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
         };

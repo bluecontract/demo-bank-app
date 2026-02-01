@@ -3,27 +3,27 @@ import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
 import type { PayNoteDeliverySummary } from '../../../types/api';
 
-type PayNoteDeliveryError = Error & { status?: number };
+type ProposalsError = Error & { status?: number };
 
-const makeError = (message: string, status?: number): PayNoteDeliveryError => {
-  const error = new Error(message) as PayNoteDeliveryError;
+const makeError = (message: string, status?: number): ProposalsError => {
+  const error = new Error(message) as ProposalsError;
   error.status = status;
   return error;
 };
 
-export function usePayNoteDeliveries() {
+export function useProposals() {
   const { handleAuthError } = useAuthErrorHandler();
 
-  return useQuery<PayNoteDeliverySummary[], PayNoteDeliveryError>({
-    queryKey: ['paynote-deliveries'],
+  return useQuery<PayNoteDeliverySummary[], ProposalsError>({
+    queryKey: ['proposals'],
     queryFn: async (): Promise<PayNoteDeliverySummary[]> => {
       const response = await apiClient.banking.listPayNoteDeliveries({
-        query: undefined,
+        query: { clientDecisionStatus: 'pending' },
         overrideClientOptions: { credentials: 'include' },
       });
 
       if (response.status !== 200) {
-        throw makeError('Failed to fetch PayNote deliveries', response.status);
+        throw makeError('Failed to fetch proposals', response.status);
       }
 
       return response.body.items;

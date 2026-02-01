@@ -320,4 +320,34 @@ describe('payNoteWebhookHandler', () => {
     expect(hoistedAdapters.transferFundsMock).not.toHaveBeenCalled();
     expect(hoistedAdapters.fetchEventImpl).not.toHaveBeenCalled();
   });
+
+  it('routes bootstrap request events to the delivery handler', async () => {
+    const payload = {
+      id: 'event-bootstrap',
+      object: {
+        sessionId: 'sync-session',
+        document: {
+          type: { blueId: 'SynchronyMerchant' },
+        },
+        emitted: [
+          {
+            type: 'Conversation/Document Bootstrap Requested',
+            bootstrapAssignee: 'synchronyChannel',
+            document: {
+              type: 'PayNote/PayNote Delivery',
+            },
+          },
+        ],
+      },
+    };
+
+    await payNoteWebhookHandler({ body: payload } as any);
+
+    expect(
+      hoistedPaynotes.handlePayNoteDeliveryWebhookEventMock
+    ).toHaveBeenCalledWith(
+      { eventId: 'event-bootstrap', payload },
+      expect.any(Object)
+    );
+  });
 });

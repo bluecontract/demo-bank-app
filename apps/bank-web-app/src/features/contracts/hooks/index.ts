@@ -4,3 +4,7 @@ export * from './useContractSummary';
 export * from './useRunContractOperation';
 export * from './useContractReviewState';
 export * from './useActiveContractSession';
+export * from './useProposals';
+export * from './useProposalDetails';
+export * from './useAcceptPayNoteDelivery';
+export * from './useRejectPayNoteDelivery';

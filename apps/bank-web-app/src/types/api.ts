@@ -93,6 +93,11 @@ export type PayNoteDeliveryDetails = ClientInferResponseBody<
   200
 >;
 
+export type PayNoteDeliveryDetailsSanitized = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['getPayNoteDeliveryBySessionId'],
+  200
+>;
+
 // Contract types
 export type ContractListResponse = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['listContracts'],

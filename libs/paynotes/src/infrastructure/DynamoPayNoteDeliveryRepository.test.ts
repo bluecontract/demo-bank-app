@@ -134,12 +134,15 @@ describe('DynamoPayNoteDeliveryRepository', () => {
           deliveryId: 'delivery-1',
           createdAt: '2024-01-01T00:00:00.000Z',
           updatedAt: '2024-01-01T00:00:00.000Z',
+          transactionId: 'txn-1',
           deliveryDocument: {
             name: 'Delivery for Invoice',
-            payNote: {
-              name: 'Invoice 42',
-              amount: { total: 1200 },
-              currency: 'USD',
+            payNoteBootstrapRequest: {
+              document: {
+                name: 'Invoice 42',
+                amount: { total: 1200 },
+                currency: 'USD',
+              },
             },
           },
         },
@@ -160,6 +163,7 @@ describe('DynamoPayNoteDeliveryRepository', () => {
         name: 'Delivery for Invoice',
         amountMinor: 1200,
         currency: 'USD',
+        transactionId: 'txn-1',
       }),
     ]);
   });
