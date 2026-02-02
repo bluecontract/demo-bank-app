@@ -621,13 +621,14 @@ export class DynamoPayNoteDeliveryRepository
           deliveryDocument?.payNoteBootstrapRequest?.document ??
           deliveryDocument?.payNote;
         const payNoteSummary = getPayNoteSummaryFromDocument(payNotePayload);
+        const deliveryName = record.deliveryDocument
+          ? getDeliveryNameFromDocument(record.deliveryDocument)
+          : undefined;
 
         return {
           deliveryId: record.deliveryId,
           deliverySessionId: record.deliverySessionId,
-          name: record.deliveryDocument
-            ? getDeliveryNameFromDocument(record.deliveryDocument)
-            : undefined,
+          name: payNoteSummary.name ?? deliveryName,
           amountMinor: payNoteSummary.amountMinor,
           currency: payNoteSummary.currency,
           deliveryStatus: record.deliveryStatus,

@@ -18,7 +18,7 @@ payNoteBootstrapRequest:
   type: Conversation/Document Bootstrap Requested
   bootstrapAssignee: payNoteDeliverer
   document:
-    type: PayNote/PayNote
+    type: PayNote/Card Transaction PayNote
     currency: USD
     amount:
       total: 1200
@@ -30,8 +30,10 @@ cardTransactionDetails:
 contracts:
   payNoteSender:
     type: MyOS/MyOS Timeline Channel
+    accountId: merchant-account
   payNoteDeliverer:
     type: MyOS/MyOS Timeline Channel
+    accountId: bank-account
 `;
   const node = blue.yamlToNode(yaml);
   node.setType(blue.jsonValueToNode({ blueId: PAYNOTE_DELIVERY_BLUE_ID }));
@@ -45,7 +47,7 @@ payNoteBootstrapRequest:
   type: Conversation/Document Bootstrap Requested
   bootstrapAssignee: payNoteDeliverer
   document:
-    type: PayNote/PayNote
+    type: PayNote/Card Transaction PayNote
     currency: USD
     amount:
       total: 1200
@@ -57,8 +59,10 @@ cardTransactionDetails:
 contracts:
   payNoteSender:
     type: MyOS/MyOS Timeline Channel
+    accountId: merchant-account
   payNoteDeliverer:
     type: MyOS/MyOS Timeline Channel
+    accountId: bank-account
 `;
   const node = blue.yamlToNode(yaml);
   node.setType(blue.jsonValueToNode({ blueId: PAYNOTE_DELIVERY_BLUE_ID }));
@@ -113,6 +117,9 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
                 synchronyChannel: {
                   type: 'MyOS/MyOS Timeline Channel',
                   accountId: 'bank-account',
+                },
+                sendPayNote: {
+                  type: 'Conversation/Operation',
                 },
               },
             },
@@ -215,6 +222,9 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
                   type: 'MyOS/MyOS Timeline Channel',
                   accountId: 'bank-account',
                 },
+                sendPayNote: {
+                  type: 'Conversation/Operation',
+                },
               },
             },
             emitted: [
@@ -268,7 +278,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     const deliveryDocument = buildDeliveryDocument();
     const deliveryId = buildCardTransactionDetailsKey(cardDetails);
     const payNoteDocument = {
-      type: 'PayNote/PayNote',
+      type: 'PayNote/Card Transaction PayNote',
       currency: 'USD',
       amount: { total: 1200 },
     };
@@ -374,6 +384,259 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     );
     expect(payNoteDeliveryRepository.getDelivery).toHaveBeenCalledWith(
       deliveryId
+    );
+  });
+
+  it('reports delivery errors when paynote type is unsupported', async () => {
+    const deliveryDocument = buildDeliveryDocument();
+    const payNoteDocument = {
+      type: 'PayNote/PayNote',
+      currency: 'USD',
+      amount: { total: 1200 },
+    };
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: 'api-key',
+        accountId: 'bank-account',
+        baseUrl: 'https://myos.example.com',
+      }),
+      bootstrapDocument: vi.fn(),
+      runDocumentOperation: vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200 }),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn().mockResolvedValue({
+        kind: 'not-found',
+        status: 404,
+      } satisfies MyOsFetchDocumentResult),
+    };
+
+    const payNoteDeliveryRepository = {
+      markEventProcessed: vi.fn().mockResolvedValue(true),
+      saveDelivery: vi.fn(),
+      getDelivery: vi.fn().mockResolvedValue(null),
+      getDeliveryByDocumentId: vi.fn(),
+      getDeliveryBySessionId: vi.fn(),
+      getDeliveryByBootstrapSessionId: vi.fn(),
+      getDeliveryByPayNoteDocumentId: vi.fn(),
+      getDeliveryByCardTransactionDetails: vi.fn(),
+      listDeliveriesByUserId: vi.fn(),
+    };
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
+      saveContract: vi.fn(),
+    };
+
+    const result = await handlePayNoteDeliveryWebhookEvent(
+      {
+        payload: {
+          id: 'event-unsupported',
+          object: {
+            sessionId: 'delivery-session',
+            document: deliveryDocument,
+            emitted: [
+              {
+                type: 'Conversation/Document Bootstrap Requested',
+                bootstrapAssignee: 'payNoteDeliverer',
+                channelBindings: {
+                  payeeChannel: { accountId: 'merchant-account' },
+                },
+                document: payNoteDocument,
+              },
+            ],
+          },
+        },
+      },
+      {
+        myOsClient: myOsClient as any,
+        payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+        contractRepository: contractRepository as any,
+        bankingRepository: {} as any,
+        holdRepository: {
+          getHoldByCardTransactionDetails: vi.fn().mockResolvedValue(null),
+        } as any,
+        clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
+      }
+    );
+
+    expect(result.handled).toBe(true);
+    expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
+    expect(myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'delivery-session',
+        operation: 'reportDeliveryError',
+        payload:
+          'Unsupported PayNote type. Expected PayNote/Card Transaction PayNote.',
+      })
+    );
+  });
+
+  it('reports delivery errors when payer binding is supplied', async () => {
+    const deliveryDocument = buildDeliveryDocument();
+    const payNoteDocument = {
+      type: 'PayNote/Card Transaction PayNote',
+      currency: 'USD',
+      amount: { total: 1200 },
+    };
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: 'api-key',
+        accountId: 'bank-account',
+        baseUrl: 'https://myos.example.com',
+      }),
+      bootstrapDocument: vi.fn(),
+      runDocumentOperation: vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200 }),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn().mockResolvedValue({
+        kind: 'not-found',
+        status: 404,
+      } satisfies MyOsFetchDocumentResult),
+    };
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
+      saveContract: vi.fn(),
+    };
+
+    const result = await handlePayNoteDeliveryWebhookEvent(
+      {
+        payload: {
+          id: 'event-payer-binding',
+          object: {
+            sessionId: 'delivery-session',
+            document: deliveryDocument,
+            emitted: [
+              {
+                type: 'Conversation/Document Bootstrap Requested',
+                bootstrapAssignee: 'payNoteDeliverer',
+                channelBindings: {
+                  payeeChannel: { accountId: 'merchant-account' },
+                  payerChannel: { accountId: 'payer-account' },
+                },
+                document: payNoteDocument,
+              },
+            ],
+          },
+        },
+      },
+      {
+        myOsClient: myOsClient as any,
+        payNoteDeliveryRepository: {
+          markEventProcessed: vi.fn().mockResolvedValue(true),
+          saveDelivery: vi.fn(),
+          getDelivery: vi.fn().mockResolvedValue(null),
+          getDeliveryByDocumentId: vi.fn(),
+          getDeliveryBySessionId: vi.fn(),
+          getDeliveryByBootstrapSessionId: vi.fn(),
+          getDeliveryByPayNoteDocumentId: vi.fn(),
+          getDeliveryByCardTransactionDetails: vi.fn(),
+          listDeliveriesByUserId: vi.fn(),
+        } as any,
+        contractRepository: contractRepository as any,
+        bankingRepository: {} as any,
+        holdRepository: {
+          getHoldByCardTransactionDetails: vi.fn().mockResolvedValue(null),
+        } as any,
+        clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
+      }
+    );
+
+    expect(result.handled).toBe(true);
+    expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
+    expect(myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'delivery-session',
+        operation: 'reportDeliveryError',
+        payload: 'Payer binding must not be provided by merchant.',
+      })
+    );
+  });
+
+  it('reports delivery errors when payee does not match delivery sender', async () => {
+    const deliveryDocument = buildDeliveryDocument();
+    const payNoteDocument = {
+      type: 'PayNote/Card Transaction PayNote',
+      currency: 'USD',
+      amount: { total: 1200 },
+    };
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: 'api-key',
+        accountId: 'bank-account',
+        baseUrl: 'https://myos.example.com',
+      }),
+      bootstrapDocument: vi.fn(),
+      runDocumentOperation: vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200 }),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn().mockResolvedValue({
+        kind: 'not-found',
+        status: 404,
+      } satisfies MyOsFetchDocumentResult),
+    };
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
+      saveContract: vi.fn(),
+    };
+
+    const result = await handlePayNoteDeliveryWebhookEvent(
+      {
+        payload: {
+          id: 'event-payee-mismatch',
+          object: {
+            sessionId: 'delivery-session',
+            document: deliveryDocument,
+            emitted: [
+              {
+                type: 'Conversation/Document Bootstrap Requested',
+                bootstrapAssignee: 'payNoteDeliverer',
+                channelBindings: {
+                  payeeChannel: { accountId: 'other-merchant' },
+                },
+                document: payNoteDocument,
+              },
+            ],
+          },
+        },
+      },
+      {
+        myOsClient: myOsClient as any,
+        payNoteDeliveryRepository: {
+          markEventProcessed: vi.fn().mockResolvedValue(true),
+          saveDelivery: vi.fn(),
+          getDelivery: vi.fn().mockResolvedValue(null),
+          getDeliveryByDocumentId: vi.fn(),
+          getDeliveryBySessionId: vi.fn(),
+          getDeliveryByBootstrapSessionId: vi.fn(),
+          getDeliveryByPayNoteDocumentId: vi.fn(),
+          getDeliveryByCardTransactionDetails: vi.fn(),
+          listDeliveriesByUserId: vi.fn(),
+        } as any,
+        contractRepository: contractRepository as any,
+        bankingRepository: {} as any,
+        holdRepository: {
+          getHoldByCardTransactionDetails: vi.fn().mockResolvedValue(null),
+        } as any,
+        clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
+      }
+    );
+
+    expect(result.handled).toBe(true);
+    expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
+    expect(myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'delivery-session',
+        operation: 'reportDeliveryError',
+        payload: 'Payee binding must match the delivery sender.',
+      })
     );
   });
 
@@ -767,16 +1030,19 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
             sessionId: 'sync-session',
             document: {
               contracts: {
-                payNoteDeliverer: {
+                synchronyChannel: {
                   type: 'MyOS/MyOS Timeline Channel',
                   accountId: 'bank-account',
+                },
+                sendPayNote: {
+                  type: 'Conversation/Operation',
                 },
               },
             },
             emitted: [
               {
                 type: 'Conversation/Document Bootstrap Requested',
-                bootstrapAssignee: 'payNoteDeliverer',
+                bootstrapAssignee: 'synchronyChannel',
                 channelBindings: {
                   payNoteSender: { accountId: 'merchant-account' },
                 },

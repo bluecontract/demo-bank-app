@@ -1,4 +1,11 @@
+import type { BlueNode } from '@blue-labs/language';
 import { DocumentBootstrapRequestedSchema } from '@blue-repository/types/packages/conversation/schemas';
+import {
+  CardTransactionPayNoteSchema,
+  MerchantToCustomerPayNoteSchema,
+  PayNoteDeliverySchema,
+  PayNoteSchema,
+} from '@blue-repository/types/packages/paynote/schemas';
 import type { Hold } from '@demo-bank-app/banking';
 import { buildCardTransactionDetailsKey } from '@demo-bank-app/banking';
 import type { LogEntry, MyOsClient, PayNoteDeliveryRecord } from '../../ports';
@@ -7,8 +14,6 @@ import {
   getCardTransactionDetailsFromDocument,
   getPayNoteSummaryFromDocument,
   getSynchronySessionIdFromDocument,
-  isPayNoteDeliveryDocument,
-  isPayNoteDocument,
 } from '../../payNoteDelivery/blueUtils';
 import { blue } from '../../../blue';
 import { log, trace } from '../paynoteWebhook/logging';
@@ -19,7 +24,11 @@ import type {
   WebhookEventObject,
 } from './types';
 
-export type BootstrapRequest = Record<string, unknown>;
+export type BootstrapRequest = {
+  rawEvent: unknown;
+  request: Record<string, unknown>;
+  documentNode: BlueNode | null;
+};
 
 type ChannelBindings = Record<string, { email?: string; accountId?: string }>;
 
@@ -27,6 +36,19 @@ type NormalizedBootstrapRequest = {
   bootstrapAssignee?: string;
   document?: Record<string, unknown> | null;
   channelBindings: ChannelBindings;
+};
+
+type PayNoteBootstrapContext = {
+  payNoteDocument?: Record<string, unknown> | null;
+  payNoteDocumentNode: BlueNode | null;
+  requestingSessionId?: string;
+  requestingDeliveryCardDetails: ReturnType<
+    typeof getCardTransactionDetailsFromDocument
+  > | null;
+  deliveryId?: string;
+  senderIdentity?: string;
+  payeeIdentity?: string;
+  payerIdentity?: string;
 };
 
 export const getDocumentBootstrapRequestFromEvent = (
@@ -45,7 +67,17 @@ export const getDocumentBootstrapRequestFromEvent = (
   const payload = blue.nodeToJson(node, 'simple') as
     | Record<string, unknown>
     | undefined;
-  return payload && typeof payload === 'object' ? payload : null;
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const documentNode = node.getProperties()?.document ?? null;
+
+  return {
+    rawEvent: event,
+    request: payload,
+    documentNode,
+  };
 };
 
 const normalizeChannelBindings = (
@@ -81,6 +113,11 @@ const normalizeChannelBindings = (
   return output;
 };
 
+const getBindingIdentity = (binding?: {
+  email?: string;
+  accountId?: string;
+}): string | undefined => binding?.accountId ?? binding?.email;
+
 const isBootstrapAssigneeMatch = (
   requestingDocument: Record<string, unknown> | undefined,
   bootstrapAssignee: string | undefined,
@@ -105,16 +142,298 @@ const extractBootstrapSessionId = (response: {
   return typeof body?.sessionId === 'string' ? body.sessionId : undefined;
 };
 
+const rejectPayNoteBootstrapRequest = async (input: {
+  eventId: string;
+  deliveryId?: string;
+  requestingSessionId?: string;
+  reason: string;
+  logMessage: string;
+  logContext?: Record<string, unknown>;
+  credentials: Awaited<ReturnType<MyOsClient['getCredentials']>>;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<boolean> => {
+  const { logMessage, logContext, logs, eventId, deliveryId, ...rest } = input;
+  log(logs, 'error', logMessage, { eventId, deliveryId, ...logContext });
+  return reportDeliveryError({ eventId, deliveryId, logs, ...rest });
+};
+
+const reportDeliveryError = async (input: {
+  eventId: string;
+  deliveryId?: string;
+  requestingSessionId?: string;
+  reason: string;
+  credentials: Awaited<ReturnType<MyOsClient['getCredentials']>>;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<boolean> => {
+  const {
+    eventId,
+    deliveryId,
+    requestingSessionId,
+    reason,
+    credentials,
+    deps,
+    logs,
+  } = input;
+
+  if (!requestingSessionId) {
+    log(
+      logs,
+      'error',
+      'Failed to report PayNote delivery error (missing session id)',
+      { eventId, deliveryId }
+    );
+    return true;
+  }
+
+  const reportResponse = await deps.myOsClient.runDocumentOperation({
+    credentials,
+    sessionId: requestingSessionId,
+    operation: 'reportDeliveryError',
+    payload: reason,
+  });
+
+  if (!reportResponse.ok) {
+    log(logs, 'error', 'Failed to report PayNote delivery error', {
+      eventId,
+      deliveryId,
+      status: reportResponse.status,
+      body: reportResponse.body,
+    });
+  } else {
+    log(logs, 'info', 'Reported PayNote delivery error', {
+      eventId,
+      deliveryId,
+    });
+  }
+
+  return true;
+};
+
 const normalizeBootstrapRequest = (
-  request: BootstrapRequest
+  request: Record<string, unknown>
 ): NormalizedBootstrapRequest => ({
   bootstrapAssignee: getString(request.bootstrapAssignee),
   document: toSimpleRecord(request.document),
   channelBindings: normalizeChannelBindings(request.channelBindings),
 });
 
+const buildPayNoteBootstrapContext = (input: {
+  request: NormalizedBootstrapRequest;
+  documentNode: BlueNode | null;
+  eventObject?: WebhookEventObject;
+  documentPayload?: Record<string, unknown>;
+}): PayNoteBootstrapContext => {
+  const { request, documentNode, eventObject, documentPayload } = input;
+  const payNoteDocument = request.document;
+  const requestingSessionId = getString(eventObject?.sessionId);
+  const requestingDeliveryCardDetails = documentPayload
+    ? getCardTransactionDetailsFromDocument(documentPayload) ?? null
+    : null;
+  const deliveryId = requestingDeliveryCardDetails
+    ? buildCardTransactionDetailsKey(requestingDeliveryCardDetails)
+    : undefined;
+  const deliveryContracts = documentPayload
+    ? toSimpleRecord(documentPayload.contracts)
+    : null;
+  const deliveryBindings = deliveryContracts
+    ? buildChannelBindingsFromContracts(deliveryContracts)
+    : {};
+  const senderIdentity = getBindingIdentity(deliveryBindings.payNoteSender);
+  const payeeIdentity = getBindingIdentity(
+    request.channelBindings.payeeChannel
+  );
+  const payerIdentity = getBindingIdentity(
+    request.channelBindings.payerChannel
+  );
+
+  return {
+    payNoteDocument,
+    payNoteDocumentNode: documentNode,
+    requestingSessionId,
+    requestingDeliveryCardDetails,
+    deliveryId,
+    senderIdentity,
+    payeeIdentity,
+    payerIdentity,
+  };
+};
+
+const ensureValidPayNoteBootstrapRequest = async (input: {
+  request: NormalizedBootstrapRequest;
+  context: PayNoteBootstrapContext;
+  eventId: string;
+  credentials: Awaited<ReturnType<MyOsClient['getCredentials']>>;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<Record<string, unknown> | null> => {
+  const { request, context, eventId, credentials, deps, logs } = input;
+  const {
+    deliveryId,
+    requestingSessionId,
+    payerIdentity,
+    payeeIdentity,
+    senderIdentity,
+    payNoteDocumentNode,
+  } = context;
+
+  if (payerIdentity) {
+    await rejectPayNoteBootstrapRequest({
+      eventId,
+      deliveryId,
+      requestingSessionId,
+      reason: 'Payer binding must not be provided by merchant.',
+      logMessage:
+        'PayNote bootstrap request rejected (payer binding supplied by merchant)',
+      credentials,
+      deps,
+      logs,
+    });
+    return null;
+  }
+
+  if (!senderIdentity || !payeeIdentity || payeeIdentity !== senderIdentity) {
+    await rejectPayNoteBootstrapRequest({
+      eventId,
+      deliveryId,
+      requestingSessionId,
+      reason: 'Payee binding must match the delivery sender.',
+      logMessage:
+        'PayNote bootstrap request rejected (payee does not match delivery sender)',
+      credentials,
+      deps,
+      logs,
+    });
+    return null;
+  }
+
+  if (!request.document || !payNoteDocumentNode) {
+    await rejectPayNoteBootstrapRequest({
+      eventId,
+      deliveryId,
+      requestingSessionId,
+      reason:
+        'Unsupported PayNote type. Expected PayNote/Card Transaction PayNote.',
+      logMessage:
+        'PayNote bootstrap request rejected (unsupported PayNote type)',
+      credentials,
+      deps,
+      logs,
+    });
+    return null;
+  }
+
+  if (
+    !blue.isTypeOf(payNoteDocumentNode, CardTransactionPayNoteSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    await rejectPayNoteBootstrapRequest({
+      eventId,
+      deliveryId,
+      requestingSessionId,
+      reason:
+        'Unsupported PayNote type. Expected PayNote/Card Transaction PayNote.',
+      logMessage:
+        'PayNote bootstrap request rejected (unsupported PayNote type)',
+      credentials,
+      deps,
+      logs,
+    });
+    return null;
+  }
+
+  return request.document;
+};
+
+const resolveExistingDelivery = async (input: {
+  deliveryId?: string;
+  requestingSessionId?: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<PayNoteDeliveryRecord | null> => {
+  const { deliveryId, requestingSessionId, deps } = input;
+  if (deliveryId) {
+    return deps.payNoteDeliveryRepository.getDelivery(deliveryId);
+  }
+  if (requestingSessionId) {
+    return deps.payNoteDeliveryRepository.getDeliveryBySessionId(
+      requestingSessionId
+    );
+  }
+  return null;
+};
+
+const resolveHoldForBootstrap = async (input: {
+  existingDelivery: PayNoteDeliveryRecord | null;
+  requestingDeliveryCardDetails: ReturnType<
+    typeof getCardTransactionDetailsFromDocument
+  > | null;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<Hold | null> => {
+  const { existingDelivery, requestingDeliveryCardDetails, deps } = input;
+  if (existingDelivery?.holdId) {
+    return deps.holdRepository.getHold(existingDelivery.holdId);
+  }
+  if (requestingDeliveryCardDetails) {
+    return deps.holdRepository.getHoldByCardTransactionDetails(
+      requestingDeliveryCardDetails
+    );
+  }
+  return null;
+};
+
+const isDeliveryDocumentNode = (node: BlueNode | null): boolean =>
+  Boolean(
+    node &&
+      blue.isTypeOf(node, PayNoteDeliverySchema, {
+        checkSchemaExtensions: true,
+      })
+  );
+
+const isPayNoteDocumentNode = (node: BlueNode | null): boolean =>
+  Boolean(
+    node &&
+      blue.isTypeOf(node, PayNoteSchema, {
+        checkSchemaExtensions: true,
+      })
+  );
+
+const resolveExistingDocAllowedBootstrapType = (
+  node: BlueNode | null
+): string | null => {
+  if (
+    node &&
+    blue.isTypeOf(node, MerchantToCustomerPayNoteSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    return 'PayNote/Merchant To Customer PayNote';
+  }
+  return null;
+};
+
+const resolveKnownDeliveryBySessionId = async (input: {
+  sessionId?: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<PayNoteDeliveryRecord | null> => {
+  const { sessionId, deps } = input;
+  if (!sessionId) {
+    return null;
+  }
+  const byDeliverySession =
+    await deps.payNoteDeliveryRepository.getDeliveryBySessionId(sessionId);
+  if (byDeliverySession) {
+    return byDeliverySession;
+  }
+  return deps.payNoteDeliveryRepository.getDeliveryByBootstrapSessionId(
+    sessionId
+  );
+};
+
 const handleDeliveryBootstrapRequest = async (input: {
   request: NormalizedBootstrapRequest;
+  deliveryDocument: Record<string, unknown>;
   eventId: string;
   bootstrapAssignee: string;
   now: string;
@@ -122,14 +441,16 @@ const handleDeliveryBootstrapRequest = async (input: {
   deps: HandlePayNoteDeliveryWebhookDependencies;
   logs: LogEntry[];
 }): Promise<boolean> => {
-  const { request, eventId, bootstrapAssignee, now, credentials, deps, logs } =
-    input;
-
-  if (!request.document || !isPayNoteDeliveryDocument(request.document)) {
-    return false;
-  }
-
-  const deliveryDocument = request.document;
+  const {
+    request,
+    deliveryDocument,
+    eventId,
+    bootstrapAssignee,
+    now,
+    credentials,
+    deps,
+    logs,
+  } = input;
   const synchronySessionId =
     getSynchronySessionIdFromDocument(deliveryDocument);
   const deliveryError = getString(deliveryDocument.deliveryError);
@@ -244,6 +565,7 @@ const handleDeliveryBootstrapRequest = async (input: {
 
 const handlePayNoteBootstrapRequest = async (input: {
   request: NormalizedBootstrapRequest;
+  requestedDocumentNode: BlueNode | null;
   eventId: string;
   eventObject?: WebhookEventObject;
   documentPayload?: Record<string, unknown>;
@@ -254,6 +576,7 @@ const handlePayNoteBootstrapRequest = async (input: {
 }): Promise<boolean> => {
   const {
     request,
+    requestedDocumentNode,
     eventId,
     eventObject,
     documentPayload,
@@ -263,89 +586,58 @@ const handlePayNoteBootstrapRequest = async (input: {
     logs,
   } = input;
 
-  if (!request.document || !isPayNoteDocument(request.document)) {
-    return false;
+  const context = buildPayNoteBootstrapContext({
+    request,
+    documentNode: requestedDocumentNode,
+    eventObject,
+    documentPayload,
+  });
+  const payNoteDocument = await ensureValidPayNoteBootstrapRequest({
+    request,
+    context,
+    eventId,
+    credentials,
+    deps,
+    logs,
+  });
+
+  if (!payNoteDocument) {
+    return true;
   }
 
-  const payNoteDocument = request.document;
-  const requestingSessionId = getString(eventObject?.sessionId);
-  const requestingDeliveryCardDetails = documentPayload
-    ? getCardTransactionDetailsFromDocument(documentPayload)
-    : null;
-  const deliveryId = requestingDeliveryCardDetails
-    ? buildCardTransactionDetailsKey(requestingDeliveryCardDetails)
-    : undefined;
-  const existingDelivery = deliveryId
-    ? await deps.payNoteDeliveryRepository.getDelivery(deliveryId)
-    : requestingSessionId
-    ? await deps.payNoteDeliveryRepository.getDeliveryBySessionId(
-        requestingSessionId
-      )
-    : null;
+  const { deliveryId, requestingSessionId, requestingDeliveryCardDetails } =
+    context;
+  const existingDelivery = await resolveExistingDelivery({
+    deliveryId,
+    requestingSessionId,
+    deps,
+  });
   const payNoteSummary = getPayNoteSummaryFromDocument(payNoteDocument);
   const payNoteAmountMinor = payNoteSummary.amountMinor;
 
   if (payNoteAmountMinor !== undefined) {
-    let hold: Hold | null = null;
-    if (existingDelivery?.holdId) {
-      hold = await deps.holdRepository.getHold(existingDelivery.holdId);
-    }
-    if (!hold && requestingDeliveryCardDetails) {
-      hold = await deps.holdRepository.getHoldByCardTransactionDetails(
-        requestingDeliveryCardDetails
-      );
-    }
-
+    const hold = await resolveHoldForBootstrap({
+      existingDelivery,
+      requestingDeliveryCardDetails,
+      deps,
+    });
     if (hold && hold.amountMinor !== payNoteAmountMinor) {
       const deliveryError = `PayNote amount (${payNoteAmountMinor}) does not match transaction amount (${hold.amountMinor})`;
-      log(
-        logs,
-        'error',
-        'PayNote bootstrap request rejected (amount mismatch)',
-        {
-          eventId,
-          deliveryId,
+      return rejectPayNoteBootstrapRequest({
+        eventId,
+        deliveryId,
+        requestingSessionId,
+        reason: deliveryError,
+        logMessage: 'PayNote bootstrap request rejected (amount mismatch)',
+        logContext: {
           holdId: hold.holdId,
           payNoteAmountMinor,
           holdAmountMinor: hold.amountMinor,
-        }
-      );
-
-      if (!requestingSessionId) {
-        log(
-          logs,
-          'error',
-          'Failed to report PayNote bootstrap error (missing session id)',
-          {
-            eventId,
-            deliveryId,
-            holdId: hold.holdId,
-          }
-        );
-        return true;
-      }
-
-      const reportResponse = await deps.myOsClient.runDocumentOperation({
+        },
         credentials,
-        sessionId: requestingSessionId,
-        operation: 'reportDeliveryError',
-        payload: deliveryError,
+        deps,
+        logs,
       });
-
-      if (!reportResponse.ok) {
-        log(logs, 'error', 'Failed to report PayNote delivery error', {
-          eventId,
-          deliveryId,
-          status: reportResponse.status,
-          body: reportResponse.body,
-        });
-      } else {
-        log(logs, 'info', 'Reported PayNote delivery error', {
-          eventId,
-          deliveryId,
-        });
-      }
-      return true;
     }
   }
 
@@ -412,9 +704,33 @@ export const handleBootstrapRequests = async (input: {
   const { requests, eventId, eventObject, documentPayload, now, deps, logs } =
     input;
   const credentials = await deps.myOsClient.getCredentials();
+  const requestingSessionId = getString(eventObject?.sessionId);
+  const requestingDocumentNode = eventObject?.document
+    ? toBlueNode(eventObject.document)
+    : null;
+  const isRequestingDeliveryDoc = isDeliveryDocumentNode(
+    requestingDocumentNode
+  );
+  const requestingContracts = documentPayload
+    ? toSimpleRecord(documentPayload.contracts)
+    : null;
+  const isSynchronyMerchantDoc = Boolean(
+    requestingContracts?.synchronyChannel && requestingContracts?.sendPayNote
+  );
+  let knownDelivery: PayNoteDeliveryRecord | null | undefined;
+  const getKnownDelivery = async () => {
+    if (knownDelivery !== undefined) {
+      return knownDelivery;
+    }
+    knownDelivery = await resolveKnownDeliveryBySessionId({
+      sessionId: requestingSessionId,
+      deps,
+    });
+    return knownDelivery;
+  };
 
   for (const request of requests) {
-    const normalized = normalizeBootstrapRequest(request);
+    const normalized = normalizeBootstrapRequest(request.request);
     const bootstrapAssignee = normalized.bootstrapAssignee;
 
     if (!bootstrapAssignee) {
@@ -443,23 +759,85 @@ export const handleBootstrapRequests = async (input: {
       continue;
     }
 
-    if (
+    const requestedDocumentNode = request.documentNode;
+
+    if (isDeliveryDocumentNode(requestedDocumentNode)) {
+      if (!isSynchronyMerchantDoc) {
+        log(
+          logs,
+          'warn',
+          'Bootstrap request ignored (delivery bootstrap outside synchrony merchant)',
+          {
+            eventId,
+            bootstrapAssignee,
+          }
+        );
+        continue;
+      }
+
       await handleDeliveryBootstrapRequest({
         request: normalized,
+        deliveryDocument: normalized.document,
         eventId,
         bootstrapAssignee,
         now,
         credentials,
         deps,
         logs,
-      })
-    ) {
+      });
       continue;
     }
 
-    if (
+    const allowedExistingDocType = resolveExistingDocAllowedBootstrapType(
+      requestedDocumentNode
+    );
+    if (allowedExistingDocType && !isRequestingDeliveryDoc) {
+      const existingDelivery = await getKnownDelivery();
+      if (!existingDelivery) {
+        log(
+          logs,
+          'warn',
+          'Bootstrap request ignored (unknown requesting session)',
+          {
+            eventId,
+            bootstrapAssignee,
+            requestedTypeName: allowedExistingDocType,
+          }
+        );
+        continue;
+      }
+
+      log(
+        logs,
+        'warn',
+        'Bootstrap request ignored (no handler configured for allowed type)',
+        {
+          eventId,
+          bootstrapAssignee,
+          requestedTypeName: allowedExistingDocType,
+          deliveryId: existingDelivery.deliveryId,
+        }
+      );
+      continue;
+    }
+
+    if (isPayNoteDocumentNode(requestedDocumentNode)) {
+      if (!isRequestingDeliveryDoc) {
+        log(
+          logs,
+          'warn',
+          'Bootstrap request ignored (paynote bootstrap outside delivery document)',
+          {
+            eventId,
+            bootstrapAssignee,
+          }
+        );
+        continue;
+      }
+
       await handlePayNoteBootstrapRequest({
         request: normalized,
+        requestedDocumentNode,
         eventId,
         eventObject,
         documentPayload,
@@ -467,8 +845,7 @@ export const handleBootstrapRequests = async (input: {
         credentials,
         deps,
         logs,
-      })
-    ) {
+      });
       continue;
     }
 

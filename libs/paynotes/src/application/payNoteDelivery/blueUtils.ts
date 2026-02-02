@@ -2,9 +2,11 @@ import type { CardTransactionDetails } from '@demo-bank-app/banking';
 import type { BlueNode } from '@blue-labs/language';
 import { MyOSTimelineChannelSchema } from '@blue-repository/types/packages/myos/schemas';
 import {
+  CardTransactionPayNoteSchema,
   PayNoteDeliverySchema,
   PayNoteSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
+import { blueIds } from '@blue-repository/types/packages/paynote/blue-ids';
 import type { AnyZodObject, infer as ZodInfer } from 'zod';
 import { blue } from '../../blue';
 
@@ -88,11 +90,27 @@ const parsePayNoteDelivery = (document: unknown) =>
 const parsePayNote = (document: unknown) =>
   parseDocumentWithSchema(document, PayNoteSchema);
 
+const parseCardTransactionPayNote = (document: unknown) =>
+  parseDocumentWithSchema(document, CardTransactionPayNoteSchema);
+
 export const isPayNoteDeliveryDocument = (document: unknown): boolean =>
   Boolean(parsePayNoteDelivery(document));
 
 export const isPayNoteDocument = (document: unknown): boolean =>
   Boolean(parsePayNote(document));
+
+export const isCardTransactionPayNoteDocument = (
+  document: unknown
+): boolean => {
+  const parsed = parseCardTransactionPayNote(document);
+  if (!parsed) {
+    return false;
+  }
+  return blue.isTypeOfBlueId(
+    parsed.node,
+    blueIds['PayNote/Card Transaction PayNote']
+  );
+};
 
 const parseTimelineChannel = (value: unknown) => {
   const node = toBlueNode(value);

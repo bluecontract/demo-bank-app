@@ -8,7 +8,10 @@ import type {
   HandlePayNoteDeliveryWebhookResult,
   WebhookPayload,
 } from './types';
-import { getDocumentBootstrapRequestFromEvent } from './bootstrap';
+import {
+  type BootstrapRequest,
+  getDocumentBootstrapRequestFromEvent,
+} from './bootstrap';
 
 export type DeliveryWebhookContext = {
   eventId: string;
@@ -16,7 +19,7 @@ export type DeliveryWebhookContext = {
   eventObject?: WebhookPayload['object'];
   documentPayload?: Record<string, unknown>;
   emitted: unknown[];
-  documentBootstrapRequests: Record<string, unknown>[];
+  documentBootstrapRequests: BootstrapRequest[];
   isDeliveryDoc: boolean;
 };
 
@@ -38,17 +41,20 @@ export const resolveDeliveryWebhookContext = (
   }
 
   const eventObject = payload?.object;
-  const documentPayload = toSimpleRecord(eventObject?.document) ?? undefined;
+  const rawDocument = eventObject?.document;
+  const documentPayload = toSimpleRecord(rawDocument) ?? undefined;
 
   const emitted = Array.isArray(eventObject?.emitted)
     ? eventObject?.emitted
     : [];
   const documentBootstrapRequests = emitted
     .map(event => getDocumentBootstrapRequestFromEvent(event))
-    .filter((request): request is Record<string, unknown> => request !== null);
+    .filter(
+      (request): request is NonNullable<typeof request> => request !== null
+    );
 
-  const isDeliveryDoc = documentPayload
-    ? isPayNoteDeliveryDocument(documentPayload)
+  const isDeliveryDoc = rawDocument
+    ? isPayNoteDeliveryDocument(rawDocument)
     : false;
 
   trace(logs, 'PayNote Delivery webhook received', {

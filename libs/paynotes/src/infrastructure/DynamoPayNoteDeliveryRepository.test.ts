@@ -160,7 +160,7 @@ describe('DynamoPayNoteDeliveryRepository', () => {
     expect(result).toEqual([
       expect.objectContaining({
         deliveryId: 'delivery-1',
-        name: 'Delivery for Invoice',
+        name: 'Invoice 42',
         amountMinor: 1200,
         currency: 'USD',
         transactionId: 'txn-1',
