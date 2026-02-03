@@ -41,6 +41,18 @@ import { ERROR_CODES } from './shared/errors';
  * These tests require LocalStack to be running
  */
 
+const resolveLocalstackEndpoint = () => {
+  const envEndpoint =
+    process.env.AWS_ENDPOINT_URL?.trim() ||
+    process.env.LOCALSTACK_ENDPOINT_URL?.trim();
+  if (envEndpoint) {
+    return envEndpoint;
+  }
+
+  const port = process.env.LOCALSTACK_EDGE_PORT?.trim() || '4566';
+  return `http://localhost:${port}`;
+};
+
 // Test configuration
 const TEST_CONFIG = {
   tableName: `demo-bank-app-bank-api-integration-test-${Date.now()}`,
@@ -48,7 +60,7 @@ const TEST_CONFIG = {
   myOsSecretArn: '/demo-bank-app/integration-test/myos-credentials',
   openAiSecretArn: '/demo-bank-app/integration-test/openai-api-key',
   jwtSecret: 'integration-test-jwt-secret-key-12345',
-  localstackEndpoint: 'http://localhost:4566',
+  localstackEndpoint: resolveLocalstackEndpoint(),
   region: 'us-east-1',
   jwtTtlSeconds: 604800,
   testUserTtlSeconds: 600,

@@ -22,7 +22,17 @@ type CloudFormationCustomResourceHandler = Handler<
   void
 >;
 
-const LOCALSTACK_ENDPOINT = 'http://localhost:4566';
+const isLocalstackEndpoint = (endpoint: string | undefined) => {
+  if (!endpoint) {
+    return false;
+  }
+
+  return (
+    endpoint.includes('localhost') ||
+    endpoint.includes('127.0.0.1') ||
+    endpoint.includes('host.docker.internal')
+  );
+};
 
 // Create banking repository instance lazily
 const createRepository = () => {
@@ -203,7 +213,7 @@ export const handler: CloudFormationCustomResourceHandler = async (
 };
 if (
   process.env.NODE_ENV !== 'test' &&
-  process.env.AWS_ENDPOINT_URL === LOCALSTACK_ENDPOINT
+  isLocalstackEndpoint(process.env.AWS_ENDPOINT_URL)
 ) {
   // Running under `sam local …` – no CloudFormation present
   seedFundingSource().catch(console.error);

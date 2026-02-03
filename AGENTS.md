@@ -16,6 +16,30 @@ Implementation runs autonomously until verify + review steps are complete.
 
 If you hit any friction (tests fail due to missing steps, ports, missing docs, unclear commands, etc.), do not apply only an ad-hoc fix. Propose a change to the workflow, scripts, or docs so the issue won’t repeat. Log the recommendation in the chat and ask for approval to implement it.
 
+## LocalStack (Worktrees)
+
+Parallel agents should use per-worktree LocalStack settings:
+
+- Create `.localstack.env` at repo root with unique `LOCALSTACK_CONTAINER_NAME`,
+  `LOCALSTACK_EDGE_PORT`, and (optionally) `LOCALSTACK_PORT_RANGE`.
+- Set per-worktree app ports: `BANK_API_PORT` and `WEB_APP_PORT` (plus
+  `WEB_APP_PREVIEW_PORT` if needed).
+- To keep secrets out of git, pass a shared secrets JSON to
+  `scripts/setup-worktree-localstack.sh` (it merges into
+  `apps/bank-api/env.local.worktree.json`).
+- Set `AWS_ENDPOINT_URL` for host-side tools/tests and
+  `LOCALSTACK_DOCKER_ENDPOINT_URL` for SAM containers.
+- Copy `apps/bank-api/env.local.json` to a worktree-specific env file (for
+  example `apps/bank-api/env.local.worktree.json`) and update
+  `AWS_ENDPOINT_URL`/`AwsEndpointUrl` to match `LOCALSTACK_DOCKER_ENDPOINT_URL`.
+- Source `.localstack.env` (or use direnv) before running Nx commands.
+- Helper script: `scripts/setup-worktree-localstack.sh wt1 4567 5510-5559`.
+- Helper script can auto-pick nearest free ports when you omit them (use short
+  worktree IDs like `wt1`, `qa`, `ux`).
+- If ports are auto-picked, report the chosen values from the script output or
+  `.localstack.env`.
+- Stop helper: `scripts/stop-worktree-localstack.sh`.
+
 ## Git Commits (Required)
 
 - Work in reasonable increments; avoid micro-commits and avoid one giant commit for a large change.

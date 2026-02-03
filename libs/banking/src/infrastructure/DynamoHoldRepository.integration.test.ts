@@ -28,9 +28,21 @@ import { Transaction } from '../domain/entities/Transaction';
 import { Posting } from '../domain/valueObjects/Posting';
 import { Money } from '../domain/valueObjects/Money';
 
+const resolveLocalstackEndpoint = () => {
+  const envEndpoint =
+    process.env.AWS_ENDPOINT_URL?.trim() ||
+    process.env.LOCALSTACK_ENDPOINT_URL?.trim();
+  if (envEndpoint) {
+    return envEndpoint;
+  }
+
+  const port = process.env.LOCALSTACK_EDGE_PORT?.trim() || '4566';
+  return `http://localhost:${port}`;
+};
+
 const TEST_CONFIG = {
   tableName: `demo-bank-app-holds-integration-test-${Date.now()}`,
-  localstackEndpoint: 'http://localhost:4566',
+  localstackEndpoint: resolveLocalstackEndpoint(),
   region: 'us-east-1',
 };
 

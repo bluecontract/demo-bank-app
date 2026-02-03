@@ -6,19 +6,24 @@ import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const webAppPort = Number.parseInt(process.env.WEB_APP_PORT || '4200', 10);
+const webAppPreviewPort = Number.parseInt(
+  process.env.WEB_APP_PREVIEW_PORT || String(webAppPort + 100),
+  10
+);
 
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/apps/demo-bank-app',
   server: {
-    port: 4200,
+    port: webAppPort,
     host: 'localhost',
     watch: {
       usePolling: true,
     },
   },
   preview: {
-    port: 4300,
+    port: webAppPreviewPort,
     host: 'localhost',
   },
   plugins: [react()],

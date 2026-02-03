@@ -28,6 +28,8 @@ npm run verify:full
 - E2E (prod): `npm run e2e:prod`
 
 Note: `npm run e2e` expects the local stack to be running (`npm run serve:all` or `npm run serve:stack`).
+For worktrees, `source .localstack.env` so integration tests use the correct LocalStack endpoint and app ports.
+Use `scripts/stop-worktree-localstack.sh` to cleanly stop ports + LocalStack after tests.
 
 # Capture Output (optional)
 

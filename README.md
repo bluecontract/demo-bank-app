@@ -94,7 +94,7 @@ The app will be available at:
 
 - **Frontend**: http://localhost:4200
 - **Backend API**: http://localhost:3000
-- **LocalStack**: http://localhost:4566
+- **LocalStack**: http://localhost:4566 (or your `LOCALSTACK_EDGE_PORT`)
 
 ### Available Scripts
 
@@ -155,10 +155,134 @@ nx serve @demo-bank-app/bank-web-app # Frontend only
 # so you don't need AWS SSO to run locally.
 
 # Check service status
-docker ps --filter 'name=localstack-demo-bank-app'
+docker ps --filter "name=${LOCALSTACK_CONTAINER_NAME:-localstack-demo-bank-app}"
 
 # Stop services when done
-docker stop localstack-demo-bank-app
+docker stop "${LOCALSTACK_CONTAINER_NAME:-localstack-demo-bank-app}"
+```
+
+### Git Worktrees + LocalStack (Parallel Agents)
+
+Each worktree should run its own LocalStack container and ports. Use a
+worktree-local `.localstack.env` plus a worktree-specific SAM env file.
+
+#### Quick setup script
+
+```bash
+scripts/setup-worktree-localstack.sh wt1 4567 5510-5559 3001 4201 /Users/you/secrets/demo-bank-app.bank-api.json
+```
+
+This writes `.localstack.env` at the repo root and creates/updates
+`apps/bank-api/env.local.worktree.json` with the matching LocalStack endpoint.
+If a shared secrets file path is provided, its values are merged into the
+worktree env file.
+The secrets file path is stored in `.localstack.env` as `SHARED_SECRETS_FILE`.
+If you place `bank-api.env.local.json` at the repo root, the script will use it
+automatically.
+Re-run the script per worktree with a unique port/container name.
+
+You can also let it auto-pick the nearest free ports:
+
+```bash
+scripts/setup-worktree-localstack.sh wt1
+```
+
+Auto-pick selects the closest free ports to defaults (LocalStack 4566, API 3000,
+Web 4200) and finds a free LocalStack port range if needed.
+The script prints the chosen ports and stores them in `.localstack.env`.
+
+To disable the LocalStack port range mapping, pass an empty third arg:
+
+```bash
+scripts/setup-worktree-localstack.sh wt1 "" ""
+```
+
+#### Shared secrets (one-time)
+
+Create a JSON file outside the repo (gitignored), for example:
+
+```json
+{
+  "MYOS_API_KEY": "…",
+  "MYOS_ACCOUNT_ID": "…",
+  "OPENAI_API_KEY": "…"
+}
+```
+
+You can also use the env.local.json shape if you prefer:
+
+```json
+{
+  "Parameters": {
+    "MYOS_API_KEY": "…",
+    "MYOS_ACCOUNT_ID": "…",
+    "OPENAI_API_KEY": "…"
+  }
+}
+```
+
+Pass this path to the setup script and it will be merged into
+`apps/bank-api/env.local.worktree.json`.
+
+#### Stop a worktree stack
+
+```bash
+scripts/stop-worktree-localstack.sh
+```
+
+#### Manual setup
+
+1. Create `.localstack.env` at the repo root (not committed):
+
+```bash
+LOCALSTACK_CONTAINER_NAME=localstack-demo-bank-app-wt1
+LOCALSTACK_EDGE_PORT=4567
+LOCALSTACK_PORT_RANGE=5510-5559
+AWS_ENDPOINT_URL=http://localhost:4567
+LOCALSTACK_DOCKER_ENDPOINT_URL=http://host.docker.internal:4567
+BANK_API_PORT=3001
+WEB_APP_PORT=4201
+WEB_APP_PREVIEW_PORT=4301
+BANK_API_URL=http://localhost:3001
+VITE_API_URL=http://localhost:3001
+E2E_BASE_URL=http://localhost:4201
+ENV_VARS_FILE=env.local.worktree.json
+```
+
+- Set `LOCALSTACK_PORT_RANGE=` (empty) to skip the 4510-4559 mapping if you do
+  not need it.
+- `AWS_ENDPOINT_URL` is for host-side tools/tests.
+- `LOCALSTACK_DOCKER_ENDPOINT_URL` is for SAM containers.
+- `.localstack.env` and `env.local.worktree.json` are ignored by git.
+
+2. Create a worktree-specific SAM env file:
+
+```bash
+cp apps/bank-api/env.local.json apps/bank-api/env.local.worktree.json
+# Edit AWS_ENDPOINT_URL and AwsEndpointUrl to match LOCALSTACK_DOCKER_ENDPOINT_URL
+```
+
+3. Load the env and run:
+
+```bash
+source .localstack.env
+npm run serve:all
+```
+
+#### Running two worktrees in parallel
+
+Pick unique ports for each worktree, then run `npm run serve:all` in both:
+
+```bash
+# Worktree 1
+scripts/setup-worktree-localstack.sh wt1 4567 5510-5559 3001 4201
+source .localstack.env
+npm run serve:all
+
+# Worktree 2
+scripts/setup-worktree-localstack.sh wt2 4568 5610-5659 3002 4202
+source .localstack.env
+npm run serve:all
 ```
 
 ### Logs

@@ -11,10 +11,10 @@
           "nx build bank-api --configuration=development",
           "mv dist/apps/bank-api/lambda/main.cjs dist/apps/bank-api/lambda/main.js",
           "mv dist/apps/bank-api/lambda/summary.cjs dist/apps/bank-api/lambda/summary.js",
-          "cd apps/bank-api && samlocal deploy --no-confirm-changeset --resolve-s3 --parameter-overrides AwsEndpointUrl=http://host.docker.internal:4566",
+          "cd apps/bank-api && samlocal deploy --no-confirm-changeset --resolve-s3 --parameter-overrides AwsEndpointUrl=${LOCALSTACK_DOCKER_ENDPOINT_URL:-http://host.docker.internal:${LOCALSTACK_EDGE_PORT:-4566}}",
           "cd apps/bank-api && npm run seed-secrets",
           "cd apps/bank-api && npm run seed-funding-source",
-          "cd apps/bank-api && sam local start-api --port 3000 --no-memory-limit --docker-volume-basedir . --env-vars env.local.json"
+          "cd apps/bank-api && sam local start-api --port ${BANK_API_PORT:-3000} --no-memory-limit --docker-volume-basedir . --env-vars ${ENV_VARS_FILE:-env.local.json}"
         ],
         "parallel": false,
         "env": {

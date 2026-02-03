@@ -61,3 +61,8 @@ IMPLEMENTATION_PLAN.md
 
 # Code review artifacts
 agents/skills/code-review/reviews/
+
+# LocalStack worktree overrides
+.localstack.env
+apps/bank-api/env.local.worktree.json
+bank-api.env.local.json

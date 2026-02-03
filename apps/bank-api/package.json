@@ -12,7 +12,7 @@
     "build:seed": "esbuild scripts/seed-funding-source.ts --bundle --platform=node --format=cjs --target=node22 --outfile=../../dist/apps/bank-api/seed/seed-funding-source.cjs --sourcemap",
     "build": "npm run build:setup && npm run build:lambda && npm run build:summary && npm run build:seed",
     "seed-secrets": "npx tsx ./scripts/seed-secrets.ts",
-    "seed-funding-source": "AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=eu-west-1 AWS_ENDPOINT_URL='http://localhost:4566' TABLE=demo-bank-dev npx tsx ./scripts/seed-funding-source.ts"
+    "seed-funding-source": "AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=eu-west-1 AWS_ENDPOINT_URL=${AWS_ENDPOINT_URL:-http://localhost:4566} TABLE=demo-bank-dev npx tsx ./scripts/seed-funding-source.ts"
   },
   "keywords": [],
   "author": "",
