@@ -18,6 +18,9 @@ inconsistent serialization.
 - We must preserve document fidelity when reading, validating, and writing.
 - Type checks must align with Blue repository schemas.
 - The bank already uses the Blue language library in PayNote webhook handling.
+- `nodeToSchemaOutput` drops fields that are not defined in the target schema.
+- `nodeToJson(..., 'simple')` is lossy and can strip `type` metadata needed for
+  MyOS resolution/initialization.
 
 ## Decision
 
@@ -27,10 +30,19 @@ library. Incoming payloads are deserialized into Blue nodes, validated with
 `nodeToSchemaOutput` when needed, and serialized back with `nodeToJson` after
 modifications.
 
+For outbound MyOS calls (bootstrap/operations), we must preserve the full
+document shape. Prefer passing through the original payload when available, or
+serialize with `nodeToJson` using `official` or `original`. Use
+`nodeToJson(..., 'simple')` only for UI summaries or logging. If we want to
+strip BlueIds while keeping types, call `restoreInlineTypes` before
+serialization.
+
 ## Consequences
 
 - Consistent schema validation and safer document manipulation.
 - Stable serialization path for storage and outbound operations.
+- Clear separation between lossless serialization for MyOS and lossy `simple`
+  serialization for UI/logging.
 
 * Requires careful handling of parse failures and schema mismatches.
 

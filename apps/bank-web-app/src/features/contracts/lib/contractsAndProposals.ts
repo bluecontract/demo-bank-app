@@ -5,7 +5,13 @@ export type ProposalListItem = PayNoteDeliverySummary & {
   kind: 'proposal';
 };
 
-export type ContractOrProposalItem = ContractSummary | ProposalListItem;
+export type MergedContractItem = ContractSummary & {
+  originProposalDeliveryId?: string;
+  originProposalSessionId?: string;
+  sortUpdatedAt?: string;
+};
+
+export type ContractOrProposalItem = MergedContractItem | ProposalListItem;
 
 export const isProposalItem = (
   item: ContractOrProposalItem
@@ -26,20 +32,76 @@ export const getItemSessionId = (
 export const getItemUpdatedAt = (item: ContractOrProposalItem): string =>
   item.updatedAt;
 
+const getItemSortUpdatedAt = (item: ContractOrProposalItem): string =>
+  'sortUpdatedAt' in item && item.sortUpdatedAt
+    ? item.sortUpdatedAt
+    : item.updatedAt;
+
 export function mergeContractsAndProposals(
   contracts: ContractSummary[],
   proposals: PayNoteDeliverySummary[]
 ): ContractOrProposalItem[] {
-  const proposalItems: ProposalListItem[] = proposals.map(p => ({
-    ...p,
-    kind: 'proposal' as const,
-  }));
+  const contractBySessionId = new Map(
+    contracts
+      .map(contract => [contract.sessionId, contract] as const)
+      .filter((entry): entry is [string, ContractSummary] => Boolean(entry[0]))
+  );
+  const contractSessionIds = new Set(
+    contracts
+      .map(contract => contract.sessionId)
+      .filter((value): value is string => Boolean(value))
+  );
 
-  const combined: ContractOrProposalItem[] = [...contracts, ...proposalItems];
+  const matchedContractSessionIds = new Set<string>();
+  const mergedItems: ContractOrProposalItem[] = [];
+
+  for (const proposal of proposals) {
+    const payNoteSessionIds = proposal.payNoteSessionIds ?? [];
+    const matchingSessionId = payNoteSessionIds.find(id =>
+      contractSessionIds.has(id)
+    );
+    if (matchingSessionId) {
+      const contract = contractBySessionId.get(matchingSessionId);
+      if (contract) {
+        const contractStatus = contract.status?.toLowerCase();
+        if (contractStatus === 'bootstrapped') {
+          matchedContractSessionIds.add(matchingSessionId);
+          mergedItems.push({
+            ...proposal,
+            kind: 'proposal' as const,
+          });
+        } else {
+          matchedContractSessionIds.add(matchingSessionId);
+          mergedItems.push({
+            ...contract,
+            originProposalDeliveryId: proposal.deliveryId,
+            originProposalSessionId: proposal.deliverySessionId,
+            sortUpdatedAt: proposal.updatedAt,
+          });
+        }
+        continue;
+      }
+    }
+
+    mergedItems.push({
+      ...proposal,
+      kind: 'proposal' as const,
+    });
+  }
+
+  const unmatchedContracts = contracts.filter(
+    contract =>
+      !contract.sessionId || !matchedContractSessionIds.has(contract.sessionId)
+  );
+
+  const combined: ContractOrProposalItem[] = [
+    ...unmatchedContracts,
+    ...mergedItems,
+  ];
 
   return combined.sort((a, b) => {
-    const aTime = parseTimestamp(getItemUpdatedAt(a));
-    const bTime = parseTimestamp(getItemUpdatedAt(b));
+    const aTime = parseTimestamp(getItemSortUpdatedAt(a));
+    const bTime = parseTimestamp(getItemSortUpdatedAt(b));
     return bTime - aTime;
   });
 }

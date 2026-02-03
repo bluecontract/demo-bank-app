@@ -421,6 +421,7 @@ export const PayNoteSummaryDto = z.object({
 export const PayNoteDeliverySummaryDto = z.object({
   deliveryId: z.string(),
   deliverySessionId: z.string().optional(),
+  payNoteSessionIds: z.array(z.string()).optional(),
   name: z.string().optional(),
   amountMinor: MoneyMinor.optional(),
   currency: z.string().optional(),
@@ -428,6 +429,7 @@ export const PayNoteDeliverySummaryDto = z.object({
   transactionIdentificationStatus: z.string().optional(),
   clientDecisionStatus: z.string().optional(),
   transactionId: z.string().optional(),
+  holdId: z.string().optional(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
 });
@@ -479,6 +481,17 @@ export const ContractSummaryDto = z.object({
 
 export const ContractListResponseDto = z.object({
   items: z.array(ContractSummaryDto),
+});
+
+export const RelatedContractItemDto = z.union([
+  ContractSummaryDto,
+  PayNoteDeliverySummaryDto.extend({
+    kind: z.literal('proposal'),
+  }),
+]);
+
+export const RelatedContractListResponseDto = z.object({
+  items: z.array(RelatedContractItemDto),
 });
 
 export const ContractDocumentSummaryKeyFactDto = z.object({

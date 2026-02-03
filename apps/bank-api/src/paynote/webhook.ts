@@ -10,15 +10,73 @@ import {
   getDocumentBootstrapRequestFromEvent,
   getPayloadSummary,
 } from '@demo-bank-app/paynotes';
+import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { Blue } from '@blue-labs/language';
 import { repository } from '@blue-repository/types';
 import { DocumentSessionBootstrapSchema } from '@blue-repository/types/packages/myos/schemas';
 import { getDependencies } from './dependencies';
-import { prefetchContractSummaryForSessionId } from '../contracts/generateContractSummary';
+import type { SummaryJob } from '../summary/types';
+import type { PowertoolsLogger } from '@demo-bank-app/shared-observability';
 
 const blue = new Blue({
   repositories: [repository],
 });
+
+let cachedLambdaClient: LambdaClient | null = null;
+
+const getLambdaClient = () => {
+  if (cachedLambdaClient) {
+    return cachedLambdaClient;
+  }
+
+  const region = process.env.AWS_REGION || 'eu-west-1';
+  const endpoint = process.env.AWS_ENDPOINT_URL;
+  cachedLambdaClient = new LambdaClient({
+    region,
+    ...(endpoint ? { endpoint } : {}),
+  });
+  return cachedLambdaClient;
+};
+
+const enqueueSummaryJob = async (
+  job: SummaryJob,
+  logger: PowertoolsLogger
+): Promise<boolean> => {
+  const functionName = process.env.SUMMARY_LAMBDA_NAME?.trim();
+  if (!functionName) {
+    logger.debug('Summary dispatch skipped (missing SUMMARY_LAMBDA_NAME)', {
+      type: job.type,
+      sessionId: job.sessionId,
+    });
+    return false;
+  }
+
+  try {
+    const payload = Buffer.from(JSON.stringify(job));
+    const response = await getLambdaClient().send(
+      new InvokeCommand({
+        FunctionName: functionName,
+        InvocationType: 'Event',
+        Payload: payload,
+      })
+    );
+
+    logger.info('Enqueued summary job', {
+      type: job.type,
+      sessionId: job.sessionId,
+      statusCode: response.StatusCode,
+    });
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Failed to enqueue summary job', {
+      type: job.type,
+      sessionId: job.sessionId,
+      error: message,
+    });
+    return false;
+  }
+};
 
 const isTraceEnabled =
   process.env.PAYNOTE_WEBHOOK_TRACE === '1' ||
@@ -42,19 +100,29 @@ const getEventTypeName = (event: unknown): string | undefined => {
   return typeof typeRecord.value === 'string' ? typeRecord.value : undefined;
 };
 
-const classifyDocumentType = (document: unknown) => {
+const classifyDocumentType = (
+  document: unknown,
+  supportedContract?: ReturnType<typeof getSupportedContractForDocument> | null
+) => {
   try {
     const node = blue.jsonValueToNode(document);
-    const supportedContract = getSupportedContractForDocument(document);
+    const resolvedContract =
+      supportedContract ?? getSupportedContractForDocument(document);
     return {
-      isPayNote: supportedContract?.typeName === 'PayNote/PayNote',
-      isDelivery: supportedContract?.typeName === 'PayNote/PayNote Delivery',
+      isPayNote: resolvedContract?.typeName === 'PayNote/PayNote',
+      isDelivery: resolvedContract?.typeName === 'PayNote/PayNote Delivery',
       isBootstrap: blue.isTypeOf(node, DocumentSessionBootstrapSchema, {
         checkSchemaExtensions: true,
       }),
+      isSupportedContract: Boolean(resolvedContract),
     };
   } catch {
-    return { isPayNote: false, isDelivery: false, isBootstrap: false };
+    return {
+      isPayNote: false,
+      isDelivery: false,
+      isBootstrap: false,
+      isSupportedContract: false,
+    };
   }
 };
 
@@ -76,7 +144,6 @@ export const payNoteWebhookHandler = async (
 ) => {
   const {
     logger,
-    getOpenAiApiKey,
     myOsClient,
     bankingFacade,
     payNoteRepository,
@@ -193,9 +260,17 @@ export const payNoteWebhookHandler = async (
 
   const documentPayload = (payload as { object?: { document?: unknown } })
     ?.object?.document;
+  const supportedContract = documentPayload
+    ? getSupportedContractForDocument(documentPayload)
+    : null;
   const documentType = documentPayload
-    ? classifyDocumentType(documentPayload)
-    : { isPayNote: false, isDelivery: false, isBootstrap: false };
+    ? classifyDocumentType(documentPayload, supportedContract)
+    : {
+        isPayNote: false,
+        isDelivery: false,
+        isBootstrap: false,
+        isSupportedContract: false,
+      };
 
   const shouldHandleDelivery =
     documentType.isDelivery || hasDocumentBootstrapRequest(payload);
@@ -203,6 +278,7 @@ export const payNoteWebhookHandler = async (
   trace('PayNote webhook classification', {
     eventId,
     documentType,
+    supportedContractType: supportedContract?.typeName ?? null,
     shouldHandleDelivery,
     payloadType: getEventTypeName(payload),
     documentTypeName: documentPayload
@@ -228,6 +304,17 @@ export const payNoteWebhookHandler = async (
           bankingRepository,
           holdRepository,
           clock,
+          enqueuePayNoteDeliverySummary: async input => {
+            await enqueueSummaryJob(
+              {
+                type: 'paynote-delivery-summary',
+                sessionId: input.sessionId,
+                reason: input.reason,
+                force: input.force,
+              },
+              logger
+            );
+          },
         }
       )
     : null;
@@ -276,13 +363,15 @@ export const payNoteWebhookHandler = async (
 
   const sessionId = (payload as { object?: { sessionId?: unknown } })?.object
     ?.sessionId;
-  if (typeof sessionId === 'string') {
-    void prefetchContractSummaryForSessionId({
-      sessionId,
-      contractRepository,
-      getOpenAiApiKey,
-      logger,
-    });
+  if (typeof sessionId === 'string' && documentType.isSupportedContract) {
+    void enqueueSummaryJob(
+      {
+        type: 'contract-summary',
+        sessionId,
+        reason: 'webhook',
+      },
+      logger
+    );
   }
 
   return {

@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   CreateSecretCommand,
+  GetSecretValueCommand,
+  PutSecretValueCommand,
   ResourceExistsException,
   SecretsManagerClient,
 } from '@aws-sdk/client-secrets-manager';
@@ -85,6 +87,27 @@ const createSecretIfMissing = async (
   }
 };
 
+const extractOpenAiApiKey = (secretString: string | undefined): string => {
+  if (!secretString) {
+    return '';
+  }
+
+  try {
+    const parsed = JSON.parse(secretString) as unknown;
+    if (typeof parsed === 'string') {
+      return parsed.trim();
+    }
+    if (parsed && typeof parsed === 'object') {
+      const maybeKey = (parsed as { openAiApiKey?: unknown }).openAiApiKey;
+      return typeof maybeKey === 'string' ? maybeKey.trim() : '';
+    }
+  } catch {
+    return secretString.trim();
+  }
+
+  return '';
+};
+
 const run = async () => {
   const params = getEnvParams();
 
@@ -120,13 +143,44 @@ const run = async () => {
   }
 
   if (openAiSecretArn) {
-    const openAiApiKey = params.OPENAI_API_KEY?.trim() || DEFAULTS.openAiApiKey;
-    await createSecretIfMissing(
-      client,
-      openAiSecretArn,
-      JSON.stringify({ openAiApiKey }),
-      'OpenAI API key for local development'
-    );
+    const explicitOpenAiKey = params.OPENAI_API_KEY?.trim();
+    const openAiApiKey = explicitOpenAiKey || DEFAULTS.openAiApiKey;
+    const payload = JSON.stringify({ openAiApiKey });
+
+    try {
+      await client.send(
+        new CreateSecretCommand({
+          Name: openAiSecretArn,
+          SecretString: payload,
+          Description: 'OpenAI API key for local development',
+        })
+      );
+      console.info(`Created secret: ${openAiSecretArn}`);
+    } catch (error) {
+      if (!(error instanceof ResourceExistsException)) {
+        throw error;
+      }
+
+      const existing = await client.send(
+        new GetSecretValueCommand({ SecretId: openAiSecretArn })
+      );
+      const existingKey = extractOpenAiApiKey(existing.SecretString);
+      const shouldUpdate = explicitOpenAiKey
+        ? existingKey !== explicitOpenAiKey
+        : existingKey.length === 0;
+
+      if (shouldUpdate) {
+        await client.send(
+          new PutSecretValueCommand({
+            SecretId: openAiSecretArn,
+            SecretString: payload,
+          })
+        );
+        console.info(`Updated secret: ${openAiSecretArn}`);
+      } else {
+        console.info(`Secret already exists: ${openAiSecretArn}`);
+      }
+    }
   } else {
     console.warn(
       'OPENAI_API_KEY_SECRET_ARN not set; skipping OpenAI secret creation.'

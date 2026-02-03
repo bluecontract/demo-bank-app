@@ -98,6 +98,16 @@ export type PayNoteDeliveryDetailsSanitized = ClientInferResponseBody<
   200
 >;
 
+export type PayNoteDeliverySummaryFetch = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['getPayNoteDeliverySummary'],
+  200
+>;
+
+export type PayNoteDeliverySummaryGeneration = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['generatePayNoteDeliverySummary'],
+  200
+>;
+
 // Contract types
 export type ContractListResponse = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['listContracts'],
@@ -105,6 +115,13 @@ export type ContractListResponse = ClientInferResponseBody<
 >;
 
 export type ContractSummary = ContractListResponse['items'][number];
+
+export type RelatedContractsListResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['listTransactionContracts'],
+  200
+>;
+
+export type RelatedContractItem = RelatedContractsListResponse['items'][number];
 
 export type ContractDetails = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['getContractDetails'],
@@ -115,6 +132,8 @@ export type ContractSummaryGeneration = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['generateContractSummary'],
   200
 >;
+
+export type ContractDocumentSummary = ContractSummaryGeneration['summary'];
 
 export type ContractOperationResponse = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['runContractOperation'],

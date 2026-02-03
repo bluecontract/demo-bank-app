@@ -108,6 +108,9 @@ status:
   description: The current state of the PayNote (e.g., Pending, Approved, Reserved, Captured, Released, Rejected).
   type: Text
   value: Pending
+transactionStatus:
+  type: PayNote/Transaction Status
+  description: Optional status snapshot. If present in proposal, bank validates it; if missing bank sets it at bootstrap.
 currency:
   description: The ISO 4217 currency code for the transaction.
   type: Text
@@ -140,33 +143,12 @@ payNoteInitialStateDescription:
 # --- Participants & Contracts ---
 contracts:
   payerChannel:
-    type: MyOS/MyOS Timeline
+    type: Conversation/Timeline Channel
   payeeChannel:
-    type: MyOS/MyOS Timeline
+    type: Conversation/Timeline Channel
   guarantorChannel:
-    type: MyOS/MyOS Timeline
-
-  # --- Operations for the Guarantor to emit state-changing events ---
-  # Each operation is restricted to the guarantorChannel. When called, it simply
-  # triggers a corresponding event that all participants can observe.
-
-  approvePayNote:
-    type: Conversation/Operation
-    channel: guarantorChannel
-    # ... implementation triggers 'PayNote/PayNote Approved' event ...
-
-  markPayNoteRejectedByClient:
-    type: Conversation/Operation
-    channel: guarantorChannel
-    # ... implementation triggers 'PayNote/PayNote Rejected' event ...
-
-  specifySettlementAmount:
-    type: Conversation/Operation
-    channel: guarantorChannel
-    request: { type: Integer } # The final amount
-    # ... implementation triggers 'PayNote/Settlement Amount Specified' event ...
-
-  # ... and so on for all other Guarantor-driven events ...
+    type: Conversation/Timeline Channel
+  # Guarantor emits updates via the guarantor channel (operation details omitted).
 
 \`\`\`
 `;

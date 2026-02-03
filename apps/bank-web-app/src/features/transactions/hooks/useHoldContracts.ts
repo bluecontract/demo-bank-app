@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
-import type { ContractSummary } from '../../../types/api';
+import type { RelatedContractItem } from '../../../types/api';
 
 type RelatedContractsError = Error & { status?: number };
 
@@ -24,9 +24,9 @@ export function useHoldContracts({
 }: UseHoldContractsOptions) {
   const { handleAuthError } = useAuthErrorHandler();
 
-  return useQuery<ContractSummary[], RelatedContractsError>({
+  return useQuery<RelatedContractItem[], RelatedContractsError>({
     queryKey: ['hold-contracts', holdId],
-    queryFn: async (): Promise<ContractSummary[]> => {
+    queryFn: async (): Promise<RelatedContractItem[]> => {
       if (!holdId) {
         throw makeError('Hold id is required');
       }

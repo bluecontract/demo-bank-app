@@ -1,5 +1,5 @@
 import { ActivityDetail } from '../hooks/useActivityDetail';
-import type { ContractSummary } from '../../../types/api';
+import type { RelatedContractItem } from '../../../types/api';
 import { Card } from '../../../ui/Card';
 import { Spinner } from '../../../ui/Spinner';
 import { formatCurrency } from '../../../lib/formatCurrency';
@@ -26,7 +26,7 @@ interface HoldDetailsProps {
   'data-testid'?: string;
   showPayNoteHelper?: boolean;
   onViewPayNoteDetails?: () => void;
-  relatedContracts?: ContractSummary[] | null;
+  relatedContracts?: RelatedContractItem[] | null;
   isRelatedContractsLoading?: boolean;
   relatedContractsError?: string;
 }
@@ -170,6 +170,8 @@ export function HoldDetails({
   relatedContractsError,
 }: HoldDetailsProps) {
   const { setActiveSession } = useActiveContractSession();
+  const isProposalItem = (item: RelatedContractItem) =>
+    'kind' in item && item.kind === 'proposal';
   const formattedAmount = formatCurrency(hold.amountMinor);
   const timeline = [...hold.timeline].sort(
     (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
@@ -201,8 +203,44 @@ export function HoldDetails({
     : 'Standard Transfer';
 
   const relatedContractsList = relatedContracts ?? [];
+  const hasRelatedContract = relatedContractsList.some(
+    item => !isProposalItem(item)
+  );
+  const contractSessionIds = new Set(
+    relatedContractsList
+      .filter(item => !isProposalItem(item))
+      .map(item => item.sessionId)
+      .filter((value): value is string => Boolean(value))
+  );
+  const visibleRelatedContracts = hasRelatedContract
+    ? relatedContractsList.filter(item => !isProposalItem(item))
+    : relatedContractsList.filter(item => {
+        if (!isProposalItem(item)) {
+          return true;
+        }
+        const payNoteSessionIds = item.payNoteSessionIds ?? [];
+        if (!payNoteSessionIds.length) {
+          return true;
+        }
+        return !payNoteSessionIds.some(id => contractSessionIds.has(id));
+      });
 
-  const handleContractClick = (contract: ContractSummary) => {
+  const handleContractClick = (contract: RelatedContractItem) => {
+    if (isProposalItem(contract)) {
+      const proposalSessionId = contract.deliverySessionId;
+      if (!proposalSessionId) {
+        return;
+      }
+      setActiveSession(proposalSessionId);
+      if (typeof window !== 'undefined') {
+        const target = `/contracts?sessionId=${encodeURIComponent(
+          proposalSessionId
+        )}`;
+        window.location.assign(target);
+      }
+      return;
+    }
+
     if (!contract.sessionId) {
       return;
     }
@@ -399,7 +437,7 @@ export function HoldDetails({
 
           {!isRelatedContractsLoading &&
             !relatedContractsError &&
-            relatedContractsList.length === 0 && (
+            visibleRelatedContracts.length === 0 && (
               <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm text-slate-500">
                 No related contracts found.
               </div>
@@ -407,20 +445,31 @@ export function HoldDetails({
 
           {!isRelatedContractsLoading &&
             !relatedContractsError &&
-            relatedContractsList.length > 0 && (
+            visibleRelatedContracts.length > 0 && (
               <div className="space-y-2">
-                {relatedContractsList.map(contract => {
-                  const isSelectable = Boolean(contract.sessionId);
-                  const primaryName =
-                    contract.documentName?.trim() || contract.displayName;
-                  const statusKey = contract.status?.toLowerCase() ?? '';
+                {visibleRelatedContracts.map(contract => {
+                  const isProposal = isProposalItem(contract);
+                  const isSelectable = isProposal
+                    ? Boolean(contract.deliverySessionId)
+                    : Boolean(contract.sessionId);
+                  const primaryName = isProposal
+                    ? contract.name?.trim() || 'PayNote proposal'
+                    : contract.documentName?.trim() || contract.displayName;
+                  const statusValue = isProposal
+                    ? contract.clientDecisionStatus ?? 'pending'
+                    : contract.status;
+                  const statusKey = statusValue?.toLowerCase() ?? '';
                   const statusStyle =
                     contractStatusStyles[statusKey] ??
                     'bg-slate-100 text-slate-700 border border-slate-200';
 
                   return (
                     <button
-                      key={contract.contractId}
+                      key={
+                        isProposal
+                          ? `proposal-${contract.deliveryId}`
+                          : contract.contractId
+                      }
                       type="button"
                       className={`w-full text-left rounded-xl border p-3 shadow-sm transition ${
                         isSelectable
@@ -441,12 +490,17 @@ export function HoldDetails({
                         </p>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="app-chip app-chip-neutral">
-                            {contract.displayName}
+                            {isProposal ? 'Proposal' : contract.displayName}
                           </span>
+                          {isProposal && (
+                            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-100">
+                              Proposal
+                            </span>
+                          )}
                           <span
                             className={`text-xs font-semibold px-2 py-1 rounded-full ${statusStyle}`}
                           >
-                            {formatContractStatus(contract.status)}
+                            {formatContractStatus(statusValue)}
                           </span>
                         </div>
                       </div>

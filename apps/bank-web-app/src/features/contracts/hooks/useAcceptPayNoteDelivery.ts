@@ -44,9 +44,7 @@ export function useAcceptPayNoteDelivery() {
       queryClient.invalidateQueries({ queryKey: ['paynote-deliveries'] });
     },
     throwOnError: error => {
-      if (!handleAuthError(error)) {
-        return true;
-      }
+      handleAuthError(error);
       return false;
     },
   });

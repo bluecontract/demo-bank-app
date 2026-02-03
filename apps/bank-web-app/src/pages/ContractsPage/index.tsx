@@ -41,6 +41,8 @@ export function ContractsPage() {
 
   const contractsQuery = useContracts();
   const proposalsQuery = useProposals();
+  const { refetch: refetchContracts } = contractsQuery;
+  const { refetch: refetchProposals } = proposalsQuery;
   const dedupedContracts = useMemo(
     () => (contractsQuery.data ? dedupeContracts(contractsQuery.data) : []),
     [contractsQuery.data]
@@ -49,10 +51,25 @@ export function ContractsPage() {
     () => proposalsQuery.data ?? [],
     [proposalsQuery.data]
   );
+  const disablePolling = __UI_REFRESH_DISABLE_POLLING__ === 'true';
   const listItems = useMemo(
     () => mergeContractsAndProposals(dedupedContracts, proposals),
     [dedupedContracts, proposals]
   );
+  const proposalSessionToContractSession = useMemo(() => {
+    const mapping = new Map<string, string>();
+    listItems.forEach(item => {
+      if (
+        !isProposalItem(item) &&
+        'originProposalSessionId' in item &&
+        item.originProposalSessionId &&
+        item.sessionId
+      ) {
+        mapping.set(item.originProposalSessionId, item.sessionId);
+      }
+    });
+    return mapping;
+  }, [listItems]);
 
   const selectedItem = useMemo(
     () =>
@@ -72,6 +89,12 @@ export function ContractsPage() {
   const proposalDetailsQuery = useProposalDetails(
     selectedSessionId && selectedKind === 'proposal' ? selectedSessionId : null
   );
+
+  const handleProposalDecisionComplete = () => {
+    void proposalDetailsQuery.refetch();
+    void refetchProposals();
+    void refetchContracts();
+  };
 
   useEffect(() => {
     if (!requestedSessionId) {
@@ -123,6 +146,17 @@ export function ContractsPage() {
   ]);
 
   useEffect(() => {
+    if (!selectedSessionId) {
+      return;
+    }
+    const mappedSession =
+      proposalSessionToContractSession.get(selectedSessionId);
+    if (mappedSession && mappedSession !== selectedSessionId) {
+      setSelectedSessionId(mappedSession);
+    }
+  }, [proposalSessionToContractSession, selectedSessionId]);
+
+  useEffect(() => {
     if (selectedSessionId && selectedSessionId !== activeSessionId) {
       setActiveSession(selectedSessionId);
     }
@@ -132,6 +166,19 @@ export function ContractsPage() {
     return () => setActiveSession(null);
   }, [setActiveSession]);
 
+  useEffect(() => {
+    if (disablePolling) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      void refetchContracts();
+      void refetchProposals();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [disablePolling, refetchContracts, refetchProposals]);
+
   const handleSelectItem = (item: ContractOrProposalItem) => {
     const sid = getItemSessionId(item);
     if (sid) {
@@ -139,7 +186,9 @@ export function ContractsPage() {
     }
   };
 
-  const isListLoading = contractsQuery.isLoading || proposalsQuery.isLoading;
+  const isListLoading =
+    listItems.length === 0 &&
+    (contractsQuery.isLoading || proposalsQuery.isLoading);
   const isListError = contractsQuery.isError || proposalsQuery.isError;
 
   return (
@@ -176,7 +225,7 @@ export function ContractsPage() {
                     ? proposalDetailsQuery.error.message
                     : undefined
                 }
-                onDecisionComplete={() => setSelectedSessionId(null)}
+                onDecisionComplete={handleProposalDecisionComplete}
               />
             ) : selectedSessionId && !selectedItem && isListLoading ? (
               <Card className="flex items-center justify-center min-h-[420px]">

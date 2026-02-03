@@ -28,6 +28,7 @@ Everyone sees the same terms and same timeline.
 - **Docker** - Required for LocalStack (AWS service emulation)
 - **AWS SAM CLI** - Required for local Lambda development and testing
 - **Localstack samlocal** - Required for local Lambda development and testing
+- **AWS CLI** (optional) - Required for `npm run logs:summary`
 
 #### Install AWS SAM CLI
 
@@ -132,6 +133,7 @@ The app will be available at:
 | `npm run serve:all`            | Start all services with Nx                      |
 | `npm run serve:stack`          | Start backend stack (LocalStack + Lambda)       |
 | `npm run docker:check`         | Verify Docker is running                        |
+| `npm run logs:summary`         | Tail summary lambda logs (LocalStack)           |
 
 > **💡 Affected vs All**: By default, commands run only on "affected" projects (those changed since the last commit). Use `:all` variants to run on all projects.
 
@@ -157,6 +159,13 @@ docker ps --filter 'name=localstack-demo-bank-app'
 
 # Stop services when done
 docker stop localstack-demo-bank-app
+```
+
+### Logs
+
+```bash
+# Summary lambda (LocalStack CloudWatch)
+npm run logs:summary
 ```
 
 ## 🧪 Testing

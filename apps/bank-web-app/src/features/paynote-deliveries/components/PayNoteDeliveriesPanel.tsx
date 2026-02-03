@@ -74,7 +74,7 @@ export function PayNoteDeliveriesPanel() {
 
   const handleDecision = (
     delivery: PayNoteDeliverySummary,
-    operation: 'markPayNoteAcceptedByClient' | 'markPayNoteRejectedByClient'
+    operation: 'acceptPayNote' | 'rejectPayNote'
   ) => {
     if (!delivery.deliverySessionId) {
       return;
@@ -181,9 +181,7 @@ export function PayNoteDeliveriesPanel() {
                   variant="outline"
                   size="sm"
                   disabled={actionsDisabled}
-                  onClick={() =>
-                    handleDecision(delivery, 'markPayNoteRejectedByClient')
-                  }
+                  onClick={() => handleDecision(delivery, 'rejectPayNote')}
                 >
                   Reject
                 </Button>
@@ -191,9 +189,7 @@ export function PayNoteDeliveriesPanel() {
                   variant="primary"
                   size="sm"
                   disabled={actionsDisabled}
-                  onClick={() =>
-                    handleDecision(delivery, 'markPayNoteAcceptedByClient')
-                  }
+                  onClick={() => handleDecision(delivery, 'acceptPayNote')}
                 >
                   Accept
                 </Button>

@@ -261,4 +261,68 @@ describe('TransactionDetails', () => {
       screen.queryByText('No related contracts found.')
     ).not.toBeInTheDocument();
   });
+
+  it('should render related proposal when provided', () => {
+    render(
+      <TransactionDetails
+        {...defaultProps}
+        relatedContracts={[
+          {
+            kind: 'proposal',
+            deliveryId: 'delivery-1',
+            deliverySessionId: 'session-delivery-1',
+            name: 'Slow Digestion PayNote',
+            amountMinor: 1200,
+            currency: 'USD',
+            clientDecisionStatus: 'pending',
+            transactionId: 'txn-123',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-02T00:00:00.000Z',
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText('Slow Digestion PayNote')).toBeInTheDocument();
+    expect(screen.getAllByText('Proposal').length).toBeGreaterThan(0);
+    expect(screen.getByText('Pending')).toBeInTheDocument();
+  });
+
+  it('should hide proposal when matching contract exists', () => {
+    render(
+      <TransactionDetails
+        {...defaultProps}
+        relatedContracts={[
+          {
+            contractId: 'contract-1',
+            typeBlueId: 'type-1',
+            displayName: 'PayNote',
+            sessionId: 'session-1',
+            status: 'accepted',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-02T12:00:00.000Z',
+          },
+          {
+            kind: 'proposal',
+            deliveryId: 'delivery-1',
+            deliverySessionId: 'delivery-session-1',
+            payNoteSessionIds: ['session-1'],
+            name: 'Slow Digestion PayNote',
+            amountMinor: 1200,
+            currency: 'USD',
+            clientDecisionStatus: 'accepted',
+            transactionId: 'txn-123',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-02T00:00:00.000Z',
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getAllByText('PayNote').length).toBeGreaterThan(0);
+    expect(
+      screen.queryByText('Slow Digestion PayNote')
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Proposal')).not.toBeInTheDocument();
+  });
 });

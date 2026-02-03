@@ -34,6 +34,7 @@
     "graph": "nx graph",
     "serve:all": "nx run-many --target=serve --all",
     "serve:stack": "nx run-many --target=serve --projects=localstack,bank-api,bank-web-app",
+    "logs:summary": "AWS_REGION=eu-west-1 aws --endpoint-url http://localhost:4566 logs tail \"/aws/lambda/blue-bank-summary-dev\" --follow",
     "docker:check": "docker info > /dev/null 2>&1 || (echo 'Error: Docker is not running. Please start Docker first.' && exit 1)",
     "generate-docs": "npx tsx scripts/generate-openapi.ts",
     "wait-for-backend": "npx tsx scripts/wait-for-backend.ts",

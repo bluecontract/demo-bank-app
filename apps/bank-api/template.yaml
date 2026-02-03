@@ -7,16 +7,20 @@ Parameters:
     Type: String
     Default: dev
     AllowedValues: [dev, prod]
+  AwsEndpointUrl:
+    Type: String
+    Default: ''
 
 Globals:
   Function:
-    Timeout: 30
+    Timeout: 60
     Runtime: nodejs22.x
     CodeUri: ../../dist/apps/bank-api/
     Environment:
       Variables:
         NODE_ENV: !Ref Environment
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+        CONTRACT_SUMMARY_TIMEOUT_MS: 45000
 
 Resources:
   # DynamoDB Table for Single Table Design
@@ -193,9 +197,10 @@ Resources:
           JWT_TTL_SECONDS: 604800
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
           SERVICE_NAME: !Sub 'bank-api-${Environment}'
+          SUMMARY_LAMBDA_NAME: !Ref SummaryLambdaFunction
           LOG_LEVEL: INFO
           METRICS_NAMESPACE: !Sub 'DemoBlue/${Environment}'
-          AWS_ENDPOINT_URL: '' # only for local development
+          AWS_ENDPOINT_URL: !Ref AwsEndpointUrl # only for local development
           CARD_PAN_SECRET: 'demo-bank-pan-secret'
           CARD_CVC_SECRET: 'demo-bank-cvc-secret'
           CARD_PROCESSOR_TOKEN: 'demo-bank-processor-token'
@@ -207,6 +212,10 @@ Resources:
             TableName: !Ref BankTable
         - Version: '2012-10-17'
           Statement:
+            - Effect: Allow
+              Action:
+                - lambda:InvokeFunction
+              Resource: !GetAtt SummaryLambdaFunction.Arn
             - Effect: Allow
               Action:
                 - secretsmanager:GetSecretValue
@@ -236,6 +245,70 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /{proxy+}
             Method: ANY
+
+  SummaryLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'blue-bank-summary-${Environment}'
+      Handler: summary.handler
+      CodeUri: ../../dist/apps/bank-api/lambda/
+      Description: Banking summary Lambda function
+      Environment:
+        Variables:
+          AUTH_DYNAMO_TABLE_NAME: !Ref BankTable
+          BANKING_DYNAMO_TABLE_NAME: !Ref BankTable
+          JWT_SECRET_ARN: !Ref JwtSecret
+          OPENAI_API_KEY_SECRET_ARN: !Ref OpenAiKeySecret
+          MYOS_SECRET_ARN: !Ref MyOsSecret
+          MYOS_API_KEY: ''
+          MYOS_ACCOUNT_ID: ''
+          MYOS_BASE_URL: ''
+          JWT_TTL_SECONDS: 604800
+          TEST_USER_TTL_SECONDS: 600 # 10 minutes
+          SERVICE_NAME: !Sub 'bank-api-summary-${Environment}'
+          LOG_LEVEL: INFO
+          METRICS_NAMESPACE: !Sub 'DemoBlue/${Environment}'
+          AWS_ENDPOINT_URL: !Ref AwsEndpointUrl # only for local development
+          CARD_PAN_SECRET: 'demo-bank-pan-secret'
+          CARD_CVC_SECRET: 'demo-bank-cvc-secret'
+          CARD_PROCESSOR_TOKEN: 'demo-bank-processor-token'
+          CARD_BIN_PREFIX: '123456'
+          CARD_SETTLEMENT_ACCOUNT_ID: 'CARD_SETTLEMENT'
+          CARD_SETTLEMENT_ACCOUNT_NUMBER: '9999999999'
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref BankTable
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref JwtSecret
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref OpenAiKeySecret
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref MyOsSecret
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
+              Resource: '*'
+      Events:
+        SummaryPayNoteDelivery:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/paynotes/deliveries/{sessionId}/summary
+            Method: POST
+        SummaryContract:
+          Type: Api
+          Properties:
+            RestApiId: !Ref BankApi
+            Path: /v1/contracts/{sessionId}/summary
+            Method: POST
   # ------------------------------------------------------------------
   # Seed the FUNDING_SOURCE account and its BALANCE row (idempotent)
   # ------------------------------------------------------------------
@@ -248,7 +321,7 @@ Resources:
       Environment:
         Variables:
           TABLE: !Ref BankTable
-          AWS_ENDPOINT_URL: '' # only for local development
+          AWS_ENDPOINT_URL: !Ref AwsEndpointUrl # only for local development
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref BankTable

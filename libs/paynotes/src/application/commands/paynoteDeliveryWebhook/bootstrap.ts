@@ -19,6 +19,7 @@ import { blue } from '../../../blue';
 import { log, trace } from '../paynoteWebhook/logging';
 import { getString, toSimpleRecord } from '../paynoteWebhook/utils';
 import { toBlueNode } from '../webhookUtils';
+import { mergeSessionIds } from '../payNoteSessionUtils';
 import type {
   HandlePayNoteDeliveryWebhookDependencies,
   WebhookEventObject,
@@ -28,6 +29,7 @@ export type BootstrapRequest = {
   rawEvent: unknown;
   request: Record<string, unknown>;
   documentNode: BlueNode | null;
+  documentPayload: Record<string, unknown> | null;
 };
 
 type ChannelBindings = Record<string, { email?: string; accountId?: string }>;
@@ -54,6 +56,17 @@ type PayNoteBootstrapContext = {
 export const getDocumentBootstrapRequestFromEvent = (
   event: unknown
 ): BootstrapRequest | null => {
+  const rawRecord =
+    event && typeof event === 'object' && !Array.isArray(event)
+      ? (event as Record<string, unknown>)
+      : null;
+  const rawDocument =
+    rawRecord &&
+    rawRecord.document &&
+    typeof rawRecord.document === 'object' &&
+    !Array.isArray(rawRecord.document)
+      ? (rawRecord.document as Record<string, unknown>)
+      : null;
   const node = toBlueNode(event);
   if (
     !node ||
@@ -72,11 +85,19 @@ export const getDocumentBootstrapRequestFromEvent = (
   }
 
   const documentNode = node.getProperties()?.document ?? null;
+  const documentPayload =
+    rawDocument ??
+    (payload.document &&
+    typeof payload.document === 'object' &&
+    !Array.isArray(payload.document)
+      ? (payload.document as Record<string, unknown>)
+      : null);
 
   return {
     rawEvent: event,
     request: payload,
     documentNode,
+    documentPayload,
   };
 };
 
@@ -219,14 +240,36 @@ const normalizeBootstrapRequest = (
   channelBindings: normalizeChannelBindings(request.channelBindings),
 });
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const normalizeBootstrapDocument = (
+  document: Record<string, unknown>
+): Record<string, unknown> => {
+  const node = toBlueNode(document);
+  if (!node) {
+    return document;
+  }
+  const restored = blue.restoreInlineTypes(node);
+  const normalized = blue.nodeToJson(restored, 'original');
+  return isRecord(normalized) ? normalized : document;
+};
+
 const buildPayNoteBootstrapContext = (input: {
   request: NormalizedBootstrapRequest;
   documentNode: BlueNode | null;
+  requestedDocumentPayload?: Record<string, unknown> | null;
   eventObject?: WebhookEventObject;
   documentPayload?: Record<string, unknown>;
 }): PayNoteBootstrapContext => {
-  const { request, documentNode, eventObject, documentPayload } = input;
-  const payNoteDocument = request.document;
+  const {
+    request,
+    documentNode,
+    requestedDocumentPayload,
+    eventObject,
+    documentPayload,
+  } = input;
+  const payNoteDocument = requestedDocumentPayload ?? null;
   const requestingSessionId = getString(eventObject?.sessionId);
   const requestingDeliveryCardDetails = documentPayload
     ? getCardTransactionDetailsFromDocument(documentPayload) ?? null
@@ -268,7 +311,7 @@ const ensureValidPayNoteBootstrapRequest = async (input: {
   deps: HandlePayNoteDeliveryWebhookDependencies;
   logs: LogEntry[];
 }): Promise<Record<string, unknown> | null> => {
-  const { request, context, eventId, credentials, deps, logs } = input;
+  const { context, eventId, credentials, deps, logs } = input;
   const {
     deliveryId,
     requestingSessionId,
@@ -276,6 +319,7 @@ const ensureValidPayNoteBootstrapRequest = async (input: {
     payeeIdentity,
     senderIdentity,
     payNoteDocumentNode,
+    payNoteDocument,
   } = context;
 
   if (payerIdentity) {
@@ -308,7 +352,7 @@ const ensureValidPayNoteBootstrapRequest = async (input: {
     return null;
   }
 
-  if (!request.document || !payNoteDocumentNode) {
+  if (!payNoteDocument || !payNoteDocumentNode) {
     await rejectPayNoteBootstrapRequest({
       eventId,
       deliveryId,
@@ -344,7 +388,7 @@ const ensureValidPayNoteBootstrapRequest = async (input: {
     return null;
   }
 
-  return request.document;
+  return payNoteDocument;
 };
 
 const resolveExistingDelivery = async (input: {
@@ -453,7 +497,9 @@ const handleDeliveryBootstrapRequest = async (input: {
   } = input;
   const synchronySessionId =
     getSynchronySessionIdFromDocument(deliveryDocument);
-  const deliveryError = getString(deliveryDocument.deliveryError);
+  const deliveryError =
+    getString(deliveryDocument.deliveryError) ??
+    getString(toSimpleRecord(deliveryDocument)?.deliveryError);
   if (!synchronySessionId) {
     trace(logs, 'Delivery bootstrap request missing synchrony merchant link', {
       eventId,
@@ -505,11 +551,12 @@ const handleDeliveryBootstrapRequest = async (input: {
     hasDeliveryDocument: Boolean(deliveryDocument),
   });
 
+  const bootstrapDocument = normalizeBootstrapDocument(deliveryDocument);
   const response = await deps.myOsClient.bootstrapDocument({
     credentials,
     payload: {
       channelBindings,
-      document: deliveryDocument,
+      document: bootstrapDocument,
     },
   });
 
@@ -526,8 +573,35 @@ const handleDeliveryBootstrapRequest = async (input: {
     });
   }
 
+  const bootstrapSessionId = response.ok
+    ? extractBootstrapSessionId(response)
+    : undefined;
+
+  if (response.ok && bootstrapSessionId) {
+    const deliverySessionIds = mergeSessionIds(
+      deliveryRecord.deliverySessionIds ??
+        (deliveryRecord.deliverySessionId
+          ? [deliveryRecord.deliverySessionId]
+          : undefined),
+      bootstrapSessionId
+    );
+
+    await deps.payNoteDeliveryRepository.saveDelivery({
+      ...deliveryRecord,
+      deliverySessionId: deliveryRecord.deliverySessionId ?? bootstrapSessionId,
+      deliverySessionIds,
+      updatedAt: now,
+    });
+
+    if (deps.enqueuePayNoteDeliverySummary) {
+      void deps.enqueuePayNoteDeliverySummary({
+        sessionId: bootstrapSessionId,
+        reason: 'delivery-bootstrap',
+      });
+    }
+  }
+
   if (response.ok && deliveryError) {
-    const bootstrapSessionId = extractBootstrapSessionId(response);
     if (!bootstrapSessionId) {
       log(
         logs,
@@ -566,6 +640,7 @@ const handleDeliveryBootstrapRequest = async (input: {
 const handlePayNoteBootstrapRequest = async (input: {
   request: NormalizedBootstrapRequest;
   requestedDocumentNode: BlueNode | null;
+  requestedDocumentPayload?: Record<string, unknown> | null;
   eventId: string;
   eventObject?: WebhookEventObject;
   documentPayload?: Record<string, unknown>;
@@ -577,6 +652,7 @@ const handlePayNoteBootstrapRequest = async (input: {
   const {
     request,
     requestedDocumentNode,
+    requestedDocumentPayload,
     eventId,
     eventObject,
     documentPayload,
@@ -589,6 +665,7 @@ const handlePayNoteBootstrapRequest = async (input: {
   const context = buildPayNoteBootstrapContext({
     request,
     documentNode: requestedDocumentNode,
+    requestedDocumentPayload,
     eventObject,
     documentPayload,
   });
@@ -654,11 +731,12 @@ const handlePayNoteBootstrapRequest = async (input: {
     hasPayNoteDocument: Boolean(payNoteDocument),
   });
 
+  const bootstrapDocument = normalizeBootstrapDocument(payNoteDocument);
   const response = await deps.myOsClient.bootstrapDocument({
     credentials,
     payload: {
       channelBindings,
-      document: payNoteDocument,
+      document: bootstrapDocument,
     },
   });
 
@@ -754,7 +832,9 @@ export const handleBootstrapRequests = async (input: {
       continue;
     }
 
-    if (!normalized.document) {
+    const requestedDocumentPayload =
+      request.documentPayload ?? normalized.document ?? null;
+    if (!requestedDocumentPayload) {
       log(logs, 'warn', 'Bootstrap request missing document', { eventId });
       continue;
     }
@@ -777,7 +857,7 @@ export const handleBootstrapRequests = async (input: {
 
       await handleDeliveryBootstrapRequest({
         request: normalized,
-        deliveryDocument: normalized.document,
+        deliveryDocument: requestedDocumentPayload,
         eventId,
         bootstrapAssignee,
         now,
@@ -838,6 +918,7 @@ export const handleBootstrapRequests = async (input: {
       await handlePayNoteBootstrapRequest({
         request: normalized,
         requestedDocumentNode,
+        requestedDocumentPayload,
         eventId,
         eventObject,
         documentPayload,

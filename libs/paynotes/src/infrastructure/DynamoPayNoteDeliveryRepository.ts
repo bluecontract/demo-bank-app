@@ -4,6 +4,7 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 import type {
@@ -82,6 +83,12 @@ interface PayNoteDeliveryItem {
   identificationReportedAt?: string;
   decisionRecordedAt?: string;
   payNoteBootstrapRequestedAt?: string;
+  summary?: Record<string, unknown>;
+  summaryUpdatedAt?: string;
+  summarySourceUpdatedAt?: string;
+  summaryInputBlueId?: string;
+  summaryModel?: string;
+  summaryError?: string;
 }
 
 interface PayNoteDeliverySessionItem {
@@ -201,11 +208,17 @@ export class DynamoPayNoteDeliveryRepository
   }
 
   private mapItemToRecord(item: PayNoteDeliveryItem): PayNoteDeliveryRecord {
+    const deliverySessionIds =
+      item.deliverySessionIds && item.deliverySessionIds.length
+        ? item.deliverySessionIds
+        : undefined;
+    const deliverySessionId = item.deliverySessionId ?? deliverySessionIds?.[0];
+
     return {
       deliveryId: item.deliveryId,
       deliveryDocumentId: item.deliveryDocumentId,
-      deliverySessionId: item.deliverySessionId,
-      deliverySessionIds: item.deliverySessionIds,
+      deliverySessionId,
+      deliverySessionIds,
       synchronySessionId: item.synchronySessionId,
       cardTransactionDetails: item.cardTransactionDetails,
       cardTransactionDetailsKey: item.cardTransactionDetailsKey,
@@ -226,6 +239,12 @@ export class DynamoPayNoteDeliveryRepository
       identificationReportedAt: item.identificationReportedAt,
       decisionRecordedAt: item.decisionRecordedAt,
       payNoteBootstrapRequestedAt: item.payNoteBootstrapRequestedAt,
+      summary: item.summary,
+      summaryUpdatedAt: item.summaryUpdatedAt,
+      summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+      summaryInputBlueId: item.summaryInputBlueId,
+      summaryModel: item.summaryModel,
+      summaryError: item.summaryError,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
@@ -398,6 +417,15 @@ export class DynamoPayNoteDeliveryRepository
   }
 
   async saveDelivery(record: PayNoteDeliveryRecord): Promise<void> {
+    const normalizedDeliverySessionIds =
+      record.deliverySessionIds && record.deliverySessionIds.length
+        ? record.deliverySessionIds
+        : record.deliverySessionId
+        ? [record.deliverySessionId]
+        : undefined;
+    const normalizedDeliverySessionId =
+      record.deliverySessionId ?? normalizedDeliverySessionIds?.[0];
+
     const item: PayNoteDeliveryItem = {
       PK: this.buildDeliveryPk(record.deliveryId),
       SK: SORT_KEYS.META,
@@ -408,11 +436,11 @@ export class DynamoPayNoteDeliveryRepository
       ...(record.deliveryDocumentId
         ? { deliveryDocumentId: record.deliveryDocumentId }
         : {}),
-      ...(record.deliverySessionId
-        ? { deliverySessionId: record.deliverySessionId }
+      ...(normalizedDeliverySessionId
+        ? { deliverySessionId: normalizedDeliverySessionId }
         : {}),
-      ...(record.deliverySessionIds
-        ? { deliverySessionIds: record.deliverySessionIds }
+      ...(normalizedDeliverySessionIds
+        ? { deliverySessionIds: normalizedDeliverySessionIds }
         : {}),
       ...(record.synchronySessionId
         ? { synchronySessionId: record.synchronySessionId }
@@ -469,6 +497,18 @@ export class DynamoPayNoteDeliveryRepository
       ...(record.payNoteBootstrapRequestedAt
         ? { payNoteBootstrapRequestedAt: record.payNoteBootstrapRequestedAt }
         : {}),
+      ...(record.summary ? { summary: record.summary } : {}),
+      ...(record.summaryUpdatedAt
+        ? { summaryUpdatedAt: record.summaryUpdatedAt }
+        : {}),
+      ...(record.summarySourceUpdatedAt
+        ? { summarySourceUpdatedAt: record.summarySourceUpdatedAt }
+        : {}),
+      ...(record.summaryInputBlueId
+        ? { summaryInputBlueId: record.summaryInputBlueId }
+        : {}),
+      ...(record.summaryModel ? { summaryModel: record.summaryModel } : {}),
+      ...(record.summaryError ? { summaryError: record.summaryError } : {}),
     };
 
     await this.client.send(
@@ -481,8 +521,8 @@ export class DynamoPayNoteDeliveryRepository
     const now = new Date().toISOString();
     const writes: Array<Promise<unknown>> = [];
 
-    if (record.deliverySessionIds?.length) {
-      record.deliverySessionIds.forEach(sessionId => {
+    if (normalizedDeliverySessionIds?.length) {
+      normalizedDeliverySessionIds.forEach(sessionId => {
         const sessionItem: PayNoteDeliverySessionItem = {
           PK: this.buildSessionPk(sessionId),
           SK: SORT_KEYS.META,
@@ -584,6 +624,94 @@ export class DynamoPayNoteDeliveryRepository
     }
   }
 
+  async updateDeliverySummary(input: {
+    deliveryId: string;
+    summary?: Record<string, unknown>;
+    summaryUpdatedAt?: string;
+    summarySourceUpdatedAt?: string;
+    summaryInputBlueId?: string;
+    summaryModel?: string;
+    summaryError?: string | null;
+  }): Promise<void> {
+    const {
+      deliveryId,
+      summary,
+      summaryUpdatedAt,
+      summarySourceUpdatedAt,
+      summaryInputBlueId,
+      summaryModel,
+      summaryError,
+    } = input;
+
+    const names: Record<string, string> = {};
+    const values: Record<string, unknown> = {};
+    const setExpressions: string[] = [];
+    const removeExpressions: string[] = [];
+
+    if (summary !== undefined) {
+      names['#summary'] = 'summary';
+      values[':summary'] = summary;
+      setExpressions.push('#summary = :summary');
+    }
+    if (summaryUpdatedAt !== undefined) {
+      names['#summaryUpdatedAt'] = 'summaryUpdatedAt';
+      values[':summaryUpdatedAt'] = summaryUpdatedAt;
+      setExpressions.push('#summaryUpdatedAt = :summaryUpdatedAt');
+    }
+    if (summarySourceUpdatedAt !== undefined) {
+      names['#summarySourceUpdatedAt'] = 'summarySourceUpdatedAt';
+      values[':summarySourceUpdatedAt'] = summarySourceUpdatedAt;
+      setExpressions.push('#summarySourceUpdatedAt = :summarySourceUpdatedAt');
+    }
+    if (summaryInputBlueId !== undefined) {
+      names['#summaryInputBlueId'] = 'summaryInputBlueId';
+      values[':summaryInputBlueId'] = summaryInputBlueId;
+      setExpressions.push('#summaryInputBlueId = :summaryInputBlueId');
+    }
+    if (summaryModel !== undefined) {
+      names['#summaryModel'] = 'summaryModel';
+      values[':summaryModel'] = summaryModel;
+      setExpressions.push('#summaryModel = :summaryModel');
+    }
+
+    if (summaryError === null) {
+      names['#summaryError'] = 'summaryError';
+      removeExpressions.push('#summaryError');
+    } else if (summaryError !== undefined) {
+      names['#summaryError'] = 'summaryError';
+      values[':summaryError'] = summaryError;
+      setExpressions.push('#summaryError = :summaryError');
+    }
+
+    if (!setExpressions.length && !removeExpressions.length) {
+      return;
+    }
+
+    const updateExpressionParts = [];
+    if (setExpressions.length) {
+      updateExpressionParts.push(`SET ${setExpressions.join(', ')}`);
+    }
+    if (removeExpressions.length) {
+      updateExpressionParts.push(`REMOVE ${removeExpressions.join(', ')}`);
+    }
+
+    await this.client.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: this.buildDeliveryPk(deliveryId),
+          SK: SORT_KEYS.META,
+        },
+        ConditionExpression: 'attribute_exists(PK)',
+        UpdateExpression: updateExpressionParts.join(' '),
+        ExpressionAttributeNames: names,
+        ExpressionAttributeValues: Object.keys(values).length
+          ? values
+          : undefined,
+      })
+    );
+  }
+
   async listDeliveriesByUserId(
     userId: string
   ): Promise<PayNoteDeliverySummary[]> {
@@ -628,6 +756,7 @@ export class DynamoPayNoteDeliveryRepository
         return {
           deliveryId: record.deliveryId,
           deliverySessionId: record.deliverySessionId,
+          payNoteSessionIds: record.payNoteSessionIds,
           name: payNoteSummary.name ?? deliveryName,
           amountMinor: payNoteSummary.amountMinor,
           currency: payNoteSummary.currency,
@@ -636,6 +765,7 @@ export class DynamoPayNoteDeliveryRepository
             record.transactionIdentificationStatus,
           clientDecisionStatus: record.clientDecisionStatus,
           transactionId: record.transactionId,
+          holdId: record.holdId,
           createdAt: record.createdAt,
           updatedAt: record.updatedAt,
         };

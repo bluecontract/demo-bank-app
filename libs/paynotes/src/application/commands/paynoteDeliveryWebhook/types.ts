@@ -19,6 +19,11 @@ export interface HandlePayNoteDeliveryWebhookDependencies {
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
   clock: ClockPort;
+  enqueuePayNoteDeliverySummary?: (input: {
+    sessionId: string;
+    reason?: string;
+    force?: boolean;
+  }) => Promise<void>;
 }
 
 export interface HandlePayNoteDeliveryWebhookResult {

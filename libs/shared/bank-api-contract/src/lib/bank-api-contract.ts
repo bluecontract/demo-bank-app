@@ -29,6 +29,7 @@ import {
   PayNoteDeliveryDetailsDto,
   PayNoteDeliveryDetailsSanitizedDto,
   RejectPayNoteDeliveryRequestDto,
+  RelatedContractListResponseDto,
   ContractListResponseDto,
   ContractDetailsDto,
   ContractSummaryGenerationDto,
@@ -410,6 +411,38 @@ export const bankApiContract = c.router(
           'Get PayNote Delivery (proposal) details by session id; sanitized view without raw document.',
       },
 
+      getPayNoteDeliverySummary: {
+        method: 'GET',
+        path: '/v1/paynotes/deliveries/:sessionId/summary',
+        pathParams: z.object({ sessionId: z.string() }),
+        responses: {
+          200: ContractSummaryGenerationDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          500: ProblemDto,
+        },
+        summary: 'Get cached PayNote proposal summary for the current user.',
+      },
+
+      generatePayNoteDeliverySummary: {
+        method: 'POST',
+        path: '/v1/paynotes/deliveries/:sessionId/summary',
+        pathParams: z.object({ sessionId: z.string() }),
+        body: z
+          .object({
+            force: z.boolean().optional(),
+          })
+          .optional(),
+        responses: {
+          200: ContractSummaryGenerationDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          500: ProblemDto,
+        },
+        summary:
+          'Generate (or return cached) PayNote proposal summary for the current user.',
+      },
+
       acceptPayNoteDelivery: {
         method: 'POST',
         path: '/v1/paynotes/deliveries/:sessionId/accept',
@@ -474,7 +507,7 @@ export const bankApiContract = c.router(
           txnId: z.string(),
         }),
         responses: {
-          200: ContractListResponseDto,
+          200: RelatedContractListResponseDto,
           401: ProblemDto,
         },
         summary: 'List contracts related to a transaction.',
@@ -487,7 +520,7 @@ export const bankApiContract = c.router(
           holdId: z.string(),
         }),
         responses: {
-          200: ContractListResponseDto,
+          200: RelatedContractListResponseDto,
           401: ProblemDto,
         },
         summary: 'List contracts related to a hold.',

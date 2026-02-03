@@ -126,6 +126,8 @@ export const buildDeliveryRecord = (input: {
     normalizeDeliverySessionIds(existing),
     sessionId
   );
+  const resolvedDeliverySessionId =
+    sessionId ?? existing?.deliverySessionId ?? deliverySessionIds?.[0];
 
   const deliveryRecord: PayNoteDeliveryRecord = {
     ...(existing ?? {
@@ -135,7 +137,7 @@ export const buildDeliveryRecord = (input: {
     }),
     deliveryId,
     deliveryDocumentId: deliveryDocumentId ?? existing?.deliveryDocumentId,
-    deliverySessionId: existing?.deliverySessionId ?? sessionId,
+    deliverySessionId: resolvedDeliverySessionId,
     deliverySessionIds,
     synchronySessionId,
     cardTransactionDetails: cardDetails,

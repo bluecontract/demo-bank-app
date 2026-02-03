@@ -129,7 +129,7 @@ describe('runContractOperationHandler', () => {
       {
         params: {
           sessionId: 'session-1',
-          operation: 'markPayNoteAcceptedByClient',
+          operation: 'acceptPayNote',
         },
         body: {},
       } as any,
@@ -140,7 +140,7 @@ describe('runContractOperationHandler', () => {
     expect(myOsClient.runDocumentOperation).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
-        operation: 'markPayNoteAcceptedByClient',
+        operation: 'acceptPayNote',
         payload: expect.objectContaining({
           acceptedAt: '2024-02-01T12:00:00.000Z',
         }),
@@ -182,7 +182,7 @@ describe('runContractOperationHandler', () => {
       {
         params: {
           sessionId: 'session-1',
-          operation: 'markPayNoteRejectedByClient',
+          operation: 'rejectPayNote',
         },
         body: {},
       } as any,

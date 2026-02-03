@@ -55,6 +55,7 @@ export function ContractsListPanel({
   onSelect,
 }: ContractsListPanelProps) {
   const { reviewedMap, markReviewed } = useContractReviewState();
+  const hasItems = Boolean(items && items.length > 0);
 
   return (
     <Card className="flex flex-col min-h-0">
@@ -68,25 +69,25 @@ export function ContractsListPanel({
       </div>
 
       <div className="mt-4 flex-1 min-h-0">
-        {isLoading && (
+        {isLoading && !hasItems && (
           <div className="flex items-center justify-center py-12">
             <Spinner size="lg" color="green" />
           </div>
         )}
 
-        {isError && (
+        {isError && !hasItems && (
           <div className="rounded-xl border border-slate-200 bg-white/70 p-6 text-sm text-slate-600">
             Unable to load contracts. Please refresh.
           </div>
         )}
 
-        {!isLoading && !isError && (!items || items.length === 0) && (
+        {!isLoading && !isError && !hasItems && (
           <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 p-6 text-center text-sm text-slate-500">
             No contracts available yet.
           </div>
         )}
 
-        {!isLoading && !isError && items && items.length > 0 && (
+        {hasItems && (
           <div className="space-y-3 max-h-full overflow-y-auto pr-1">
             {items.map(item => {
               const sessionId = getItemSessionId(item);
@@ -120,6 +121,9 @@ export function ContractsListPanel({
                   : null;
               const itemKey = isProposal
                 ? `proposal-${item.deliveryId}`
+                : 'originProposalDeliveryId' in item &&
+                  item.originProposalDeliveryId
+                ? `proposal-${item.originProposalDeliveryId}`
                 : item.contractId;
 
               return (

@@ -6,5 +6,6 @@ export * from './useContractReviewState';
 export * from './useActiveContractSession';
 export * from './useProposals';
 export * from './useProposalDetails';
+export * from './useProposalSummary';
 export * from './useAcceptPayNoteDelivery';
 export * from './useRejectPayNoteDelivery';

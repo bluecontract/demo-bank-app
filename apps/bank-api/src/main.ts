@@ -33,8 +33,10 @@ import { getPayNoteDetailsHandler } from './paynote/getPayNoteDetails';
 import { listPayNoteDeliveriesHandler } from './paynote/listPayNoteDeliveries';
 import { getPayNoteDeliveryHandler } from './paynote/getPayNoteDelivery';
 import { getPayNoteDeliveryBySessionIdHandler } from './paynote/getPayNoteDeliveryBySessionId';
+import { getPayNoteDeliverySummaryHandler } from './paynote/getPayNoteDeliverySummary';
 import { acceptPayNoteDeliveryHandler } from './paynote/acceptPayNoteDelivery';
 import { rejectPayNoteDeliveryHandler } from './paynote/rejectPayNoteDelivery';
+import { generatePayNoteDeliverySummaryHandler } from './paynote/generatePayNoteDeliverySummary';
 import { runContractOperationHandler } from './contracts/runContractOperation';
 import { listContractsHandler } from './contracts/listContracts';
 import { getContractDetailsHandler } from './contracts/getContractDetails';
@@ -88,6 +90,8 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       listPayNoteDeliveries: listPayNoteDeliveriesHandler,
       getPayNoteDelivery: getPayNoteDeliveryHandler,
       getPayNoteDeliveryBySessionId: getPayNoteDeliveryBySessionIdHandler,
+      getPayNoteDeliverySummary: getPayNoteDeliverySummaryHandler,
+      generatePayNoteDeliverySummary: generatePayNoteDeliverySummaryHandler,
       acceptPayNoteDelivery: acceptPayNoteDeliveryHandler,
       rejectPayNoteDelivery: rejectPayNoteDeliveryHandler,
       listContracts: listContractsHandler,

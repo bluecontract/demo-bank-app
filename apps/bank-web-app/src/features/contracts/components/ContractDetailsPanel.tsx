@@ -8,6 +8,7 @@ import { Button } from '../../../ui/Button';
 import type { ContractDetails } from '../../../types/api';
 import { collectContractOperations } from '../lib/operations';
 import { OperationForm } from './OperationForm';
+import { SummaryPanel } from './SummaryPanel';
 import { TransactionDetailsModal } from '../../transactions/components/TransactionDetailsModal';
 import { TransactionItem } from '../../transactions/components/TransactionItem';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
@@ -161,7 +162,6 @@ export function ContractDetailsPanel({
   const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(
     null
   );
-  const [isKeyFactsExpanded, setIsKeyFactsExpanded] = useState(false);
   const { data: accounts } = useAccounts();
   const activityQuery = useActivity({
     accountNumber: contract?.accountNumber ?? null,
@@ -191,7 +191,6 @@ export function ContractDetailsPanel({
     setActiveOperation(null);
     setActiveActivityId(null);
     setSelectedActivity(null);
-    setIsKeyFactsExpanded(false);
   }, [contract?.sessionId]);
 
   const restoredDocument = restoreInlineTypes(contract?.document);
@@ -219,6 +218,10 @@ export function ContractDetailsPanel({
     (summaryQuery.error instanceof Error ? summaryQuery.error.message : null) ??
     contract?.summaryError ??
     null;
+  const handleRegenerateSummary = () => {
+    if (!contract?.sessionId) return;
+    regenerateSummary.mutate({ sessionId: contract.sessionId });
+  };
   const triggerEventJson = formatJson(contract?.triggerEvent);
   const emittedEventsJson = formatJson(contract?.emittedEvents);
   const statusEntries = contract?.statusTimestamps
@@ -324,7 +327,7 @@ export function ContractDetailsPanel({
     activityQuery.isLoading &&
     (relatedTransactions.length > 0 || relatedHolds.length > 0);
 
-  if (isLoading) {
+  if (isLoading && !contract) {
     return (
       <Card className="flex items-center justify-center min-h-[420px]">
         <Spinner size="lg" color="green" />
@@ -332,7 +335,7 @@ export function ContractDetailsPanel({
     );
   }
 
-  if (isError) {
+  if (isError && !contract) {
     return (
       <Card className="p-6 text-sm text-slate-600">
         {errorMessage || 'Unable to load contract details.'}
@@ -371,137 +374,22 @@ export function ContractDetailsPanel({
       </div>
 
       <div className="flex flex-col gap-6">
-        <section className="border border-slate-200 rounded-2xl overflow-hidden bg-white/70">
-          <header className="px-4 py-3 border-b border-slate-200 bg-white/80">
-            <h3 className="text-sm font-semibold text-slate-900">
-              Contract summary
-            </h3>
-          </header>
-          <div className="p-4">
-            {summaryQuery.isLoading && !generatedSummary && (
-              <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
-                <Spinner size="sm" color="green" />
-                Generating summary...
-              </div>
-            )}
-
-            {summaryQuery.isFetching && generatedSummary && (
-              <div className="mb-3 flex items-center gap-2 text-xs text-slate-500">
-                <Spinner size="sm" color="green" />
-                Updating summary...
-              </div>
-            )}
-
-            {summaryErrorMessage && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
-                {summaryErrorMessage}
-              </div>
-            )}
-
-            {generatedSummary ? (
-              <div className="space-y-4 text-sm text-slate-700">
-                <div>
-                  <p className="text-lg font-semibold text-slate-900">
-                    {generatedSummary.title}
-                  </p>
-                  <p className="mt-1 whitespace-pre-line break-words text-slate-600 leading-relaxed">
-                    {generatedSummary.oneLiner}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Current state
-                  </p>
-                  <p className="mt-2 font-semibold text-slate-900">
-                    {generatedSummary.state.statusLabel}
-                  </p>
-                  <p className="mt-1 whitespace-pre-line break-words text-slate-600 leading-relaxed">
-                    {generatedSummary.state.explanation}
-                  </p>
-                </div>
-
-                {generatedSummary.keyFacts.length > 0 && (
-                  <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                        Key facts
-                      </p>
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-slate-600 hover:text-slate-900"
-                        onClick={() => setIsKeyFactsExpanded(prev => !prev)}
-                        aria-expanded={isKeyFactsExpanded}
-                      >
-                        {isKeyFactsExpanded ? 'Hide' : 'Show'} (
-                        {generatedSummary.keyFacts.length})
-                      </button>
-                    </div>
-
-                    {isKeyFactsExpanded ? (
-                      <dl className="mt-3 divide-y divide-slate-200/70">
-                        {generatedSummary.keyFacts.map(fact => (
-                          <div
-                            key={`${fact.label}:${fact.value}`}
-                            className="py-3 first:pt-0 last:pb-0"
-                          >
-                            <dt className="text-xs font-medium text-slate-500">
-                              {fact.label}
-                            </dt>
-                            <dd className="mt-1 whitespace-pre-wrap break-words font-medium text-slate-900">
-                              {fact.value}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    ) : (
-                      <p className="mt-2 text-xs text-slate-500">
-                        Key information about the contract (participants,
-                        amounts, statuses, and identifiers).
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {generatedSummary.warnings?.length ? (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
-                    <p className="text-xs uppercase tracking-[0.2em] text-amber-700">
-                      Notes
-                    </p>
-                    <ul className="mt-2 list-disc space-y-1 pl-5">
-                      {generatedSummary.warnings.map(warning => (
-                        <li key={warning}>{warning}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-700 leading-relaxed">
-                {documentSummary}
-              </p>
-            )}
-
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={!contract.sessionId || regenerateSummary.isPending}
-                onClick={() => {
-                  if (!contract.sessionId) return;
-                  regenerateSummary.mutate({ sessionId: contract.sessionId });
-                }}
-              >
-                {regenerateSummary.isPending ? 'Regenerating...' : 'Regenerate'}
-              </Button>
-              {summaryModel && (
-                <span className="text-xs text-slate-500">
-                  Model: {summaryModel}
-                </span>
-              )}
-            </div>
-          </div>
-        </section>
+        <SummaryPanel
+          title="Contract summary"
+          summary={generatedSummary}
+          summaryModel={summaryModel ?? null}
+          summaryErrorMessage={summaryErrorMessage}
+          isLoading={summaryQuery.isLoading && !generatedSummary}
+          isFetching={summaryQuery.isFetching && Boolean(generatedSummary)}
+          fallbackText={documentSummary}
+          onRegenerate={handleRegenerateSummary}
+          regenerateDisabled={
+            !contract.sessionId || regenerateSummary.isPending
+          }
+          isRegeneratePending={regenerateSummary.isPending}
+          loadingLabel="Generating summary..."
+          fetchingLabel="Updating summary..."
+        />
 
         <section className="flex flex-col gap-4">
           <div className="rounded-2xl border border-slate-200 bg-white/70 p-4">

@@ -150,6 +150,12 @@ export interface PayNoteDeliveryRecord {
   identificationReportedAt?: string;
   decisionRecordedAt?: string;
   payNoteBootstrapRequestedAt?: string;
+  summary?: Record<string, unknown>;
+  summaryUpdatedAt?: string;
+  summarySourceUpdatedAt?: string;
+  summaryInputBlueId?: string;
+  summaryModel?: string;
+  summaryError?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -157,6 +163,7 @@ export interface PayNoteDeliveryRecord {
 export interface PayNoteDeliverySummary {
   deliveryId: string;
   deliverySessionId?: string;
+  payNoteSessionIds?: string[];
   name?: string;
   amountMinor?: number;
   currency?: string;
@@ -164,6 +171,7 @@ export interface PayNoteDeliverySummary {
   transactionIdentificationStatus?: string;
   clientDecisionStatus?: string;
   transactionId?: string;
+  holdId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -187,6 +195,15 @@ export interface PayNoteDeliveryRepository {
     details: CardTransactionDetails
   ): Promise<PayNoteDeliveryRecord | null>;
   saveDelivery(record: PayNoteDeliveryRecord): Promise<void>;
+  updateDeliverySummary(input: {
+    deliveryId: string;
+    summary?: Record<string, unknown>;
+    summaryUpdatedAt?: string;
+    summarySourceUpdatedAt?: string;
+    summaryInputBlueId?: string;
+    summaryModel?: string;
+    summaryError?: string | null;
+  }): Promise<void>;
   listDeliveriesByUserId(userId: string): Promise<PayNoteDeliverySummary[]>;
 }
 

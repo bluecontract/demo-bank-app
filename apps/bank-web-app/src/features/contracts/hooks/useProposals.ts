@@ -18,7 +18,7 @@ export function useProposals() {
     queryKey: ['proposals'],
     queryFn: async (): Promise<PayNoteDeliverySummary[]> => {
       const response = await apiClient.banking.listPayNoteDeliveries({
-        query: { clientDecisionStatus: 'pending' },
+        query: undefined,
         overrideClientOptions: { credentials: 'include' },
       });
 
