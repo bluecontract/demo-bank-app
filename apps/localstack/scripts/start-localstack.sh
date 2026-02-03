@@ -12,6 +12,7 @@ docker_args=(
   -d
 )
 
+port_range_flag=()
 if [[ -n "${LOCALSTACK_CONTAINER_LABEL:-}" ]]; then
   docker_args+=(--label "${LOCALSTACK_CONTAINER_LABEL}")
 fi
@@ -31,12 +32,7 @@ if docker ps -a --filter "name=${LOCALSTACK_CONTAINER_NAME}" --format '{{.Names}
 fi
 
 echo "Starting LocalStack container (${LOCALSTACK_CONTAINER_NAME})..."
-docker run \
-  --name "${LOCALSTACK_CONTAINER_NAME}" \
-  -p "127.0.0.1:${LOCALSTACK_EDGE_PORT}:4566" \
-  "${port_range_flag[@]}" \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -d "${LOCALSTACK_IMAGE}"
+docker run "${docker_args[@]}" "${port_range_flag[@]}" "${LOCALSTACK_IMAGE}"
 
 echo "Waiting for LocalStack health check..."
 sleep 5
