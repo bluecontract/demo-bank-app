@@ -15,6 +15,9 @@ const formatExpiry = (month: number, year: number) => {
   return `${monthValue}/${shortYear}`;
 };
 
+const formatStatus = (status: string) =>
+  `${status.slice(0, 1)}${status.slice(1).toLowerCase()}`;
+
 const statusStyles: Record<string, string> = {
   ACTIVE: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
   BLOCKED: 'bg-amber-50 text-amber-700 border border-amber-100',
@@ -103,34 +106,24 @@ export function CardsPanel({ selectedCardId, onSelectCard }: CardsPanelProps) {
   }, [cards, onSelectCard, selectedCardId]);
 
   return (
-    <Card className="flex flex-col min-h-0">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">Cards</h2>
-          {selectedAccount ? (
-            <p className="text-sm text-[color:var(--color-muted)] mt-1">
-              Account {selectedAccount.accountNumber}
-            </p>
-          ) : (
-            <p className="text-sm text-slate-500 mt-1">
-              Select an account to manage cards.
-            </p>
-          )}
-        </div>
+    <Card className="flex flex-col min-h-0 p-0 overflow-hidden">
+      <div className="flex items-center justify-between gap-4 px-4 py-4 border-b border-slate-200">
+        <h2 className="text-base font-semibold text-slate-900">Cards</h2>
         <Button
-          variant="secondary"
+          variant="primary"
           size="sm"
+          className="rounded-full px-4"
           onClick={handleIssueClick}
           disabled={!selectedAccount}
         >
-          Issue Card
+          Issue
         </Button>
       </div>
 
-      <div className="mt-4 flex-1 min-h-0">
+      <div className="flex-1 min-h-0 p-4">
         {!selectedAccount && (
           <div className="flex items-center justify-center h-full text-sm text-gray-500">
-            Choose an account to see issued cards.
+            Select an account to manage cards.
           </div>
         )}
 
@@ -157,10 +150,10 @@ export function CardsPanel({ selectedCardId, onSelectCard }: CardsPanelProps) {
                     key={card.cardId}
                     role="button"
                     tabIndex={0}
-                    className={`w-full flex items-center justify-between gap-4 bg-white/70 border rounded-2xl p-4 shadow-sm text-left transition hover:border-emerald-200 hover:shadow-md ${
+                    className={`w-full flex flex-wrap items-center gap-4 rounded-xl border px-4 py-3 text-left transition ${
                       isSelected
-                        ? 'border-[color:var(--color-primary)] bg-[rgba(43,190,156,0.08)]'
-                        : 'border-slate-200'
+                        ? 'border-[color:var(--color-primary)] bg-[rgba(43,190,156,0.06)]'
+                        : 'border-slate-200 bg-white/80'
                     }`}
                     onClick={() => handleCardSelect(card)}
                     onKeyDown={event => {
@@ -171,36 +164,31 @@ export function CardsPanel({ selectedCardId, onSelectCard }: CardsPanelProps) {
                     }}
                     aria-label={`Select card ending ${card.panLast4}`}
                   >
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-slate-900">
-                        **** {card.panLast4}
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        Exp {formatExpiry(card.expiryMonth, card.expiryYear)}
-                        {card.cardholderName ? ` • ${card.cardholderName}` : ''}
-                      </div>
+                    <span
+                      className={`text-xs font-semibold px-2 py-1 rounded-md ${
+                        statusStyles[card.status] ?? 'bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      {formatStatus(card.status)}
+                    </span>
+                    <div className="flex-1 min-w-[120px] text-sm text-slate-700">
+                      **** {card.panLast4}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                          statusStyles[card.status] ??
-                          'bg-gray-100 text-gray-700'
-                        }`}
-                      >
-                        {card.status}
-                      </span>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={event => {
-                          event.stopPropagation();
-                          handleCardSelect(card);
-                          handleCardDetails(card);
-                        }}
-                      >
-                        Details
-                      </Button>
+                    <div className="min-w-[72px] text-sm text-slate-500">
+                      {formatExpiry(card.expiryMonth, card.expiryYear)}
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full px-4"
+                      onClick={event => {
+                        event.stopPropagation();
+                        handleCardSelect(card);
+                        handleCardDetails(card);
+                      }}
+                    >
+                      Details
+                    </Button>
                   </div>
                 );
               })

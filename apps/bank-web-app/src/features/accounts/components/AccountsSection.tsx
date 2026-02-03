@@ -8,6 +8,9 @@ interface AccountsSectionProps {
   onFund?: (accountId: string) => void;
   onEditCreditLimit?: (accountId: string) => void;
   isCreatingAccount?: boolean;
+  showActions?: boolean;
+  selectOnCardClick?: boolean;
+  cardSize?: 'default' | 'compact';
 }
 
 export function AccountsSection({
@@ -17,6 +20,9 @@ export function AccountsSection({
   onFund,
   onEditCreditLimit,
   isCreatingAccount = false,
+  showActions = true,
+  selectOnCardClick = false,
+  cardSize = 'default',
 }: AccountsSectionProps) {
   return (
     <section className="app-surface">
@@ -30,6 +36,9 @@ export function AccountsSection({
         onFund={onFund}
         onEditCreditLimit={onEditCreditLimit}
         isCreatingAccount={isCreatingAccount}
+        showActions={showActions}
+        selectOnCardClick={selectOnCardClick}
+        cardSize={cardSize}
       />
     </section>
   );

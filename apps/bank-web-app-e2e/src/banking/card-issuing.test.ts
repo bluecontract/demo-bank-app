@@ -51,7 +51,7 @@ test.describe('Card Issuing Flow', () => {
       timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
     });
 
-    await page.getByRole('button', { name: 'Issue Card' }).click();
+    await page.getByRole('button', { name: 'Issue' }).click();
     await waitForModalToOpen(page, 'issue-card-modal-content');
 
     await page

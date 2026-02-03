@@ -11,6 +11,9 @@ interface HorizontalAccountsListProps {
   onFund?: (accountId: string) => void;
   onEditCreditLimit?: (accountId: string) => void;
   isCreatingAccount?: boolean;
+  showActions?: boolean;
+  selectOnCardClick?: boolean;
+  cardSize?: 'default' | 'compact';
   'data-testid'?: string;
 }
 
@@ -21,6 +24,9 @@ export function HorizontalAccountsList({
   onFund,
   onEditCreditLimit,
   isCreatingAccount = false,
+  showActions = true,
+  selectOnCardClick = false,
+  cardSize = 'default',
   'data-testid': testId,
 }: HorizontalAccountsListProps) {
   const { selectedAccount, setSelectedAccount } = useSelectedAccount();
@@ -28,7 +34,7 @@ export function HorizontalAccountsList({
   const [showRightArrow, setShowRightArrow] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const handleAccountDetails = (accountId: string) => {
+  const handleAccountSelection = (accountId: string) => {
     const account = accounts.find(acc => acc.accountId === accountId);
     if (account) {
       setSelectedAccount(account);
@@ -142,10 +148,17 @@ export function HorizontalAccountsList({
               isSelected={
                 selectedAccount?.accountNumber === account.accountNumber
               }
-              onDetailsClick={handleAccountDetails}
-              onTransferClick={onTransfer}
-              onFundClick={onFund}
-              onEditCreditLimitClick={onEditCreditLimit}
+              showActions={showActions}
+              size={cardSize}
+              onSelect={selectOnCardClick ? handleAccountSelection : undefined}
+              onDetailsClick={
+                selectOnCardClick ? undefined : handleAccountSelection
+              }
+              onTransferClick={showActions ? onTransfer : undefined}
+              onFundClick={showActions ? onFund : undefined}
+              onEditCreditLimitClick={
+                showActions ? onEditCreditLimit : undefined
+              }
             />
           </div>
         ))}
@@ -155,6 +168,7 @@ export function HorizontalAccountsList({
           <AddAccountCard
             onClick={onCreateAccount}
             isLoading={isCreatingAccount}
+            size={cardSize}
           />
         </div>
       </div>

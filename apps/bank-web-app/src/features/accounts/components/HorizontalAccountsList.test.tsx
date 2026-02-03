@@ -114,6 +114,25 @@ describe('HorizontalAccountsList', () => {
     expect(mockSetSelectedAccount).toHaveBeenCalledWith(mockAccounts[0]);
   });
 
+  it('should select account when card is clicked in selectOnCardClick mode', () => {
+    render(
+      <HorizontalAccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onTransfer={vi.fn()}
+        showActions={false}
+        selectOnCardClick={true}
+      />
+    );
+
+    const cardButton = screen.getByRole('button', {
+      name: 'Select Checking Account',
+    });
+    fireEvent.click(cardButton);
+    expect(mockSetSelectedAccount).toHaveBeenCalledWith(mockAccounts[0]);
+    expect(screen.queryByText('Details')).not.toBeInTheDocument();
+  });
+
   it('should show selected account with different styling', () => {
     mockUseSelectedAccount.mockReturnValue({
       selectedAccount: mockAccounts[0],

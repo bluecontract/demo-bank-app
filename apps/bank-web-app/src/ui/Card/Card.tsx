@@ -1,11 +1,8 @@
-import { ReactNode } from 'react';
+import { ReactNode, HTMLAttributes } from 'react';
 
-interface CardProps {
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
-  className?: string;
   variant?: 'default' | 'gradient' | 'dashed';
-  onClick?: () => void;
-  'data-testid'?: string;
 }
 
 export function Card({
@@ -13,7 +10,7 @@ export function Card({
   className = '',
   variant = 'default',
   onClick,
-  'data-testid': testId,
+  ...rest
 }: CardProps) {
   const baseClasses = 'app-surface p-6 transition-all duration-200';
 
@@ -32,7 +29,7 @@ export function Card({
     `${baseClasses} ${variantClasses[variant]} ${interactiveClasses} ${className}`.trim();
 
   return (
-    <div className={finalClasses} onClick={onClick} data-testid={testId}>
+    <div className={finalClasses} onClick={onClick} {...rest}>
       {children}
     </div>
   );

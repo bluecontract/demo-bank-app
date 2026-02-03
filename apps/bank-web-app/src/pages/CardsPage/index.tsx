@@ -2,10 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { SelectedAccountProvider } from '../../app/providers/SelectedAccountProvider';
-import {
-  DashboardHeader,
-  SidebarNav,
-} from '../../features/dashboard/components';
+import { SidebarNav } from '../../features/dashboard/components';
 import {
   AccountCreationModal,
   AccountsSection,
@@ -13,20 +10,15 @@ import {
 } from '../../features/accounts/components';
 import { FundModal } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
-import {
-  CardsPanel,
-  CardActivityPanel,
-  CardSimulatorPanel,
-} from '../../features/cards/components';
+import { CardsPanel } from '../../features/cards/components';
 import { SpinnerWithText } from '../../ui/Spinner';
 import type { Account, CardSummary } from '../../types/api';
 
 export function CardsPage() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { data: accounts, isLoading, error } = useAccounts();
   const navigate = useNavigate();
   const [selectedCard, setSelectedCard] = useState<CardSummary | null>(null);
-  const [showDevTools, setShowDevTools] = useState(false);
 
   const [accountCreationModal, setAccountCreationModal] = useState({
     isOpen: false,
@@ -54,6 +46,10 @@ export function CardsPage() {
 
   const handleCreateAccount = () => {
     setAccountCreationModal({ isOpen: true });
+  };
+
+  const handleSignOut = () => {
+    signOut();
   };
 
   const closeAccountCreationModal = () => {
@@ -129,11 +125,34 @@ export function CardsPage() {
 
         <div className="flex-1 flex flex-col min-h-screen">
           <div className="px-6 pt-8 pb-4 lg:px-10">
-            <DashboardHeader
-              userEmail={user?.email || 'Guest'}
-              title="Cards"
-              description="Issue cards, review status, and simulate transactions."
-            />
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <h1 className="text-3xl font-semibold text-slate-900">Cards</h1>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-slate-600">
+                  {user?.email || 'Guest'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="rounded-full border border-slate-200 bg-white/80 p-2 text-slate-600 transition hover:text-slate-900"
+                  aria-label="Sign out"
+                >
+                  <svg
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 3v6m6.364-2.364A9 9 0 105.636 6.636"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
 
           <main className="flex-1 px-6 pb-8 lg:px-10 flex flex-col gap-6 min-h-0">
@@ -143,26 +162,16 @@ export function CardsPage() {
               onTransfer={handleTransfer}
               onFund={handleFund}
               onEditCreditLimit={handleEditCreditLimit}
+              showActions={false}
+              selectOnCardClick={true}
+              cardSize="compact"
             />
 
-            <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] min-h-0">
+            <section className="flex flex-col min-h-0">
               <CardsPanel
                 selectedCardId={selectedCard?.cardId ?? null}
                 onSelectCard={setSelectedCard}
               />
-              <CardActivityPanel selectedCard={selectedCard} />
-            </section>
-
-            <section className="flex flex-col gap-4">
-              <button
-                type="button"
-                className="text-left text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--color-muted)]"
-                onClick={() => setShowDevTools(prev => !prev)}
-                aria-expanded={showDevTools}
-              >
-                {showDevTools ? 'Hide' : 'Show'} dev tools
-              </button>
-              {showDevTools && <CardSimulatorPanel />}
             </section>
           </main>
         </div>

@@ -3,16 +3,24 @@ import { Card } from '../../../ui/Card';
 interface AddAccountCardProps {
   onClick?: () => void;
   isLoading?: boolean;
+  size?: 'default' | 'compact';
   'data-testid'?: string;
 }
 
 export function AddAccountCard({
   onClick,
   isLoading = false,
+  size = 'default',
   'data-testid': testId,
 }: AddAccountCardProps) {
+  const heightClass = size === 'compact' ? 'min-h-[125px]' : 'min-h-[208px]';
+
   return (
-    <Card variant="dashed" className="p-4 min-h-[208px]" data-testid={testId}>
+    <Card
+      variant="dashed"
+      className={`p-4 ${heightClass}`}
+      data-testid={testId}
+    >
       <button
         className={`w-full h-full flex flex-col gap-4 disabled:opacity-50 ${
           onClick && !isLoading ? 'cursor-pointer hover:bg-white/60' : ''

@@ -53,6 +53,24 @@ describe('AccountCard', () => {
     expect(onDetailsClick).toHaveBeenCalledWith(mockAccount.accountId);
   });
 
+  it('calls onSelect when card is clicked', () => {
+    const onSelect = vi.fn();
+    render(
+      <AccountCard
+        account={mockAccount}
+        onSelect={onSelect}
+        showActions={false}
+      />
+    );
+
+    const cardButton = screen.getByRole('button', {
+      name: 'Select Checking Account',
+    });
+    fireEvent.click(cardButton);
+
+    expect(onSelect).toHaveBeenCalledWith(mockAccount.accountId);
+  });
+
   it('calls onTransferClick when Transfer button is clicked', () => {
     const onTransferClick = vi.fn();
     render(
@@ -97,6 +115,29 @@ describe('AccountCard', () => {
     expect(screen.getByText('$3,500')).toBeInTheDocument();
     expect(screen.getByText('Limit: $5,000')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+  });
+
+  it('hides action buttons when showActions is false', () => {
+    render(<AccountCard account={mockAccount} showActions={false} />);
+
+    expect(
+      screen.queryByRole('button', { name: 'Details' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Transfer' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Fund' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('hides credit line actions when showActions is false', () => {
+    render(<AccountCard account={creditLineAccount} showActions={false} />);
+
+    expect(screen.getByText('Limit: $5,000')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Edit' })
+    ).not.toBeInTheDocument();
   });
 
   it('calls onEditCreditLimitClick when Edit button is clicked', () => {

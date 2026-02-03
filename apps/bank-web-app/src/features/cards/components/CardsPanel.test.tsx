@@ -41,7 +41,7 @@ describe('CardsPanel', () => {
     expect(
       screen.getByText('Select an account to manage cards.')
     ).toBeInTheDocument();
-    const issueButton = screen.getByRole('button', { name: 'Issue Card' });
+    const issueButton = screen.getByRole('button', { name: 'Issue' });
     expect(issueButton).toBeDisabled();
   });
 
@@ -88,7 +88,7 @@ describe('CardsPanel', () => {
     render(<CardsPanel />);
 
     expect(screen.getByText('**** 4242')).toBeInTheDocument();
-    expect(screen.getByText('ACTIVE')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Issue Card' })).toBeEnabled();
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Issue' })).toBeEnabled();
   });
 });

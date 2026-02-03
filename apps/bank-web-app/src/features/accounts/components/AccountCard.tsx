@@ -7,6 +7,9 @@ import { Account } from '../../../types/api';
 interface AccountCardProps {
   account: Account;
   isSelected?: boolean;
+  showActions?: boolean;
+  size?: 'default' | 'compact';
+  onSelect?: (accountId: string) => void;
   onDetailsClick?: (accountId: string) => void;
   onTransferClick?: (accountId: string) => void;
   onFundClick?: (accountId: string) => void;
@@ -16,12 +19,20 @@ interface AccountCardProps {
 export function AccountCard({
   account,
   isSelected = false,
+  showActions = true,
+  size = 'default',
+  onSelect,
   onDetailsClick,
   onTransferClick,
   onFundClick,
   onEditCreditLimitClick,
 }: AccountCardProps) {
   const isCreditLine = account.accountType === 'CREDIT_LINE';
+  const isSelectable = Boolean(onSelect);
+
+  const handleSelect = () => {
+    onSelect?.(account.accountId);
+  };
 
   const handleDetailsClick = () => {
     onDetailsClick?.(account.accountId);
@@ -42,9 +53,27 @@ export function AccountCard({
   const cardClassName = isSelected
     ? 'ring-2 ring-[rgba(43,190,156,0.35)] bg-white'
     : 'hover:shadow-md';
+  const heightClass = size === 'compact' ? 'min-h-[125px]' : 'min-h-[208px]';
 
   return (
-    <Card className={`${cardClassName} p-4 flex flex-col gap-3 min-h-[208px]`}>
+    <Card
+      className={`${cardClassName} ${heightClass} p-4 flex flex-col gap-3`}
+      onClick={isSelectable ? handleSelect : undefined}
+      role={isSelectable ? 'button' : undefined}
+      tabIndex={isSelectable ? 0 : undefined}
+      aria-pressed={isSelectable ? isSelected : undefined}
+      aria-label={isSelectable ? `Select ${account.name}` : undefined}
+      onKeyDown={
+        isSelectable
+          ? event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleSelect();
+              }
+            }
+          : undefined
+      }
+    >
       <div className="flex flex-col gap-3 h-full">
         <div className="min-w-0">
           <Tooltip content={account.name} position="top">
@@ -66,7 +95,7 @@ export function AccountCard({
             {account.creditLimitMinor !== undefined && (
               <span>Limit: {formatCurrency(account.creditLimitMinor)}</span>
             )}
-            {onEditCreditLimitClick && (
+            {showActions && onEditCreditLimitClick && (
               <button
                 type="button"
                 className="font-semibold text-[var(--color-primary)] hover:underline"
@@ -79,7 +108,7 @@ export function AccountCard({
               </button>
             )}
           </div>
-        ) : onFundClick ? (
+        ) : showActions && onFundClick ? (
           <button
             type="button"
             className="text-xs font-semibold text-[var(--color-primary)] hover:underline self-start"
@@ -92,30 +121,32 @@ export function AccountCard({
           </button>
         ) : null}
 
-        <div className="mt-auto flex gap-2">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={event => {
-              event.stopPropagation();
-              handleDetailsClick();
-            }}
-            className="flex-1"
-          >
-            Details
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={event => {
-              event.stopPropagation();
-              handleTransferClick();
-            }}
-            className="flex-1 whitespace-nowrap"
-          >
-            Transfer
-          </Button>
-        </div>
+        {showActions && (
+          <div className="mt-auto flex gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={event => {
+                event.stopPropagation();
+                handleDetailsClick();
+              }}
+              className="flex-1"
+            >
+              Details
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={event => {
+                event.stopPropagation();
+                handleTransferClick();
+              }}
+              className="flex-1 whitespace-nowrap"
+            >
+              Transfer
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );
