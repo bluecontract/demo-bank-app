@@ -7,8 +7,8 @@ ts=$(date -u +"%Y%m%dT%H%M%SZ")
 review_dir="agents/skills/code-review/reviews/${task}_${ts}"
 prompt_file="${review_dir}/context.md"
 result_file="${review_dir}/result.md"
-# Default: 300s (5 minutes) per model unless overridden via REVIEW_TIMEOUT_SECONDS.
-timeout_seconds="${REVIEW_TIMEOUT_SECONDS:-300}"
+# Default: 600s (10 minutes) per model unless overridden via REVIEW_TIMEOUT_SECONDS.
+timeout_seconds="${REVIEW_TIMEOUT_SECONDS:-600}"
 
 if git diff --cached --quiet; then
   echo "No staged changes to review." >&2
@@ -49,6 +49,53 @@ detect_timeout_cmd() {
   return 1
 }
 
+run_with_timeout() {
+  local timeout="$1"
+  local out="$2"
+  local err="$3"
+  shift 3
+  local -a cmd=("$@")
+  local pid=""
+  local pgid=""
+
+  if command -v setsid >/dev/null 2>&1; then
+    setsid "${cmd[@]}" > "${out}" 2> "${err}" &
+    pid=$!
+    pgid=$pid
+  else
+    "${cmd[@]}" > "${out}" 2> "${err}" &
+    pid=$!
+  fi
+
+  local start
+  start=$(date +%s)
+  while kill -0 "${pid}" 2>/dev/null; do
+    local now
+    now=$(date +%s)
+    if (( now - start >= timeout )); then
+      if [[ -n "${pgid}" ]]; then
+        kill -TERM "-${pgid}" 2>/dev/null || true
+      else
+        kill -TERM "${pid}" 2>/dev/null || true
+      fi
+      sleep 5
+      if kill -0 "${pid}" 2>/dev/null; then
+        if [[ -n "${pgid}" ]]; then
+          kill -KILL "-${pgid}" 2>/dev/null || true
+        else
+          kill -KILL "${pid}" 2>/dev/null || true
+        fi
+      fi
+      wait "${pid}" 2>/dev/null
+      return 124
+    fi
+    sleep 1
+  done
+
+  wait "${pid}"
+  return $?
+}
+
 run_model() {
   local label=$1
   local outfile=$2
@@ -71,7 +118,7 @@ run_model() {
   if [[ -n "$timeout_cmd" ]]; then
     "$timeout_cmd" "$timeout_seconds" "${cmd[@]}" > "$outfile" 2> "$errfile"
   else
-    "${cmd[@]}" > "$outfile" 2> "$errfile"
+    run_with_timeout "$timeout_seconds" "$outfile" "$errfile" "${cmd[@]}"
   fi
 
   local exit_code=$?
@@ -116,7 +163,11 @@ run_gemini_with_fallback() {
 }
 
 run_gemini_with_fallback
-run_model "codex" "${review_dir}/codex.md" codex review -c model="codex-5.2-codex" "$prompt"
+if [[ -n "${CODEX_REVIEW_MODEL:-}" ]]; then
+  run_model "codex" "${review_dir}/codex.md" codex review -c model="$CODEX_REVIEW_MODEL" "$prompt"
+else
+  run_model "codex" "${review_dir}/codex.md" codex review "$prompt"
+fi
 
 cat <<'EOF' > "$result_file"
 # Review Resolution

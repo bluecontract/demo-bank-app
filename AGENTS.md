@@ -37,7 +37,12 @@ Parallel agents should use per-worktree LocalStack settings:
 - Helper script can auto-pick nearest free ports when you omit them (use short
   worktree IDs like `wt1`, `qa`, `ux`).
 - If ports are auto-picked, report the chosen values from the script output or
-  `.localstack.env`.
+  `.localstack.env`. Auto-picks are cached per worktree to avoid collisions
+  (registry in `${TMPDIR:-/tmp}/demo-bank-app-localstack-ports.registry`).
+- `scripts/setup-worktree-localstack.sh` writes `LOCALSTACK_WORKTREE_ID` and
+  `LOCALSTACK_CONTAINER_LABEL` so LocalStack containers are labeled per worktree.
+- `scripts/stop-worktree-localstack.sh` only stops containers matching the
+  current worktree label.
 - Stop helper: `scripts/stop-worktree-localstack.sh`.
 
 ## Git Commits (Required)

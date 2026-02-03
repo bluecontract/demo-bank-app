@@ -5,7 +5,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 . "${SCRIPT_DIR}/localstack-env.sh"
 
-port_range_flag=()
+docker_args=(
+  --name "${LOCALSTACK_CONTAINER_NAME}"
+  -p "127.0.0.1:${LOCALSTACK_EDGE_PORT}:4566"
+  -v /var/run/docker.sock:/var/run/docker.sock
+  -d
+)
+
+if [[ -n "${LOCALSTACK_CONTAINER_LABEL:-}" ]]; then
+  docker_args+=(--label "${LOCALSTACK_CONTAINER_LABEL}")
+fi
+
 if [[ -n "${LOCALSTACK_PORT_RANGE}" ]]; then
   port_range_flag=("-p" "127.0.0.1:${LOCALSTACK_PORT_RANGE}:4510-4559")
 fi

@@ -7,14 +7,35 @@
 
 const BANK_API_URL = process.env.BANK_API_URL || 'http://localhost:3000';
 const HEALTH_ENDPOINT = `${BANK_API_URL}/health`;
-const MAX_ATTEMPTS = 5; // 5 attempts
-const INITIAL_DELAY = 1000; // Start with 1 second
-const MAX_DELAY = 5000; // Cap at 5 seconds
+const DEFAULT_RETRY_DELAYS_MS = [1000, 5000, 10000, 20000, 30000, 60000];
+const HEALTHCHECK_TIMEOUT_MS = Number(
+  process.env.HEALTHCHECK_TIMEOUT_MS ?? 5000
+);
+
+const parseDelays = (raw?: string) => {
+  if (!raw) {
+    return null;
+  }
+  const values = raw
+    .split(',')
+    .map(value => Number(value.trim()))
+    .filter(value => Number.isFinite(value) && value > 0)
+    .map(value => value * 1000);
+
+  return values.length > 0 ? values : null;
+};
+
+const RETRY_DELAYS_MS =
+  parseDelays(process.env.BACKEND_HEALTHCHECK_DELAYS) ??
+  DEFAULT_RETRY_DELAYS_MS;
 
 async function checkHealth(): Promise<boolean> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      HEALTHCHECK_TIMEOUT_MS
+    );
 
     const response = await fetch(HEALTH_ENDPOINT, {
       signal: controller.signal,
@@ -38,7 +59,8 @@ async function checkHealth(): Promise<boolean> {
 async function waitForBackend(): Promise<void> {
   console.log(`🔍 Checking backend health at ${HEALTH_ENDPOINT}...`);
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  const maxAttempts = RETRY_DELAYS_MS.length + 1;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const isHealthy = await checkHealth();
 
     if (isHealthy) {
@@ -46,9 +68,9 @@ async function waitForBackend(): Promise<void> {
       return;
     }
 
-    if (attempt === MAX_ATTEMPTS) {
+    if (attempt === maxAttempts) {
       console.error(
-        `❌ Backend failed to become healthy after ${MAX_ATTEMPTS} attempts.`
+        `❌ Backend failed to become healthy after ${maxAttempts} attempts.`
       );
       console.error(`\n💡 Make sure the backend is running:`);
       console.error(`   npm run serve:stack`);
@@ -56,18 +78,12 @@ async function waitForBackend(): Promise<void> {
       process.exit(1);
     }
 
-    // Exponential backoff with jitter
-    const delay = Math.min(
-      INITIAL_DELAY * Math.pow(1.5, attempt - 1),
-      MAX_DELAY
-    );
-    const jitter = Math.random() * 500; // Add up to 500ms jitter
-    const totalDelay = Math.floor(delay + jitter);
+    const delay = RETRY_DELAYS_MS[attempt - 1];
 
     console.log(
-      `⏳ Attempt ${attempt}/${MAX_ATTEMPTS} failed, retrying in ${totalDelay}ms...`
+      `⏳ Attempt ${attempt}/${maxAttempts} failed, retrying in ${delay}ms...`
     );
-    await new Promise(resolve => setTimeout(resolve, totalDelay));
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
 }
 

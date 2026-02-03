@@ -27,6 +27,10 @@ fi
 WORKTREE_ID="$1"
 EDGE_PORT="${2:-}"
 PORT_RANGE="${3:-}"
+PORT_RANGE_PROVIDED="false"
+if [[ $# -ge 3 ]]; then
+  PORT_RANGE_PROVIDED="true"
+fi
 BANK_API_PORT="${4:-}"
 WEB_APP_PORT="${5:-}"
 SHARED_SECRETS_FILE="${6:-${SHARED_SECRETS_FILE:-}}"
@@ -34,6 +38,112 @@ AUTO_PICKED_PORTS=()
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+LOCK_DIR="${TMPDIR:-/tmp}/demo-bank-app-localstack-ports.lock"
+REGISTRY_FILE="${TMPDIR:-/tmp}/demo-bank-app-localstack-ports.registry"
+REGISTRY_TTL_SECONDS="${LOCALSTACK_PORT_REGISTRY_TTL_SECONDS:-86400}"
+LOCK_STALE_SECONDS="${LOCALSTACK_PORT_LOCK_STALE_SECONDS:-120}"
+
+get_mtime() {
+  local target="$1"
+  if stat -f %m "${target}" >/dev/null 2>&1; then
+    stat -f %m "${target}"
+    return 0
+  fi
+  stat -c %Y "${target}"
+}
+
+acquire_lock() {
+  local start
+  local now
+  start=$(date +%s)
+  while ! mkdir "${LOCK_DIR}" 2>/dev/null; do
+    local lock_ts=""
+    if [[ -f "${LOCK_DIR}/timestamp" ]]; then
+      lock_ts=$(cat "${LOCK_DIR}/timestamp" 2>/dev/null || true)
+    else
+      lock_ts=$(get_mtime "${LOCK_DIR}" 2>/dev/null || true)
+    fi
+    now=$(date +%s)
+    if [[ -n "${lock_ts}" && "${lock_ts}" =~ ^[0-9]+$ ]]; then
+      if (( now - lock_ts > LOCK_STALE_SECONDS )); then
+        echo "Stale port lock detected; clearing..." >&2
+        rm -rf "${LOCK_DIR}"
+        continue
+      fi
+    fi
+    if (( now - start > 30 )); then
+      echo "Timed out waiting for port lock (${LOCK_DIR})." >&2
+      exit 1
+    fi
+    sleep 0.2
+  done
+  echo "$$" > "${LOCK_DIR}/pid"
+  date +%s > "${LOCK_DIR}/timestamp"
+}
+
+release_lock() {
+  rm -rf "${LOCK_DIR}"
+}
+
+cleanup_registry() {
+  [[ -f "${REGISTRY_FILE}" ]] || return 0
+  local now
+  now=$(date +%s)
+  local tmp="${REGISTRY_FILE}.tmp.$$"
+  : > "${tmp}"
+  while IFS='|' read -r id ts edge range bank web preview; do
+    [[ -z "${id}" || "${id}" == \#* ]] && continue
+    if [[ ! "${ts}" =~ ^[0-9]+$ ]]; then
+      continue
+    fi
+    if (( now - ts <= REGISTRY_TTL_SECONDS )); then
+      echo "${id}|${ts}|${edge}|${range}|${bank}|${web}|${preview}" >> "${tmp}"
+    fi
+  done < "${REGISTRY_FILE}"
+  mv "${tmp}" "${REGISTRY_FILE}"
+}
+
+load_registry_entry() {
+  REGISTRY_EDGE_PORT=""
+  REGISTRY_PORT_RANGE=""
+  REGISTRY_BANK_API_PORT=""
+  REGISTRY_WEB_APP_PORT=""
+  REGISTRY_WEB_APP_PREVIEW_PORT=""
+  [[ -f "${REGISTRY_FILE}" ]] || return 1
+  while IFS='|' read -r id ts edge range bank web preview; do
+    [[ -z "${id}" || "${id}" == \#* ]] && continue
+    if [[ "${id}" == "${WORKTREE_ID}" ]]; then
+      REGISTRY_EDGE_PORT="${edge}"
+      REGISTRY_PORT_RANGE="${range}"
+      REGISTRY_BANK_API_PORT="${bank}"
+      REGISTRY_WEB_APP_PORT="${web}"
+      REGISTRY_WEB_APP_PREVIEW_PORT="${preview}"
+      return 0
+    fi
+  done < "${REGISTRY_FILE}"
+  return 1
+}
+
+write_registry_entry() {
+  local now
+  now=$(date +%s)
+  local tmp="${REGISTRY_FILE}.tmp.$$"
+  : > "${tmp}"
+  if [[ -f "${REGISTRY_FILE}" ]]; then
+    while IFS='|' read -r id ts edge range bank web preview; do
+      [[ -z "${id}" || "${id}" == \#* ]] && continue
+      if [[ "${id}" != "${WORKTREE_ID}" ]]; then
+        echo "${id}|${ts}|${edge}|${range}|${bank}|${web}|${preview}" >> "${tmp}"
+      fi
+    done < "${REGISTRY_FILE}"
+  fi
+  local range_field="${PORT_RANGE:-}"
+  if [[ -z "${range_field}" ]]; then
+    range_field="-"
+  fi
+  echo "${WORKTREE_ID}|${now}|${EDGE_PORT}|${range_field}|${BANK_API_PORT}|${WEB_APP_PORT}|${WEB_APP_PREVIEW_PORT}" >> "${tmp}"
+  mv "${tmp}" "${REGISTRY_FILE}"
+}
 
 is_port_free() {
   local port="$1"
@@ -59,8 +169,13 @@ PY
 }
 
 declare -a RESERVED_PORTS=()
+declare -a RESERVED_RANGES=()
 reserve_port() {
   RESERVED_PORTS+=("$1")
+}
+
+reserve_range() {
+  RESERVED_RANGES+=("$1")
 }
 
 is_port_available() {
@@ -70,7 +185,34 @@ is_port_available() {
       return 1
     fi
   done
+  for range in "${RESERVED_RANGES[@]-}"; do
+    if [[ "${range}" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      local range_start="${BASH_REMATCH[1]}"
+      local range_end="${BASH_REMATCH[2]}"
+      if (( port >= range_start && port <= range_end )); then
+        return 1
+      fi
+    fi
+  done
   is_port_free "${port}"
+}
+
+load_registry_reserved_ports() {
+  [[ -f "${REGISTRY_FILE}" ]] || return 0
+  while IFS='|' read -r id ts edge range bank web preview; do
+    [[ -z "${id}" || "${id}" == \#* ]] && continue
+    if [[ "${id}" == "${WORKTREE_ID}" ]]; then
+      continue
+    fi
+    for port in "${edge}" "${bank}" "${web}" "${preview}"; do
+      if [[ -n "${port}" && "${port}" != "-" ]]; then
+        reserve_port "${port}"
+      fi
+    done
+    if [[ -n "${range}" && "${range}" != "-" ]]; then
+      reserve_range "${range}"
+    fi
+  done < "${REGISTRY_FILE}"
 }
 
 find_nearest_free_port() {
@@ -122,61 +264,185 @@ find_free_range() {
   return 1
 }
 
+ENV_EDGE_PORT=""
+ENV_PORT_RANGE=""
+ENV_BANK_API_PORT=""
+ENV_WEB_APP_PORT=""
+ENV_WEB_APP_PREVIEW_PORT=""
+ENV_FILE="${REPO_ROOT}/.localstack.env"
+ENV_FILE_PRESENT="false"
+
+if [[ -f "${ENV_FILE}" ]]; then
+  ENV_FILE_PRESENT="true"
+  while IFS= read -r line; do
+    line="${line#export }"
+    case "${line}" in
+      LOCALSTACK_EDGE_PORT=*) ENV_EDGE_PORT="${line#*=}" ;;
+      LOCALSTACK_PORT_RANGE=*) ENV_PORT_RANGE="${line#*=}" ;;
+      BANK_API_PORT=*) ENV_BANK_API_PORT="${line#*=}" ;;
+      WEB_APP_PORT=*) ENV_WEB_APP_PORT="${line#*=}" ;;
+      WEB_APP_PREVIEW_PORT=*) ENV_WEB_APP_PREVIEW_PORT="${line#*=}" ;;
+    esac
+  done < "${ENV_FILE}"
+fi
+
+acquire_lock
+trap release_lock EXIT
+cleanup_registry
+load_registry_entry || true
+load_registry_reserved_ports
+
+if [[ "${REGISTRY_PORT_RANGE}" == "-" ]]; then
+  REGISTRY_PORT_RANGE=""
+fi
+
 if [[ -z "${EDGE_PORT}" ]]; then
-  EDGE_PORT="$(find_nearest_free_port 4566 500)" || {
-    echo "Failed to find free LocalStack edge port near 4566." >&2
-    exit 1
-  }
-  AUTO_PICKED_PORTS+=("LOCALSTACK_EDGE_PORT")
+  if [[ -n "${ENV_EDGE_PORT}" ]]; then
+    EDGE_PORT="${ENV_EDGE_PORT}"
+    EDGE_PORT_SOURCE="env"
+  elif [[ -n "${REGISTRY_EDGE_PORT}" ]]; then
+    EDGE_PORT="${REGISTRY_EDGE_PORT}"
+    EDGE_PORT_SOURCE="registry"
+  else
+    EDGE_PORT="$(find_nearest_free_port 4566 500)" || {
+      echo "Failed to find free LocalStack edge port near 4566." >&2
+      exit 1
+    }
+    AUTO_PICKED_PORTS+=("LOCALSTACK_EDGE_PORT")
+    EDGE_PORT_SOURCE="auto"
+  fi
 else
   if ! is_port_available "${EDGE_PORT}"; then
     echo "LocalStack edge port ${EDGE_PORT} is in use. Omit the port to auto-pick." >&2
     exit 1
   fi
+  EDGE_PORT_SOURCE="cli"
+fi
+if [[ "${EDGE_PORT_SOURCE}" == "registry" && "${ENV_FILE_PRESENT}" == "false" ]]; then
+  if ! is_port_free "${EDGE_PORT}"; then
+    EDGE_PORT="$(find_nearest_free_port 4566 500)" || {
+      echo "Failed to find free LocalStack edge port near 4566." >&2
+      exit 1
+    }
+    AUTO_PICKED_PORTS+=("LOCALSTACK_EDGE_PORT")
+    EDGE_PORT_SOURCE="auto"
+  fi
 fi
 reserve_port "${EDGE_PORT}"
 
 if [[ -z "${BANK_API_PORT}" ]]; then
-  BANK_API_PORT="$(find_nearest_free_port 3000 500)" || {
-    echo "Failed to find free bank-api port near 3000." >&2
-    exit 1
-  }
-  AUTO_PICKED_PORTS+=("BANK_API_PORT")
+  if [[ -n "${ENV_BANK_API_PORT}" ]]; then
+    BANK_API_PORT="${ENV_BANK_API_PORT}"
+    BANK_API_PORT_SOURCE="env"
+  elif [[ -n "${REGISTRY_BANK_API_PORT}" ]]; then
+    BANK_API_PORT="${REGISTRY_BANK_API_PORT}"
+    BANK_API_PORT_SOURCE="registry"
+  else
+    BANK_API_PORT="$(find_nearest_free_port 3000 500)" || {
+      echo "Failed to find free bank-api port near 3000." >&2
+      exit 1
+    }
+    AUTO_PICKED_PORTS+=("BANK_API_PORT")
+    BANK_API_PORT_SOURCE="auto"
+  fi
 else
   if ! is_port_available "${BANK_API_PORT}"; then
     echo "Bank API port ${BANK_API_PORT} is in use. Omit the port to auto-pick." >&2
     exit 1
   fi
+  BANK_API_PORT_SOURCE="cli"
+fi
+if [[ "${BANK_API_PORT_SOURCE}" == "registry" && "${ENV_FILE_PRESENT}" == "false" ]]; then
+  if ! is_port_free "${BANK_API_PORT}"; then
+    BANK_API_PORT="$(find_nearest_free_port 3000 500)" || {
+      echo "Failed to find free bank-api port near 3000." >&2
+      exit 1
+    }
+    AUTO_PICKED_PORTS+=("BANK_API_PORT")
+    BANK_API_PORT_SOURCE="auto"
+  fi
 fi
 reserve_port "${BANK_API_PORT}"
 
 if [[ -z "${WEB_APP_PORT}" ]]; then
-  WEB_APP_PORT="$(find_nearest_free_port 4200 500)" || {
-    echo "Failed to find free web-app port near 4200." >&2
-    exit 1
-  }
-  AUTO_PICKED_PORTS+=("WEB_APP_PORT")
+  if [[ -n "${ENV_WEB_APP_PORT}" ]]; then
+    WEB_APP_PORT="${ENV_WEB_APP_PORT}"
+    WEB_APP_PORT_SOURCE="env"
+  elif [[ -n "${REGISTRY_WEB_APP_PORT}" ]]; then
+    WEB_APP_PORT="${REGISTRY_WEB_APP_PORT}"
+    WEB_APP_PORT_SOURCE="registry"
+  else
+    WEB_APP_PORT="$(find_nearest_free_port 4200 500)" || {
+      echo "Failed to find free web-app port near 4200." >&2
+      exit 1
+    }
+    AUTO_PICKED_PORTS+=("WEB_APP_PORT")
+    WEB_APP_PORT_SOURCE="auto"
+  fi
 else
   if ! is_port_available "${WEB_APP_PORT}"; then
     echo "Web app port ${WEB_APP_PORT} is in use. Omit the port to auto-pick." >&2
     exit 1
   fi
+  WEB_APP_PORT_SOURCE="cli"
+fi
+if [[ "${WEB_APP_PORT_SOURCE}" == "registry" && "${ENV_FILE_PRESENT}" == "false" ]]; then
+  if ! is_port_free "${WEB_APP_PORT}"; then
+    WEB_APP_PORT="$(find_nearest_free_port 4200 500)" || {
+      echo "Failed to find free web-app port near 4200." >&2
+      exit 1
+    }
+    AUTO_PICKED_PORTS+=("WEB_APP_PORT")
+    WEB_APP_PORT_SOURCE="auto"
+  fi
 fi
 reserve_port "${WEB_APP_PORT}"
 
-WEB_APP_PREVIEW_PORT="$((WEB_APP_PORT + 100))"
-if ! is_port_available "${WEB_APP_PREVIEW_PORT}"; then
-  WEB_APP_PREVIEW_PORT="$(find_nearest_free_port "${WEB_APP_PREVIEW_PORT}" 200)" || {
-    echo "Failed to find free web preview port near $((WEB_APP_PORT + 100))." >&2
-    exit 1
-  }
-  AUTO_PICKED_PORTS+=("WEB_APP_PREVIEW_PORT")
+if [[ -z "${WEB_APP_PREVIEW_PORT:-}" ]]; then
+  if [[ -n "${ENV_WEB_APP_PREVIEW_PORT}" ]]; then
+    WEB_APP_PREVIEW_PORT="${ENV_WEB_APP_PREVIEW_PORT}"
+    WEB_APP_PREVIEW_PORT_SOURCE="env"
+  elif [[ -n "${REGISTRY_WEB_APP_PREVIEW_PORT}" ]]; then
+    WEB_APP_PREVIEW_PORT="${REGISTRY_WEB_APP_PREVIEW_PORT}"
+    WEB_APP_PREVIEW_PORT_SOURCE="registry"
+  else
+    WEB_APP_PREVIEW_PORT="$((WEB_APP_PORT + 100))"
+    if ! is_port_available "${WEB_APP_PREVIEW_PORT}"; then
+      WEB_APP_PREVIEW_PORT="$(find_nearest_free_port "${WEB_APP_PREVIEW_PORT}" 200)" || {
+        echo "Failed to find free web preview port near $((WEB_APP_PORT + 100))." >&2
+        exit 1
+      }
+      AUTO_PICKED_PORTS+=("WEB_APP_PREVIEW_PORT")
+    fi
+    WEB_APP_PREVIEW_PORT_SOURCE="auto"
+  fi
+fi
+if [[ "${WEB_APP_PREVIEW_PORT_SOURCE:-}" == "registry" && "${ENV_FILE_PRESENT}" == "false" ]]; then
+  if ! is_port_free "${WEB_APP_PREVIEW_PORT}"; then
+    WEB_APP_PREVIEW_PORT="$((WEB_APP_PORT + 100))"
+    if ! is_port_available "${WEB_APP_PREVIEW_PORT}"; then
+      WEB_APP_PREVIEW_PORT="$(find_nearest_free_port "${WEB_APP_PREVIEW_PORT}" 200)" || {
+        echo "Failed to find free web preview port near $((WEB_APP_PORT + 100))." >&2
+        exit 1
+      }
+      AUTO_PICKED_PORTS+=("WEB_APP_PREVIEW_PORT")
+    fi
+    WEB_APP_PREVIEW_PORT_SOURCE="auto"
+  fi
 fi
 reserve_port "${WEB_APP_PREVIEW_PORT}"
 
-if [[ -z "${PORT_RANGE+x}" ]]; then
-  PORT_RANGE="$(find_free_range 4510 50 100)" || PORT_RANGE=""
-  AUTO_PICKED_PORTS+=("LOCALSTACK_PORT_RANGE")
+if [[ "${PORT_RANGE_PROVIDED}" == "false" ]]; then
+  if [[ -n "${ENV_PORT_RANGE}" ]]; then
+    PORT_RANGE="${ENV_PORT_RANGE}"
+    PORT_RANGE_SOURCE="env"
+  elif [[ -n "${REGISTRY_PORT_RANGE}" ]]; then
+    PORT_RANGE="${REGISTRY_PORT_RANGE}"
+    PORT_RANGE_SOURCE="registry"
+  else
+    PORT_RANGE=""
+    PORT_RANGE_SOURCE="default"
+  fi
 else
   if [[ -n "${PORT_RANGE}" ]]; then
     if [[ "${PORT_RANGE}" =~ ^([0-9]+)-([0-9]+)$ ]]; then
@@ -197,6 +463,30 @@ else
       exit 1
     fi
   fi
+  PORT_RANGE_SOURCE="cli"
+fi
+
+if [[ "${PORT_RANGE_SOURCE}" == "registry" && "${ENV_FILE_PRESENT}" == "false" && -n "${PORT_RANGE}" ]]; then
+  if [[ "${PORT_RANGE}" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+    range_start="${BASH_REMATCH[1]}"
+    range_end="${BASH_REMATCH[2]}"
+    range_ok="true"
+    for ((p=range_start; p<=range_end; p++)); do
+      if ! is_port_available "${p}"; then
+        range_ok="false"
+        break
+      fi
+    done
+    if [[ "${range_ok}" != "true" ]]; then
+      PORT_RANGE="$(find_free_range 4510 50 100)" || PORT_RANGE=""
+      if [[ -n "${PORT_RANGE}" ]]; then
+        AUTO_PICKED_PORTS+=("LOCALSTACK_PORT_RANGE")
+        PORT_RANGE_SOURCE="auto"
+      else
+        PORT_RANGE_SOURCE="default"
+      fi
+    fi
+  fi
 fi
 
 if [[ -z "${SHARED_SECRETS_FILE}" ]]; then
@@ -206,10 +496,14 @@ if [[ -z "${SHARED_SECRETS_FILE}" ]]; then
   fi
 fi
 
+write_registry_entry
+
 ENV_FILE="${REPO_ROOT}/.localstack.env"
 
 cat > "${ENV_FILE}" <<EOF_ENV
 export LOCALSTACK_CONTAINER_NAME=localstack-demo-bank-app-${WORKTREE_ID}
+export LOCALSTACK_WORKTREE_ID=${WORKTREE_ID}
+export LOCALSTACK_CONTAINER_LABEL=com.demo-bank-app.worktree=${WORKTREE_ID}
 export LOCALSTACK_EDGE_PORT=${EDGE_PORT}
 export LOCALSTACK_PORT_RANGE=${PORT_RANGE}
 export AWS_ENDPOINT_URL=http://localhost:${EDGE_PORT}

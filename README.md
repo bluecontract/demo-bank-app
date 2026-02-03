@@ -190,6 +190,8 @@ scripts/setup-worktree-localstack.sh wt1
 Auto-pick selects the closest free ports to defaults (LocalStack 4566, API 3000,
 Web 4200) and finds a free LocalStack port range if needed.
 The script prints the chosen ports and stores them in `.localstack.env`.
+Auto-picks are cached per worktree to avoid collisions in parallel runs
+(registry: `${TMPDIR:-/tmp}/demo-bank-app-localstack-ports.registry`).
 
 To disable the LocalStack port range mapping, pass an empty third arg:
 
@@ -230,12 +232,17 @@ Pass this path to the setup script and it will be merged into
 scripts/stop-worktree-localstack.sh
 ```
 
+The stop script only stops the LocalStack container that matches the current
+worktree label.
+
 #### Manual setup
 
 1. Create `.localstack.env` at the repo root (not committed):
 
 ```bash
 LOCALSTACK_CONTAINER_NAME=localstack-demo-bank-app-wt1
+LOCALSTACK_WORKTREE_ID=wt1
+LOCALSTACK_CONTAINER_LABEL=com.demo-bank-app.worktree=wt1
 LOCALSTACK_EDGE_PORT=4567
 LOCALSTACK_PORT_RANGE=5510-5559
 AWS_ENDPOINT_URL=http://localhost:4567
@@ -325,8 +332,11 @@ The E2E command automatically waits for the backend to become healthy before run
 
 **Environment Variables:**
 
-- `E2E_BASE_URL`: Frontend URL for E2E tests (default: http://localhost:4300)
-- `BACKEND_URL`: Backend URL for health checks (default: http://localhost:3000)
+- `E2E_BASE_URL`: Frontend URL for E2E tests (default: http://localhost:4200)
+- `BANK_API_URL`: Backend URL for health checks (default: http://localhost:3000)
+- `BACKEND_HEALTHCHECK_DELAYS`: Comma-separated retry delays in seconds
+  (default: `1,5,10,20,30,60`).
+- `HEALTHCHECK_TIMEOUT_MS`: Per-attempt timeout in milliseconds (default: 5000).
 
 ### Security Auditing
 

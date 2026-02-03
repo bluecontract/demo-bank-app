@@ -51,7 +51,7 @@ agents/skills/code-review/scripts/run-review.sh short-slug
 
 Notes:
 
-- Configure timeout with `REVIEW_TIMEOUT_SECONDS` (default: 300 seconds per model).
+- Configure timeout with `REVIEW_TIMEOUT_SECONDS` (default: 600 seconds per model).
 - If a model fails or times out, its output file will contain the error details.
 
 # Command Template (manual fallback)
@@ -87,7 +87,8 @@ prompt=$(cat "$prompt_file")
 claude --model sonnet -p "$prompt" > "${review_dir}/claude.md"
 gemini -m gemini-3-pro-preview --allowed-tools= "$prompt" > "${review_dir}/gemini.md" \
   || gemini -m gemini-3-flash-preview --allowed-tools= "$prompt" > "${review_dir}/gemini.md"
-codex review -c model="codex-5.2-codex" "$prompt" > "${review_dir}/codex.md"
+# Uses the default codex CLI model; optionally override with CODEX_REVIEW_MODEL.
+codex review "$prompt" > "${review_dir}/codex.md"
 
 cat <<'EOF' > "$result_file"
 # Review Resolution
