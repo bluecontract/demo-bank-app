@@ -7,12 +7,7 @@ import {
 } from '../../contracts/hooks';
 import { dedupeContracts } from '../../contracts/lib/dedupeContracts';
 import { getContractChangeType } from '../../contracts/lib/contractReview';
-import {
-  CardsIcon,
-  ContractsIcon,
-  OverviewIcon,
-  TransactionsIcon,
-} from './SidebarNavIcons';
+import { CardsIcon, ContractsIcon, OverviewIcon } from './SidebarNavIcons';
 
 const navItems = [
   {
@@ -27,8 +22,23 @@ const navItems = [
   },
   {
     label: 'Transactions',
-    to: '/transfer/new',
-    icon: <TransactionsIcon />,
+    to: '/transactions',
+    icon: (
+      <svg
+        className="h-4 w-4"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h10" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 12h10" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 17h10" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h.01" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h.01" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 17h.01" />
+      </svg>
+    ),
   },
   {
     label: 'Contracts',

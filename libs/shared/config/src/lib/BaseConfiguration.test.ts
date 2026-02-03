@@ -69,8 +69,17 @@ describe('BaseConfiguration', () => {
   beforeEach(() => {
     config = new TestConfiguration();
     process.env = { ...originalEnv };
-    // Reset NODE_ENV to avoid test environment interference
-    delete process.env.NODE_ENV;
+    // Reset env vars to avoid local/dev environment interference
+    for (const key of [
+      'NODE_ENV',
+      'SERVICE_NAME',
+      'LOG_LEVEL',
+      'METRICS_NAMESPACE',
+      'AWS_REGION',
+      'AWS_ENDPOINT_URL',
+    ]) {
+      delete process.env[key];
+    }
   });
 
   afterEach(() => {

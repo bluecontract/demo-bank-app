@@ -5,6 +5,7 @@ import { ProtectedRoute } from './providers/ProtectedRoute';
 import { HomePage } from '../pages/HomePage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { CardsPage } from '../pages/CardsPage';
+import { TransactionsPage } from '../pages/TransactionsPage';
 import { NewTransferPage } from '../pages/NewTransferPage';
 import { ContractsPage } from '../pages/ContractsPage';
 import { SignUpPage } from '../features/auth/pages/SignUpPage';
@@ -31,6 +32,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <CardsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/transactions"
+            element={
+              <ProtectedRoute>
+                <TransactionsPage />
               </ProtectedRoute>
             }
           />

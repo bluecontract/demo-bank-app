@@ -44,7 +44,11 @@ const getCardGroupKeys = (item: ActivityItem) => {
   return keys;
 };
 
-export function TransactionHistory() {
+interface TransactionHistoryProps {
+  cardId?: string | null;
+}
+
+export function TransactionHistory({ cardId }: TransactionHistoryProps) {
   const { selectedAccount } = useSelectedAccount();
   const { data: accounts } = useAccounts();
   const [activeFilter, setActiveFilter] = useState<ActivityFilter>('all');
@@ -63,9 +67,11 @@ export function TransactionHistory() {
       return activityItems;
     }
 
+    let items = activityItems;
     switch (activeFilter) {
       case 'transfers':
-        return activityItems.filter(item => isPostedTransaction(item));
+        items = activityItems.filter(item => isPostedTransaction(item));
+        break;
       case 'cards': {
         const cardGroupIds = new Set<string>();
         activityItems.forEach(item => {
@@ -73,19 +79,28 @@ export function TransactionHistory() {
             getCardGroupKeys(item).forEach(key => cardGroupIds.add(key));
           }
         });
-        return activityItems.filter(item => {
+        items = activityItems.filter(item => {
           if (hasCardContext(item)) {
             return true;
           }
           return getCardGroupKeys(item).some(key => cardGroupIds.has(key));
         });
+        break;
       }
       case 'holds':
-        return activityItems.filter(item => !isPostedTransaction(item));
+        items = activityItems.filter(item => !isPostedTransaction(item));
+        break;
       default:
-        return activityItems;
+        items = activityItems;
+        break;
     }
-  }, [activityItems, activeFilter]);
+
+    if (!cardId) {
+      return items;
+    }
+
+    return items.filter(item => item.cardId === cardId);
+  }, [activityItems, activeFilter, cardId]);
 
   const isEmpty = !isLoading && !isError && filteredItems.length === 0;
 
