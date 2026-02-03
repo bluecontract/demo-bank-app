@@ -11,7 +11,7 @@ import { TransactionList } from '../../transactions/components/TransactionList';
 type ActivityFilter = 'all' | 'transfers' | 'cards' | 'holds';
 
 const filterOptions: { label: string; value: ActivityFilter }[] = [
-  { label: 'All activity', value: 'all' },
+  { label: 'All', value: 'all' },
   { label: 'Transfers', value: 'transfers' },
   { label: 'Cards', value: 'cards' },
   { label: 'Holds', value: 'holds' },
@@ -90,58 +90,47 @@ export function TransactionHistory() {
   const isEmpty = !isLoading && !isError && filteredItems.length === 0;
 
   return (
-    <Card className="flex flex-col flex-1 min-h-0">
-      <div className="mb-6 flex-shrink-0 flex flex-wrap items-center gap-4">
-        <div className="flex-1 min-w-[220px]">
-          <h2 className="text-xl font-semibold text-slate-900">
-            Transaction History
-          </h2>
-          <p className="text-sm text-[color:var(--color-muted)]">
-            Real-time activity from transfers, holds, and card captures.
-          </p>
+    <Card className="flex flex-col flex-1 min-h-0 p-0">
+      <div className="border-b border-slate-200 px-4 pt-4 pb-3">
+        <h2 className="text-base font-semibold text-slate-900">Transactions</h2>
+      </div>
+
+      <div className="px-4">
+        <div className="flex flex-wrap items-center gap-6 border-b border-slate-200 text-sm">
+          {filterOptions.map(option => {
+            const isActive = activeFilter === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`-mb-px border-b-2 px-0 py-3 text-sm font-medium transition ${
+                  isActive
+                    ? 'border-[var(--color-primary)] text-slate-900'
+                    : 'border-transparent text-slate-500 hover:text-slate-900'
+                }`}
+                onClick={() => setActiveFilter(option.value)}
+                aria-pressed={isActive}
+                data-testid={`activity-filter-${option.value}`}
+              >
+                {option.label}
+              </button>
+            );
+          })}
         </div>
-        {selectedAccount && (
-          <div className="app-chip">
-            Account:{' '}
-            <span className="font-semibold">
-              {selectedAccount.accountNumber}
-            </span>
-          </div>
-        )}
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-xs">
-        {filterOptions.map(option => {
-          const isActive = activeFilter === option.value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                isActive
-                  ? 'bg-[rgba(43,190,156,0.12)] text-[color:var(--color-primary)]'
-                  : 'bg-white/70 text-slate-600 hover:text-slate-900'
-              }`}
-              onClick={() => setActiveFilter(option.value)}
-              aria-pressed={isActive}
-              data-testid={`activity-filter-${option.value}`}
-            >
-              {option.label}
-            </button>
-          );
-        })}
+      <div className="flex-1 min-h-0 px-4 pb-4 pt-2">
+        <TransactionList
+          activityItems={filteredItems}
+          accountId={selectedAccount?.accountId || ''}
+          currentAccountNumber={selectedAccount?.accountNumber}
+          accounts={accounts}
+          isLoading={isLoading}
+          isError={isError}
+          isEmpty={isEmpty}
+          data-testid="transaction-history-list"
+        />
       </div>
-
-      <TransactionList
-        activityItems={filteredItems}
-        accountId={selectedAccount?.accountId || ''}
-        currentAccountNumber={selectedAccount?.accountNumber}
-        accounts={accounts}
-        isLoading={isLoading}
-        isError={isError}
-        isEmpty={isEmpty}
-        data-testid="transaction-history-list"
-      />
     </Card>
   );
 }

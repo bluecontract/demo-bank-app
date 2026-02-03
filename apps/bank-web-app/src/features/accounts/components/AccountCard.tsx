@@ -44,93 +44,76 @@ export function AccountCard({
     : 'hover:shadow-md';
 
   return (
-    <Card
-      className={cardClassName}
-      onClick={onDetailsClick ? handleDetailsClick : undefined}
-    >
-      <div className="space-y-4">
-        {/* Account Name and Fund Button */}
-        <div className="flex items-start justify-between">
-          <div className="flex-1 mr-2 min-w-0">
-            <Tooltip content={account.name} position="top">
-              <h3 className="text-lg font-semibold text-slate-900 truncate">
-                {account.name}
-              </h3>
-            </Tooltip>
-            {isCreditLine && (
-              <span className="mt-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                Credit Line
-              </span>
-            )}
-            <p className="account-number mt-2">
-              {formatAccountNumber(account.accountNumber)}
-            </p>
-          </div>
-          {isCreditLine ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={event => {
-                event.stopPropagation();
-                handleEditCreditLimitClick();
-              }}
-              className="px-3 whitespace-normal leading-tight text-sm py-2 mt-1"
-            >
-              Edit Credit Limit
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={event => {
-                event.stopPropagation();
-                handleFundClick();
-              }}
-              className="px-3 whitespace-normal leading-tight text-sm py-2 mt-1"
-            >
-              Fund Account
-            </Button>
-          )}
-        </div>
-
-        {/* Balance */}
-        <div className="space-y-1">
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-            {isCreditLine ? 'Remaining Credit' : 'Available Balance'}
+    <Card className={`${cardClassName} p-4 flex flex-col gap-3 min-h-[208px]`}>
+      <div className="flex flex-col gap-3 h-full">
+        <div className="min-w-0">
+          <Tooltip content={account.name} position="top">
+            <h3 className="text-sm font-semibold text-slate-900 truncate">
+              {account.name}
+            </h3>
+          </Tooltip>
+          <p className="account-number mt-1 text-xs text-slate-500">
+            {formatAccountNumber(account.accountNumber)}
           </p>
-          <div className="balance-display text-slate-900">
-            {formatCurrency(account.availableBalanceMinor)}
-          </div>
-          {isCreditLine && account.creditLimitMinor !== undefined && (
-            <p className="text-sm text-slate-600">
-              Limit: {formatCurrency(account.creditLimitMinor)}
-            </p>
-          )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-2">
+        <div className="balance-display text-slate-900">
+          {formatCurrency(account.availableBalanceMinor)}
+        </div>
+
+        {isCreditLine ? (
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            {account.creditLimitMinor !== undefined && (
+              <span>Limit: {formatCurrency(account.creditLimitMinor)}</span>
+            )}
+            {onEditCreditLimitClick && (
+              <button
+                type="button"
+                className="font-semibold text-[var(--color-primary)] hover:underline"
+                onClick={event => {
+                  event.stopPropagation();
+                  handleEditCreditLimitClick();
+                }}
+              >
+                Edit
+              </button>
+            )}
+          </div>
+        ) : onFundClick ? (
+          <button
+            type="button"
+            className="text-xs font-semibold text-[var(--color-primary)] hover:underline self-start"
+            onClick={event => {
+              event.stopPropagation();
+              handleFundClick();
+            }}
+          >
+            Fund
+          </button>
+        ) : null}
+
+        <div className="mt-auto flex gap-2">
           <Button
             variant="primary"
-            size="md"
+            size="sm"
             onClick={event => {
               event.stopPropagation();
               handleDetailsClick();
             }}
-            className="flex-[0.4]"
+            className="flex-1"
           >
             Details
           </Button>
           <Button
-            variant="secondary"
-            size="md"
+            variant="outline"
+            size="sm"
             onClick={event => {
               event.stopPropagation();
               handleTransferClick();
             }}
-            className="flex-[0.6] whitespace-nowrap"
+            className="flex-1 whitespace-nowrap"
           >
-            New transfer
+            Transfer
           </Button>
         </div>
       </div>

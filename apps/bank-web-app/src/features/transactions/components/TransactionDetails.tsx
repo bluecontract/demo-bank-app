@@ -123,28 +123,36 @@ export function TransactionDetails({
   };
 
   const relatedContractsList = relatedContracts ?? [];
-  const isProposalItem = (item: RelatedContractItem) =>
+  const isProposalItem = (
+    item: RelatedContractItem
+  ): item is Extract<RelatedContractItem, { kind: 'proposal' }> =>
     'kind' in item && item.kind === 'proposal';
-  const hasRelatedContract = relatedContractsList.some(
-    item => !isProposalItem(item)
+  const isContractItem = (
+    item: RelatedContractItem
+  ): item is Exclude<RelatedContractItem, { kind: 'proposal' }> =>
+    !isProposalItem(item);
+  const hasRelatedContract = relatedContractsList.some(item =>
+    isContractItem(item)
   );
   const contractSessionIds = new Set(
     relatedContractsList
-      .filter(item => !isProposalItem(item))
+      .filter(isContractItem)
       .map(item => item.sessionId)
       .filter((value): value is string => Boolean(value))
   );
   const visibleRelatedContracts = hasRelatedContract
-    ? relatedContractsList.filter(item => !isProposalItem(item))
+    ? relatedContractsList.filter(isContractItem)
     : relatedContractsList.filter(item => {
-        if (!isProposalItem(item)) {
+        if (isContractItem(item)) {
           return true;
         }
         const payNoteSessionIds = item.payNoteSessionIds ?? [];
         if (!payNoteSessionIds.length) {
           return true;
         }
-        return !payNoteSessionIds.some(id => contractSessionIds.has(id));
+        return !payNoteSessionIds.some((id: string) =>
+          contractSessionIds.has(id)
+        );
       });
 
   const formatContractStatus = (value?: string) => {

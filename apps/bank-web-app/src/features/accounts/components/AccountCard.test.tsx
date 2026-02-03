@@ -53,53 +53,53 @@ describe('AccountCard', () => {
     expect(onDetailsClick).toHaveBeenCalledWith(mockAccount.accountId);
   });
 
-  it('calls onTransferClick when New transfer button is clicked', () => {
+  it('calls onTransferClick when Transfer button is clicked', () => {
     const onTransferClick = vi.fn();
     render(
       <AccountCard account={mockAccount} onTransferClick={onTransferClick} />
     );
 
-    const transferButton = screen.getByRole('button', { name: 'New transfer' });
+    const transferButton = screen.getByRole('button', { name: 'Transfer' });
     fireEvent.click(transferButton);
 
     expect(onTransferClick).toHaveBeenCalledWith(mockAccount.accountId);
   });
 
-  it('calls onFundClick when Fund Account button is clicked', () => {
+  it('calls onFundClick when Fund button is clicked', () => {
     const onFundClick = vi.fn();
     render(<AccountCard account={mockAccount} onFundClick={onFundClick} />);
 
-    const fundButton = screen.getByRole('button', { name: 'Fund Account' });
+    const fundButton = screen.getByRole('button', { name: 'Fund' });
     fireEvent.click(fundButton);
 
     expect(onFundClick).toHaveBeenCalledWith(mockAccount.accountId);
   });
 
   it('renders action buttons for deposit accounts', () => {
-    render(<AccountCard account={mockAccount} />);
+    render(<AccountCard account={mockAccount} onFundClick={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'New transfer' })
+      screen.getByRole('button', { name: 'Transfer' })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Fund Account' })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fund' })).toBeInTheDocument();
   });
 
   it('renders credit line details and edit button', () => {
-    render(<AccountCard account={creditLineAccount} />);
+    render(
+      <AccountCard
+        account={creditLineAccount}
+        onEditCreditLimitClick={vi.fn()}
+      />
+    );
 
-    expect(screen.getByText('Credit Line')).toBeInTheDocument();
-    expect(screen.getByText('Remaining Credit')).toBeInTheDocument();
+    expect(screen.getByText('Merchant Credit Line')).toBeInTheDocument();
     expect(screen.getByText('$3,500')).toBeInTheDocument();
     expect(screen.getByText('Limit: $5,000')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Edit Credit Limit' })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
   });
 
-  it('calls onEditCreditLimitClick when Edit Credit Limit button is clicked', () => {
+  it('calls onEditCreditLimitClick when Edit button is clicked', () => {
     const onEditCreditLimitClick = vi.fn();
     render(
       <AccountCard
@@ -108,9 +108,7 @@ describe('AccountCard', () => {
       />
     );
 
-    const editButton = screen.getByRole('button', {
-      name: 'Edit Credit Limit',
-    });
+    const editButton = screen.getByRole('button', { name: 'Edit' });
     fireEvent.click(editButton);
 
     expect(onEditCreditLimitClick).toHaveBeenCalledWith(
@@ -122,13 +120,10 @@ describe('AccountCard', () => {
     render(<AccountCard account={mockAccount} />);
 
     const detailsButton = screen.getByRole('button', { name: 'Details' });
-    const transferButton = screen.getByRole('button', { name: 'New transfer' });
-    const fundButton = screen.getByRole('button', { name: 'Fund Account' });
-
+    const transferButton = screen.getByRole('button', { name: 'Transfer' });
     expect(() => {
       fireEvent.click(detailsButton);
       fireEvent.click(transferButton);
-      fireEvent.click(fundButton);
     }).not.toThrow();
   });
 

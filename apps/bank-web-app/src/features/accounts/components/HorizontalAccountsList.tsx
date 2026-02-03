@@ -37,13 +37,13 @@ export function HorizontalAccountsList({
 
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -320, behavior: 'smooth' });
+      scrollContainerRef.current.scrollBy({ left: -256, behavior: 'smooth' });
     }
   };
 
   const scrollRight = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 320, behavior: 'smooth' });
+      scrollContainerRef.current.scrollBy({ left: 256, behavior: 'smooth' });
     }
   };
 
@@ -130,13 +130,13 @@ export function HorizontalAccountsList({
       {/* Scrollable Container */}
       <div
         ref={scrollContainerRef}
-        className="flex gap-4 overflow-x-auto scrollbar-hide px-6 pb-6 pt-4"
+        className="flex gap-4 overflow-x-auto scrollbar-hide px-4 pb-4 pt-3"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         data-testid="accounts-scroll-container"
       >
         {/* Account Cards */}
         {accounts.map(account => (
-          <div key={account.accountNumber} className="flex-shrink-0 w-80">
+          <div key={account.accountNumber} className="flex-shrink-0 w-60">
             <AccountCard
               account={account}
               isSelected={
@@ -151,7 +151,7 @@ export function HorizontalAccountsList({
         ))}
 
         {/* Add Account Card */}
-        <div className="flex-shrink-0 w-80">
+        <div className="flex-shrink-0 w-60">
           <AddAccountCard
             onClick={onCreateAccount}
             isLoading={isCreatingAccount}

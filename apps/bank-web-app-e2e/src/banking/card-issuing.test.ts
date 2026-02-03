@@ -38,7 +38,7 @@ test.describe('Card Issuing Flow', () => {
     await page.click('button[type="submit"]');
     await waitForModalToClose(page, 'modal-content');
 
-    await page.click('text=Fund Account');
+    await page.getByRole('button', { name: 'Fund' }).first().click();
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '50.00');
     await page.click('button[type="submit"]');
@@ -143,8 +143,10 @@ test.describe('Card Issuing Flow', () => {
     await expect(history.getByText('Demo Shop').first()).toBeVisible({
       timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
     });
-    await expect(
-      history.getByText(`Card: **** ${last4}`).first()
-    ).toBeVisible();
+    const demoShopRow = history
+      .locator('[data-testid^="activity-item-"]')
+      .filter({ hasText: 'Demo Shop' })
+      .first();
+    await expect(demoShopRow).toContainText(`**** ${last4}`);
   });
 });

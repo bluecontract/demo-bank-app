@@ -129,8 +129,8 @@ export function TransactionList({
   return (
     <>
       <div className="flex-1 flex flex-col min-h-0" data-testid={testId}>
-        <div className="flex-1 overflow-y-auto bg-white/80 rounded-2xl border border-slate-200">
-          <div className="divide-y divide-slate-100">
+        <div className="flex-1 overflow-y-auto">
+          <div className="divide-y divide-slate-200">
             {activityItems.map(item => {
               return (
                 <TransactionItem

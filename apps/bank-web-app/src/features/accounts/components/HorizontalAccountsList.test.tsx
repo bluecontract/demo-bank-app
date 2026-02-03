@@ -95,7 +95,7 @@ describe('HorizontalAccountsList', () => {
       />
     );
 
-    const transferButtons = screen.getAllByText('New transfer');
+    const transferButtons = screen.getAllByText('Transfer');
     fireEvent.click(transferButtons[0]);
     expect(mockOnTransfer).toHaveBeenCalledWith('1');
   });

@@ -55,7 +55,8 @@ export function ContractsListPanel({
   onSelect,
 }: ContractsListPanelProps) {
   const { reviewedMap, markReviewed } = useContractReviewState();
-  const hasItems = Boolean(items && items.length > 0);
+  const safeItems = items ?? [];
+  const hasItems = safeItems.length > 0;
 
   return (
     <Card className="flex flex-col min-h-0">
@@ -89,7 +90,7 @@ export function ContractsListPanel({
 
         {hasItems && (
           <div className="space-y-3 max-h-full overflow-y-auto pr-1">
-            {items.map(item => {
+            {safeItems.map(item => {
               const sessionId = getItemSessionId(item);
               const isActive = sessionId && sessionId === selectedSessionId;
               const isProposal = isProposalItem(item);

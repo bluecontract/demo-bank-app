@@ -58,8 +58,8 @@ export const UI_TEXT = {
   BUTTONS: {
     HOME: 'Home', // From TransferConfirmation component
     BACK_TO_HOME: 'Back to Home', // Alternative text patterns
-    FUND_ACCOUNT: 'Fund Account',
-    NEW_TRANSFER: 'New transfer',
+    FUND_ACCOUNT: 'Fund',
+    NEW_TRANSFER: 'Transfer',
     DETAILS: 'Details',
     CREATE_ACCOUNT: 'Create Account',
     TRANSFER: 'Transfer',

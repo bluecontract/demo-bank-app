@@ -74,7 +74,7 @@ test.describe('Banking Form Validation', () => {
     await waitForModalToClose(page, 'modal-content');
 
     // Open fund modal
-    await page.click('text=Fund Account');
+    await page.getByRole('button', { name: 'Fund' }).first().click();
     await waitForModalToOpen(page, 'modal-content');
 
     // Try to submit empty form
@@ -118,7 +118,7 @@ test.describe('Banking Form Validation', () => {
     await waitForModalToClose(page, 'modal-content');
 
     // Fund source account
-    await page.click('text=Fund Account');
+    await page.getByRole('button', { name: 'Fund' }).first().click();
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '200.00');
     await page.click('button[type="submit"]');
@@ -148,7 +148,7 @@ test.describe('Banking Form Validation', () => {
       page.waitForURL('**/transfer/new**', {
         timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
       }),
-      page.click('text=New transfer'),
+      page.click('text=Transfer'),
     ]);
 
     await expect(page.getByText('Initiate New Transfer')).toBeVisible();
@@ -269,7 +269,7 @@ test.describe('Banking Form Validation', () => {
     await waitForModalToClose(page, 'modal-content');
 
     // Fund account
-    await page.click('text=Fund Account');
+    await page.click('text=Fund');
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '100.00');
     await page.click('button[type="submit"]');
@@ -278,7 +278,7 @@ test.describe('Banking Form Validation', () => {
     await waitForModalToClose(page, 'modal-content');
 
     // Open fund modal again
-    await page.click('text=Fund Account');
+    await page.click('text=Fund');
     await waitForModalToOpen(page, 'modal-content');
 
     // Try to submit empty form to trigger validation
@@ -308,7 +308,7 @@ test.describe('Banking Form Validation', () => {
     await waitForModalToClose(page, 'modal-content');
 
     // Open fund modal
-    await page.click('text=Fund Account');
+    await page.click('text=Fund');
     await waitForModalToOpen(page, 'modal-content');
 
     // Fill valid decimal places (the input sanitization prevents > 2 decimal places)
@@ -332,7 +332,7 @@ test.describe('Banking Form Validation', () => {
     await waitForModalToClose(page, 'modal-content');
 
     // Open fund modal
-    await page.click('text=Fund Account');
+    await page.click('text=Fund');
     await waitForModalToOpen(page, 'modal-content');
 
     // Test input sanitization (should remove non-numeric characters)

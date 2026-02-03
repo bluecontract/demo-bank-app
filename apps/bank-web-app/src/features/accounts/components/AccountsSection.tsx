@@ -20,21 +20,8 @@ export function AccountsSection({
 }: AccountsSectionProps) {
   return (
     <section className="app-surface">
-      <div className="flex items-center justify-between px-6 pt-6">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--color-muted)]">
-            Accounts
-          </p>
-          <h2 className="mt-2 text-xl font-semibold text-slate-900">
-            Your portfolios
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="app-chip app-chip-neutral">
-            {accounts.length} active
-          </span>
-          <span className="app-chip">USD</span>
-        </div>
+      <div className="px-4 pt-4">
+        <h2 className="text-base font-semibold text-slate-900">Accounts</h2>
       </div>
       <HorizontalAccountsList
         accounts={accounts}

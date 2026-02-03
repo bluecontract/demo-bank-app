@@ -67,6 +67,7 @@ const createDependencies = () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
+      updateDeliverySummary: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
     };
 

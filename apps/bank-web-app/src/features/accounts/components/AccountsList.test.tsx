@@ -107,7 +107,7 @@ describe('AccountsList', () => {
       />
     );
 
-    const transferButton = screen.getAllByText('New transfer')[0];
+    const transferButton = screen.getAllByText('Transfer')[0];
     transferButton.click();
 
     expect(handleTransfer).toHaveBeenCalledTimes(1);

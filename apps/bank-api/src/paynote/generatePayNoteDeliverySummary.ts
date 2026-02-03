@@ -64,6 +64,12 @@ const buildProposalFacts = (input: {
       definitionsByBlueId: Record<string, unknown>;
       typeNameByBlueId: Record<string, string>;
     };
+    payNoteSummary?: {
+      name?: string;
+      amountMinor?: number;
+      currency?: string;
+      amountDisplay?: string;
+    };
     integrationNotes?: string[];
   };
   summaryInputBlueId: string;
