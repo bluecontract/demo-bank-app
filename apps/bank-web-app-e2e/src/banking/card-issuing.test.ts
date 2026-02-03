@@ -2,8 +2,9 @@ import { test, expect } from '@playwright/test';
 import {
   URLS,
   TEST_DATA,
-  createUniqueEmail,
   createUniqueAccountName,
+  signUpAndReachDashboard,
+  createAccountViaModal,
   waitForModalToOpen,
   waitForModalToClose,
   waitForTransferCompletion,
@@ -21,22 +22,12 @@ test.describe('Card Issuing Flow', () => {
     page,
     request,
   }) => {
-    const testUserEmail = createUniqueEmail('card-user');
+    await signUpAndReachDashboard(page, 'card-user');
 
-    await page.goto(URLS.SIGNUP);
-    await page.fill('input[name="email"]', testUserEmail);
-    await page.click('button[type="submit"]');
-
-    await page.waitForURL(URLS.DASHBOARD, {
-      timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
-    });
-
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('card');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    const accountName = await createAccountViaModal(
+      page,
+      createUniqueAccountName('card')
+    );
 
     await page.getByRole('button', { name: 'Fund' }).first().click();
     await waitForModalToOpen(page, 'modal-content');
@@ -51,7 +42,7 @@ test.describe('Card Issuing Flow', () => {
       timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
     });
 
-    await page.getByRole('button', { name: 'Issue' }).click();
+    await page.getByTestId('issue-card-button').click();
     await waitForModalToOpen(page, 'issue-card-modal-content');
 
     await page

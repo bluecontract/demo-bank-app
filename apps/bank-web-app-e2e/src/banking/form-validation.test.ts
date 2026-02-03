@@ -2,34 +2,24 @@ import { test, expect } from '@playwright/test';
 import {
   URLS,
   TEST_DATA,
-  createUniqueEmail,
   createUniqueAccountName,
   waitForModalToClose,
   waitForModalToOpen,
   waitForTransferCompletion,
   expectFormValidationError,
-  DASHBOARD_HEADING_TEXT,
+  signUpAndReachDashboard,
+  createAccountViaModal,
 } from '../constants';
 
 test.describe('Banking Form Validation', () => {
   test.describe.configure({ timeout: 60000 });
   test.beforeEach(async ({ page }) => {
-    const testUserEmail = createUniqueEmail('validation-user');
-
-    // Sign up and get to dashboard
-    await page.goto(URLS.SIGNUP);
-    await page.fill('input[name="email"]', testUserEmail);
-    await page.click('button[type="submit"]');
-
-    await page.waitForURL(URLS.DASHBOARD, {
-      timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
-    });
-    await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+    await signUpAndReachDashboard(page, 'validation-user');
   });
 
   test('should validate account creation form', async ({ page }) => {
     // Open account creation modal
-    await page.click('text=Add new account');
+    await page.getByTestId('add-account-button').click();
     await waitForModalToOpen(page, 'modal-content');
 
     // Try to submit empty form
@@ -53,7 +43,7 @@ test.describe('Banking Form Validation', () => {
     await waitForModalToClose(page, 'modal-content');
 
     // Re-open modal for next test
-    await page.click('text=Add new account');
+    await page.getByTestId('add-account-button').click();
     await waitForModalToOpen(page, 'modal-content');
 
     // Test valid input
@@ -66,12 +56,10 @@ test.describe('Banking Form Validation', () => {
 
   test('should validate fund account form', async ({ page }) => {
     // Create account first
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('fund-validation');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(
+      page,
+      createUniqueAccountName('fund-validation')
+    );
 
     // Open fund modal
     await page.getByRole('button', { name: 'Fund' }).first().click();
@@ -104,18 +92,10 @@ test.describe('Banking Form Validation', () => {
     const targetAccount = createUniqueAccountName('target-validation');
 
     // Create source account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', sourceAccount);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, sourceAccount);
 
     // Create target account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', targetAccount);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, targetAccount);
 
     // Fund source account
     await page.getByRole('button', { name: 'Fund' }).first().click();
@@ -261,12 +241,10 @@ test.describe('Banking Form Validation', () => {
     page,
   }) => {
     // Create account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('clear-validation');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(
+      page,
+      createUniqueAccountName('clear-validation')
+    );
 
     // Fund account
     await page.click('text=Fund');
@@ -300,12 +278,10 @@ test.describe('Banking Form Validation', () => {
 
   test('should validate decimal places in amounts', async ({ page }) => {
     // Create account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('decimal-validation');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(
+      page,
+      createUniqueAccountName('decimal-validation')
+    );
 
     // Open fund modal
     await page.click('text=Fund');
@@ -324,12 +300,7 @@ test.describe('Banking Form Validation', () => {
 
   test('should handle input sanitization', async ({ page }) => {
     // Create account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('sanitization');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, createUniqueAccountName('sanitization'));
 
     // Open fund modal
     await page.click('text=Fund');

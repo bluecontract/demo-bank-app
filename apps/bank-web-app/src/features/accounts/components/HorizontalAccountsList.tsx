@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { AccountCard } from './AccountCard';
 import { AddAccountCard } from './AddAccountCard';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
@@ -33,6 +33,10 @@ export function HorizontalAccountsList({
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const accountCardWidthClass = 'w-60';
+  const accountCardWidthPx = 240;
+  const accountCardGapPx = 16;
+  const scrollStepPx = accountCardWidthPx + accountCardGapPx;
 
   const handleAccountSelection = (accountId: string) => {
     const account = accounts.find(acc => acc.accountId === accountId);
@@ -43,40 +47,49 @@ export function HorizontalAccountsList({
 
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -256, behavior: 'smooth' });
+      scrollContainerRef.current.scrollBy({
+        left: -scrollStepPx,
+        behavior: 'smooth',
+      });
     }
   };
 
   const scrollRight = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 256, behavior: 'smooth' });
+      scrollContainerRef.current.scrollBy({
+        left: scrollStepPx,
+        behavior: 'smooth',
+      });
     }
   };
 
-  const updateArrows = () => {
+  const updateArrows = useCallback(() => {
     if (scrollContainerRef.current) {
       const { scrollLeft, scrollWidth, clientWidth } =
         scrollContainerRef.current;
       setShowLeftArrow(scrollLeft > 0);
       setShowRightArrow(scrollLeft + clientWidth < scrollWidth);
     }
-  };
+  }, []);
 
   useEffect(() => {
     updateArrows();
-    const handleResize = () => updateArrows();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [accounts]);
+  }, [accounts.length, updateArrows]);
 
   useEffect(() => {
-    if (scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      container.addEventListener('scroll', updateArrows);
-      return () => container.removeEventListener('scroll', updateArrows);
+    window.addEventListener('resize', updateArrows);
+    return () => window.removeEventListener('resize', updateArrows);
+  }, [updateArrows]);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return undefined;
     }
-    return undefined;
-  }, []);
+
+    container.addEventListener('scroll', updateArrows);
+    return () => container.removeEventListener('scroll', updateArrows);
+  }, [updateArrows]);
 
   // Auto-select first account when accounts are loaded
   useEffect(() => {
@@ -142,7 +155,10 @@ export function HorizontalAccountsList({
       >
         {/* Account Cards */}
         {accounts.map(account => (
-          <div key={account.accountNumber} className="flex-shrink-0 w-60">
+          <div
+            key={account.accountNumber}
+            className={`flex-shrink-0 ${accountCardWidthClass}`}
+          >
             <AccountCard
               account={account}
               isSelected={
@@ -164,7 +180,7 @@ export function HorizontalAccountsList({
         ))}
 
         {/* Add Account Card */}
-        <div className="flex-shrink-0 w-60">
+        <div className={`flex-shrink-0 ${accountCardWidthClass}`}>
           <AddAccountCard
             onClick={onCreateAccount}
             isLoading={isCreatingAccount}

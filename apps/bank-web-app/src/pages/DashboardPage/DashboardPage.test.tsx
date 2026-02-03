@@ -51,6 +51,12 @@ vi.mock('../../features/dashboard/components', () => ({
   DashboardHeader: vi.fn(({ userEmail }) => (
     <div data-testid="dashboard-header">Dashboard Header - {userEmail}</div>
   )),
+  DashboardShell: vi.fn(({ header, children, 'data-testid': testId }) => (
+    <div className="app-shell flex" data-testid={testId || 'dashboard-shell'}>
+      {header}
+      {children}
+    </div>
+  )),
   SidebarNav: vi.fn(() => <div data-testid="sidebar-nav">Sidebar Nav</div>),
 }));
 

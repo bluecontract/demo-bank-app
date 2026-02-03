@@ -3,6 +3,10 @@ import { Button } from '../../../ui/Button';
 import { Tooltip } from '../../../ui/Tooltip';
 import { formatCurrency, formatAccountNumber } from '../../../lib';
 import { Account } from '../../../types/api';
+import {
+  ACCOUNT_CARD_HEIGHT_CLASSES,
+  ACCOUNT_CARD_SELECTED_RING_CLASS,
+} from './accountCardStyles';
 
 interface AccountCardProps {
   account: Account;
@@ -51,9 +55,9 @@ export function AccountCard({
   };
 
   const cardClassName = isSelected
-    ? 'ring-2 ring-[rgba(43,190,156,0.35)] bg-white'
+    ? ACCOUNT_CARD_SELECTED_RING_CLASS
     : 'hover:shadow-md';
-  const heightClass = size === 'compact' ? 'min-h-[125px]' : 'min-h-[208px]';
+  const heightClass = ACCOUNT_CARD_HEIGHT_CLASSES[size];
 
   return (
     <Card

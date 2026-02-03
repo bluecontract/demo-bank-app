@@ -7,16 +7,8 @@ import { useCards } from '../hooks/useCards';
 import { useCardDetails } from '../hooks/useCardDetails';
 import { IssueCardModal } from './IssueCardModal';
 import { CardDetailsModal } from './CardDetailsModal';
+import { formatCardExpiry, formatCardStatus } from '../lib/cardFormatters';
 import type { CardSummary } from '../../../types/api';
-
-const formatExpiry = (month: number, year: number) => {
-  const monthValue = month.toString().padStart(2, '0');
-  const shortYear = year.toString().slice(-2);
-  return `${monthValue}/${shortYear}`;
-};
-
-const formatStatus = (status: string) =>
-  `${status.slice(0, 1)}${status.slice(1).toLowerCase()}`;
 
 const statusStyles: Record<string, string> = {
   ACTIVE: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
@@ -115,6 +107,7 @@ export function CardsPanel({ selectedCardId, onSelectCard }: CardsPanelProps) {
           className="rounded-full px-4"
           onClick={handleIssueClick}
           disabled={!selectedAccount}
+          data-testid="issue-card-button"
         >
           Issue
         </Button>
@@ -122,25 +115,37 @@ export function CardsPanel({ selectedCardId, onSelectCard }: CardsPanelProps) {
 
       <div className="flex-1 min-h-0 p-4">
         {!selectedAccount && (
-          <div className="flex items-center justify-center h-full text-sm text-gray-500">
+          <div
+            className="flex items-center justify-center h-full text-sm text-gray-500"
+            data-testid="cards-no-account"
+          >
             Select an account to manage cards.
           </div>
         )}
 
         {selectedAccount && isLoading && (
-          <div className="flex items-center justify-center h-full">
+          <div
+            className="flex items-center justify-center h-full"
+            data-testid="cards-loading-state"
+          >
             <Spinner size="lg" color="green" />
           </div>
         )}
 
         {selectedAccount && isError && (
-          <div className="flex items-center justify-center h-full text-sm text-gray-500">
+          <div
+            className="flex items-center justify-center h-full text-sm text-gray-500"
+            data-testid="cards-error-state"
+          >
             Unable to load cards. Please refresh.
           </div>
         )}
 
         {selectedAccount && !isLoading && !isError && (
-          <div className="space-y-3 max-h-full overflow-y-auto pr-1">
+          <div
+            className="space-y-3 max-h-full overflow-y-auto pr-1"
+            data-testid="cards-list"
+          >
             {cards && cards.length > 0 ? (
               cards.map(card => {
                 const isSelected = selectedCardId === card.cardId;
@@ -163,19 +168,20 @@ export function CardsPanel({ selectedCardId, onSelectCard }: CardsPanelProps) {
                       }
                     }}
                     aria-label={`Select card ending ${card.panLast4}`}
+                    data-testid={`card-item-${card.cardId}`}
                   >
                     <span
                       className={`text-xs font-semibold px-2 py-1 rounded-md ${
                         statusStyles[card.status] ?? 'bg-gray-100 text-gray-700'
                       }`}
                     >
-                      {formatStatus(card.status)}
+                      {formatCardStatus(card.status)}
                     </span>
                     <div className="flex-1 min-w-[120px] text-sm text-slate-700">
                       **** {card.panLast4}
                     </div>
                     <div className="min-w-[72px] text-sm text-slate-500">
-                      {formatExpiry(card.expiryMonth, card.expiryYear)}
+                      {formatCardExpiry(card.expiryMonth, card.expiryYear)}
                     </div>
                     <Button
                       variant="outline"
@@ -186,6 +192,7 @@ export function CardsPanel({ selectedCardId, onSelectCard }: CardsPanelProps) {
                         handleCardSelect(card);
                         handleCardDetails(card);
                       }}
+                      data-testid={`card-details-button-${card.cardId}`}
                     >
                       Details
                     </Button>
@@ -193,7 +200,10 @@ export function CardsPanel({ selectedCardId, onSelectCard }: CardsPanelProps) {
                 );
               })
             ) : (
-              <div className="text-sm text-slate-500 bg-white/70 border border-dashed border-slate-200 rounded-2xl p-6 text-center">
+              <div
+                className="text-sm text-slate-500 bg-white/70 border border-dashed border-slate-200 rounded-2xl p-6 text-center"
+                data-testid="cards-empty-state"
+              >
                 No cards yet. Issue your first card to get started.
               </div>
             )}

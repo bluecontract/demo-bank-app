@@ -1,6 +1,8 @@
 import { Card } from '../../../ui/Card';
 import { Button } from '../../../ui/Button';
 import { Spinner } from '../../../ui/Spinner';
+import { BRAND_GRADIENT_CLASS } from '../../../ui/styleConstants';
+import { formatCardExpiry } from '../lib/cardFormatters';
 import type { CardDetails } from '../../../types/api';
 
 interface CardDetailsModalProps {
@@ -10,12 +12,6 @@ interface CardDetailsModalProps {
   isLoading?: boolean;
   errorMessage?: string | null;
 }
-
-const formatExpiry = (month: number, year: number) => {
-  const monthValue = month.toString().padStart(2, '0');
-  const shortYear = year.toString().slice(-2);
-  return `${monthValue}/${shortYear}`;
-};
 
 const formatPan = (pan: string) => pan.replace(/(\d{4})(?=\d)/g, '$1 ');
 
@@ -83,7 +79,7 @@ export function CardDetailsModal({
 
           {card && showDetails && (
             <>
-              <Card className="bg-gradient-to-br from-[#2bbe9c] to-[#f4b740] text-slate-900">
+              <Card className={`${BRAND_GRADIENT_CLASS} text-slate-900`}>
                 <div className="text-sm uppercase tracking-widest text-slate-900/70">
                   Demo Bank
                 </div>
@@ -97,7 +93,7 @@ export function CardDetailsModal({
                   <div>
                     <div className="text-slate-900/70">Expiry</div>
                     <div className="font-medium">
-                      {formatExpiry(card.expiryMonth, card.expiryYear)}
+                      {formatCardExpiry(card.expiryMonth, card.expiryYear)}
                     </div>
                   </div>
                   <div>

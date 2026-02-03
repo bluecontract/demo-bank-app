@@ -1,17 +1,16 @@
 import { test, expect } from '@playwright/test';
 import type { Locator, Page } from '@playwright/test';
 import {
-  URLS,
   TEST_DATA,
   UI_TEXT,
-  createUniqueEmail,
   createUniqueAccountName,
   waitForModalToClose,
   waitForModalToOpen,
   waitForTooltipToAppear,
-  DASHBOARD_HEADING_TEXT,
   waitForTransferCompletion,
   completeStandardTransferViaStepper,
+  signUpAndReachDashboard,
+  createAccountViaModal,
 } from '../constants';
 
 const getAccountCard = (page: Page, accountName: string): Locator =>
@@ -28,30 +27,17 @@ const selectAccountByName = async (page: Page, accountName: string) => {
 test.describe('Banking Core Flows', () => {
   test.describe.configure({ timeout: 60000 });
   test.beforeEach(async ({ page }) => {
-    const testUserEmail = createUniqueEmail('banking-user');
-
-    // Sign up and get to dashboard
-    await page.goto(URLS.SIGNUP);
-    await page.fill('input[name="email"]', testUserEmail);
-    await page.click('button[type="submit"]');
-
-    await page.waitForURL(URLS.DASHBOARD, {
-      timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
-    });
-    await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+    await signUpAndReachDashboard(page, 'banking-user');
   });
 
   test('should create account and display in horizontal list', async ({
     page,
   }) => {
     // Create account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-
-    const accountName = createUniqueAccountName();
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    const accountName = await createAccountViaModal(
+      page,
+      createUniqueAccountName()
+    );
 
     // Verify account appears in horizontal list
     await expect(page.getByText(accountName)).toBeVisible();
@@ -70,11 +56,7 @@ test.describe('Banking Core Flows', () => {
     ];
 
     for (const accountName of accountNames) {
-      await page.click('text=Add new account');
-      await waitForModalToOpen(page, 'modal-content');
-      await page.fill('input#accountName', accountName);
-      await page.click('button[type="submit"]');
-      await waitForModalToClose(page, 'modal-content');
+      await createAccountViaModal(page, accountName);
     }
 
     // Verify all accounts exist
@@ -104,11 +86,7 @@ test.describe('Banking Core Flows', () => {
     );
 
     // Create account with long name
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', longAccountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, longAccountName);
 
     // Verify account name is displayed
     await expect(page.getByText(longAccountName)).toBeVisible();
@@ -127,12 +105,7 @@ test.describe('Banking Core Flows', () => {
 
   test('should fund account with modal and confirmation', async ({ page }) => {
     // Create account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('fund-test');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, createUniqueAccountName('fund-test'));
 
     // Fund the account
     await page.getByRole('button', { name: 'Fund' }).first().click();
@@ -167,18 +140,10 @@ test.describe('Banking Core Flows', () => {
     const targetAccount = createUniqueAccountName('target');
 
     // Create source account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', sourceAccount);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, sourceAccount);
 
     // Create target account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', targetAccount);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, targetAccount);
 
     // Fund source account first
     await page.getByRole('button', { name: 'Fund' }).first().click();
@@ -234,12 +199,10 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     // Create and select an account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('history-test');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    const accountName = await createAccountViaModal(
+      page,
+      createUniqueAccountName('history-test')
+    );
 
     // Fund the account to create transaction history
     await page.getByRole('button', { name: 'Fund' }).first().click();
@@ -267,12 +230,10 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     // Create account and fund it
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('incoming-details');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    const accountName = await createAccountViaModal(
+      page,
+      createUniqueAccountName('incoming-details')
+    );
 
     // Fund account
     await page.getByRole('button', { name: 'Fund' }).first().click();
@@ -314,19 +275,14 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     // Create two accounts
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const account1 = createUniqueAccountName('outgoing-source');
-    await page.fill('input#accountName', account1);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
-
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const account2 = createUniqueAccountName('outgoing-dest');
-    await page.fill('input#accountName', account2);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    const account1 = await createAccountViaModal(
+      page,
+      createUniqueAccountName('outgoing-source')
+    );
+    const account2 = await createAccountViaModal(
+      page,
+      createUniqueAccountName('outgoing-dest')
+    );
 
     // Fund first account
     await selectAccountByName(page, account1);
@@ -480,11 +436,7 @@ test.describe('Banking Core Flows', () => {
     });
 
     // Create account so the activity feed mounts
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, accountName);
 
     // Wait for activity list to render mocked hold
     const holdRow = page.getByTestId('activity-item-hold_created-hold-123');
@@ -621,11 +573,7 @@ test.describe('Banking Core Flows', () => {
       });
     });
 
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, accountName);
 
     const activityRow = page.getByTestId('activity-item-txn-txn-paynote-001');
     await expect(activityRow).toBeVisible();
@@ -666,12 +614,7 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     // Create account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('balance-test');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, createUniqueAccountName('balance-test'));
 
     // Initial balance should be $0
     await expect(
@@ -715,19 +658,14 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     // Create two accounts
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const account1 = createUniqueAccountName('switch-account1');
-    await page.fill('input#accountName', account1);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
-
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const account2 = createUniqueAccountName('switch-account2');
-    await page.fill('input#accountName', account2);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    const account1 = await createAccountViaModal(
+      page,
+      createUniqueAccountName('switch-account1')
+    );
+    const account2 = await createAccountViaModal(
+      page,
+      createUniqueAccountName('switch-account2')
+    );
 
     // Fund first account to create transaction history
     await selectAccountByName(page, account1);

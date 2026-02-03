@@ -1,33 +1,16 @@
 import { test, expect } from '@playwright/test';
 import {
-  URLS,
   TEST_DATA,
-  createUniqueEmail,
-  DASHBOARD_HEADING_TEXT,
   waitForModalToOpen,
   waitForModalToClose,
+  signUpMerchantAndReachDashboard,
 } from '../constants';
-
-const createUniqueMerchantId = () =>
-  `merchant-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
 test.describe('Merchant Credit Line Flows', () => {
   test.describe.configure({ timeout: 60000 });
 
   test.beforeEach(async ({ page }) => {
-    const merchantEmail = createUniqueEmail('merchant-user');
-    const merchantId = createUniqueMerchantId();
-
-    await page.goto(URLS.SIGNUP);
-    await page.fill('input[name="email"]', merchantEmail);
-    await page.getByLabel('I am a merchant').check();
-    await page.fill('input[name="merchantId"]', merchantId);
-    await page.click('button[type="submit"]');
-
-    await page.waitForURL(URLS.DASHBOARD, {
-      timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
-    });
-    await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+    await signUpMerchantAndReachDashboard(page);
   });
 
   test('should create credit line account for merchant signup', async ({

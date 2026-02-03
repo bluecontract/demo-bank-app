@@ -1,4 +1,5 @@
 import { ReactNode, HTMLAttributes } from 'react';
+import { CARD_GRADIENT_CLASS } from '../styleConstants';
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
@@ -16,8 +17,7 @@ export function Card({
 
   const variantClasses = {
     default: '',
-    gradient:
-      'bg-gradient-to-br from-[#2bbe9c] via-[#a7f0d4] to-[#f4b740] text-slate-900 border-transparent',
+    gradient: CARD_GRADIENT_CLASS,
     dashed: 'bg-white/70 border-2 border-dashed border-slate-200 shadow-none',
   };
 

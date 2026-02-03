@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Button } from '../../../ui/Button';
+import { BRAND_GRADIENT_CLASS } from '../../../ui/styleConstants';
 import { useIssueCard } from '../hooks/useIssueCard';
+import { formatCardExpiry } from '../lib/cardFormatters';
 import { IssueCardResponse } from '../../../types/api';
 
 interface IssueCardModalProps {
@@ -9,12 +11,6 @@ interface IssueCardModalProps {
   accountId: string;
   accountName: string;
 }
-
-const formatExpiry = (month: number, year: number) => {
-  const monthValue = month.toString().padStart(2, '0');
-  const shortYear = year.toString().slice(-2);
-  return `${monthValue}/${shortYear}`;
-};
 
 export function IssueCardModal({
   isOpen,
@@ -159,7 +155,9 @@ export function IssueCardModal({
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-gradient-to-br from-[#2bbe9c] to-[#f4b740] text-slate-900 p-5">
+              <div
+                className={`rounded-2xl ${BRAND_GRADIENT_CLASS} text-slate-900 p-5`}
+              >
                 <div className="text-sm uppercase tracking-widest text-slate-900/70">
                   Demo Bank
                 </div>
@@ -179,7 +177,7 @@ export function IssueCardModal({
                       className="font-medium"
                       data-testid="issued-card-expiry"
                     >
-                      {formatExpiry(
+                      {formatCardExpiry(
                         issuedCard.expiryMonth,
                         issuedCard.expiryYear
                       )}

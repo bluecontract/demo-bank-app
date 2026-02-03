@@ -1,4 +1,6 @@
 import { Card } from '../../../ui/Card';
+import { BRAND_GRADIENT_CLASS } from '../../../ui/styleConstants';
+import { ACCOUNT_CARD_HEIGHT_CLASSES } from './accountCardStyles';
 
 interface AddAccountCardProps {
   onClick?: () => void;
@@ -13,7 +15,7 @@ export function AddAccountCard({
   size = 'default',
   'data-testid': testId,
 }: AddAccountCardProps) {
-  const heightClass = size === 'compact' ? 'min-h-[125px]' : 'min-h-[208px]';
+  const heightClass = ACCOUNT_CARD_HEIGHT_CLASSES[size];
 
   return (
     <Card
@@ -28,13 +30,16 @@ export function AddAccountCard({
         onClick={isLoading ? undefined : onClick}
         disabled={isLoading}
         aria-label="Add new account"
+        data-testid="add-account-button"
       >
         <span className="text-sm font-semibold text-slate-700">
           {isLoading ? 'Creating...' : 'Add new account'}
         </span>
 
         <div className="flex-1 flex items-center justify-center">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#2bbe9c] to-[#f4b740] flex items-center justify-center shadow-sm">
+          <div
+            className={`w-12 h-12 rounded-full ${BRAND_GRADIENT_CLASS} flex items-center justify-center shadow-sm`}
+          >
             <span className="text-slate-900 text-2xl font-semibold">+</span>
           </div>
         </div>
