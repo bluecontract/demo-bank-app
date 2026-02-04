@@ -20,6 +20,11 @@ vi.mock('../../app/providers/AuthProvider', () => ({
   useAuth: vi.fn(),
 }));
 
+vi.mock('../../features/contracts/components/ContractAiChatDrawer', () => ({
+  ContractAiChatDrawer: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div data-testid="ai-chat-drawer" /> : null,
+}));
+
 vi.mock('../../features/contracts/hooks', () => ({
   useAcceptPayNoteDelivery: vi.fn(),
   useActiveContractSession: vi.fn(),
@@ -190,6 +195,54 @@ describe('ContractDetailsPage', () => {
     expect(markReviewedMock).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-1' })
     );
+  });
+
+  it('opens the AI chat drawer when Talk with AI is clicked', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'GE Refrigerator Order',
+        document: { name: 'GE Refrigerator Order' },
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        summary: {
+          title: 'GE Refrigerator Order',
+          oneLiner: 'Funds will be held until delivery is confirmed.',
+          state: {
+            statusLabel: 'Proposal pending',
+            explanation: 'Awaiting client approval.',
+            updatedAt: null,
+          },
+          keyFacts: [],
+          warnings: [],
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    expect(screen.queryByTestId('ai-chat-drawer')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Talk with AI' }));
+
+    expect(screen.getByTestId('ai-chat-drawer')).toBeInTheDocument();
   });
 
   it('renders proposal actions when the proposal view is active', () => {

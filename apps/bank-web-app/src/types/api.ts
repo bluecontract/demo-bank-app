@@ -1,5 +1,5 @@
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
-import { ClientInferResponseBody } from '@ts-rest/core';
+import { ClientInferRequest, ClientInferResponseBody } from '@ts-rest/core';
 
 // Health check types
 export type HealthCheck = ClientInferResponseBody<
@@ -137,6 +137,17 @@ export type ContractDocumentSummary = ContractSummaryGeneration['summary'];
 
 export type ContractOperationResponse = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['runContractOperation'],
+  200
+>;
+
+export type ContractAiChatRequest = ClientInferRequest<
+  (typeof bankApiContract)['banking']['contractAiChat']
+>['body'];
+
+export type ContractAiChatMessage = ContractAiChatRequest['messages'][number];
+
+export type ContractAiChatResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['contractAiChat'],
   200
 >;
 

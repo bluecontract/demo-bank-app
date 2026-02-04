@@ -1,0 +1,377 @@
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../../api/client';
+import { Button } from '../../../ui/Button';
+import { Input } from '../../../ui/Input';
+import { Spinner } from '../../../ui/Spinner';
+import type {
+  ContractAiChatMessage,
+  ContractAiChatResponse,
+} from '../../../types/api';
+import { useContractAiChat } from '../hooks/useContractAiChat';
+import { useRunContractOperation } from '../hooks/useRunContractOperation';
+
+type ChatMessage = ContractAiChatMessage & { id: string };
+
+type PendingOperation = {
+  operation: string;
+  request?: unknown;
+};
+
+type ContractAiChatDrawerProps = {
+  isOpen: boolean;
+  sessionId: string;
+  documentTitle: string;
+  contractUpdatedAt: string;
+  onClose: () => void;
+};
+
+const MAX_HISTORY_MESSAGES = 20;
+
+const createId = () => {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const formatJson = (value: unknown) => {
+  if (value == null) {
+    return null;
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return null;
+  }
+};
+
+const sleep = (ms: number) =>
+  new Promise<void>(resolve => {
+    window.setTimeout(resolve, ms);
+  });
+
+export function ContractAiChatDrawer({
+  isOpen,
+  sessionId,
+  documentTitle,
+  contractUpdatedAt,
+  onClose,
+}: ContractAiChatDrawerProps) {
+  const queryClient = useQueryClient();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [draft, setDraft] = useState('');
+  const [pendingOperation, setPendingOperation] =
+    useState<PendingOperation | null>(null);
+  const chat = useContractAiChat();
+  const runOperation = useRunContractOperation();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const chatResetRef = useRef<(() => void) | undefined>(undefined);
+  const runOperationResetRef = useRef<(() => void) | undefined>(undefined);
+
+  const appendAssistantMessage = (text: string) => {
+    setMessages(prev => [
+      ...prev,
+      { id: createId(), role: 'assistant', content: text },
+    ]);
+  };
+
+  const handleAiResponse = (response: ContractAiChatResponse) => {
+    appendAssistantMessage(response.assistantMessage);
+
+    if (response.status === 'ready') {
+      if (!response.operationRequest) {
+        appendAssistantMessage(
+          'Sorry — I could not understand the operation request. Please try again.'
+        );
+        setPendingOperation(null);
+        return;
+      }
+
+      setPendingOperation({
+        operation: response.operationRequest.operation,
+        request: response.operationRequest.request,
+      });
+      return;
+    }
+
+    setPendingOperation(null);
+  };
+
+  const sendMessage = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || chat.isPending || runOperation.isPending) {
+      return;
+    }
+
+    setPendingOperation(null);
+
+    const nextMessages: ChatMessage[] = [
+      ...messages,
+      { id: createId(), role: 'user', content: trimmed },
+    ];
+
+    setMessages(nextMessages);
+    setDraft('');
+
+    try {
+      const response = await chat.mutateAsync({
+        sessionId,
+        messages: nextMessages.slice(-MAX_HISTORY_MESSAGES),
+      });
+
+      handleAiResponse(response);
+    } catch (error) {
+      const status =
+        error && typeof error === 'object' && 'status' in error
+          ? (error as { status?: unknown }).status
+          : undefined;
+
+      if (typeof status === 'number') {
+        appendAssistantMessage(
+          `Sorry — the assistant request failed (${status}). Try again.`
+        );
+        return;
+      }
+
+      appendAssistantMessage(
+        'Sorry — I could not reach the assistant. Try again.'
+      );
+    }
+  };
+
+  const refreshContractDetailsIfUpdated = async (
+    baselineUpdatedAt: string
+  ): Promise<void> => {
+    const deadline = Date.now() + 20_000;
+
+    while (Date.now() < deadline) {
+      await sleep(1200);
+      const response = await apiClient.banking.getContractDetails({
+        params: { sessionId },
+        overrideClientOptions: { credentials: 'include' },
+      });
+
+      if (response.status !== 200) {
+        continue;
+      }
+
+      if (response.body.updatedAt !== baselineUpdatedAt) {
+        queryClient.setQueryData(
+          ['contract-details', sessionId],
+          response.body
+        );
+        queryClient.invalidateQueries({ queryKey: ['contracts'] });
+        return;
+      }
+    }
+  };
+
+  const handleConfirmOperation = async () => {
+    if (!pendingOperation || runOperation.isPending) {
+      return;
+    }
+
+    const cachedContract = queryClient.getQueryData([
+      'contract-details',
+      sessionId,
+    ]) as { updatedAt?: string } | undefined;
+    const baselineUpdatedAt = cachedContract?.updatedAt ?? contractUpdatedAt;
+
+    runOperation.mutate(
+      {
+        sessionId,
+        operation: pendingOperation.operation,
+        body: pendingOperation.request ?? {},
+      },
+      {
+        onSuccess: () => {
+          appendAssistantMessage('Done.');
+          void refreshContractDetailsIfUpdated(baselineUpdatedAt);
+        },
+        onError: () => {
+          appendAssistantMessage('Sorry — the operation failed to submit.');
+        },
+        onSettled: () => {
+          setPendingOperation(null);
+        },
+      }
+    );
+  };
+
+  useEffect(() => {
+    chatResetRef.current = chat.reset;
+  }, [chat.reset]);
+
+  useEffect(() => {
+    runOperationResetRef.current = runOperation.reset;
+  }, [runOperation.reset]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    setMessages([
+      {
+        id: createId(),
+        role: 'assistant',
+        content: `How can I help you? I know everything about the document: “${documentTitle}”.`,
+      },
+    ]);
+    setDraft('');
+    setPendingOperation(null);
+    chatResetRef.current?.();
+    runOperationResetRef.current?.();
+  }, [isOpen, sessionId, documentTitle]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    inputRef.current?.focus();
+  }, [isOpen]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const payloadPreview = pendingOperation
+    ? formatJson(pendingOperation.request ?? {})
+    : null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 flex">
+      <div
+        className="w-full max-w-[720px] h-full bg-[color:var(--color-surface)] flex flex-col"
+        onClick={event => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Talk with AI"
+      >
+        <header className="flex items-center justify-between gap-3 p-4 border-b border-slate-200 bg-white/80">
+          <h2 className="text-base font-semibold text-slate-900">
+            Talk with AI
+          </h2>
+          <button
+            type="button"
+            className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white/80 text-slate-600 hover:text-slate-900"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </header>
+
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-[#f5f7fa]">
+          {messages.map(message => {
+            const isAssistant = message.role === 'assistant';
+            return (
+              <div
+                key={message.id}
+                className={`w-full border border-slate-200 p-4 text-sm text-slate-800 ${
+                  isAssistant
+                    ? 'bg-[#ccf1cf] rounded-tl-lg rounded-tr-lg rounded-br-lg'
+                    : 'bg-[#f5f7fa] rounded-tl-lg rounded-tr-lg rounded-bl-lg'
+                }`}
+              >
+                <p className="whitespace-pre-wrap break-words leading-relaxed">
+                  {message.content}
+                </p>
+                {isAssistant && (
+                  <p className="mt-3 text-xs text-slate-600">AI Assistant</p>
+                )}
+              </div>
+            );
+          })}
+
+          {chat.isPending && (
+            <div className="flex items-center gap-2 text-sm text-slate-600">
+              <Spinner size="sm" color="green" />
+              Thinking...
+            </div>
+          )}
+
+          {pendingOperation && (
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 space-y-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  Confirm operation
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
+                  {pendingOperation.operation}
+                </p>
+              </div>
+              {payloadPreview && (
+                <pre className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white/70 p-3 text-xs text-slate-700">
+                  {payloadPreview}
+                </pre>
+              )}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPendingOperation(null)}
+                  disabled={runOperation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleConfirmOperation}
+                  disabled={runOperation.isPending}
+                >
+                  {runOperation.isPending ? 'Submitting...' : 'Confirm'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <footer className="p-4 border-t border-slate-200 bg-white/80">
+          <form
+            className="flex items-center gap-2"
+            onSubmit={event => {
+              event.preventDefault();
+              void sendMessage(draft);
+            }}
+          >
+            <div className="flex-1">
+              <Input
+                ref={inputRef}
+                value={draft}
+                onChange={event => setDraft(event.target.value)}
+                placeholder="Write what you want"
+                disabled={chat.isPending || runOperation.isPending}
+                className="rounded-lg"
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              disabled={
+                !draft.trim() || chat.isPending || runOperation.isPending
+              }
+            >
+              Send
+            </Button>
+          </form>
+        </footer>
+      </div>
+
+      <div
+        className="flex-1"
+        role="presentation"
+        onClick={() => {
+          if (!runOperation.isPending) {
+            onClose();
+          }
+        }}
+      />
+    </div>
+  );
+}

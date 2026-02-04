@@ -21,6 +21,7 @@ import {
 import { ContractOperationsList } from '../../features/contracts/components/ContractOperationsList';
 import { ContractRawDocument } from '../../features/contracts/components/ContractRawDocument';
 import { ContractRelatedActivitySection } from '../../features/contracts/components/ContractRelatedActivitySection';
+import { ContractAiChatDrawer } from '../../features/contracts/components/ContractAiChatDrawer';
 import { Avatar } from '../../ui/Avatar';
 import { Button } from '../../ui/Button';
 import { Dropdown, DropdownItem } from '../../ui/Dropdown';
@@ -197,6 +198,7 @@ export function ContractDetailsPage() {
   const [activeKind, setActiveKind] = useState<'contract' | 'proposal'>(
     requestedKind ?? 'contract'
   );
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
 
   useEffect(() => {
     if (!requestedKind) {
@@ -232,6 +234,7 @@ export function ContractDetailsPage() {
 
   const contract = contractQuery.data ?? null;
   const proposal = proposalQuery.data ?? null;
+  const aiChatSessionId = contract?.sessionId ?? null;
   const relatedActivitySource = contract
     ? contract
     : proposal
@@ -305,6 +308,10 @@ export function ContractDetailsPage() {
   const summaryFallbackText =
     summaryOneLiner ||
     (contract ? 'Summary unavailable.' : proposalSummaryFallback);
+
+  useEffect(() => {
+    setIsAiChatOpen(false);
+  }, [aiChatSessionId]);
 
   const historyItems = useMemo(() => {
     if (!Array.isArray(contract?.emittedEvents)) {
@@ -501,14 +508,16 @@ export function ContractDetailsPage() {
                     {senderName}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="text-sm font-semibold text-[color:var(--color-primary)] opacity-70"
-                  aria-label="Talk with AI (coming soon)"
-                  disabled
-                >
-                  Talk with AI
-                </button>
+                {aiChatSessionId ? (
+                  <button
+                    type="button"
+                    className="text-sm font-semibold text-[color:var(--color-primary)] opacity-70 hover:opacity-100"
+                    aria-label="Talk with AI"
+                    onClick={() => setIsAiChatOpen(true)}
+                  >
+                    Talk with AI
+                  </button>
+                ) : null}
               </div>
 
               <div className="mt-4 space-y-3 text-slate-700">
@@ -673,6 +682,16 @@ export function ContractDetailsPage() {
           </div>
         </div>
       </section>
+
+      {aiChatSessionId && contract?.updatedAt && (
+        <ContractAiChatDrawer
+          isOpen={isAiChatOpen}
+          sessionId={aiChatSessionId}
+          documentTitle={summaryTitle}
+          contractUpdatedAt={contract.updatedAt}
+          onClose={() => setIsAiChatOpen(false)}
+        />
+      )}
     </DashboardShell>
   );
 }

@@ -34,6 +34,8 @@ import {
   ContractDetailsDto,
   ContractSummaryGenerationDto,
   ContractOperationResponseDto,
+  ContractAiChatRequestDto,
+  ContractAiChatResponseDto,
   NotImplementedResponseDto,
 } from './schemas';
 
@@ -575,6 +577,23 @@ export const bankApiContract = c.router(
         },
         summary:
           'Generate (or return cached) contract summary for the current document state.',
+      },
+
+      contractAiChat: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/ai-chat',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        body: ContractAiChatRequestDto,
+        responses: {
+          200: ContractAiChatResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          500: ProblemDto,
+        },
+        summary:
+          'Chat with an assistant about a contract and prepare eligible operations.',
       },
 
       runContractOperation: {

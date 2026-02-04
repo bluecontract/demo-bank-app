@@ -43,6 +43,7 @@ import { getContractDetailsHandler } from './contracts/getContractDetails';
 import { archiveContractHandler } from './contracts/archiveContract';
 import { unarchiveContractHandler } from './contracts/unarchiveContract';
 import { generateContractSummaryHandler } from './contracts/generateContractSummary';
+import { contractAiChatHandler } from './contracts/aiChat';
 import { listTransactionContractsHandler } from './contracts/listTransactionContracts';
 import { listHoldContractsHandler } from './contracts/listHoldContracts';
 
@@ -103,6 +104,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       listTransactionContracts: listTransactionContractsHandler,
       listHoldContracts: listHoldContractsHandler,
       generateContractSummary: generateContractSummaryHandler,
+      contractAiChat: contractAiChatHandler,
       runContractOperation: runContractOperationHandler,
       authorizeCard: authorizeCardHandler,
       captureCardAuthorization: captureCardAuthorizationHandler,

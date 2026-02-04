@@ -43,7 +43,7 @@ export const createHttpMyOsGateway = (
           'Content-Type': 'application/json',
           Authorization: credentials.apiKey,
         },
-        body: payload ? JSON.stringify(payload) : '{}',
+        body: payload === undefined ? '{}' : JSON.stringify(payload),
       }
     );
 

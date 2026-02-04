@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { formatShortDateTime } from '../../../lib/formatDate';
 import { formatStatusLabel } from '../../../lib/formatStatusLabel';
 import { Card } from '../../../ui/Card';
+import { Button } from '../../../ui/Button';
 import { Spinner } from '../../../ui/Spinner';
 import type { ContractDetails } from '../../../types/api';
+import { ContractAiChatDrawer } from './ContractAiChatDrawer';
 import {
   formatJson,
   getDocumentDescription,
@@ -34,6 +37,7 @@ export function ContractDetailsPanel({
   isError = false,
   errorMessage,
 }: ContractDetailsPanelProps) {
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const restoredDocument = restoreInlineTypes(contract?.document);
   const documentTitle =
     getDocumentName(restoredDocument) ?? contract?.displayName ?? 'Contract';
@@ -93,6 +97,17 @@ export function ContractDetailsPanel({
             </span>
           )}
         </div>
+        {contract.sessionId && (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setIsAiChatOpen(true)}
+            >
+              Talk with AI
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-6">
@@ -237,6 +252,16 @@ export function ContractDetailsPanel({
           </div>
         </div>
       </details>
+
+      {contract.sessionId && (
+        <ContractAiChatDrawer
+          isOpen={isAiChatOpen}
+          sessionId={contract.sessionId}
+          documentTitle={documentTitle}
+          contractUpdatedAt={contract.updatedAt}
+          onClose={() => setIsAiChatOpen(false)}
+        />
+      )}
     </Card>
   );
 }

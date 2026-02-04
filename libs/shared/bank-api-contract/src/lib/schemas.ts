@@ -557,6 +557,55 @@ export const ContractOperationResponseDto = z.object({
   body: z.unknown().optional(),
 });
 
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+const JsonValueDto: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueDto),
+    z.record(JsonValueDto),
+  ])
+);
+
+export const ContractAiChatMessageDto = z.object({
+  role: z.enum(['user', 'assistant']),
+  content: z.string(),
+});
+
+export const ContractAiChatRequestDto = z.object({
+  messages: z.array(ContractAiChatMessageDto).min(1).max(50),
+});
+
+export const ContractAiChatFocusDto = z
+  .object({
+    paths: z.array(z.string()),
+    sectionKeys: z.array(z.string()),
+    contractKeys: z.array(z.string()),
+  })
+  .strict();
+
+export const ContractAiChatOperationRequestDto = z
+  .object({
+    type: z.literal('Conversation/Operation Request'),
+    operation: z.string(),
+    request: JsonValueDto.nullable(),
+  })
+  .strict();
+
+export const ContractAiChatResponseDto = z
+  .object({
+    assistantMessage: z.string(),
+    status: z.enum(['answer', 'needs_more_info', 'cannot_do', 'ready']),
+    nextProcessingState: z.enum(['none', 'collect', 'confirm']),
+    focus: z.union([z.null(), ContractAiChatFocusDto]),
+    operationRequest: ContractAiChatOperationRequestDto.nullable(),
+  })
+  .strict();
+
 export const NotImplementedResponseDto = z.object({
   message: z.string(),
 });

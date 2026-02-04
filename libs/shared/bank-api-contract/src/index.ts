@@ -15,6 +15,11 @@ export {
   ContractSummaryGenerationDto,
   ContractDetailsDto,
   ContractOperationResponseDto,
+  ContractAiChatMessageDto,
+  ContractAiChatRequestDto,
+  ContractAiChatResponseDto,
+  ContractAiChatOperationRequestDto,
+  ContractAiChatFocusDto,
   NotImplementedResponseDto,
 } from './lib/schemas';
 export {
@@ -25,3 +30,12 @@ export {
   getSupportedContractForDocument,
   type SupportedContract,
 } from './lib/supportedContracts';
+export {
+  collectContractOperations,
+  type ContractOperation,
+} from './lib/operations';
+export {
+  buildRequestModel,
+  type FieldModel,
+  type FieldKind,
+} from './lib/operationRequestModel';
