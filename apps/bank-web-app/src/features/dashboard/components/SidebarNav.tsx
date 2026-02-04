@@ -4,9 +4,18 @@ import {
   useContracts,
   useContractReviewState,
   useActiveContractSession,
+  useProposals,
 } from '../../contracts/hooks';
 import { dedupeContracts } from '../../contracts/lib/dedupeContracts';
 import { getContractChangeType } from '../../contracts/lib/contractReview';
+import {
+  isInboxContract,
+  isImportantProposal,
+} from '../../contracts/lib/contractListFilters';
+import {
+  mergeContractsAndProposals,
+  isProposalItem,
+} from '../../contracts/lib/contractsAndProposals';
 import { CardsIcon, ContractsIcon, OverviewIcon } from './SidebarNavIcons';
 
 const navItems = [
@@ -51,19 +60,34 @@ export function SidebarNav() {
   const { reviewedMap } = useContractReviewState();
   const { activeSessionId } = useActiveContractSession();
   const newContractsQuery = useContracts({ refetchInterval: 15000 });
+  const proposalsQuery = useProposals();
 
   const newCount = useMemo(() => {
-    if (!newContractsQuery.data) {
+    const contracts = newContractsQuery.data
+      ? dedupeContracts(newContractsQuery.data)
+      : [];
+    const proposals = proposalsQuery.data ?? [];
+    if (contracts.length === 0 && proposals.length === 0) {
       return 0;
     }
-    const deduped = dedupeContracts(newContractsQuery.data);
-    return deduped.filter(contract => {
+    const listItems = mergeContractsAndProposals(contracts, proposals);
+    const inboxContracts = listItems.filter(isInboxContract);
+    const inboxCount = inboxContracts.filter(contract => {
       if (activeSessionId && contract.sessionId === activeSessionId) {
         return false;
       }
       return Boolean(getContractChangeType(contract, reviewedMap));
     }).length;
-  }, [activeSessionId, newContractsQuery.data, reviewedMap]);
+    const importantCount = listItems.filter(
+      item => isProposalItem(item) && isImportantProposal(item)
+    ).length;
+    return inboxCount + importantCount;
+  }, [
+    activeSessionId,
+    newContractsQuery.data,
+    proposalsQuery.data,
+    reviewedMap,
+  ]);
 
   return (
     <aside className="hidden lg:flex w-[240px] shrink-0 flex-col gap-8 border-r border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4">
