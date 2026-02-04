@@ -475,6 +475,9 @@ export const ContractSummaryDto = z.object({
   sessionId: z.string().optional(),
   documentId: z.string().optional(),
   status: z.string().optional(),
+  archivedAt: z.string().datetime({ offset: true }).optional(),
+  summaryUpdatedAt: z.string().datetime({ offset: true }).optional(),
+  summarySourceUpdatedAt: z.string().datetime({ offset: true }).optional(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
 });
@@ -520,6 +523,7 @@ export const ContractDetailsDto = z.object({
   sessionId: z.string().optional(),
   documentId: z.string().optional(),
   status: z.string().optional(),
+  archivedAt: z.string().datetime({ offset: true }).optional(),
   statusUpdatedAt: z.string().datetime({ offset: true }).optional(),
   statusTimestamps: z.record(z.string()).optional(),
   triggerEvent: z.unknown().optional(),

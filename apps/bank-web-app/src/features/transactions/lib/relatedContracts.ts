@@ -1,10 +1,9 @@
 import type { RelatedContractItem } from '../../../types/api';
-import { isProposalItem as isProposalListItem } from '../../contracts/lib/contractsAndProposals';
 
 export const isProposalRelatedContract = (
   item: RelatedContractItem
 ): item is Extract<RelatedContractItem, { kind: 'proposal' }> =>
-  isProposalListItem(item as unknown as { kind?: string });
+  'kind' in item && item.kind === 'proposal';
 
 export const isContractRelatedContract = (
   item: RelatedContractItem

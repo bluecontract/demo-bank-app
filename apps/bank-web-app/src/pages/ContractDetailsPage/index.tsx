@@ -7,10 +7,11 @@ import {
   useActiveContractSession,
   useContractDetails,
   useContractReviewState,
-  useContractSummary,
   useProposalDetails,
   useProposalSummary,
   useRejectPayNoteDelivery,
+  useArchiveContract,
+  useUnarchiveContract,
 } from '../../features/contracts/hooks';
 import {
   getDocumentDescription,
@@ -22,6 +23,7 @@ import { ContractRawDocument } from '../../features/contracts/components/Contrac
 import { ContractRelatedActivitySection } from '../../features/contracts/components/ContractRelatedActivitySection';
 import { Avatar } from '../../ui/Avatar';
 import { Button } from '../../ui/Button';
+import { Dropdown, DropdownItem } from '../../ui/Dropdown';
 import { Spinner, SpinnerWithText } from '../../ui/Spinner';
 import { formatShortDateTime } from '../../lib/formatDate';
 import type {
@@ -180,6 +182,8 @@ export function ContractDetailsPage() {
   const { user, signOut } = useAuth();
   const { setActiveSession } = useActiveContractSession();
   const { markReviewed } = useContractReviewState();
+  const archiveMutation = useArchiveContract();
+  const unarchiveMutation = useUnarchiveContract();
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -269,18 +273,6 @@ export function ContractDetailsPage() {
   const proposalTitle = proposal?.payNote?.name?.trim() || null;
   const headerTitle = contractTitle || proposalTitle || 'Contract';
   const senderName = contract?.displayName || proposalTitle || 'Contract';
-  const summaryIsFresh = Boolean(
-    contract?.summary &&
-      contract?.summarySourceUpdatedAt &&
-      contract?.summarySourceUpdatedAt === contract?.updatedAt
-  );
-  const shouldFetchSummary = Boolean(
-    contract?.sessionId && contract?.updatedAt && !summaryIsFresh
-  );
-  const summaryQuery = useContractSummary(
-    contract?.sessionId ?? null,
-    shouldFetchSummary ? contract?.updatedAt ?? null : null
-  );
   const proposalSummarySessionId =
     proposal?.deliverySessionId ?? sessionId ?? null;
   const proposalSummaryQuery = useProposalSummary(
@@ -288,15 +280,9 @@ export function ContractDetailsPage() {
     Boolean(proposal && proposalSummarySessionId)
   );
   const proposalSummary = proposalSummaryQuery.data?.summary ?? null;
-  const summary = contract
-    ? summaryQuery.data?.summary ?? contract?.summary ?? null
-    : proposalSummary;
+  const summary = contract ? contract?.summary ?? null : proposalSummary;
   const summaryErrorMessage = contract
-    ? (summaryQuery.error instanceof Error
-        ? summaryQuery.error.message
-        : null) ??
-      contract?.summaryError ??
-      null
+    ? contract?.summaryError ?? null
     : proposalSummaryQuery.error instanceof Error
     ? proposalSummaryQuery.error.message
     : null;
@@ -310,12 +296,9 @@ export function ContractDetailsPage() {
   const summaryStateExplanation = summary?.state?.explanation?.trim() || null;
   const summaryKeyFacts = summary?.keyFacts ?? [];
   const summaryWarnings = summary?.warnings ?? [];
-  const isSummaryLoading = contract
-    ? summaryQuery.isLoading && !summary && !!contract
-    : proposalSummaryQuery.isLoading && !summary && !!proposal;
-  const isSummaryFetching = contract
-    ? summaryQuery.isFetching && !!summary
-    : proposalSummaryQuery.isFetching && !!summary;
+  const isSummaryLoading =
+    proposalSummaryQuery.isLoading && !summary && !!proposal;
+  const isSummaryFetching = proposalSummaryQuery.isFetching && !!summary;
   const proposalSummaryFallback = proposalSummaryQuery.timedOut
     ? 'Sorry, contract summary is not available.'
     : 'Summary not available yet.';
@@ -366,6 +349,19 @@ export function ContractDetailsPage() {
     });
   }, [contract?.emittedEvents]);
   const hasHistory = historyItems.length > 0;
+  const isArchivePending =
+    archiveMutation.isPending || unarchiveMutation.isPending;
+
+  const handleArchiveToggle = () => {
+    if (!contract?.sessionId || isArchivePending) {
+      return;
+    }
+    if (contract.archivedAt) {
+      unarchiveMutation.mutate({ sessionId: contract.sessionId });
+    } else {
+      archiveMutation.mutate({ sessionId: contract.sessionId });
+    }
+  };
 
   const handleBack = () => {
     navigate(backTarget);
@@ -464,22 +460,35 @@ export function ContractDetailsPage() {
               {headerTitle}
             </h2>
           </div>
-          <button
-            type="button"
-            className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900"
-            aria-label="More options"
-          >
-            <svg
-              className="h-5 w-5"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              aria-hidden="true"
+          {contract && (
+            <Dropdown
+              trigger={
+                <div className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900">
+                  <svg
+                    className="h-5 w-5"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <circle cx="10" cy="4" r="1.5" />
+                    <circle cx="10" cy="10" r="1.5" />
+                    <circle cx="10" cy="16" r="1.5" />
+                  </svg>
+                </div>
+              }
+              align="right"
+              triggerAriaLabel="More options"
             >
-              <circle cx="10" cy="4" r="1.5" />
-              <circle cx="10" cy="10" r="1.5" />
-              <circle cx="10" cy="16" r="1.5" />
-            </svg>
-          </button>
+              <DropdownItem
+                onClick={handleArchiveToggle}
+                className={
+                  isArchivePending ? 'opacity-60 cursor-not-allowed' : ''
+                }
+              >
+                {contract.archivedAt ? 'Restore contract' : 'Archive contract'}
+              </DropdownItem>
+            </Dropdown>
+          )}
         </div>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">

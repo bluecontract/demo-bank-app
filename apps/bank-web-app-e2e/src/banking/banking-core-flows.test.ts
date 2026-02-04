@@ -199,10 +199,7 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     // Create and select an account
-    const accountName = await createAccountViaModal(
-      page,
-      createUniqueAccountName('history-test')
-    );
+    await createAccountViaModal(page, createUniqueAccountName('history-test'));
 
     // Fund the account to create transaction history
     await page.getByRole('button', { name: 'Fund' }).first().click();
@@ -230,7 +227,7 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     // Create account and fund it
-    const accountName = await createAccountViaModal(
+    await createAccountViaModal(
       page,
       createUniqueAccountName('incoming-details')
     );
@@ -459,9 +456,7 @@ test.describe('Banking Core Flows', () => {
     await expect(
       holdDetails.locator('text=Hold ID: hold-123').first()
     ).toBeVisible();
-    await expect(
-      holdDetails.locator('text=$123.45').first()
-    ).toBeVisible();
+    await expect(holdDetails.locator('text=$123.45').first()).toBeVisible();
     await expect(
       holdDetails.getByText('Pending hold for vendor authorization')
     ).toBeVisible();

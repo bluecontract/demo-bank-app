@@ -1,5 +1,6 @@
 import type { ContractSummary } from '../../../types/api';
 import { getContractKey } from './dedupeContracts';
+import { getContractLastChangeAt } from './contractTimestamps';
 
 export type ContractChangeType = 'new' | 'updated';
 
@@ -20,7 +21,7 @@ export const getContractChangeType = (
     return null;
   }
 
-  const updatedAt = parseTimestamp(contract.updatedAt);
+  const updatedAt = parseTimestamp(getContractLastChangeAt(contract));
   if (!updatedAt) {
     return null;
   }

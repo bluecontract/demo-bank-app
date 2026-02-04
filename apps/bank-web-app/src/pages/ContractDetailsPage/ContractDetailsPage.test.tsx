@@ -8,10 +8,11 @@ import {
   useActiveContractSession,
   useContractDetails,
   useContractReviewState,
-  useContractSummary,
   useProposalDetails,
   useProposalSummary,
   useRejectPayNoteDelivery,
+  useArchiveContract,
+  useUnarchiveContract,
 } from '../../features/contracts/hooks';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -24,10 +25,11 @@ vi.mock('../../features/contracts/hooks', () => ({
   useActiveContractSession: vi.fn(),
   useContractDetails: vi.fn(),
   useContractReviewState: vi.fn(),
-  useContractSummary: vi.fn(),
   useProposalDetails: vi.fn(),
   useProposalSummary: vi.fn(),
   useRejectPayNoteDelivery: vi.fn(),
+  useArchiveContract: vi.fn(),
+  useUnarchiveContract: vi.fn(),
 }));
 
 vi.mock('../../features/dashboard/components', () => ({
@@ -56,9 +58,12 @@ const mockUseContractDetails = useContractDetails as ReturnType<typeof vi.fn>;
 const mockUseContractReviewState = useContractReviewState as ReturnType<
   typeof vi.fn
 >;
-const mockUseContractSummary = useContractSummary as ReturnType<typeof vi.fn>;
 const mockUseProposalDetails = useProposalDetails as ReturnType<typeof vi.fn>;
 const mockUseProposalSummary = useProposalSummary as ReturnType<typeof vi.fn>;
+const mockUseArchiveContract = useArchiveContract as ReturnType<typeof vi.fn>;
+const mockUseUnarchiveContract = useUnarchiveContract as ReturnType<
+  typeof vi.fn
+>;
 const mockUseAcceptPayNoteDelivery = useAcceptPayNoteDelivery as ReturnType<
   typeof vi.fn
 >;
@@ -104,12 +109,16 @@ describe('ContractDetailsPage', () => {
       markReviewed: markReviewedMock,
     });
 
-    mockUseContractSummary.mockReturnValue({
-      data: null,
-      isLoading: false,
-      isFetching: false,
-      error: null,
+    mockUseArchiveContract.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
     });
+
+    mockUseUnarchiveContract.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    });
+
     mockUseProposalSummary.mockReturnValue({
       data: null,
       isLoading: false,

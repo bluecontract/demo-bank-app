@@ -1,5 +1,8 @@
-import type { ContractSummary } from '../../../types/api';
-import type { PayNoteDeliverySummary } from '../../../types/api';
+import type {
+  ContractSummary,
+  PayNoteDeliverySummary,
+} from '../../../types/api';
+import { getContractLastChangeAt } from './contractTimestamps';
 
 export type ProposalListItem = PayNoteDeliverySummary & {
   kind: 'proposal';
@@ -31,13 +34,19 @@ export const getItemSessionId = (
 ): string | undefined =>
   isProposalItem(item) ? item.deliverySessionId : item.sessionId;
 
-export const getItemUpdatedAt = (item: ContractOrProposalItem): string =>
-  item.updatedAt;
+export const getItemUpdatedAt = (item: ContractOrProposalItem): string => {
+  if (!isProposalItem(item)) {
+    return getContractLastChangeAt(item) ?? item.updatedAt;
+  }
+  return item.updatedAt;
+};
 
-const getItemSortUpdatedAt = (item: ContractOrProposalItem): string =>
-  'sortUpdatedAt' in item && item.sortUpdatedAt
-    ? item.sortUpdatedAt
-    : item.updatedAt;
+const getItemSortUpdatedAt = (item: ContractOrProposalItem): string => {
+  if ('sortUpdatedAt' in item && item.sortUpdatedAt) {
+    return item.sortUpdatedAt;
+  }
+  return getItemUpdatedAt(item);
+};
 
 export function mergeContractsAndProposals(
   contracts: ContractSummary[],

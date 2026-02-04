@@ -11,7 +11,7 @@ import {
   type FieldModel,
   type PathSegment,
 } from '../lib/operationFormModel';
-import { useRunContractOperation } from '../hooks/useRunContractOperation';
+import { useRunContractOperation } from '../hooks';
 
 interface OperationFormProps {
   operation: ContractOperation;
@@ -166,6 +166,9 @@ export function OperationForm({
   const isConfirming = mode === 'confirm';
   const isSuccess = mode === 'success';
   const operationTitle = operation.label || operation.name;
+  const isOperationPending = runOperation.isPending;
+  const operationErrorMessage =
+    runOperation.error instanceof Error ? runOperation.error.message : null;
 
   const handleReview = () => {
     if (!model) {
@@ -816,10 +819,8 @@ export function OperationForm({
                 </Button>
               </div>
 
-              {runOperation.isError && (
-                <p className="text-sm text-rose-600">
-                  {runOperation.error?.message ?? 'Unable to run operation.'}
-                </p>
+              {operationErrorMessage && (
+                <p className="text-sm text-rose-600">{operationErrorMessage}</p>
               )}
             </div>
           )}
@@ -835,7 +836,7 @@ export function OperationForm({
                   variant="secondary"
                   size="sm"
                   onClick={handleConfirmCancel}
-                  disabled={runOperation.isPending}
+                  disabled={isOperationPending}
                 >
                   Cancel
                 </Button>
@@ -843,16 +844,14 @@ export function OperationForm({
                   variant="primary"
                   size="sm"
                   onClick={handleConfirm}
-                  disabled={runOperation.isPending}
+                  disabled={isOperationPending}
                 >
-                  {runOperation.isPending ? 'Running...' : 'Confirm'}
+                  {isOperationPending ? 'Running...' : 'Confirm'}
                 </Button>
-                {runOperation.isPending && <Spinner size="sm" color="green" />}
+                {isOperationPending && <Spinner size="sm" color="green" />}
               </div>
-              {runOperation.isError && (
-                <p className="text-sm text-rose-600">
-                  {runOperation.error?.message ?? 'Unable to run operation.'}
-                </p>
+              {operationErrorMessage && (
+                <p className="text-sm text-rose-600">{operationErrorMessage}</p>
               )}
             </div>
           )}

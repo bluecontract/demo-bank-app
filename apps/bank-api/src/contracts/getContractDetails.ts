@@ -38,6 +38,7 @@ export const getContractDetailsHandler = async (
       sessionId: contract.sessionId,
       documentId: contract.documentId,
       status: contract.status,
+      archivedAt: contract.archivedAt,
       statusUpdatedAt: contract.statusUpdatedAt,
       statusTimestamps: contract.statusTimestamps,
       triggerEvent: contract.triggerEvent,

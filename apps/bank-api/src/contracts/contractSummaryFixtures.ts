@@ -15,6 +15,9 @@ const buildContractSummary = (
   sessionId: overrides.sessionId ?? 'session-1',
   documentId: overrides.documentId,
   status: overrides.status ?? 'accepted',
+  archivedAt: overrides.archivedAt,
+  summaryUpdatedAt: overrides.summaryUpdatedAt,
+  summarySourceUpdatedAt: overrides.summarySourceUpdatedAt,
   createdAt: overrides.createdAt ?? '2024-01-01T00:00:00.000Z',
   updatedAt: overrides.updatedAt ?? '2024-01-02T12:00:00.000Z',
 });

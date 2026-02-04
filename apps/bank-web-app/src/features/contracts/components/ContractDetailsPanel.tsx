@@ -13,7 +13,6 @@ import { ContractOperationsList } from './ContractOperationsList';
 import { ContractRawDocument } from './ContractRawDocument';
 import { ContractRelatedActivitySection } from './ContractRelatedActivitySection';
 import { SummaryPanel } from './SummaryPanel';
-import { useContractSummary, useRegenerateContractSummary } from '../hooks';
 
 interface ContractDetailsPanelProps {
   contract?: ContractDetails | null;
@@ -40,29 +39,9 @@ export function ContractDetailsPanel({
     getDocumentName(restoredDocument) ?? contract?.displayName ?? 'Contract';
   const documentSummary =
     getDocumentDescription(restoredDocument) ?? documentTitle;
-  const summaryIsFresh = Boolean(
-    contract?.summary &&
-      contract?.summarySourceUpdatedAt &&
-      contract?.summarySourceUpdatedAt === contract?.updatedAt
-  );
-  const shouldFetchSummary = Boolean(
-    contract?.sessionId && contract?.updatedAt && !summaryIsFresh
-  );
-  const summaryQuery = useContractSummary(
-    contract?.sessionId ?? null,
-    shouldFetchSummary ? contract?.updatedAt ?? null : null
-  );
-  const regenerateSummary = useRegenerateContractSummary();
-  const generatedSummary = summaryQuery.data?.summary ?? contract?.summary;
-  const summaryModel = summaryQuery.data?.model ?? contract?.summaryModel;
-  const summaryErrorMessage =
-    (summaryQuery.error instanceof Error ? summaryQuery.error.message : null) ??
-    contract?.summaryError ??
-    null;
-  const handleRegenerateSummary = () => {
-    if (!contract?.sessionId) return;
-    regenerateSummary.mutate({ sessionId: contract.sessionId });
-  };
+  const summary = contract?.summary ?? null;
+  const summaryModel = contract?.summaryModel ?? null;
+  const summaryErrorMessage = contract?.summaryError ?? null;
   const triggerEventJson = formatJson(contract?.triggerEvent);
   const emittedEventsJson = formatJson(contract?.emittedEvents);
   const statusEntries = contract?.statusTimestamps
@@ -119,19 +98,10 @@ export function ContractDetailsPanel({
       <div className="flex flex-col gap-6">
         <SummaryPanel
           title="Contract summary"
-          summary={generatedSummary}
+          summary={summary}
           summaryModel={summaryModel ?? null}
           summaryErrorMessage={summaryErrorMessage}
-          isLoading={summaryQuery.isLoading && !generatedSummary}
-          isFetching={summaryQuery.isFetching && Boolean(generatedSummary)}
           fallbackText={documentSummary}
-          onRegenerate={handleRegenerateSummary}
-          regenerateDisabled={
-            !contract.sessionId || regenerateSummary.isPending
-          }
-          isRegeneratePending={regenerateSummary.isPending}
-          loadingLabel="Generating summary..."
-          fetchingLabel="Updating summary..."
         />
 
         <section className="flex flex-col gap-4">

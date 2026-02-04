@@ -500,6 +500,36 @@ export const bankApiContract = c.router(
         summary: 'Get contract details by session id.',
       },
 
+      archiveContract: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/archive',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        body: z.unknown().optional(),
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Archive a contract by session id.',
+      },
+
+      unarchiveContract: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/unarchive',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        body: z.unknown().optional(),
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Unarchive a contract by session id.',
+      },
+
       listTransactionContracts: {
         method: 'GET',
         path: '/v1/transactions/:txnId/contracts',

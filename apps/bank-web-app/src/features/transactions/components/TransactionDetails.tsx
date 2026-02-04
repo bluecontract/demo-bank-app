@@ -8,6 +8,7 @@ import { formatStatusLabel } from '../../../lib/formatStatusLabel';
 import { Spinner } from '../../../ui/Spinner';
 import { navigateTo } from '../../../lib/navigation';
 import { useActiveContractSession } from '../../contracts/hooks';
+import { getContractLastChangeAt } from '../../contracts/lib/contractTimestamps';
 import {
   getRelatedContractTarget,
   getRelatedContractSessionId,
@@ -349,7 +350,11 @@ export function TransactionDetails({
                   contractStatusStyles[statusKey] ??
                   'bg-slate-100 text-slate-700 border border-slate-200';
                 const contractDate = formatLongDate(
-                  contract.updatedAt ?? contract.createdAt
+                  isProposal
+                    ? contract.updatedAt ?? contract.createdAt
+                    : getContractLastChangeAt(contract) ??
+                        contract.updatedAt ??
+                        contract.createdAt
                 );
 
                 return (

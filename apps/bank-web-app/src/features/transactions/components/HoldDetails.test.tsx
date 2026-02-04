@@ -177,6 +177,33 @@ describe('HoldDetails', () => {
     expect(screen.queryByText('Proposal')).not.toBeInTheDocument();
   });
 
+  it('keeps proposals visible when no contracts exist even with paynote session ids', () => {
+    render(
+      <HoldDetails
+        {...defaultProps}
+        relatedContracts={[
+          {
+            kind: 'proposal',
+            deliveryId: 'delivery-2',
+            deliverySessionId: 'delivery-session-2',
+            payNoteSessionIds: ['session-99'],
+            name: 'Delayed PayNote',
+            amountMinor: 2400,
+            currency: 'USD',
+            clientDecisionStatus: 'pending',
+            transactionId: 'txn-456',
+            createdAt: '2024-01-05T00:00:00.000Z',
+            updatedAt: '2024-01-06T00:00:00.000Z',
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText('Delayed PayNote')).toBeInTheDocument();
+    expect(screen.getAllByText('Proposal').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Pending').length).toBeGreaterThan(0);
+  });
+
   it('navigates to proposal details when clicking a linked proposal', () => {
     const setActiveSession = vi.fn();
     mockUseActiveContractSession.mockReturnValue({

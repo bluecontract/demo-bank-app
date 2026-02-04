@@ -493,6 +493,9 @@ const generateOrLoadContractSummary = async (input: {
       summaryInputBlueId,
       summaryModel: model,
       summaryError: null,
+      userId: contract.userId,
+      relatedTransactionIds: contract.relatedTransactionIds,
+      relatedHoldIds: contract.relatedHoldIds,
     });
 
     return {
@@ -513,6 +516,9 @@ const generateOrLoadContractSummary = async (input: {
       summaryUpdatedAt: contract.summaryUpdatedAt ?? now,
       summarySourceUpdatedAt:
         contract.summarySourceUpdatedAt ?? contract.updatedAt,
+      userId: contract.userId,
+      relatedTransactionIds: contract.relatedTransactionIds,
+      relatedHoldIds: contract.relatedHoldIds,
     });
 
     throw error;

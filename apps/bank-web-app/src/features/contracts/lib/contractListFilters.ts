@@ -41,8 +41,7 @@ export const isRejectedProposal = (proposal: PayNoteDeliverySummary): boolean =>
   getProposalDecisionStatus(proposal) === 'rejected';
 
 export const isContractArchived = (contract: ContractSummary): boolean => {
-  const archivedAt = (contract as { archivedAt?: string }).archivedAt;
-  return Boolean(archivedAt);
+  return Boolean(contract.archivedAt);
 };
 
 export const isConsentContract = (contract: ContractSummary): boolean => {

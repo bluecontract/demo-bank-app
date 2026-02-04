@@ -13,6 +13,7 @@ import type {
   ContractSummary,
   ContractDocumentSummary,
   ContractSummaryUpdate,
+  ContractArchiveUpdate,
 } from '../application/ports';
 
 const ENTITY_TYPES = {
@@ -57,6 +58,7 @@ interface ContractItem {
   documentId?: string;
   document?: Record<string, unknown>;
   status?: string;
+  archivedAt?: string;
   statusUpdatedAt?: string;
   statusTimestamps?: Record<string, string>;
   triggerEvent?: unknown;
@@ -104,6 +106,9 @@ interface ContractUserItem {
   sessionId?: string;
   documentId?: string;
   status?: string;
+  archivedAt?: string;
+  summaryUpdatedAt?: string;
+  summarySourceUpdatedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -120,6 +125,9 @@ interface ContractRelationshipItem {
   documentId?: string;
   status?: string;
   userId?: string;
+  archivedAt?: string;
+  summaryUpdatedAt?: string;
+  summarySourceUpdatedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -181,6 +189,7 @@ export class DynamoContractRepository implements ContractRepository {
       documentId: item.documentId,
       document: item.document,
       status: item.status,
+      archivedAt: item.archivedAt,
       statusUpdatedAt: item.statusUpdatedAt,
       statusTimestamps: item.statusTimestamps,
       triggerEvent: item.triggerEvent,
@@ -275,6 +284,7 @@ export class DynamoContractRepository implements ContractRepository {
       documentId: record.documentId,
       document: record.document,
       status: record.status,
+      archivedAt: record.archivedAt,
       statusUpdatedAt: record.statusUpdatedAt,
       statusTimestamps: record.statusTimestamps,
       triggerEvent: record.triggerEvent,
@@ -346,6 +356,9 @@ export class DynamoContractRepository implements ContractRepository {
         sessionId: record.sessionId,
         documentId: record.documentId,
         status: record.status,
+        archivedAt: record.archivedAt,
+        summaryUpdatedAt: record.summaryUpdatedAt,
+        summarySourceUpdatedAt: record.summarySourceUpdatedAt,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
       };
@@ -369,6 +382,9 @@ export class DynamoContractRepository implements ContractRepository {
       documentId: record.documentId,
       status: record.status,
       userId: record.userId,
+      archivedAt: record.archivedAt,
+      summaryUpdatedAt: record.summaryUpdatedAt,
+      summarySourceUpdatedAt: record.summarySourceUpdatedAt,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     });
@@ -397,6 +413,102 @@ export class DynamoContractRepository implements ContractRepository {
 
     if (writes.length) {
       await Promise.all(writes);
+    }
+  }
+
+  async updateContractArchive(update: ContractArchiveUpdate): Promise<void> {
+    const setters: string[] = ['#updatedAt = :updatedAt'];
+    const removals: string[] = [];
+    const names: Record<string, string> = {
+      '#pk': 'PK',
+      '#updatedAt': 'updatedAt',
+      '#archivedAt': 'archivedAt',
+    };
+    const values: Record<string, unknown> = {
+      ':updatedAt': update.updatedAt,
+    };
+
+    if (update.archivedAt === null) {
+      removals.push('#archivedAt');
+    } else {
+      values[':archivedAt'] = update.archivedAt;
+      setters.push('#archivedAt = :archivedAt');
+    }
+
+    const expressions: string[] = [];
+    if (setters.length) {
+      expressions.push(`SET ${setters.join(', ')}`);
+    }
+    if (removals.length) {
+      expressions.push(`REMOVE ${removals.join(', ')}`);
+    }
+
+    const updateRequest = {
+      TableName: this.tableName,
+      ConditionExpression: 'attribute_exists(#pk)',
+      UpdateExpression: expressions.join(' '),
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: values,
+    };
+
+    await this.client.send(
+      new UpdateCommand({
+        ...updateRequest,
+        Key: {
+          PK: this.buildContractPk(update.contractId),
+          SK: SORT_KEYS.META,
+        },
+      })
+    );
+
+    const updates: Array<Promise<unknown>> = [];
+
+    if (update.userId) {
+      updates.push(
+        this.client.send(
+          new UpdateCommand({
+            ...updateRequest,
+            Key: {
+              PK: this.buildUserPk(update.userId),
+              SK: this.buildUserSk(update.contractId),
+            },
+          })
+        )
+      );
+    }
+
+    const relatedTransactionIds = update.relatedTransactionIds ?? [];
+    relatedTransactionIds.forEach(transactionId => {
+      updates.push(
+        this.client.send(
+          new UpdateCommand({
+            ...updateRequest,
+            Key: {
+              PK: this.buildTransactionPk(transactionId),
+              SK: this.buildRelationshipSk(update.contractId),
+            },
+          })
+        )
+      );
+    });
+
+    const relatedHoldIds = update.relatedHoldIds ?? [];
+    relatedHoldIds.forEach(holdId => {
+      updates.push(
+        this.client.send(
+          new UpdateCommand({
+            ...updateRequest,
+            Key: {
+              PK: this.buildHoldPk(holdId),
+              SK: this.buildRelationshipSk(update.contractId),
+            },
+          })
+        )
+      );
+    });
+
+    if (updates.length) {
+      await Promise.all(updates);
     }
   }
 
@@ -499,6 +611,115 @@ export class DynamoContractRepository implements ContractRepository {
           : {}),
       })
     );
+
+    const summaryMetaSetters: string[] = [];
+    const summaryMetaRemovals: string[] = [];
+    const summaryMetaNames: Record<string, string> = {
+      '#pk': 'PK',
+    };
+    const summaryMetaValues: Record<string, unknown> = {};
+
+    const setSummaryMetaField = (
+      nameKey: string,
+      attributeName: string,
+      valueKey: string,
+      value: unknown | null | undefined
+    ) => {
+      if (value === undefined) {
+        return;
+      }
+      summaryMetaNames[nameKey] = attributeName;
+      if (value === null) {
+        summaryMetaRemovals.push(nameKey);
+        return;
+      }
+      summaryMetaValues[valueKey] = value;
+      summaryMetaSetters.push(`${nameKey} = ${valueKey}`);
+    };
+
+    setSummaryMetaField(
+      '#summaryUpdatedAt',
+      'summaryUpdatedAt',
+      ':summaryUpdatedAt',
+      update.summaryUpdatedAt
+    );
+    setSummaryMetaField(
+      '#summarySourceUpdatedAt',
+      'summarySourceUpdatedAt',
+      ':summarySourceUpdatedAt',
+      update.summarySourceUpdatedAt
+    );
+
+    if (!summaryMetaSetters.length && !summaryMetaRemovals.length) {
+      return;
+    }
+
+    const summaryMetaExpressions: string[] = [];
+    if (summaryMetaSetters.length) {
+      summaryMetaExpressions.push(`SET ${summaryMetaSetters.join(', ')}`);
+    }
+    if (summaryMetaRemovals.length) {
+      summaryMetaExpressions.push(`REMOVE ${summaryMetaRemovals.join(', ')}`);
+    }
+
+    const updateRequests: Array<Promise<unknown>> = [];
+    const summaryMetaUpdate = {
+      TableName: this.tableName,
+      ConditionExpression: 'attribute_exists(#pk)',
+      UpdateExpression: summaryMetaExpressions.join(' '),
+      ExpressionAttributeNames: summaryMetaNames,
+      ...(Object.keys(summaryMetaValues).length
+        ? { ExpressionAttributeValues: summaryMetaValues }
+        : {}),
+    };
+
+    if (update.userId) {
+      updateRequests.push(
+        this.client.send(
+          new UpdateCommand({
+            ...summaryMetaUpdate,
+            Key: {
+              PK: this.buildUserPk(update.userId),
+              SK: this.buildUserSk(update.contractId),
+            },
+          })
+        )
+      );
+    }
+
+    const relatedTransactionIds = update.relatedTransactionIds ?? [];
+    relatedTransactionIds.forEach(transactionId => {
+      updateRequests.push(
+        this.client.send(
+          new UpdateCommand({
+            ...summaryMetaUpdate,
+            Key: {
+              PK: this.buildTransactionPk(transactionId),
+              SK: this.buildRelationshipSk(update.contractId),
+            },
+          })
+        )
+      );
+    });
+
+    const relatedHoldIds = update.relatedHoldIds ?? [];
+    relatedHoldIds.forEach(holdId => {
+      updateRequests.push(
+        this.client.send(
+          new UpdateCommand({
+            ...summaryMetaUpdate,
+            Key: {
+              PK: this.buildHoldPk(holdId),
+              SK: this.buildRelationshipSk(update.contractId),
+            },
+          })
+        )
+      );
+    });
+
+    if (updateRequests.length) {
+      await Promise.all(updateRequests);
+    }
   }
 
   async listContractsByUserId(
@@ -521,13 +742,17 @@ export class DynamoContractRepository implements ContractRepository {
     );
 
     const items = (query.Items ?? []) as ContractUserItem[];
+    const getSummaryTimestamp = (item: ContractUserItem) =>
+      item.summarySourceUpdatedAt ?? item.summaryUpdatedAt ?? item.updatedAt;
     const updatedSince = options?.updatedSince;
     const filtered = updatedSince
-      ? items.filter(item => item.updatedAt > updatedSince)
+      ? items.filter(item => getSummaryTimestamp(item) > updatedSince)
       : items;
 
     return filtered
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .sort((a, b) =>
+        getSummaryTimestamp(b).localeCompare(getSummaryTimestamp(a))
+      )
       .map(item => ({
         contractId: item.contractId,
         typeBlueId: item.typeBlueId,
@@ -536,6 +761,9 @@ export class DynamoContractRepository implements ContractRepository {
         sessionId: item.sessionId,
         documentId: item.documentId,
         status: item.status,
+        archivedAt: item.archivedAt,
+        summaryUpdatedAt: item.summaryUpdatedAt,
+        summarySourceUpdatedAt: item.summarySourceUpdatedAt,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       }));
@@ -565,8 +793,13 @@ export class DynamoContractRepository implements ContractRepository {
 
     const items = (query.Items ?? []) as ContractRelationshipItem[];
 
+    const getSummaryTimestamp = (item: ContractRelationshipItem) =>
+      item.summarySourceUpdatedAt ?? item.summaryUpdatedAt ?? item.updatedAt;
+
     return items
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .sort((a, b) =>
+        getSummaryTimestamp(b).localeCompare(getSummaryTimestamp(a))
+      )
       .map(item => ({
         contractId: item.contractId,
         typeBlueId: item.typeBlueId,
@@ -575,6 +808,9 @@ export class DynamoContractRepository implements ContractRepository {
         sessionId: item.sessionId,
         documentId: item.documentId,
         status: item.status,
+        archivedAt: item.archivedAt,
+        summaryUpdatedAt: item.summaryUpdatedAt,
+        summarySourceUpdatedAt: item.summarySourceUpdatedAt,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       }));
@@ -604,8 +840,13 @@ export class DynamoContractRepository implements ContractRepository {
 
     const items = (query.Items ?? []) as ContractRelationshipItem[];
 
+    const getSummaryTimestamp = (item: ContractRelationshipItem) =>
+      item.summarySourceUpdatedAt ?? item.summaryUpdatedAt ?? item.updatedAt;
+
     return items
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .sort((a, b) =>
+        getSummaryTimestamp(b).localeCompare(getSummaryTimestamp(a))
+      )
       .map(item => ({
         contractId: item.contractId,
         typeBlueId: item.typeBlueId,
@@ -614,6 +855,9 @@ export class DynamoContractRepository implements ContractRepository {
         sessionId: item.sessionId,
         documentId: item.documentId,
         status: item.status,
+        archivedAt: item.archivedAt,
+        summaryUpdatedAt: item.summaryUpdatedAt,
+        summarySourceUpdatedAt: item.summarySourceUpdatedAt,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       }));

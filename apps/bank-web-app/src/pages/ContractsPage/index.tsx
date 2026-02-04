@@ -16,6 +16,7 @@ import { dedupeContracts } from '../../features/contracts/lib/dedupeContracts';
 import {
   mergeContractsAndProposals,
   getItemSessionId,
+  getItemUpdatedAt,
   isProposalItem,
 } from '../../features/contracts/lib/contractsAndProposals';
 import {
@@ -294,7 +295,7 @@ export function ContractsPage() {
                   const preview = isProposalItem(item)
                     ? getProposalPreview(item)
                     : getContractPreview(item);
-                  const updatedAt = formatListDate(item.updatedAt);
+                  const updatedAt = formatListDate(getItemUpdatedAt(item));
 
                   return (
                     <button

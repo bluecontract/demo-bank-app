@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
 import {
-  URLS,
   TEST_DATA,
   createUniqueAccountName,
   signUpAndReachDashboard,
@@ -24,10 +23,7 @@ test.describe('Card Issuing Flow', () => {
   }) => {
     await signUpAndReachDashboard(page, 'card-user');
 
-    const accountName = await createAccountViaModal(
-      page,
-      createUniqueAccountName('card')
-    );
+    await createAccountViaModal(page, createUniqueAccountName('card'));
 
     await page.getByRole('button', { name: 'Fund' }).first().click();
     await waitForModalToOpen(page, 'modal-content');

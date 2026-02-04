@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ContractSummary } from '../../../types/api';
 import { getContractKey } from '../lib/dedupeContracts';
+import { getContractLastChangeAt } from '../lib/contractTimestamps';
 
 const REVIEWED_KEY = 'demo-bank-contracts-reviewed';
 const REVIEWED_EVENT = 'demo-bank-contracts-reviewed-change';
@@ -66,7 +67,8 @@ export const useContractReviewState = () => {
       return;
     }
 
-    const updatedAtMs = contract.updatedAt ? Date.parse(contract.updatedAt) : 0;
+    const lastChange = getContractLastChangeAt(contract);
+    const updatedAtMs = lastChange ? Date.parse(lastChange) : 0;
     const safeUpdatedAtMs = Number.isNaN(updatedAtMs) ? 0 : updatedAtMs;
     const timestamp = new Date(
       Math.max(safeUpdatedAtMs, Date.now())
