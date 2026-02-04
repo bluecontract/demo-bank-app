@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ContractSummary } from '../../../types/api';
 import { getContractKey } from '../lib/dedupeContracts';
 import { getContractLastChangeAt } from '../lib/contractTimestamps';
+import {
+  getItemUpdatedAt,
+  type ContractOrProposalItem,
+} from '../lib/contractsAndProposals';
+import { getItemReviewKey } from '../lib/contractReview';
 
 const REVIEWED_KEY = 'demo-bank-contracts-reviewed';
 const REVIEWED_EVENT = 'demo-bank-contracts-reviewed-change';
@@ -61,23 +66,41 @@ export const useContractReviewState = () => {
     reviewedMapRef.current = reviewedMap;
   }, [reviewedMap]);
 
-  const markReviewed = useCallback((contract: ContractSummary) => {
-    const key = getContractKey(contract);
-    if (!key) {
-      return;
-    }
-
-    const lastChange = getContractLastChangeAt(contract);
-    const updatedAtMs = lastChange ? Date.parse(lastChange) : 0;
-    const safeUpdatedAtMs = Number.isNaN(updatedAtMs) ? 0 : updatedAtMs;
-    const timestamp = new Date(
-      Math.max(safeUpdatedAtMs, Date.now())
-    ).toISOString();
+  const updateReviewedMap = useCallback((key: string, updatedAtMs: number) => {
+    const timestamp = new Date(Math.max(updatedAtMs, Date.now())).toISOString();
     const next = { ...reviewedMapRef.current, [key]: timestamp };
     reviewedMapRef.current = next;
     setReviewedMap(next);
     writeReviewedMap(next, instanceIdRef.current);
   }, []);
+
+  const markReviewed = useCallback(
+    (contract: ContractSummary) => {
+      const key = getContractKey(contract);
+      if (!key) {
+        return;
+      }
+
+      const lastChange = getContractLastChangeAt(contract);
+      const updatedAtMs = lastChange ? Date.parse(lastChange) : 0;
+      const safeUpdatedAtMs = Number.isNaN(updatedAtMs) ? 0 : updatedAtMs;
+      updateReviewedMap(key, safeUpdatedAtMs);
+    },
+    [updateReviewedMap]
+  );
+
+  const markItemReviewed = useCallback(
+    (item: ContractOrProposalItem) => {
+      const key = getItemReviewKey(item);
+      if (!key) {
+        return;
+      }
+      const updatedAtMs = Date.parse(getItemUpdatedAt(item));
+      const safeUpdatedAtMs = Number.isNaN(updatedAtMs) ? 0 : updatedAtMs;
+      updateReviewedMap(key, safeUpdatedAtMs);
+    },
+    [updateReviewedMap]
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -103,5 +126,5 @@ export const useContractReviewState = () => {
     return () => window.removeEventListener(REVIEWED_EVENT, handleChange);
   }, []);
 
-  return { reviewedMap, markReviewed };
+  return { reviewedMap, markReviewed, markItemReviewed };
 };

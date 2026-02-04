@@ -476,6 +476,7 @@ export const ContractSummaryDto = z.object({
   documentId: z.string().optional(),
   status: z.string().optional(),
   archivedAt: z.string().datetime({ offset: true }).optional(),
+  summaryPreview: z.string().optional(),
   summaryUpdatedAt: z.string().datetime({ offset: true }).optional(),
   summarySourceUpdatedAt: z.string().datetime({ offset: true }).optional(),
   createdAt: z.string().datetime({ offset: true }),
@@ -497,23 +498,39 @@ export const RelatedContractListResponseDto = z.object({
   items: z.array(RelatedContractItemDto),
 });
 
-export const ContractDocumentSummaryKeyFactDto = z.object({
-  label: z.string(),
-  value: z.string(),
+export const ContractSummaryStoryDto = z.object({
+  headline: z.string(),
+  overview: z.array(z.string()),
+  bullets: z.array(z.string()),
 });
 
-export const ContractDocumentSummaryStateDto = z.object({
-  statusLabel: z.string(),
-  explanation: z.string(),
-  updatedAt: z.string().datetime({ offset: true }).nullable(),
+export const ContractSummaryNextStepsDto = z.object({
+  title: z.string(),
+  items: z.array(z.string()),
+});
+
+export const ContractSummaryLastChangeDto = z.object({
+  short: z.string(),
+  more: z.string(),
 });
 
 export const ContractDocumentSummaryDto = z.object({
-  title: z.string(),
-  oneLiner: z.string(),
-  state: ContractDocumentSummaryStateDto,
-  keyFacts: z.array(ContractDocumentSummaryKeyFactDto),
-  warnings: z.array(z.string()),
+  story: ContractSummaryStoryDto,
+  listPreview: z.string(),
+  nextSteps: ContractSummaryNextStepsDto,
+  lastChange: ContractSummaryLastChangeDto,
+});
+
+export const ContractHistoryEntryDto = z.object({
+  id: z.string(),
+  kind: z.enum(['contractUpdated', 'pendingActionRequested', 'bankLifecycle']),
+  short: z.string(),
+  more: z.string().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+});
+
+export const ContractHistoryResponseDto = z.object({
+  items: z.array(ContractHistoryEntryDto),
 });
 
 export const ContractDetailsDto = z.object({

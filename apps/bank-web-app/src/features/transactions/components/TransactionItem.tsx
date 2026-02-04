@@ -225,12 +225,14 @@ const buildVisualState = (item: ActivityItem): VisualState => {
 interface TransactionItemProps {
   item: ActivityItem;
   onActivitySelect: (activity: ActivityItem) => void;
+  variant?: 'default' | 'linked';
   'data-testid'?: string;
 }
 
 export function TransactionItem({
   item,
   onActivitySelect,
+  variant = 'default',
   'data-testid': testId,
 }: TransactionItemProps) {
   const visualState = buildVisualState(item);
@@ -264,6 +266,32 @@ export function TransactionItem({
       onActivitySelect(item);
     }
   };
+
+  if (variant === 'linked') {
+    return (
+      <div
+        className={`px-4 py-3 transition-colors ${
+          visualState.clickable ? 'cursor-pointer hover:bg-slate-50/80' : ''
+        }`}
+        onClick={visualState.clickable ? handleClick : undefined}
+        data-testid={testId}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-900 truncate">
+              {primaryText}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">{dateLabel}</p>
+          </div>
+          <div
+            className={`text-sm font-semibold text-right ${visualState.amountClass}`}
+          >
+            {visualState.amountText}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

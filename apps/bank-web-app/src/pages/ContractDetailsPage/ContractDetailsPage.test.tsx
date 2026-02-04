@@ -7,7 +7,9 @@ import {
   useAcceptPayNoteDelivery,
   useActiveContractSession,
   useContractDetails,
+  useContractHistory,
   useContractReviewState,
+  useRelatedContracts,
   useProposalDetails,
   useProposalSummary,
   useRejectPayNoteDelivery,
@@ -29,7 +31,9 @@ vi.mock('../../features/contracts/hooks', () => ({
   useAcceptPayNoteDelivery: vi.fn(),
   useActiveContractSession: vi.fn(),
   useContractDetails: vi.fn(),
+  useContractHistory: vi.fn(),
   useContractReviewState: vi.fn(),
+  useRelatedContracts: vi.fn(),
   useProposalDetails: vi.fn(),
   useProposalSummary: vi.fn(),
   useRejectPayNoteDelivery: vi.fn(),
@@ -60,9 +64,11 @@ vi.mock('react-router-dom', async () => {
 
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
 const mockUseContractDetails = useContractDetails as ReturnType<typeof vi.fn>;
+const mockUseContractHistory = useContractHistory as ReturnType<typeof vi.fn>;
 const mockUseContractReviewState = useContractReviewState as ReturnType<
   typeof vi.fn
 >;
+const mockUseRelatedContracts = useRelatedContracts as ReturnType<typeof vi.fn>;
 const mockUseProposalDetails = useProposalDetails as ReturnType<typeof vi.fn>;
 const mockUseProposalSummary = useProposalSummary as ReturnType<typeof vi.fn>;
 const mockUseArchiveContract = useArchiveContract as ReturnType<typeof vi.fn>;
@@ -114,6 +120,19 @@ describe('ContractDetailsPage', () => {
       markReviewed: markReviewedMock,
     });
 
+    mockUseContractHistory.mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mockUseRelatedContracts.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
     mockUseArchiveContract.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -150,18 +169,20 @@ describe('ContractDetailsPage', () => {
         displayName: 'GE Refrigerator Order',
         document: { name: 'GE Refrigerator Order' },
         summary: {
-          title: 'GE Refrigerator Order',
-          oneLiner: 'Funds will be held until delivery is confirmed.',
-          state: {
-            statusLabel: 'Proposal pending',
-            explanation: 'Awaiting client approval.',
-            updatedAt: null,
+          story: {
+            headline: 'GE Refrigerator Order',
+            overview: ['Funds will be held until delivery is confirmed.'],
+            bullets: ['Payment held until delivery.'],
           },
-          keyFacts: [
-            { label: 'Amount', value: '$120.00' },
-            { label: 'Currency', value: 'USD' },
-          ],
-          warnings: [],
+          listPreview: 'Funds are held until delivery.',
+          nextSteps: {
+            title: 'Next steps',
+            items: ['Awaiting client approval.'],
+          },
+          lastChange: {
+            short: 'Proposal received.',
+            more: 'A new proposal is awaiting client approval.',
+          },
         },
       },
       isLoading: false,
@@ -190,6 +211,9 @@ describe('ContractDetailsPage', () => {
     expect(
       screen.getByText('Funds will be held until delivery is confirmed.')
     ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument();
+    expect(screen.queryByText('View details')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     expect(screen.getByText('View details')).toBeInTheDocument();
     expect(screen.queryByText('View history')).not.toBeInTheDocument();
     expect(markReviewedMock).toHaveBeenCalledWith(
@@ -213,15 +237,20 @@ describe('ContractDetailsPage', () => {
         document: { name: 'GE Refrigerator Order' },
         updatedAt: '2026-01-02T00:00:00.000Z',
         summary: {
-          title: 'GE Refrigerator Order',
-          oneLiner: 'Funds will be held until delivery is confirmed.',
-          state: {
-            statusLabel: 'Proposal pending',
-            explanation: 'Awaiting client approval.',
-            updatedAt: null,
+          story: {
+            headline: 'GE Refrigerator Order',
+            overview: ['Funds will be held until delivery is confirmed.'],
+            bullets: [],
           },
-          keyFacts: [],
-          warnings: [],
+          listPreview: 'Funds will be held until delivery is confirmed.',
+          nextSteps: {
+            title: 'Next steps',
+            items: ['Awaiting client approval.'],
+          },
+          lastChange: {
+            short: 'Proposal pending.',
+            more: 'Awaiting client approval.',
+          },
         },
       },
       isLoading: false,

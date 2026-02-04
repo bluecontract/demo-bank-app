@@ -16,6 +16,7 @@ const buildContractSummary = (
   documentId: overrides.documentId,
   status: overrides.status ?? 'accepted',
   archivedAt: overrides.archivedAt,
+  summaryPreview: overrides.summaryPreview,
   summaryUpdatedAt: overrides.summaryUpdatedAt,
   summarySourceUpdatedAt: overrides.summarySourceUpdatedAt,
   createdAt: overrides.createdAt ?? '2024-01-01T00:00:00.000Z',

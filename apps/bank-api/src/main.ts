@@ -40,6 +40,7 @@ import { generatePayNoteDeliverySummaryHandler } from './paynote/generatePayNote
 import { runContractOperationHandler } from './contracts/runContractOperation';
 import { listContractsHandler } from './contracts/listContracts';
 import { getContractDetailsHandler } from './contracts/getContractDetails';
+import { listContractHistoryHandler } from './contracts/listContractHistory';
 import { archiveContractHandler } from './contracts/archiveContract';
 import { unarchiveContractHandler } from './contracts/unarchiveContract';
 import { generateContractSummaryHandler } from './contracts/generateContractSummary';
@@ -99,6 +100,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       rejectPayNoteDelivery: rejectPayNoteDeliveryHandler,
       listContracts: listContractsHandler,
       getContractDetails: getContractDetailsHandler,
+      listContractHistory: listContractHistoryHandler,
       archiveContract: archiveContractHandler,
       unarchiveContract: unarchiveContractHandler,
       listTransactionContracts: listTransactionContractsHandler,

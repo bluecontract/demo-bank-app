@@ -83,6 +83,8 @@ const createDependencies = () => {
       getContractByDocumentId: vi.fn(),
       getContractBySessionId: vi.fn(),
       saveContract: vi.fn(),
+      addContractHistoryEntry: vi.fn(),
+      listContractHistory: vi.fn(),
       updateContractArchive: vi.fn(),
       updateContractSummary: vi.fn(),
       listContractsByUserId: vi.fn(),

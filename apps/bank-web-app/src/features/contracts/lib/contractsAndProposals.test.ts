@@ -113,4 +113,28 @@ describe('mergeContractsAndProposals', () => {
 
     expect(result.some(item => isProposalItem(item))).toBe(true);
   });
+
+  it('dedupes multiple proposals that map to the same contract', () => {
+    const newerProposal = {
+      ...baseProposal,
+      deliveryId: 'delivery-2',
+      updatedAt: '2026-02-01T10:06:00.000Z',
+    };
+
+    const result = mergeContractsAndProposals(
+      [{ ...baseContract, status: 'active' }],
+      [baseProposal, newerProposal]
+    );
+
+    expect(result).toHaveLength(1);
+    expect(isProposalItem(result[0])).toBe(false);
+
+    const contractItem = result[0] as ContractSummary & {
+      originProposalDeliveryId?: string;
+      sortUpdatedAt?: string;
+    };
+
+    expect(contractItem.originProposalDeliveryId).toBe('delivery-2');
+    expect(contractItem.sortUpdatedAt).toBe(newerProposal.updatedAt);
+  });
 });

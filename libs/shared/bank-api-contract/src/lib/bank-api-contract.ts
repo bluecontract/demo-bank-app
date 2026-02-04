@@ -32,6 +32,7 @@ import {
   RelatedContractListResponseDto,
   ContractListResponseDto,
   ContractDetailsDto,
+  ContractHistoryResponseDto,
   ContractSummaryGenerationDto,
   ContractOperationResponseDto,
   ContractAiChatRequestDto,
@@ -500,6 +501,20 @@ export const bankApiContract = c.router(
           404: ProblemDto,
         },
         summary: 'Get contract details by session id.',
+      },
+
+      listContractHistory: {
+        method: 'GET',
+        path: '/v1/contracts/:sessionId/history',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        responses: {
+          200: ContractHistoryResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'List contract history entries by session id.',
       },
 
       archiveContract: {

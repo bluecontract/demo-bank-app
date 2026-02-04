@@ -48,6 +48,44 @@ const getItemSortUpdatedAt = (item: ContractOrProposalItem): string => {
   return getItemUpdatedAt(item);
 };
 
+const getItemDedupeKey = (item: ContractOrProposalItem): string | null => {
+  const sessionId = getItemSessionId(item);
+  if (sessionId) {
+    return sessionId;
+  }
+  if (isProposalItem(item)) {
+    return item.deliveryId ?? null;
+  }
+  return item.contractId ?? null;
+};
+
+const dedupeMergedItems = (
+  items: ContractOrProposalItem[]
+): ContractOrProposalItem[] => {
+  const deduped = new Map<string, ContractOrProposalItem>();
+  const fallback: ContractOrProposalItem[] = [];
+
+  for (const item of items) {
+    const key = getItemDedupeKey(item);
+    if (!key) {
+      fallback.push(item);
+      continue;
+    }
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, item);
+      continue;
+    }
+    const existingTime = parseTimestamp(getItemSortUpdatedAt(existing));
+    const candidateTime = parseTimestamp(getItemSortUpdatedAt(item));
+    if (candidateTime > existingTime) {
+      deduped.set(key, item);
+    }
+  }
+
+  return [...deduped.values(), ...fallback];
+};
+
 export function mergeContractsAndProposals(
   contracts: ContractSummary[],
   proposals: PayNoteDeliverySummary[]
@@ -153,7 +191,9 @@ export function mergeContractsAndProposals(
     ...mergedItems,
   ];
 
-  return combined.sort((a, b) => {
+  const dedupedCombined = dedupeMergedItems(combined);
+
+  return dedupedCombined.sort((a, b) => {
     const aTime = parseTimestamp(getItemSortUpdatedAt(a));
     const bTime = parseTimestamp(getItemSortUpdatedAt(b));
     return bTime - aTime;

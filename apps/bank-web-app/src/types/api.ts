@@ -128,6 +128,13 @@ export type ContractDetails = ClientInferResponseBody<
   200
 >;
 
+export type ContractHistoryResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['listContractHistory'],
+  200
+>;
+
+export type ContractHistoryEntry = ContractHistoryResponse['items'][number];
+
 export type ContractSummaryGeneration = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['generateContractSummary'],
   200

@@ -72,12 +72,14 @@ const proposalSummary = {
 describe('ContractsPage', () => {
   let navigateMock: ReturnType<typeof vi.fn>;
   let markReviewedMock: ReturnType<typeof vi.fn>;
+  let markItemReviewedMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     navigateMock = vi.fn();
     markReviewedMock = vi.fn();
+    markItemReviewedMock = vi.fn();
 
     mockUseAuth.mockReturnValue({
       user: { email: 'alex@example.com', userId: 'user-1' },
@@ -100,6 +102,7 @@ describe('ContractsPage', () => {
     mockUseContractReviewState.mockReturnValue({
       reviewedMap: {},
       markReviewed: markReviewedMock,
+      markItemReviewed: markItemReviewedMock,
     });
 
     mockUseLocation.mockReturnValue({
@@ -138,7 +141,7 @@ describe('ContractsPage', () => {
     expect(contractRow).not.toBeNull();
     fireEvent.click(contractRow as HTMLElement);
 
-    expect(markReviewedMock).toHaveBeenCalledWith(
+    expect(markItemReviewedMock).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'contract-1' })
     );
     expect(navigateMock).toHaveBeenCalledWith('/contracts/contract-1', {

@@ -36,6 +36,22 @@ vi.mock('../auth/middleware', () => ({
 
 describe('generatePayNoteDeliverySummaryHandler', () => {
   const payNoteTypeBlueId = paynoteBlueIds['PayNote/PayNote'];
+  const summaryFixture = {
+    story: {
+      headline: 'PayNote',
+      overview: ['A test PayNote proposal.'],
+      bullets: ['Funds will be held until delivery is confirmed.'],
+    },
+    listPreview: 'PayNote proposal received.',
+    nextSteps: {
+      title: 'Next steps',
+      items: ['Review and accept the proposal to proceed.'],
+    },
+    lastChange: {
+      short: 'PayNote proposal received.',
+      more: 'A new PayNote proposal is awaiting your decision.',
+    },
+  };
   const logger = {
     info: vi.fn(),
     error: vi.fn(),
@@ -99,15 +115,20 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
       deliveryUpdatedAt: '2026-01-02T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
       summary: {
-        title: 'PayNote',
-        oneLiner: 'A test PayNote.',
-        state: {
-          statusLabel: 'Pending',
-          explanation: 'Pending review.',
-          updatedAt: null,
+        story: {
+          headline: 'PayNote',
+          overview: ['A test PayNote proposal.'],
+          bullets: [],
         },
-        keyFacts: [],
-        warnings: [],
+        listPreview: 'PayNote proposal received.',
+        nextSteps: {
+          title: 'Next steps',
+          items: ['Review and accept the proposal to proceed.'],
+        },
+        lastChange: {
+          short: 'PayNote proposal received.',
+          more: 'A new PayNote proposal is awaiting your decision.',
+        },
       },
       summaryUpdatedAt: '2026-01-02T00:00:01.000Z',
       summarySourceUpdatedAt: '2026-01-02T00:00:00.000Z',
@@ -121,7 +142,7 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
 
     expect(result.status).toBe(200);
     expect(result.body.cached).toBe(true);
-    expect(result.body.summary.title).toBe('PayNote');
+    expect(result.body.summary.story.headline).toBe('PayNote');
     expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
     expect(getOpenAiApiKey).not.toHaveBeenCalled();
     expect(
@@ -152,17 +173,7 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     });
 
     hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
-      output_parsed: {
-        title: 'PayNote',
-        oneLiner: 'A test PayNote.',
-        state: {
-          statusLabel: 'Pending',
-          explanation: 'Pending review.',
-          updatedAt: null,
-        },
-        keyFacts: [],
-        warnings: [],
-      },
+      output_parsed: summaryFixture,
     });
 
     const result = await generatePayNoteDeliverySummaryHandler(
@@ -172,7 +183,7 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
 
     expect(result.status).toBe(200);
     expect(result.body.cached).toBe(false);
-    expect(result.body.summary.title).toBe('PayNote');
+    expect(result.body.summary.story.headline).toBe('PayNote');
     expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalled();
     expect(getOpenAiApiKey).toHaveBeenCalled();
     expect(payNoteDeliveryRepository.updateDeliverySummary).toHaveBeenCalled();

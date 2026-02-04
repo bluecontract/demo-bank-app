@@ -54,7 +54,7 @@ export function ContractsListPanel({
   selectedSessionId,
   onSelect,
 }: ContractsListPanelProps) {
-  const { reviewedMap, markReviewed } = useContractReviewState();
+  const { reviewedMap, markItemReviewed } = useContractReviewState();
   const safeItems = items ?? [];
   const hasItems = safeItems.length > 0;
 
@@ -140,9 +140,7 @@ export function ContractsListPanel({
                     if (!isSelectable) {
                       return;
                     }
-                    if (!isProposal) {
-                      markReviewed(item);
-                    }
+                    markItemReviewed(item);
                     onSelect?.(item);
                   }}
                   disabled={!isSelectable}

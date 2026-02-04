@@ -147,6 +147,7 @@ export function ContractRelatedActivitySection({
                     key={getActivityKey(item)}
                     item={item}
                     onActivitySelect={handleActivitySelect}
+                    variant="linked"
                   />
                 ))}
                 {missingTransactionIds.map(txnId => (
@@ -187,6 +188,7 @@ export function ContractRelatedActivitySection({
                     key={getActivityKey(item)}
                     item={item}
                     onActivitySelect={handleActivitySelect}
+                    variant="linked"
                   />
                 ))}
                 {missingHoldIds.map(holdId => (

@@ -35,6 +35,22 @@ vi.mock('../auth/middleware', () => ({
 
 describe('generateContractSummaryHandler', () => {
   const payNoteTypeBlueId = paynoteBlueIds['PayNote/PayNote'];
+  const summaryFixture = {
+    story: {
+      headline: 'PayNote',
+      overview: ['A test PayNote.'],
+      bullets: ['Funds are held until delivery is confirmed.'],
+    },
+    listPreview: 'PayNote updated.',
+    nextSteps: {
+      title: 'Next steps',
+      items: ['Awaiting approval from the customer.'],
+    },
+    lastChange: {
+      short: 'PayNote updated.',
+      more: 'The contract was updated with the latest delivery status.',
+    },
+  };
   const logger = {
     info: vi.fn(),
     error: vi.fn(),
@@ -43,6 +59,7 @@ describe('generateContractSummaryHandler', () => {
   const contractRepository = {
     getContractBySessionId: vi.fn(),
     updateContractSummary: vi.fn(),
+    addContractHistoryEntry: vi.fn(),
   };
 
   beforeEach(() => {
@@ -51,6 +68,7 @@ describe('generateContractSummaryHandler', () => {
     hoistedDeps.extractAuthInfoMock.mockReset();
     contractRepository.getContractBySessionId.mockReset();
     contractRepository.updateContractSummary.mockReset();
+    contractRepository.addContractHistoryEntry.mockReset();
     logger.info.mockReset();
     logger.error.mockReset();
     getOpenAiApiKey.mockClear();
@@ -93,16 +111,22 @@ describe('generateContractSummaryHandler', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
       summary: {
-        title: 'PayNote',
-        oneLiner: 'A test PayNote.',
-        state: {
-          statusLabel: 'Unknown',
-          explanation: 'Unknown',
-          updatedAt: null,
+        story: {
+          headline: 'PayNote',
+          overview: ['A test PayNote.'],
+          bullets: [],
         },
-        keyFacts: [],
-        warnings: [],
+        listPreview: 'PayNote updated.',
+        nextSteps: {
+          title: 'Next steps',
+          items: ['Awaiting approval from the customer.'],
+        },
+        lastChange: {
+          short: 'PayNote updated.',
+          more: 'The contract was updated with the latest delivery status.',
+        },
       },
+      summaryPreview: 'PayNote updated.',
       summaryUpdatedAt: '2026-01-02T00:00:01.000Z',
       summarySourceUpdatedAt: '2026-01-02T00:00:00.000Z',
       summaryModel: 'gpt-5',
@@ -119,10 +143,51 @@ describe('generateContractSummaryHandler', () => {
 
     expect(result.status).toBe(200);
     expect(result.body.cached).toBe(true);
-    expect(result.body.summary.title).toBe('PayNote');
+    expect(result.body.summary.story.headline).toBe('PayNote');
     expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
     expect(getOpenAiApiKey).not.toHaveBeenCalled();
     expect(contractRepository.updateContractSummary).not.toHaveBeenCalled();
+    expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
+  });
+
+  it('regenerates when summary preview is missing', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      summary: summaryFixture,
+      summaryUpdatedAt: '2026-01-02T00:00:01.000Z',
+      summarySourceUpdatedAt: '2026-01-02T00:00:00.000Z',
+      summaryModel: 'gpt-5',
+      summaryError: undefined,
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: false },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body.cached).toBe(false);
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalled();
+    expect(contractRepository.updateContractSummary).toHaveBeenCalled();
+    expect(contractRepository.addContractHistoryEntry).toHaveBeenCalled();
   });
 
   it('generates a new summary when missing', async () => {
@@ -142,17 +207,7 @@ describe('generateContractSummaryHandler', () => {
     });
 
     hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
-      output_parsed: {
-        title: 'PayNote',
-        oneLiner: 'A test PayNote.',
-        state: {
-          statusLabel: 'Pending',
-          explanation: 'Awaiting next step.',
-          updatedAt: null,
-        },
-        keyFacts: [{ label: 'Name', value: 'Test PayNote' }],
-        warnings: [],
-      },
+      output_parsed: summaryFixture,
     });
 
     const result = await generateContractSummaryHandler(
@@ -165,10 +220,17 @@ describe('generateContractSummaryHandler', () => {
 
     expect(result.status).toBe(200);
     expect(result.body.cached).toBe(false);
-    expect(result.body.summary.title).toBe('PayNote');
+    expect(result.body.summary.story.headline).toBe('PayNote');
     expect(getOpenAiApiKey).toHaveBeenCalled();
     expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalled();
     expect(contractRepository.updateContractSummary).toHaveBeenCalled();
+    expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'contractUpdated',
+        short: summaryFixture.lastChange.short,
+        more: summaryFixture.lastChange.more,
+      })
+    );
   });
 
   it('returns 400 when type pack is missing required type definitions', async () => {

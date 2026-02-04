@@ -6,7 +6,9 @@ import {
   useAcceptPayNoteDelivery,
   useActiveContractSession,
   useContractDetails,
+  useContractHistory,
   useContractReviewState,
+  useRelatedContracts,
   useProposalDetails,
   useProposalSummary,
   useRejectPayNoteDelivery,
@@ -18,6 +20,13 @@ import {
   getDocumentName,
   restoreInlineTypes,
 } from '../../features/contracts/lib/contractDocumentUtils';
+import { getContractLastChangeAt } from '../../features/contracts/lib/contractTimestamps';
+import {
+  getRelatedContractSessionId,
+  getRelatedContractTarget,
+  getVisibleRelatedContracts,
+  isProposalRelatedContract,
+} from '../../features/transactions/lib/relatedContracts';
 import { ContractOperationsList } from '../../features/contracts/components/ContractOperationsList';
 import { ContractRawDocument } from '../../features/contracts/components/ContractRawDocument';
 import { ContractRelatedActivitySection } from '../../features/contracts/components/ContractRelatedActivitySection';
@@ -27,9 +36,11 @@ import { Button } from '../../ui/Button';
 import { Dropdown, DropdownItem } from '../../ui/Dropdown';
 import { Spinner, SpinnerWithText } from '../../ui/Spinner';
 import { formatShortDateTime } from '../../lib/formatDate';
+import { formatStatusLabel } from '../../lib/formatStatusLabel';
 import type {
   ContractDetails,
   PayNoteDeliveryDetailsSanitized,
+  RelatedContractItem,
 } from '../../types/api';
 
 type LocationState = {
@@ -199,6 +210,10 @@ export function ContractDetailsPage() {
     requestedKind ?? 'contract'
   );
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+  const [expandedHistory, setExpandedHistory] = useState<
+    Record<string, boolean>
+  >({});
+  const [isSummaryExpanded, setSummaryExpanded] = useState(false);
 
   useEffect(() => {
     if (!requestedKind) {
@@ -206,6 +221,11 @@ export function ContractDetailsPage() {
     }
     setActiveKind(requestedKind);
   }, [requestedKind, sessionId]);
+
+  useEffect(() => {
+    setExpandedHistory({});
+    setSummaryExpanded(false);
+  }, [sessionId]);
 
   const contractQuery = useContractDetails(
     activeKind === 'contract' ? sessionId ?? null : null
@@ -246,6 +266,31 @@ export function ContractDetailsPage() {
         relatedHoldIds: proposal.holdId ? [proposal.holdId] : [],
       }
     : null;
+  const relatedTransactionIds =
+    relatedActivitySource?.relatedTransactionIds ?? [];
+  const relatedHoldIds = relatedActivitySource?.relatedHoldIds ?? [];
+  const hasRelatedContractIds =
+    relatedTransactionIds.length > 0 || relatedHoldIds.length > 0;
+  const relatedContractsQuery = useRelatedContracts({
+    transactionIds: relatedTransactionIds,
+    holdIds: relatedHoldIds,
+    enabled: hasRelatedContractIds,
+  });
+  const relatedContracts = relatedContractsQuery.data ?? [];
+  const { visibleRelatedContracts } =
+    getVisibleRelatedContracts(relatedContracts);
+  const filteredRelatedContracts = useMemo(
+    () =>
+      visibleRelatedContracts.filter(
+        item => getRelatedContractSessionId(item) !== (sessionId ?? undefined)
+      ),
+    [visibleRelatedContracts, sessionId]
+  );
+  const relatedContractsErrorMessage =
+    relatedContractsQuery.isError &&
+    relatedContractsQuery.error instanceof Error
+      ? relatedContractsQuery.error.message
+      : null;
   const isLoading =
     !contract &&
     !proposal &&
@@ -284,80 +329,80 @@ export function ContractDetailsPage() {
   );
   const proposalSummary = proposalSummaryQuery.data?.summary ?? null;
   const summary = contract ? contract?.summary ?? null : proposalSummary;
+  const hasSummaryContent =
+    Boolean(summary?.story?.headline?.trim()) ||
+    Boolean(summary?.story?.overview?.length) ||
+    Boolean(summary?.story?.bullets?.length) ||
+    Boolean(summary?.nextSteps?.items?.length) ||
+    Boolean(summary?.lastChange?.short?.trim());
+  const resolvedSummary = hasSummaryContent ? summary : null;
   const summaryErrorMessage = contract
     ? contract?.summaryError ?? null
     : proposalSummaryQuery.error instanceof Error
     ? proposalSummaryQuery.error.message
     : null;
-  const summaryTitle =
-    summary?.title?.trim() || getDocumentName(resolvedDocument) || headerTitle;
-  const summaryOneLiner =
-    summary?.oneLiner?.trim() ||
-    (contract ? getDocumentDescription(resolvedDocument) : null) ||
-    null;
-  const summaryStateLabel = summary?.state?.statusLabel?.trim() || null;
-  const summaryStateExplanation = summary?.state?.explanation?.trim() || null;
-  const summaryKeyFacts = summary?.keyFacts ?? [];
-  const summaryWarnings = summary?.warnings ?? [];
+  const summaryHeadline =
+    resolvedSummary?.story?.headline?.trim() ||
+    getDocumentName(resolvedDocument) ||
+    headerTitle;
+  const summaryTitle = summaryHeadline;
+  const summaryOverview = resolvedSummary?.story?.overview ?? [];
+  const summaryBullets = resolvedSummary?.story?.bullets ?? [];
+  const summaryNextSteps = resolvedSummary?.nextSteps?.items ?? [];
+  const summaryNextStepsTitle =
+    resolvedSummary?.nextSteps?.title ?? 'Next steps';
+  const summaryLastChangeShort =
+    resolvedSummary?.lastChange?.short?.trim() || null;
+  const hasSummaryExtras =
+    summaryBullets.length > 0 ||
+    summaryNextSteps.length > 0 ||
+    Boolean(summaryLastChangeShort);
   const isSummaryLoading =
-    proposalSummaryQuery.isLoading && !summary && !!proposal;
-  const isSummaryFetching = proposalSummaryQuery.isFetching && !!summary;
+    proposalSummaryQuery.isLoading && !resolvedSummary && !!proposal;
+  const isSummaryFetching =
+    proposalSummaryQuery.isFetching && !!resolvedSummary;
   const proposalSummaryFallback = proposalSummaryQuery.timedOut
     ? 'Sorry, contract summary is not available.'
     : 'Summary not available yet.';
   const summaryFallbackText =
-    summaryOneLiner ||
+    (summaryOverview[0] ??
+      (contract ? getDocumentDescription(resolvedDocument) : null)) ||
     (contract ? 'Summary unavailable.' : proposalSummaryFallback);
 
   useEffect(() => {
     setIsAiChatOpen(false);
   }, [aiChatSessionId]);
 
-  const historyItems = useMemo(() => {
-    if (!Array.isArray(contract?.emittedEvents)) {
-      return [];
-    }
-
-    return contract.emittedEvents.map((entry, index) => {
-      const record =
-        entry && typeof entry === 'object'
-          ? (entry as Record<string, unknown>)
-          : null;
-      const typeRecord =
-        record && typeof record.type === 'object' && record.type
-          ? (record.type as Record<string, unknown>)
-          : null;
-      const title =
-        (typeof record?.name === 'string' && record.name.trim()) ||
-        (typeof typeRecord?.name === 'string' && typeRecord.name.trim()) ||
-        (typeof record?.type === 'string' && record.type.trim()) ||
-        'Contract event';
-      const description =
-        (typeof record?.description === 'string' &&
-          record.description.trim()) ||
-        (typeof typeRecord?.description === 'string' &&
-          typeRecord.description.trim()) ||
-        null;
-      const timestampCandidate =
-        record?.occurredAt ??
-        record?.createdAt ??
-        record?.timestamp ??
-        record?.updatedAt ??
-        null;
-      const timestamp =
-        typeof timestampCandidate === 'string' ? timestampCandidate : null;
-
-      return {
-        id: `${index}-${title}`,
-        title,
-        description,
-        timestamp,
-      };
-    });
-  }, [contract?.emittedEvents]);
+  const historyQuery = useContractHistory(
+    activeKind === 'contract' ? sessionId ?? null : null,
+    activeKind === 'contract' && Boolean(sessionId)
+  );
+  const historyItems = historyQuery.data?.items ?? [];
   const hasHistory = historyItems.length > 0;
   const isArchivePending =
     archiveMutation.isPending || unarchiveMutation.isPending;
+  const shouldRenderLinkedContracts = Boolean(relatedActivitySource);
+
+  const contractStatusStyles: Record<string, string> = {
+    accepted: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+    rejected: 'bg-rose-50 text-rose-700 border border-rose-100',
+    pending: 'bg-amber-50 text-amber-700 border border-amber-100',
+    bootstrapped: 'bg-sky-50 text-sky-700 border border-sky-100',
+  };
+
+  const handleLinkedContractClick = (item: RelatedContractItem) => {
+    const target = getRelatedContractTarget(item);
+    const itemSessionId = getRelatedContractSessionId(item);
+    if (!target || !itemSessionId) {
+      return;
+    }
+    setActiveSession(itemSessionId);
+    navigate(target, {
+      state: {
+        from: `${location.pathname}${location.search}`,
+      },
+    });
+  };
 
   const handleArchiveToggle = () => {
     if (!contract?.sessionId || isArchivePending) {
@@ -503,7 +548,7 @@ export function ContractDetailsPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <Avatar name={senderName} size="lg" />
+                  <Avatar name={senderName} size="xl" />
                   <div className="text-sm font-semibold text-slate-900">
                     {senderName}
                   </div>
@@ -541,79 +586,95 @@ export function ContractDetailsPage() {
                   </div>
                 )}
 
-                {summary ? (
-                  <>
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900">
-                        {summaryTitle}
-                      </h3>
-                      {summaryOneLiner && (
-                        <p className="mt-1 whitespace-pre-line break-words text-sm text-slate-600 leading-relaxed">
-                          {summaryOneLiner}
-                        </p>
-                      )}
-                    </div>
-
-                    {(summaryStateLabel || summaryStateExplanation) && (
-                      <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                          Current state
-                        </p>
-                        {summaryStateLabel && (
-                          <p className="mt-2 font-semibold text-slate-900">
-                            {summaryStateLabel}
-                          </p>
-                        )}
-                        {summaryStateExplanation && (
-                          <p className="mt-1 whitespace-pre-line break-words text-sm text-slate-600 leading-relaxed">
-                            {summaryStateExplanation}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {summaryKeyFacts.length > 0 && (
-                      <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
-                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                          Key facts
-                        </p>
-                        <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-                          {summaryKeyFacts.map(fact => (
-                            <div key={`${fact.label}-${fact.value}`}>
-                              <dt className="text-xs font-medium text-slate-500">
-                                {fact.label}
-                              </dt>
-                              <dd className="mt-1 text-sm font-semibold text-slate-900">
-                                {fact.value}
-                              </dd>
-                            </div>
-                          ))}
-                        </dl>
-                      </div>
-                    )}
-
-                    {summaryWarnings.length > 0 && (
-                      <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
-                        <p className="text-xs uppercase tracking-[0.2em] text-amber-700">
-                          Notes
-                        </p>
-                        <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-amber-900">
-                          {summaryWarnings.map(warning => (
-                            <li key={warning}>{warning}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </>
+                {resolvedSummary ? (
+                  <div>
+                    <h3 className="text-2xl font-semibold text-slate-900 leading-tight">
+                      {summaryHeadline}
+                    </h3>
+                    {summaryOverview.map((paragraph, index) => (
+                      <p
+                        key={`${summaryHeadline}-${index}`}
+                        className="mt-2 whitespace-pre-line break-words text-base text-slate-600 leading-relaxed"
+                      >
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
                 ) : !isSummaryLoading ? (
                   <p className="text-sm text-slate-600">
                     {summaryFallbackText}
                   </p>
                 ) : null}
-              </div>
 
-              <div className="mt-4">
-                <ContractDetailsAccordion contract={contract} />
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--color-primary)]"
+                    onClick={() => setSummaryExpanded(prev => !prev)}
+                    aria-expanded={isSummaryExpanded}
+                  >
+                    {isSummaryExpanded ? 'Less' : 'More'}
+                    <svg
+                      className={`h-3 w-3 transition ${
+                        isSummaryExpanded ? 'rotate-180' : ''
+                      }`}
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                {isSummaryExpanded && (
+                  <div className="mt-3 space-y-3">
+                    {summaryBullets.length > 0 && (
+                      <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                          Highlights
+                        </p>
+                        <ul className="mt-3 list-disc space-y-1 pl-5 text-base text-slate-700">
+                          {summaryBullets.map(item => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {summaryLastChangeShort && (
+                      <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                          Latest update
+                        </p>
+                        <p className="mt-2 text-base font-semibold text-slate-900">
+                          {summaryLastChangeShort}
+                        </p>
+                      </div>
+                    )}
+
+                    {summaryNextSteps.length > 0 && (
+                      <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                          {summaryNextStepsTitle}
+                        </p>
+                        <ul className="mt-3 list-disc space-y-1 pl-5 text-base text-slate-700">
+                          {summaryNextSteps.map(step => (
+                            <li key={step}>{step}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {(hasSummaryExtras || contract || proposal) && (
+                      <ContractDetailsAccordion contract={contract} />
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -623,6 +684,126 @@ export function ContractDetailsPage() {
                 title="Linked transactions"
                 hideWhenEmpty
               />
+            )}
+
+            {shouldRenderLinkedContracts && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-4">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Linked contracts
+                </h3>
+
+                {relatedContractsQuery.isLoading && (
+                  <div className="flex items-center justify-center py-4">
+                    <Spinner size="md" color="green" />
+                  </div>
+                )}
+
+                {!relatedContractsQuery.isLoading &&
+                  relatedContractsErrorMessage && (
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-600">
+                      {relatedContractsErrorMessage}
+                    </div>
+                  )}
+
+                {!relatedContractsQuery.isLoading &&
+                  !relatedContractsErrorMessage &&
+                  (filteredRelatedContracts.length === 0 ||
+                    !hasRelatedContractIds) && (
+                    <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm text-slate-500">
+                      No related contracts found.
+                    </div>
+                  )}
+
+                {!relatedContractsQuery.isLoading &&
+                  !relatedContractsErrorMessage &&
+                  filteredRelatedContracts.length > 0 &&
+                  hasRelatedContractIds && (
+                    <div className="mt-4 space-y-3">
+                      {filteredRelatedContracts.map(contractItem => {
+                        const isProposal =
+                          isProposalRelatedContract(contractItem);
+                        const isSelectable = isProposal
+                          ? Boolean(contractItem.deliverySessionId)
+                          : Boolean(contractItem.sessionId);
+                        let primaryName = 'Contract';
+                        let statusValue: string | undefined;
+                        let contractDate: string | null = null;
+                        let displayName = 'Contract';
+
+                        if (isProposal) {
+                          primaryName =
+                            contractItem.name?.trim() || 'PayNote proposal';
+                          statusValue =
+                            contractItem.clientDecisionStatus ?? 'pending';
+                          contractDate = formatShortDateTime(
+                            contractItem.updatedAt ?? contractItem.createdAt
+                          );
+                          displayName = 'Proposal';
+                        } else {
+                          primaryName =
+                            contractItem.documentName?.trim() ||
+                            contractItem.displayName;
+                          statusValue = contractItem.status ?? 'pending';
+                          contractDate = formatShortDateTime(
+                            getContractLastChangeAt(contractItem) ??
+                              contractItem.updatedAt ??
+                              contractItem.createdAt
+                          );
+                          displayName = contractItem.displayName;
+                        }
+
+                        const statusKey = statusValue?.toLowerCase() ?? '';
+                        const statusStyle =
+                          contractStatusStyles[statusKey] ??
+                          'bg-slate-100 text-slate-700 border border-slate-200';
+
+                        return (
+                          <button
+                            key={
+                              isProposal
+                                ? `proposal-${contractItem.deliveryId}`
+                                : contractItem.contractId
+                            }
+                            type="button"
+                            className={`w-full rounded-xl border p-4 text-left transition ${
+                              isSelectable
+                                ? 'border-slate-200 bg-white/80 hover:border-emerald-200 hover:shadow-md'
+                                : 'border-slate-200 bg-white/50 opacity-60 cursor-not-allowed'
+                            }`}
+                            onClick={() => {
+                              if (!isSelectable) {
+                                return;
+                              }
+                              handleLinkedContractClick(contractItem);
+                            }}
+                            disabled={!isSelectable}
+                          >
+                            <div className="space-y-2">
+                              <p className="text-sm font-semibold text-slate-900 truncate">
+                                {primaryName}
+                              </p>
+                              <div className="flex flex-wrap items-center gap-2 text-xs">
+                                <span className="app-chip app-chip-neutral">
+                                  {displayName}
+                                </span>
+                                <span
+                                  className={`text-xs font-semibold px-2 py-1 rounded-full ${statusStyle}`}
+                                >
+                                  {formatStatusLabel(statusValue)}
+                                </span>
+                                {contractDate && (
+                                  <span className="text-xs text-slate-500">
+                                    {contractDate}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+              </section>
             )}
 
             {hasHistory && (
@@ -652,20 +833,36 @@ export function ContractDetailsPage() {
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
                             <p className="font-semibold text-slate-900">
-                              {item.title}
+                              {item.short}
                             </p>
-                            {item.description && (
-                              <p className="mt-1 text-xs text-slate-500">
-                                {item.description}
-                              </p>
-                            )}
                           </div>
-                          {item.timestamp && (
+                          {item.createdAt && (
                             <span className="text-xs text-slate-500">
-                              {formatShortDateTime(item.timestamp)}
+                              {formatShortDateTime(item.createdAt)}
                             </span>
                           )}
                         </div>
+                        {item.more && (
+                          <div className="mt-2 text-sm text-slate-600">
+                            {expandedHistory[item.id] && (
+                              <p className="whitespace-pre-line break-words leading-relaxed">
+                                {item.more}
+                              </p>
+                            )}
+                            <button
+                              type="button"
+                              className="mt-2 text-xs font-semibold text-[color:var(--color-primary)]"
+                              onClick={() =>
+                                setExpandedHistory(prev => ({
+                                  ...prev,
+                                  [item.id]: !prev[item.id],
+                                }))
+                              }
+                            >
+                              {expandedHistory[item.id] ? 'Less' : 'More'}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

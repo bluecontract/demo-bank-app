@@ -33,23 +33,26 @@ Input format:
 - Exception: timeline entries may include \`prevEntry: { "blueId": "..." }\`, which is an opaque linkage id. Do not interpret it.`;
 
 const CONTRACT_TASK = `Your task:
-- Explain what the contract document represents, who the participants are, and the overall lifecycle.
-- Explain its current state in plain language, including what just happened if \`transition\` is provided.
-- Explain what happens next and what actions/operations are available (if present), and describe likely outcomes given the current state.
+- Write a short, human headline describing the most recent change or status update (the "last change"). It should read like a notification update.
+- Provide a concise overview (1-2 sentences total) describing the real-world agreement: what is being purchased/arranged and what happens to the funds or services.
+- If a reward/benefit (voucher, rebate, etc.) is present, mention it briefly in the overview.
+- Avoid long state dumps. Do NOT use headings like "Current state" or "What's next" inside the text.
+- Provide a short list-preview sentence and a short "last change" sentence (with a longer "more" version).
+- Use \`nextSteps\` only for concrete next actions (0-2 items).
 - Be conservative: if an outcome depends on logic you cannot determine from the provided data, state that it is unknown.
 - If \`previousSummary\` is provided, treat it as the baseline to keep the narrative stable:
   - Keep wording and structure as consistent as possible.
   - Update only what must change based on the current facts.
-  - If \`previousSummary\` contradicts the current facts, correct it (facts win).
-  - Keep \`keyFacts\` labels/order stable; update values only when they change.`;
+  - If \`previousSummary\` contradicts the current facts, correct it (facts win).`;
 
 const PROPOSAL_TASK = `Your task:
 - Explain what this proposed PayNote is about and the real-world commitment it represents.
-- Make it clear this is a proposal that is not active yet.
+- Make it clear this is a proposal that is not active yet, and that it is waiting for approval if that is true.
 - If acceptance would create/start the PayNote, say so in plain language.
-- For \`state.statusLabel\` and \`state.explanation\`, describe the proposal state and avoid listing next steps beyond acceptance.
+- Provide a short list-preview sentence and a short "last change" sentence (with a longer "more" version).
 - Describe participants only if they are clearly identifiable from the document.
 - Do not describe lifecycle progress, transitions, or next steps beyond the acceptance context.
+- Keep the overview brief (1-2 sentences).
 - Be conservative: if something cannot be determined from the provided data, state that it is unknown.`;
 
 const STYLE = `Writing style (for non-technical end users):
@@ -61,15 +64,18 @@ const STYLE = `Writing style (for non-technical end users):
   - Instead of "workflow/step", say "rule" or "automatic step" only if needed.
 - Prefer describing real-world effects over mechanics (e.g. "funds are held", "payment is released", "the bank is asked to ...", "a voucher is issued").
 - When describing who can act, infer human role labels from participant keys/names when clear (e.g. payer/payee/guarantor); otherwise use "another participant".
-- Keep sentences short and concrete. Avoid jargon. If a technical concept is unavoidable, define it briefly in plain words.`;
+- Keep sentences short and concrete. Avoid jargon. If a technical concept is unavoidable, define it briefly in plain words.
+- Avoid enumerating "Current state" and "What's next" inside the text; use the structured fields instead.`;
 
 const OUTPUT = `Output guidance (map to schema fields):
-- \`title\`: short human name (no internal IDs).
-- \`oneLiner\`: "Overview" (can be multiple sentences / multiple lines) describing what this contract is about, the participants, and the lifecycle.
-- \`state.statusLabel\`: short label for the current state.
-- \`state.explanation\`: concise "Current state" + "What's next" (may use new lines and bullet points).
-- \`keyFacts\`: concrete facts (short values; avoid repeating the narrative).
-- \`warnings\`: only important caveats/unknowns/safety notes.
+- \`story.headline\`: one short sentence describing the latest change (no internal IDs). Aim for <= 120 characters.
+- \`story.overview\`: array of 1-2 short sentences total. No headings or labels.
+- \`story.bullets\`: 0-4 short bullet points only if truly helpful; otherwise [].
+- \`listPreview\`: one short sentence for list preview. It should match \`lastChange.short\` and stay <= 90 characters.
+- \`nextSteps.title\`: short label for the next-steps section (use "Next steps" if unsure).
+- \`nextSteps.items\`: 0-2 concrete next actions (or ["No action required."] if none).
+- \`lastChange.short\`: one short sentence describing the most recent change (<= 90 characters). It should match \`listPreview\`.
+- \`lastChange.more\`: 1-2 short sentences with more context about the most recent change.
 
 Output MUST be a JSON object that matches the provided schema exactly. Do not wrap output in markdown.`;
 

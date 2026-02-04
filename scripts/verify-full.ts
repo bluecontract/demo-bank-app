@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import process from 'node:process';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npxCommand = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 type CommandResult = {
   code: number | null;
@@ -35,6 +36,11 @@ async function runOrExit(command: string, args: string[]): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  await runOrExit(npxCommand, [
+    'nx',
+    'run',
+    '@demo-bank-app/bank-web-app:build',
+  ]);
   await runOrExit(npmCommand, ['run', 'lint']);
   await runOrExit(npmCommand, ['run', 'typecheck']);
   await runOrExit(npmCommand, ['run', 'build:all']);

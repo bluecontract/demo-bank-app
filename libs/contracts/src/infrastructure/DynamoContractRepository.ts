@@ -1,4 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { randomUUID } from 'crypto';
 import {
   DynamoDBDocumentClient,
   GetCommand,
@@ -12,6 +13,8 @@ import type {
   ContractRepository,
   ContractSummary,
   ContractDocumentSummary,
+  ContractHistoryEntry,
+  ContractHistoryEntryInput,
   ContractSummaryUpdate,
   ContractArchiveUpdate,
 } from '../application/ports';
@@ -22,6 +25,7 @@ const ENTITY_TYPES = {
   DOCUMENT: 'CONTRACT_DOCUMENT',
   USER: 'CONTRACT_USER',
   RELATIONSHIP: 'CONTRACT_RELATIONSHIP',
+  HISTORY: 'CONTRACT_HISTORY',
 } as const;
 
 const TABLE_PREFIXES = {
@@ -39,6 +43,7 @@ const SORT_KEYS = {
 
 const USER_SORT_KEY_PREFIX = 'CONTRACT#';
 const RELATIONSHIP_SORT_KEY_PREFIX = 'CONTRACT#';
+const HISTORY_SORT_KEY_PREFIX = 'HISTORY#';
 
 type DynamoContractRepositoryConfig = {
   tableName: string;
@@ -68,6 +73,7 @@ interface ContractItem {
   accountNumber?: string;
   userId?: string;
   summary?: ContractDocumentSummary;
+  summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
   summaryInputBlueId?: string;
@@ -107,6 +113,7 @@ interface ContractUserItem {
   documentId?: string;
   status?: string;
   archivedAt?: string;
+  summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
   createdAt: string;
@@ -126,10 +133,23 @@ interface ContractRelationshipItem {
   status?: string;
   userId?: string;
   archivedAt?: string;
+  summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+interface ContractHistoryItem {
+  PK: string;
+  SK: string;
+  entityType: typeof ENTITY_TYPES.HISTORY;
+  historyId: string;
+  contractId: string;
+  kind: ContractHistoryEntry['kind'];
+  short: string;
+  more?: string;
+  createdAt: string;
 }
 
 export class DynamoContractRepository implements ContractRepository {
@@ -179,6 +199,10 @@ export class DynamoContractRepository implements ContractRepository {
     return `${RELATIONSHIP_SORT_KEY_PREFIX}${contractId}`;
   }
 
+  private buildHistorySk(createdAt: string, historyId: string) {
+    return `${HISTORY_SORT_KEY_PREFIX}${createdAt}#${historyId}`;
+  }
+
   private mapItemToRecord(item: ContractItem): ContractRecord {
     return {
       contractId: item.contractId,
@@ -199,6 +223,7 @@ export class DynamoContractRepository implements ContractRepository {
       accountNumber: item.accountNumber,
       userId: item.userId,
       summary: item.summary,
+      summaryPreview: item.summaryPreview,
       summaryUpdatedAt: item.summaryUpdatedAt,
       summarySourceUpdatedAt: item.summarySourceUpdatedAt,
       summaryInputBlueId: item.summaryInputBlueId,
@@ -294,6 +319,7 @@ export class DynamoContractRepository implements ContractRepository {
       accountNumber: record.accountNumber,
       userId: record.userId,
       summary: record.summary,
+      summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
       summaryUpdatedAt: record.summaryUpdatedAt,
       summarySourceUpdatedAt: record.summarySourceUpdatedAt,
       summaryInputBlueId: record.summaryInputBlueId,
@@ -357,6 +383,7 @@ export class DynamoContractRepository implements ContractRepository {
         documentId: record.documentId,
         status: record.status,
         archivedAt: record.archivedAt,
+        summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
         summaryUpdatedAt: record.summaryUpdatedAt,
         summarySourceUpdatedAt: record.summarySourceUpdatedAt,
         createdAt: record.createdAt,
@@ -383,6 +410,7 @@ export class DynamoContractRepository implements ContractRepository {
       status: record.status,
       userId: record.userId,
       archivedAt: record.archivedAt,
+      summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
       summaryUpdatedAt: record.summaryUpdatedAt,
       summarySourceUpdatedAt: record.summarySourceUpdatedAt,
       createdAt: record.createdAt,
@@ -414,6 +442,71 @@ export class DynamoContractRepository implements ContractRepository {
     if (writes.length) {
       await Promise.all(writes);
     }
+  }
+
+  async addContractHistoryEntry(
+    entry: ContractHistoryEntryInput
+  ): Promise<ContractHistoryEntry> {
+    const createdAt = entry.createdAt ?? new Date().toISOString();
+    const historyId = entry.id ?? randomUUID();
+    const item: ContractHistoryItem = {
+      PK: this.buildContractPk(entry.contractId),
+      SK: this.buildHistorySk(createdAt, historyId),
+      entityType: ENTITY_TYPES.HISTORY,
+      historyId,
+      contractId: entry.contractId,
+      kind: entry.kind,
+      short: entry.short,
+      ...(entry.more ? { more: entry.more } : {}),
+      createdAt,
+    };
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: item,
+      })
+    );
+
+    return {
+      id: historyId,
+      contractId: entry.contractId,
+      kind: entry.kind,
+      short: entry.short,
+      more: entry.more,
+      createdAt,
+    };
+  }
+
+  async listContractHistory(
+    contractId: string
+  ): Promise<ContractHistoryEntry[]> {
+    const response = await this.client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
+        ExpressionAttributeNames: {
+          '#pk': 'PK',
+          '#sk': 'SK',
+        },
+        ExpressionAttributeValues: {
+          ':pk': this.buildContractPk(contractId),
+          ':skPrefix': HISTORY_SORT_KEY_PREFIX,
+        },
+        ScanIndexForward: false,
+      })
+    );
+
+    const items = (response.Items ?? []) as ContractHistoryItem[];
+
+    return items.map(item => ({
+      id: item.historyId,
+      contractId: item.contractId,
+      kind: item.kind,
+      short: item.short,
+      more: item.more,
+      createdAt: item.createdAt,
+    }));
   }
 
   async updateContractArchive(update: ContractArchiveUpdate): Promise<void> {
@@ -535,6 +628,10 @@ export class DynamoContractRepository implements ContractRepository {
       setters.push(`${nameKey} = ${valueKey}`);
     };
 
+    const summaryPreview = update.summary?.listPreview ?? update.summaryPreview;
+    const shouldRemoveSummaryPreview =
+      update.summary === null || update.summaryPreview === null;
+
     const handleField = (
       nameKey: string,
       attributeName: string,
@@ -553,6 +650,12 @@ export class DynamoContractRepository implements ContractRepository {
     };
 
     handleField('#summary', 'summary', ':summary', update.summary);
+    handleField(
+      '#summaryPreview',
+      'summaryPreview',
+      ':summaryPreview',
+      shouldRemoveSummaryPreview ? null : summaryPreview
+    );
     handleField(
       '#summaryUpdatedAt',
       'summaryUpdatedAt',
@@ -637,6 +740,12 @@ export class DynamoContractRepository implements ContractRepository {
       summaryMetaSetters.push(`${nameKey} = ${valueKey}`);
     };
 
+    setSummaryMetaField(
+      '#summaryPreview',
+      'summaryPreview',
+      ':summaryPreview',
+      shouldRemoveSummaryPreview ? null : summaryPreview
+    );
     setSummaryMetaField(
       '#summaryUpdatedAt',
       'summaryUpdatedAt',
@@ -762,6 +871,7 @@ export class DynamoContractRepository implements ContractRepository {
         documentId: item.documentId,
         status: item.status,
         archivedAt: item.archivedAt,
+        summaryPreview: item.summaryPreview,
         summaryUpdatedAt: item.summaryUpdatedAt,
         summarySourceUpdatedAt: item.summarySourceUpdatedAt,
         createdAt: item.createdAt,
@@ -809,6 +919,7 @@ export class DynamoContractRepository implements ContractRepository {
         documentId: item.documentId,
         status: item.status,
         archivedAt: item.archivedAt,
+        summaryPreview: item.summaryPreview,
         summaryUpdatedAt: item.summaryUpdatedAt,
         summarySourceUpdatedAt: item.summarySourceUpdatedAt,
         createdAt: item.createdAt,
@@ -856,6 +967,7 @@ export class DynamoContractRepository implements ContractRepository {
         documentId: item.documentId,
         status: item.status,
         archivedAt: item.archivedAt,
+        summaryPreview: item.summaryPreview,
         summaryUpdatedAt: item.summaryUpdatedAt,
         summarySourceUpdatedAt: item.summarySourceUpdatedAt,
         createdAt: item.createdAt,

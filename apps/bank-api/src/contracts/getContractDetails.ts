@@ -6,6 +6,7 @@ import {
 } from '../auth/middleware';
 import { getDependencies } from '../paynote/dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
+import { normalizeContractSummary } from './summaryNormalization';
 
 export const getContractDetailsHandler = async (
   request: ServerInferRequest<
@@ -29,6 +30,11 @@ export const getContractDetailsHandler = async (
     });
   }
 
+  const normalizedSummary = normalizeContractSummary(
+    contract.summary,
+    contract.documentName ?? contract.displayName
+  );
+
   return {
     status: 200 as const,
     body: {
@@ -47,7 +53,7 @@ export const getContractDetailsHandler = async (
       relatedHoldIds: contract.relatedHoldIds,
       accountNumber: contract.accountNumber,
       document: contract.document,
-      summary: contract.summary,
+      summary: normalizedSummary ?? undefined,
       summaryUpdatedAt: contract.summaryUpdatedAt,
       summarySourceUpdatedAt: contract.summarySourceUpdatedAt,
       summaryInputBlueId: contract.summaryInputBlueId,

@@ -379,7 +379,10 @@ type ContractSummaryGenerationResult = {
 const generateOrLoadContractSummary = async (input: {
   contract: ContractRecord;
   force: boolean;
-  contractRepository: Pick<ContractRepository, 'updateContractSummary'>;
+  contractRepository: Pick<
+    ContractRepository,
+    'updateContractSummary' | 'addContractHistoryEntry'
+  >;
   getOpenAiApiKey: () => Promise<string>;
   logger?: PowertoolsLogger;
 }): Promise<ContractSummaryGenerationResult> => {
@@ -389,6 +392,10 @@ const generateOrLoadContractSummary = async (input: {
     throw new ContractSummaryInputError('Contract document not available');
   }
 
+  const parsedSummary = ContractDocumentSummaryDto.safeParse(contract.summary);
+  const cachedSummary = parsedSummary.success ? parsedSummary.data : null;
+  const hasSummaryPreview = Boolean(contract.summaryPreview);
+  const previousSummary = cachedSummary ?? undefined;
   const model = process.env.CONTRACT_SUMMARY_MODEL || DEFAULT_MODEL;
 
   try {
@@ -406,13 +413,14 @@ const generateOrLoadContractSummary = async (input: {
         document: contract.document,
         triggerEvent: contract.triggerEvent,
         emittedEvents: contract.emittedEvents,
-        previousSummary: contract.summary,
+        previousSummary,
       },
     });
 
     if (
       !input.force &&
-      contract.summary &&
+      cachedSummary &&
+      hasSummaryPreview &&
       !contract.summaryError &&
       contract.summaryUpdatedAt
     ) {
@@ -424,7 +432,7 @@ const generateOrLoadContractSummary = async (input: {
         contract.summarySourceUpdatedAt === contract.updatedAt;
       if (hasMatchingSummaryInput || hasMatchingTimestamp) {
         return {
-          summary: contract.summary,
+          summary: cachedSummary,
           summaryUpdatedAt: contract.summaryUpdatedAt,
           summarySourceUpdatedAt:
             contract.summarySourceUpdatedAt ?? contract.updatedAt,
@@ -488,6 +496,7 @@ const generateOrLoadContractSummary = async (input: {
     await input.contractRepository.updateContractSummary({
       contractId: contract.contractId,
       summary,
+      summaryPreview: summary.listPreview,
       summaryUpdatedAt: now,
       summarySourceUpdatedAt: contract.updatedAt,
       summaryInputBlueId,
@@ -496,6 +505,14 @@ const generateOrLoadContractSummary = async (input: {
       userId: contract.userId,
       relatedTransactionIds: contract.relatedTransactionIds,
       relatedHoldIds: contract.relatedHoldIds,
+    });
+
+    await input.contractRepository.addContractHistoryEntry({
+      contractId: contract.contractId,
+      kind: 'contractUpdated',
+      short: summary.lastChange.short || summary.listPreview,
+      more: summary.lastChange.more,
+      createdAt: now,
     });
 
     return {
@@ -529,7 +546,9 @@ export const prefetchContractSummaryForSessionId = async (input: {
   sessionId: string;
   contractRepository: Pick<
     ContractRepository,
-    'getContractBySessionId' | 'updateContractSummary'
+    | 'getContractBySessionId'
+    | 'updateContractSummary'
+    | 'addContractHistoryEntry'
   >;
   getOpenAiApiKey: () => Promise<string>;
   logger: PowertoolsLogger;
@@ -543,7 +562,13 @@ export const prefetchContractSummaryForSessionId = async (input: {
       return;
     }
 
-    if (contract.summary || contract.summaryError) {
+    const parsedSummary = ContractDocumentSummaryDto.safeParse(
+      contract.summary
+    );
+    const hasSummary =
+      parsedSummary.success && Boolean(contract.summaryPreview);
+
+    if (hasSummary || contract.summaryError) {
       return;
     }
 

@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { Button } from '../../../ui/Button';
 import { Spinner } from '../../../ui/Spinner';
 import type { ContractDocumentSummary } from '../../../types/api';
@@ -36,13 +35,23 @@ export function SummaryPanel({
   loadingLabel = 'Generating summary...',
   fetchingLabel = 'Updating summary...',
 }: SummaryPanelProps) {
-  const [isKeyFactsExpanded, setIsKeyFactsExpanded] = useState(false);
-
-  useEffect(() => {
-    setIsKeyFactsExpanded(false);
-  }, [summary?.title]);
-
   const showActions = Boolean(onRegenerate) || Boolean(summaryModel);
+  const story = summary?.story;
+  const nextSteps = summary?.nextSteps;
+  const lastChange = summary?.lastChange;
+  const storyHeadline = story?.headline?.trim() || '';
+  const storyOverview = story?.overview ?? [];
+  const storyBullets = story?.bullets ?? [];
+  const nextStepItems = nextSteps?.items ?? [];
+  const nextStepsTitle = nextSteps?.title ?? 'Next steps';
+  const lastChangeShort = lastChange?.short?.trim() || '';
+  const hasSummaryContent =
+    storyHeadline.length > 0 ||
+    storyOverview.length > 0 ||
+    storyBullets.length > 0 ||
+    nextStepItems.length > 0 ||
+    lastChangeShort.length > 0;
+  const showSummary = Boolean(summary) && hasSummaryContent;
 
   return (
     <section className="border border-slate-200 rounded-2xl overflow-hidden bg-white/70">
@@ -70,83 +79,58 @@ export function SummaryPanel({
           </div>
         )}
 
-        {summary ? (
+        {showSummary ? (
           <div className="space-y-4 text-sm text-slate-700">
             <div>
               <p className="text-lg font-semibold text-slate-900">
-                {summary.title}
+                {storyHeadline || title}
               </p>
-              <p className="mt-1 whitespace-pre-line break-words text-slate-600 leading-relaxed">
-                {summary.oneLiner}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                Current state
-              </p>
-              <p className="mt-2 font-semibold text-slate-900">
-                {summary.state.statusLabel}
-              </p>
-              <p className="mt-1 whitespace-pre-line break-words text-slate-600 leading-relaxed">
-                {summary.state.explanation}
-              </p>
-            </div>
-
-            {summary.keyFacts.length > 0 && (
-              <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Key facts
-                  </p>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-slate-600 hover:text-slate-900"
-                    onClick={() => setIsKeyFactsExpanded(prev => !prev)}
-                    aria-expanded={isKeyFactsExpanded}
-                  >
-                    {isKeyFactsExpanded ? 'Hide' : 'Show'} (
-                    {summary.keyFacts.length})
-                  </button>
-                </div>
-
-                {isKeyFactsExpanded ? (
-                  <dl className="mt-3 divide-y divide-slate-200/70">
-                    {summary.keyFacts.map(fact => (
-                      <div
-                        key={`${fact.label}:${fact.value}`}
-                        className="py-3 first:pt-0 last:pb-0"
-                      >
-                        <dt className="text-xs font-medium text-slate-500">
-                          {fact.label}
-                        </dt>
-                        <dd className="mt-1 whitespace-pre-wrap break-words font-medium text-slate-900">
-                          {fact.value}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                ) : (
-                  <p className="mt-2 text-xs text-slate-500">
-                    Key information about this document (participants, amounts,
-                    statuses, and identifiers).
-                  </p>
-                )}
-              </div>
-            )}
-
-            {summary.warnings?.length ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
-                <p className="text-xs uppercase tracking-[0.2em] text-amber-700">
-                  Notes
+              {storyOverview.map((paragraph, index) => (
+                <p
+                  key={`${storyHeadline || title}-${index}`}
+                  className="mt-1 whitespace-pre-line break-words text-slate-600 leading-relaxed"
+                >
+                  {paragraph}
                 </p>
-                <ul className="mt-2 list-disc space-y-1 pl-5">
-                  {summary.warnings.map(warning => (
-                    <li key={warning}>{warning}</li>
+              ))}
+            </div>
+
+            {storyBullets.length ? (
+              <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  Highlights
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                  {storyBullets.map(bullet => (
+                    <li key={bullet}>{bullet}</li>
                   ))}
                 </ul>
               </div>
             ) : null}
+
+            {lastChangeShort && (
+              <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  Latest update
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
+                  {lastChangeShort}
+                </p>
+              </div>
+            )}
+
+            {nextStepItems.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white/80 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  {nextStepsTitle}
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                  {nextStepItems.map(step => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         ) : !isLoading ? (
           <p className="text-sm text-slate-700 leading-relaxed">

@@ -1,27 +1,54 @@
 export type ContractStatusTimestamps = Record<string, string>;
 
-export type ContractDocumentSummaryKeyFact = {
-  label: string;
-  value: string;
+export type ContractDocumentSummaryStory = {
+  headline: string;
+  overview: string[];
+  bullets: string[];
 };
 
-export type ContractDocumentSummaryState = {
-  statusLabel: string;
-  explanation: string;
-  updatedAt: string | null;
+export type ContractDocumentSummaryNextSteps = {
+  title: string;
+  items: string[];
+};
+
+export type ContractDocumentSummaryLastChange = {
+  short: string;
+  more: string;
 };
 
 export type ContractDocumentSummary = {
-  title: string;
-  oneLiner: string;
-  state: ContractDocumentSummaryState;
-  keyFacts: ContractDocumentSummaryKeyFact[];
-  warnings: string[];
+  story: ContractDocumentSummaryStory;
+  listPreview: string;
+  nextSteps: ContractDocumentSummaryNextSteps;
+  lastChange: ContractDocumentSummaryLastChange;
+};
+
+export type ContractHistoryKind =
+  | 'contractUpdated'
+  | 'pendingActionRequested'
+  | 'bankLifecycle';
+
+export type ContractHistoryEntry = {
+  id: string;
+  contractId: string;
+  kind: ContractHistoryKind;
+  short: string;
+  more?: string;
+  createdAt: string;
+};
+
+export type ContractHistoryEntryInput = Omit<
+  ContractHistoryEntry,
+  'id' | 'createdAt'
+> & {
+  id?: string;
+  createdAt?: string;
 };
 
 export type ContractSummaryUpdate = {
   contractId: string;
   summary?: ContractDocumentSummary | null;
+  summaryPreview?: string | null;
   summaryUpdatedAt?: string | null;
   summarySourceUpdatedAt?: string | null;
   summaryInputBlueId?: string | null;
@@ -65,6 +92,7 @@ export interface ContractRecord {
   summaryInputBlueId?: string;
   summaryModel?: string;
   summaryError?: string;
+  summaryPreview?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,6 +106,7 @@ export interface ContractSummary {
   documentId?: string;
   status?: string;
   archivedAt?: string;
+  summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
   updatedAt: string;
@@ -89,6 +118,10 @@ export interface ContractRepository {
   getContractBySessionId(sessionId: string): Promise<ContractRecord | null>;
   getContractByDocumentId(documentId: string): Promise<ContractRecord | null>;
   saveContract(record: ContractRecord): Promise<void>;
+  addContractHistoryEntry(
+    entry: ContractHistoryEntryInput
+  ): Promise<ContractHistoryEntry>;
+  listContractHistory(contractId: string): Promise<ContractHistoryEntry[]>;
   updateContractArchive(update: ContractArchiveUpdate): Promise<void>;
   updateContractSummary(update: ContractSummaryUpdate): Promise<void>;
   listContractsByUserId(

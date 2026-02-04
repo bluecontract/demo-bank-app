@@ -26,8 +26,10 @@ import {
   isImportantProposal,
   isRejectedProposal,
 } from '../../features/contracts/lib/contractListFilters';
+import { getItemChangeType } from '../../features/contracts/lib/contractReview';
 import { Avatar } from '../../ui/Avatar';
 import { formatCurrency } from '../../lib/formatCurrency';
+import { formatRelativeListDate } from '../../lib/formatDate';
 
 type ContractsTabKey = 'inbox' | 'important' | 'data-permissions' | 'archive';
 
@@ -36,18 +38,6 @@ const tabLabels: Record<ContractsTabKey, string> = {
   important: 'Important',
   'data-permissions': 'Data Permissions',
   archive: 'Archive',
-};
-
-const formatListDate = (value: string) => {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-  return date.toLocaleDateString('en-US', {
-    month: '2-digit',
-    day: '2-digit',
-    year: '2-digit',
-  });
 };
 
 const formatStatus = (value?: string) => {
@@ -73,6 +63,9 @@ const getContractPreview = (item: ContractOrProposalItem): string => {
   if (isProposalItem(item)) {
     return '';
   }
+  if (item.summaryPreview) {
+    return item.summaryPreview;
+  }
   if (item.status) {
     return `Status: ${formatStatus(item.status)}`;
   }
@@ -95,7 +88,7 @@ const getSender = (item: ContractOrProposalItem): string => {
 
 export function ContractsPage() {
   const { user } = useAuth();
-  const { markReviewed } = useContractReviewState();
+  const { markItemReviewed, reviewedMap } = useContractReviewState();
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<ContractsTabKey>('inbox');
@@ -159,9 +152,7 @@ export function ContractsPage() {
     if (!sid) {
       return;
     }
-    if (!isProposalItem(item)) {
-      markReviewed(item);
-    }
+    markItemReviewed(item);
     navigate(`/contracts/${sid}`, {
       state: {
         from: `${location.pathname}${location.search}`,
@@ -295,7 +286,17 @@ export function ContractsPage() {
                   const preview = isProposalItem(item)
                     ? getProposalPreview(item)
                     : getContractPreview(item);
-                  const updatedAt = formatListDate(getItemUpdatedAt(item));
+                  const updatedAt = formatRelativeListDate(
+                    getItemUpdatedAt(item)
+                  );
+                  const changeType = getItemChangeType(item, reviewedMap);
+                  const isUnread = Boolean(changeType);
+                  const senderClassName = isUnread
+                    ? 'text-sm font-semibold text-slate-900'
+                    : 'text-sm font-normal text-slate-900';
+                  const subjectClassName = isUnread
+                    ? 'shrink-0 font-semibold text-slate-900'
+                    : 'shrink-0 font-normal text-slate-900';
 
                   return (
                     <button
@@ -311,14 +312,12 @@ export function ContractsPage() {
                     >
                       <div className="flex items-center gap-3">
                         <Avatar name={sender} size="sm" />
-                        <span className="truncate text-sm font-semibold text-slate-900">
+                        <span className={`truncate ${senderClassName}`}>
                           {sender}
                         </span>
                       </div>
                       <div className="flex min-w-0 items-center gap-2 text-sm">
-                        <span className="shrink-0 font-semibold text-slate-900">
-                          {subject}
-                        </span>
+                        <span className={subjectClassName}>{subject}</span>
                         <span className="text-slate-400">—</span>
                         <span className="min-w-0 truncate text-slate-600">
                           {preview}
