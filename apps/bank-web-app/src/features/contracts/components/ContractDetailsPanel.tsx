@@ -1,16 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { dump as yamlDump } from 'js-yaml';
-import { getSupportedContractByTypeBlueId } from '@demo-bank-app/shared-bank-api-contract';
-import { blue } from '../../../lib/blue';
 import { formatShortDateTime } from '../../../lib/formatDate';
 import { formatStatusLabel } from '../../../lib/formatStatusLabel';
 import { Card } from '../../../ui/Card';
 import { Spinner } from '../../../ui/Spinner';
 import { Button } from '../../../ui/Button';
 import type { ContractDetails } from '../../../types/api';
-import { collectContractOperations } from '../lib/operations';
-import { OperationForm } from './OperationForm';
+import {
+  formatJson,
+  getDocumentDescription,
+  getDocumentName,
+  restoreInlineTypes,
+} from '../lib/contractDocumentUtils';
+import { ContractOperationsList } from './ContractOperationsList';
+import { ContractRawDocument } from './ContractRawDocument';
 import { SummaryPanel } from './SummaryPanel';
 import { TransactionItem } from '../../transactions/components/TransactionItem';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
@@ -30,81 +33,6 @@ interface ContractDetailsPanelProps {
   errorMessage?: string | null;
 }
 
-const formatYaml = (value: unknown) => {
-  if (value == null) {
-    return null;
-  }
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  try {
-    return yamlDump(value, { noRefs: true }).trimEnd();
-  } catch {
-    return null;
-  }
-};
-
-const formatJson = (value: unknown) => {
-  if (value == null) {
-    return null;
-  }
-
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return null;
-  }
-};
-
-const restoreInlineTypes = (value: unknown) => {
-  if (value == null) {
-    return null;
-  }
-
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  try {
-    const node = blue.jsonValueToNode(value);
-    const reversedNode = blue.reverse(node);
-    const restoredNode = blue.restoreInlineTypes(reversedNode);
-    return blue.nodeToJson(restoredNode);
-  } catch {
-    return value;
-  }
-};
-
-const getDocumentName = (value: unknown) => {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const name = (value as { name?: unknown }).name;
-  if (typeof name !== 'string') {
-    return null;
-  }
-
-  const trimmed = name.trim();
-  return trimmed ? trimmed : null;
-};
-
-const getDocumentDescription = (value: unknown) => {
-  if (!value || typeof value !== 'object') {
-    return null;
-  }
-
-  const description = (value as { description?: unknown }).description;
-  if (typeof description !== 'string') {
-    return null;
-  }
-
-  const trimmed = description.trim();
-  return trimmed ? trimmed : null;
-};
-
 const formatKeyLabel = (key: string) => {
   return key
     .replace(/([a-z])([A-Z])/g, '$1 $2')
@@ -118,7 +46,6 @@ export function ContractDetailsPanel({
   isError = false,
   errorMessage,
 }: ContractDetailsPanelProps) {
-  const [activeOperation, setActiveOperation] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { data: accounts } = useAccounts();
@@ -126,32 +53,7 @@ export function ContractDetailsPanel({
     accountNumber: contract?.accountNumber ?? null,
   });
 
-  const supportedContract = contract
-    ? getSupportedContractByTypeBlueId(contract.typeBlueId)
-    : null;
-
-  const operations = useMemo(() => {
-    if (!contract?.document || !supportedContract) {
-      return [];
-    }
-
-    return collectContractOperations({
-      document: contract.document,
-      operationsChannelKey: supportedContract.operationsChannelKey,
-      blue,
-    });
-  }, [contract?.document, supportedContract]);
-
-  const activeOperationDetails = operations.find(
-    operation => operation.name === activeOperation
-  );
-
-  useEffect(() => {
-    setActiveOperation(null);
-  }, [contract?.sessionId]);
-
   const restoredDocument = restoreInlineTypes(contract?.document);
-  const documentYaml = formatYaml(restoredDocument);
   const documentTitle =
     getDocumentName(restoredDocument) ?? contract?.displayName ?? 'Contract';
   const documentSummary =
@@ -218,12 +120,15 @@ export function ContractDetailsPanel({
       return;
     }
 
-    navigate(buildTransactionDetailsPath(account.accountId, activity.activityId), {
-      state: {
-        from: `${location.pathname}${location.search}`,
-        selectedActivity: activity,
-      },
-    });
+    navigate(
+      buildTransactionDetailsPath(account.accountId, activity.activityId),
+      {
+        state: {
+          from: `${location.pathname}${location.search}`,
+          selectedActivity: activity,
+        },
+      }
+    );
   };
 
   const handleFallbackActivityOpen = (activityId: string) => {
@@ -279,9 +184,7 @@ export function ContractDetailsPanel({
           <span className="app-chip app-chip-neutral">
             {contract.displayName}
           </span>
-          <span className="app-chip">
-            {formatStatusLabel(contract.status)}
-          </span>
+          <span className="app-chip">{formatStatusLabel(contract.status)}</span>
           {statusTimestamp && (
             <span className="app-chip app-chip-neutral">
               Updated {formatShortDateTime(statusTimestamp)}
@@ -315,57 +218,12 @@ export function ContractDetailsPanel({
                 <h3 className="text-sm font-semibold text-slate-900">
                   Available operations
                 </h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  Filtered by channel{' '}
-                  {supportedContract?.operationsChannelKey ?? 'n/a'}.
-                </p>
               </div>
-              <span className="app-chip app-chip-neutral">
-                {operations.length} total
-              </span>
             </div>
-
-            {operations.length === 0 && (
-              <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
-                No eligible operations found for this contract.
-              </div>
-            )}
-
-            {operations.length > 0 && (
-              <div className="mt-4 space-y-3">
-                {operations.map(operation => (
-                  <button
-                    key={operation.name}
-                    type="button"
-                    className={`w-full rounded-xl border p-3 text-left transition ${
-                      activeOperation === operation.name
-                        ? 'border-[color:var(--color-primary)] bg-[rgba(43,190,156,0.08)]'
-                        : 'border-slate-200 bg-white/80 hover:border-emerald-200'
-                    }`}
-                    onClick={() => setActiveOperation(operation.name)}
-                  >
-                    <p className="text-sm font-semibold text-slate-900">
-                      {operation.label}
-                    </p>
-                    {operation.description && (
-                      <p className="text-xs text-slate-500 mt-1">
-                        {operation.description}
-                      </p>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="mt-4">
+              <ContractOperationsList contract={contract} variant="card" />
+            </div>
           </div>
-
-          {activeOperationDetails && contract.sessionId && (
-            <OperationForm
-              isOpen
-              operation={activeOperationDetails}
-              sessionId={contract.sessionId}
-              onClose={() => setActiveOperation(null)}
-            />
-          )}
         </section>
       </div>
 
@@ -586,19 +444,15 @@ export function ContractDetailsPanel({
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
               Contract document
             </p>
-            {documentYaml ? (
-              <pre className="mt-3 bg-slate-900/95 text-emerald-100 text-xs rounded-xl p-4 overflow-x-auto whitespace-pre-wrap leading-relaxed">
-                <code>{documentYaml}</code>
-              </pre>
-            ) : (
-              <p className="mt-3 text-sm text-slate-600">
-                Contract document not available.
-              </p>
-            )}
+            <div className="mt-3">
+              <ContractRawDocument
+                document={contract.document}
+                emptyLabel="Contract document not available."
+              />
+            </div>
           </div>
         </div>
       </details>
-
     </Card>
   );
 }

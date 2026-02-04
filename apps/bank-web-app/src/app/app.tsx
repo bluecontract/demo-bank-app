@@ -9,6 +9,7 @@ import { TransactionsPage } from '../pages/TransactionsPage';
 import { TransactionDetailsPage } from '../pages/TransactionDetailsPage';
 import { NewTransferPage } from '../pages/NewTransferPage';
 import { ContractsPage } from '../pages/ContractsPage';
+import { ContractDetailsPage } from '../pages/ContractDetailsPage';
 import { SignUpPage } from '../features/auth/pages/SignUpPage';
 import { SignInPage } from '../features/auth/pages/SignInPage';
 
@@ -65,6 +66,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <ContractsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contracts/:sessionId"
+            element={
+              <ProtectedRoute>
+                <ContractDetailsPage />
               </ProtectedRoute>
             }
           />

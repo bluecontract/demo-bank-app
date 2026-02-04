@@ -1,0 +1,150 @@
+import { render, screen, fireEvent } from '@testing-library/react';
+import { vi } from 'vitest';
+import { ContractsPage } from './index';
+import { createTestWrapper } from '../../test-utils';
+import { useAuth } from '../../app/providers/AuthProvider';
+import {
+  useContracts,
+  useContractReviewState,
+  useProposals,
+} from '../../features/contracts/hooks';
+import { useLocation, useNavigate } from 'react-router-dom';
+import type { ContractSummary, PayNoteDeliverySummary } from '../../types/api';
+
+vi.mock('../../app/providers/AuthProvider', () => ({
+  useAuth: vi.fn(),
+}));
+
+vi.mock('../../features/contracts/hooks', () => ({
+  useContracts: vi.fn(),
+  useContractReviewState: vi.fn(),
+  useProposals: vi.fn(),
+}));
+
+vi.mock('../../features/dashboard/components', () => ({
+  SidebarNav: vi.fn(() => <div data-testid="sidebar-nav" />),
+  DashboardHeader: vi.fn(({ title }: { title: string }) => (
+    <div data-testid="dashboard-header">{title}</div>
+  )),
+}));
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>(
+    'react-router-dom'
+  );
+  return {
+    ...actual,
+    useLocation: vi.fn(),
+    useNavigate: vi.fn(),
+  };
+});
+
+const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
+const mockUseContracts = useContracts as ReturnType<typeof vi.fn>;
+const mockUseProposals = useProposals as ReturnType<typeof vi.fn>;
+const mockUseContractReviewState = useContractReviewState as ReturnType<
+  typeof vi.fn
+>;
+const mockUseLocation = useLocation as ReturnType<typeof vi.fn>;
+const mockUseNavigate = useNavigate as ReturnType<typeof vi.fn>;
+
+const contractSummary = {
+  contractId: 'contract-1',
+  sessionId: 'contract-1',
+  displayName: 'GE Refrigerator Order',
+  documentName: 'GE Refrigerator Order',
+  status: 'ACTIVE',
+  updatedAt: '2026-02-04T07:20:00.000Z',
+} as ContractSummary;
+
+const proposalSummary = {
+  deliveryId: 'proposal-1',
+  deliverySessionId: 'proposal-1',
+  name: 'Slow Digestion PayNote',
+  clientDecisionStatus: 'pending',
+  amountMinor: 100,
+  currency: 'USD',
+  updatedAt: '2026-02-04T07:21:00.000Z',
+  payNoteSessionIds: [],
+} as PayNoteDeliverySummary;
+
+describe('ContractsPage', () => {
+  let navigateMock: ReturnType<typeof vi.fn>;
+  let markReviewedMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    navigateMock = vi.fn();
+    markReviewedMock = vi.fn();
+
+    mockUseAuth.mockReturnValue({
+      user: { email: 'alex@example.com', userId: 'user-1' },
+    });
+
+    mockUseContracts.mockReturnValue({
+      data: [contractSummary],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+
+    mockUseProposals.mockReturnValue({
+      data: [proposalSummary],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+
+    mockUseContractReviewState.mockReturnValue({
+      reviewedMap: {},
+      markReviewed: markReviewedMock,
+    });
+
+    mockUseLocation.mockReturnValue({
+      pathname: '/contracts',
+      search: '',
+      state: null,
+    });
+
+    mockUseNavigate.mockReturnValue(navigateMock);
+  });
+
+  it('shows important proposals in inbox and important tabs', () => {
+    render(<ContractsPage />, { wrapper: createTestWrapper() });
+
+    expect(screen.getAllByText('GE Refrigerator Order').length).toBeGreaterThan(
+      0
+    );
+    expect(
+      screen.getAllByText('Slow Digestion PayNote').length
+    ).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /Important/i }));
+
+    expect(
+      screen.getAllByText('Slow Digestion PayNote').length
+    ).toBeGreaterThan(0);
+    expect(screen.queryAllByText('GE Refrigerator Order')).toHaveLength(0);
+  });
+
+  it('navigates to contract details and marks reviewed when a contract row is clicked', () => {
+    render(<ContractsPage />, { wrapper: createTestWrapper() });
+
+    const [contractLabel] = screen.getAllByText('GE Refrigerator Order');
+    const contractRow = contractLabel.closest('button');
+
+    expect(contractRow).not.toBeNull();
+    fireEvent.click(contractRow as HTMLElement);
+
+    expect(markReviewedMock).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'contract-1' })
+    );
+    expect(navigateMock).toHaveBeenCalledWith('/contracts/contract-1', {
+      state: {
+        from: '/contracts',
+        kind: 'contract',
+      },
+    });
+  });
+});
