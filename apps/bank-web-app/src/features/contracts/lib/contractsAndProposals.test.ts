@@ -26,24 +26,24 @@ const baseProposal: PayNoteDeliverySummary = {
 };
 
 describe('mergeContractsAndProposals', () => {
-  it('keeps proposal visible when contract status is missing', () => {
+  it('replaces proposal with contract when session id matches', () => {
     const result = mergeContractsAndProposals(
       [{ ...baseContract, status: undefined }],
       [baseProposal]
     );
 
     expect(result).toHaveLength(1);
-    expect(isProposalItem(result[0])).toBe(true);
+    expect(isProposalItem(result[0])).toBe(false);
   });
 
-  it('keeps proposal visible when contract is bootstrapped', () => {
+  it('replaces proposal with contract even when bootstrapped', () => {
     const result = mergeContractsAndProposals(
       [{ ...baseContract, status: 'bootstrapped' }],
       [baseProposal]
     );
 
     expect(result).toHaveLength(1);
-    expect(isProposalItem(result[0])).toBe(true);
+    expect(isProposalItem(result[0])).toBe(false);
   });
 
   it('replaces proposal with contract once ready', () => {
@@ -64,5 +64,53 @@ describe('mergeContractsAndProposals', () => {
     expect(contractItem.originProposalDeliveryId).toBe('delivery-1');
     expect(contractItem.originProposalSessionId).toBe('proposal-session-1');
     expect(contractItem.sortUpdatedAt).toBe(baseProposal.updatedAt);
+  });
+
+  it('replaces proposal when delivery session matches contract session', () => {
+    const result = mergeContractsAndProposals(
+      [{ ...baseContract, sessionId: 'proposal-session-1' }],
+      [{ ...baseProposal, payNoteSessionIds: [] }]
+    );
+
+    expect(result).toHaveLength(1);
+    expect(isProposalItem(result[0])).toBe(false);
+  });
+
+  it('replaces accepted proposal with contract when names match', () => {
+    const result = mergeContractsAndProposals(
+      [
+        {
+          ...baseContract,
+          sessionId: undefined,
+          displayName: 'Sample Contract',
+        },
+      ],
+      [
+        {
+          ...baseProposal,
+          payNoteSessionIds: [],
+          deliverySessionId: undefined,
+          name: 'Sample Contract',
+          clientDecisionStatus: 'accepted',
+        },
+      ]
+    );
+
+    expect(result).toHaveLength(1);
+    expect(isProposalItem(result[0])).toBe(false);
+  });
+
+  it('keeps rejected proposals even when session id matches', () => {
+    const result = mergeContractsAndProposals(
+      [{ ...baseContract, status: 'active' }],
+      [
+        {
+          ...baseProposal,
+          clientDecisionStatus: 'rejected',
+        },
+      ]
+    );
+
+    expect(result.some(item => isProposalItem(item))).toBe(true);
   });
 });

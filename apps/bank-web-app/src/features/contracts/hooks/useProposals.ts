@@ -28,7 +28,8 @@ export function useProposals() {
 
       return response.body.items;
     },
-    staleTime: 30 * 1000,
+    refetchInterval: 5000,
+    staleTime: 5 * 1000,
     gcTime: 2 * 60 * 1000,
     retry: (failureCount, error) => {
       if (error.status === 401 || error.status === 403) {

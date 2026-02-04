@@ -64,6 +64,7 @@ const proposalSummary = {
   clientDecisionStatus: 'pending',
   amountMinor: 100,
   currency: 'USD',
+  createdAt: '2026-02-04T07:15:00.000Z',
   updatedAt: '2026-02-04T07:21:00.000Z',
   payNoteSessionIds: [],
 } as PayNoteDeliverySummary;

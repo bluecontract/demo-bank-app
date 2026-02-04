@@ -59,7 +59,7 @@ const navItems = [
 export function SidebarNav() {
   const { reviewedMap } = useContractReviewState();
   const { activeSessionId } = useActiveContractSession();
-  const newContractsQuery = useContracts({ refetchInterval: 15000 });
+  const newContractsQuery = useContracts({ refetchInterval: 5000 });
   const proposalsQuery = useProposals();
 
   const newCount = useMemo(() => {

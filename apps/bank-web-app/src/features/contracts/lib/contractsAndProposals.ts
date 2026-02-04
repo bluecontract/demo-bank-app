@@ -24,6 +24,8 @@ const parseTimestamp = (value?: string) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+const normalizeName = (value?: string) => value?.trim().toLowerCase() || '';
+
 export const getItemSessionId = (
   item: ContractOrProposalItem
 ): string | undefined =>
@@ -37,14 +39,6 @@ const getItemSortUpdatedAt = (item: ContractOrProposalItem): string =>
     ? item.sortUpdatedAt
     : item.updatedAt;
 
-const isContractReadyForInbox = (contract: ContractSummary): boolean => {
-  const status = contract.status?.trim().toLowerCase();
-  if (!status) {
-    return false;
-  }
-  return status !== 'bootstrapped';
-};
-
 export function mergeContractsAndProposals(
   contracts: ContractSummary[],
   proposals: PayNoteDeliverySummary[]
@@ -54,6 +48,7 @@ export function mergeContractsAndProposals(
       .map(contract => [contract.sessionId, contract] as const)
       .filter((entry): entry is [string, ContractSummary] => Boolean(entry[0]))
   );
+  const contractByName = new Map<string, ContractSummary>();
   const contractSessionIds = new Set(
     contracts
       .map(contract => contract.sessionId)
@@ -61,31 +56,66 @@ export function mergeContractsAndProposals(
   );
 
   const matchedContractSessionIds = new Set<string>();
+  const matchedContractIds = new Set<string>();
   const mergedItems: ContractOrProposalItem[] = [];
 
+  for (const contract of contracts) {
+    const nameKey = normalizeName(
+      contract.documentName ?? contract.displayName
+    );
+    if (!nameKey) {
+      continue;
+    }
+    const existing = contractByName.get(nameKey);
+    if (
+      !existing ||
+      parseTimestamp(contract.updatedAt) > parseTimestamp(existing.updatedAt)
+    ) {
+      contractByName.set(nameKey, contract);
+    }
+  }
+
   for (const proposal of proposals) {
+    const decisionStatus = proposal.clientDecisionStatus?.trim().toLowerCase();
+    const isRejected = decisionStatus === 'rejected';
     const payNoteSessionIds = proposal.payNoteSessionIds ?? [];
-    const matchingSessionId = payNoteSessionIds.find(id =>
+    const candidateSessionIds = new Set(
+      [...payNoteSessionIds, proposal.deliverySessionId].filter(
+        (id): id is string => Boolean(id)
+      )
+    );
+    const matchingSessionId = Array.from(candidateSessionIds).find(id =>
       contractSessionIds.has(id)
     );
-    if (matchingSessionId) {
+    if (!isRejected && matchingSessionId) {
       const contract = contractBySessionId.get(matchingSessionId);
       if (contract) {
-        if (!isContractReadyForInbox(contract)) {
-          matchedContractSessionIds.add(matchingSessionId);
-          mergedItems.push({
-            ...proposal,
-            kind: 'proposal' as const,
-          });
-        } else {
-          matchedContractSessionIds.add(matchingSessionId);
-          mergedItems.push({
-            ...contract,
-            originProposalDeliveryId: proposal.deliveryId,
-            originProposalSessionId: proposal.deliverySessionId,
-            sortUpdatedAt: proposal.updatedAt,
-          });
+        matchedContractSessionIds.add(matchingSessionId);
+        matchedContractIds.add(contract.contractId);
+        mergedItems.push({
+          ...contract,
+          originProposalDeliveryId: proposal.deliveryId,
+          originProposalSessionId: proposal.deliverySessionId,
+          sortUpdatedAt: proposal.updatedAt,
+        });
+        continue;
+      }
+    }
+
+    if (!isRejected && decisionStatus === 'accepted') {
+      const nameKey = normalizeName(proposal.name);
+      const contract = nameKey ? contractByName.get(nameKey) : undefined;
+      if (contract) {
+        if (contract.sessionId) {
+          matchedContractSessionIds.add(contract.sessionId);
         }
+        matchedContractIds.add(contract.contractId);
+        mergedItems.push({
+          ...contract,
+          originProposalDeliveryId: proposal.deliveryId,
+          originProposalSessionId: proposal.deliverySessionId,
+          sortUpdatedAt: proposal.updatedAt,
+        });
         continue;
       }
     }
@@ -96,10 +126,18 @@ export function mergeContractsAndProposals(
     });
   }
 
-  const unmatchedContracts = contracts.filter(
-    contract =>
-      !contract.sessionId || !matchedContractSessionIds.has(contract.sessionId)
-  );
+  const unmatchedContracts = contracts.filter(contract => {
+    if (matchedContractIds.has(contract.contractId)) {
+      return false;
+    }
+    if (
+      contract.sessionId &&
+      matchedContractSessionIds.has(contract.sessionId)
+    ) {
+      return false;
+    }
+    return true;
+  });
 
   const combined: ContractOrProposalItem[] = [
     ...unmatchedContracts,

@@ -6,7 +6,14 @@ import { formatAccountNumber } from '../../../lib/formatAccountNumber';
 import { formatShortDate, formatLongDate } from '../../../lib/formatDate';
 import { formatStatusLabel } from '../../../lib/formatStatusLabel';
 import { Spinner } from '../../../ui/Spinner';
+import { navigateTo } from '../../../lib/navigation';
 import { useActiveContractSession } from '../../contracts/hooks';
+import {
+  getRelatedContractTarget,
+  getRelatedContractSessionId,
+  getVisibleRelatedContracts,
+  isProposalRelatedContract,
+} from '../lib/relatedContracts';
 
 type Account = {
   accountId: string;
@@ -118,38 +125,8 @@ export function TransactionDetails({
     return status.toLowerCase() === 'posted' ? 'Completed' : status;
   };
 
-  const relatedContractsList = relatedContracts ?? [];
-  const isProposalItem = (
-    item: RelatedContractItem
-  ): item is Extract<RelatedContractItem, { kind: 'proposal' }> =>
-    'kind' in item && item.kind === 'proposal';
-  const isContractItem = (
-    item: RelatedContractItem
-  ): item is Exclude<RelatedContractItem, { kind: 'proposal' }> =>
-    !isProposalItem(item);
-  const hasRelatedContract = relatedContractsList.some(item =>
-    isContractItem(item)
-  );
-  const contractSessionIds = new Set(
-    relatedContractsList
-      .filter(isContractItem)
-      .map(item => item.sessionId)
-      .filter((value): value is string => Boolean(value))
-  );
-  const visibleRelatedContracts = hasRelatedContract
-    ? relatedContractsList.filter(isContractItem)
-    : relatedContractsList.filter(item => {
-        if (isContractItem(item)) {
-          return true;
-        }
-        const payNoteSessionIds = item.payNoteSessionIds ?? [];
-        if (!payNoteSessionIds.length) {
-          return true;
-        }
-        return !payNoteSessionIds.some((id: string) =>
-          contractSessionIds.has(id)
-        );
-      });
+  const { visibleRelatedContracts } =
+    getVisibleRelatedContracts(relatedContracts);
 
   const formatContractStatus = formatStatusLabel;
 
@@ -161,31 +138,13 @@ export function TransactionDetails({
   };
 
   const handleContractClick = (contract: RelatedContractItem) => {
-    if (isProposalItem(contract)) {
-      const proposalSessionId = contract.deliverySessionId;
-      if (!proposalSessionId) {
-        return;
-      }
-      setActiveSession(proposalSessionId);
-      if (typeof window !== 'undefined') {
-        const target = `/contracts?sessionId=${encodeURIComponent(
-          proposalSessionId
-        )}`;
-        window.location.assign(target);
-      }
+    const sessionId = getRelatedContractSessionId(contract);
+    const target = getRelatedContractTarget(contract);
+    if (!sessionId || !target) {
       return;
     }
-
-    if (!contract.sessionId) {
-      return;
-    }
-    setActiveSession(contract.sessionId);
-    if (typeof window !== 'undefined') {
-      const target = `/contracts?sessionId=${encodeURIComponent(
-        contract.sessionId
-      )}`;
-      window.location.assign(target);
-    }
+    setActiveSession(sessionId);
+    navigateTo(target);
   };
 
   const headerContext = [
@@ -287,7 +246,9 @@ export function TransactionDetails({
               <div className="flex items-center gap-3">
                 <div
                   className={`flex size-8 items-center justify-center rounded-full ${
-                    isCredit ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                    isCredit
+                      ? 'bg-emerald-50 text-emerald-600'
+                      : 'bg-rose-50 text-rose-600'
                   }`}
                 >
                   <span className="text-lg">{isCredit ? '↓' : '↑'}</span>
@@ -306,7 +267,9 @@ export function TransactionDetails({
                     className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4"
                   >
                     <span className="text-slate-500">{row.label}</span>
-                    <span className="text-slate-900 text-right">{row.value}</span>
+                    <span className="text-slate-900 text-right">
+                      {row.value}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -371,7 +334,7 @@ export function TransactionDetails({
           visibleRelatedContracts.length > 0 && (
             <div className="mt-4 space-y-3">
               {visibleRelatedContracts.map(contract => {
-                const isProposal = isProposalItem(contract);
+                const isProposal = isProposalRelatedContract(contract);
                 const isSelectable = isProposal
                   ? Boolean(contract.deliverySessionId)
                   : Boolean(contract.sessionId);

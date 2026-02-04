@@ -37,7 +37,7 @@ export function useContracts(options: UseContractsOptions = {}) {
     },
     enabled: options.enabled ?? true,
     refetchInterval: options.refetchInterval ?? false,
-    staleTime: 30 * 1000,
+    staleTime: 5 * 1000,
     gcTime: 2 * 60 * 1000,
     retry: (failureCount, error) => {
       if (error.status === 401 || error.status === 403) {

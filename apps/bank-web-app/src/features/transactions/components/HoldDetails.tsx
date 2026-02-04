@@ -4,7 +4,14 @@ import { Card } from '../../../ui/Card';
 import { Spinner } from '../../../ui/Spinner';
 import { formatCurrency } from '../../../lib/formatCurrency';
 import { formatAccountNumber } from '../../../lib/formatAccountNumber';
+import { navigateTo } from '../../../lib/navigation';
 import { useActiveContractSession } from '../../contracts/hooks';
+import {
+  getRelatedContractTarget,
+  getRelatedContractSessionId,
+  getVisibleRelatedContracts,
+  isProposalRelatedContract,
+} from '../lib/relatedContracts';
 
 type Account = {
   accountId: string;
@@ -170,14 +177,6 @@ export function HoldDetails({
   relatedContractsError,
 }: HoldDetailsProps) {
   const { setActiveSession } = useActiveContractSession();
-  const isProposalItem = (
-    item: RelatedContractItem
-  ): item is Extract<RelatedContractItem, { kind: 'proposal' }> =>
-    'kind' in item && item.kind === 'proposal';
-  const isContractItem = (
-    item: RelatedContractItem
-  ): item is Exclude<RelatedContractItem, { kind: 'proposal' }> =>
-    !isProposalItem(item);
   const formattedAmount = formatCurrency(hold.amountMinor);
   const timeline = [...hold.timeline].sort(
     (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
@@ -208,57 +207,17 @@ export function HoldDetails({
     ? 'PayNote Transfer'
     : 'Standard Transfer';
 
-  const relatedContractsList = relatedContracts ?? [];
-  const hasRelatedContract = relatedContractsList.some(item =>
-    isContractItem(item)
-  );
-  const contractSessionIds = new Set(
-    relatedContractsList
-      .filter(isContractItem)
-      .map(item => item.sessionId)
-      .filter((value): value is string => Boolean(value))
-  );
-  const visibleRelatedContracts = hasRelatedContract
-    ? relatedContractsList.filter(isContractItem)
-    : relatedContractsList.filter(item => {
-        if (isContractItem(item)) {
-          return true;
-        }
-        const payNoteSessionIds = item.payNoteSessionIds ?? [];
-        if (!payNoteSessionIds.length) {
-          return true;
-        }
-        return !payNoteSessionIds.some((id: string) =>
-          contractSessionIds.has(id)
-        );
-      });
+  const { visibleRelatedContracts } =
+    getVisibleRelatedContracts(relatedContracts);
 
   const handleContractClick = (contract: RelatedContractItem) => {
-    if (isProposalItem(contract)) {
-      const proposalSessionId = contract.deliverySessionId;
-      if (!proposalSessionId) {
-        return;
-      }
-      setActiveSession(proposalSessionId);
-      if (typeof window !== 'undefined') {
-        const target = `/contracts?sessionId=${encodeURIComponent(
-          proposalSessionId
-        )}`;
-        window.location.assign(target);
-      }
+    const sessionId = getRelatedContractSessionId(contract);
+    const target = getRelatedContractTarget(contract);
+    if (!sessionId || !target) {
       return;
     }
-
-    if (!contract.sessionId) {
-      return;
-    }
-    setActiveSession(contract.sessionId);
-    if (typeof window !== 'undefined') {
-      const target = `/contracts?sessionId=${encodeURIComponent(
-        contract.sessionId
-      )}`;
-      window.location.assign(target);
-    }
+    setActiveSession(sessionId);
+    navigateTo(target);
   };
 
   const detailRows: Array<{ label: string; value: string }> = [
@@ -456,7 +415,7 @@ export function HoldDetails({
             visibleRelatedContracts.length > 0 && (
               <div className="space-y-2">
                 {visibleRelatedContracts.map(contract => {
-                  const isProposal = isProposalItem(contract);
+                  const isProposal = isProposalRelatedContract(contract);
                   const isSelectable = isProposal
                     ? Boolean(contract.deliverySessionId)
                     : Boolean(contract.sessionId);

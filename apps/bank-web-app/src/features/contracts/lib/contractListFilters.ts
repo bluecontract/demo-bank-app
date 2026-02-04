@@ -34,7 +34,7 @@ export const isImportantProposal = (
   proposal: PayNoteDeliverySummary
 ): boolean => {
   const status = getProposalDecisionStatus(proposal);
-  return status === 'pending' || status === 'accepted';
+  return status === 'pending';
 };
 
 export const isRejectedProposal = (proposal: PayNoteDeliverySummary): boolean =>

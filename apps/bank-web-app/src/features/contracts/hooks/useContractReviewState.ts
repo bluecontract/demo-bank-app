@@ -66,7 +66,11 @@ export const useContractReviewState = () => {
       return;
     }
 
-    const timestamp = contract.updatedAt ?? new Date().toISOString();
+    const updatedAtMs = contract.updatedAt ? Date.parse(contract.updatedAt) : 0;
+    const safeUpdatedAtMs = Number.isNaN(updatedAtMs) ? 0 : updatedAtMs;
+    const timestamp = new Date(
+      Math.max(safeUpdatedAtMs, Date.now())
+    ).toISOString();
     const next = { ...reviewedMapRef.current, [key]: timestamp };
     reviewedMapRef.current = next;
     setReviewedMap(next);
