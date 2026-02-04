@@ -5,8 +5,8 @@ import {
   useActivity,
   type ActivityItem,
 } from '../../transactions/hooks/useActivity';
-import { useAccounts } from '../../accounts/hooks/useAccounts';
 import { TransactionList } from '../../transactions/components/TransactionList';
+import { filterActivityByCardGroups } from '../../transactions/lib/activityUtils';
 
 type ActivityFilter = 'all' | 'transfers' | 'cards' | 'holds';
 
@@ -27,30 +27,12 @@ const hasCardContext = (item: ActivityItem) =>
 const isPostedTransaction = (item: ActivityItem) =>
   item.kind === 'POSTED_TRANSACTION';
 
-const getCardGroupKeys = (item: ActivityItem) => {
-  const keys: string[] = [];
-  if (item.kind === 'POSTED_TRANSACTION') {
-    if (item.originHoldId) {
-      keys.push(`hold-${item.originHoldId}`);
-    }
-  } else {
-    keys.push(`hold-${item.holdId}`);
-  }
-
-  if (item.processorChargeId) {
-    keys.push(`charge-${item.processorChargeId}`);
-  }
-
-  return keys;
-};
-
 interface TransactionHistoryProps {
   cardId?: string | null;
 }
 
 export function TransactionHistory({ cardId }: TransactionHistoryProps) {
   const { selectedAccount } = useSelectedAccount();
-  const { data: accounts } = useAccounts();
   const [activeFilter, setActiveFilter] = useState<ActivityFilter>('all');
 
   const {
@@ -73,18 +55,7 @@ export function TransactionHistory({ cardId }: TransactionHistoryProps) {
         items = activityItems.filter(item => isPostedTransaction(item));
         break;
       case 'cards': {
-        const cardGroupIds = new Set<string>();
-        activityItems.forEach(item => {
-          if (hasCardContext(item)) {
-            getCardGroupKeys(item).forEach(key => cardGroupIds.add(key));
-          }
-        });
-        items = activityItems.filter(item => {
-          if (hasCardContext(item)) {
-            return true;
-          }
-          return getCardGroupKeys(item).some(key => cardGroupIds.has(key));
-        });
+        items = filterActivityByCardGroups(activityItems, hasCardContext);
         break;
       }
       case 'holds':
@@ -138,8 +109,6 @@ export function TransactionHistory({ cardId }: TransactionHistoryProps) {
         <TransactionList
           activityItems={filteredItems}
           accountId={selectedAccount?.accountId || ''}
-          currentAccountNumber={selectedAccount?.accountNumber}
-          accounts={accounts}
           isLoading={isLoading}
           isError={isError}
           isEmpty={isEmpty}

@@ -6,6 +6,7 @@ import { HomePage } from '../pages/HomePage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { CardsPage } from '../pages/CardsPage';
 import { TransactionsPage } from '../pages/TransactionsPage';
+import { TransactionDetailsPage } from '../pages/TransactionDetailsPage';
 import { NewTransferPage } from '../pages/NewTransferPage';
 import { ContractsPage } from '../pages/ContractsPage';
 import { SignUpPage } from '../features/auth/pages/SignUpPage';
@@ -40,6 +41,14 @@ export function App() {
             element={
               <ProtectedRoute>
                 <TransactionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/transactions/:accountId/:activityId"
+            element={
+              <ProtectedRoute>
+                <TransactionDetailsPage />
               </ProtectedRoute>
             }
           />

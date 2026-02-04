@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
 import { Card } from '../../../ui/Card';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
-import { useAccounts } from '../../accounts/hooks/useAccounts';
 import {
   useActivity,
   type ActivityItem,
 } from '../../transactions/hooks/useActivity';
 import { TransactionList } from '../../transactions/components/TransactionList';
+import { filterActivityByCardGroups } from '../../transactions/lib/activityUtils';
 import type { CardSummary } from '../../../types/api';
 
 interface CardActivityPanelProps {
@@ -16,29 +16,10 @@ interface CardActivityPanelProps {
 const EMPTY_ACTIVITY_ITEMS: ActivityItem[] = [];
 
 const matchesSelectedCard = (item: ActivityItem, card: CardSummary) =>
-  (item.cardId && item.cardId === card.cardId) ||
-  (item.cardLast4 && item.cardLast4 === card.panLast4);
-
-const getCardGroupKeys = (item: ActivityItem) => {
-  const keys: string[] = [];
-  if (item.kind === 'POSTED_TRANSACTION') {
-    if (item.originHoldId) {
-      keys.push(`hold-${item.originHoldId}`);
-    }
-  } else {
-    keys.push(`hold-${item.holdId}`);
-  }
-
-  if (item.processorChargeId) {
-    keys.push(`charge-${item.processorChargeId}`);
-  }
-
-  return keys;
-};
+  item.cardId === card.cardId || item.cardLast4 === card.panLast4;
 
 export function CardActivityPanel({ selectedCard }: CardActivityPanelProps) {
   const { selectedAccount } = useSelectedAccount();
-  const { data: accounts } = useAccounts();
 
   const {
     data: activityData,
@@ -55,17 +36,8 @@ export function CardActivityPanel({ selectedCard }: CardActivityPanelProps) {
       return EMPTY_ACTIVITY_ITEMS;
     }
 
-    const groupKeys = new Set<string>();
-    activityItems.forEach(item => {
-      if (matchesSelectedCard(item, selectedCard)) {
-        getCardGroupKeys(item).forEach(key => groupKeys.add(key));
-      }
-    });
-
-    return activityItems.filter(
-      item =>
-        matchesSelectedCard(item, selectedCard) ||
-        getCardGroupKeys(item).some(key => groupKeys.has(key))
+    return filterActivityByCardGroups(activityItems, item =>
+      matchesSelectedCard(item, selectedCard)
     );
   }, [activityItems, selectedCard]);
 
@@ -116,8 +88,6 @@ export function CardActivityPanel({ selectedCard }: CardActivityPanelProps) {
         <TransactionList
           activityItems={filteredItems}
           accountId={selectedAccount.accountId}
-          currentAccountNumber={selectedAccount.accountNumber}
-          accounts={accounts}
           isLoading={isLoading}
           isError={isError}
           isEmpty={isEmpty}

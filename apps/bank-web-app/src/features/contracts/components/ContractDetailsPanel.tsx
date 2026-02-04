@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { dump as yamlDump } from 'js-yaml';
 import { getSupportedContractByTypeBlueId } from '@demo-bank-app/shared-bank-api-contract';
 import { blue } from '../../../lib/blue';
+import { formatShortDateTime } from '../../../lib/formatDate';
+import { formatStatusLabel } from '../../../lib/formatStatusLabel';
 import { Card } from '../../../ui/Card';
 import { Spinner } from '../../../ui/Spinner';
 import { Button } from '../../../ui/Button';
@@ -9,14 +12,16 @@ import type { ContractDetails } from '../../../types/api';
 import { collectContractOperations } from '../lib/operations';
 import { OperationForm } from './OperationForm';
 import { SummaryPanel } from './SummaryPanel';
-import { TransactionDetailsModal } from '../../transactions/components/TransactionDetailsModal';
 import { TransactionItem } from '../../transactions/components/TransactionItem';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
 import {
   ActivityItem,
   useActivity,
 } from '../../transactions/hooks/useActivity';
+import { useRelatedActivityItems } from '../../transactions/hooks/useRelatedActivityItems';
 import { useContractSummary, useRegenerateContractSummary } from '../hooks';
+import { buildTransactionDetailsPath } from '../../transactions/lib/activityRoutes';
+import { getActivityKey } from '../../transactions/lib/activityUtils';
 
 interface ContractDetailsPanelProps {
   contract?: ContractDetails | null;
@@ -100,56 +105,12 @@ const getDocumentDescription = (value: unknown) => {
   return trimmed ? trimmed : null;
 };
 
-const formatStatus = (value?: string) => {
-  if (!value) return 'Unknown';
-  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
-};
-
 const formatKeyLabel = (key: string) => {
   return key
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, char => char.toUpperCase());
 };
-
-const formatDate = (value?: string) => {
-  if (!value) return null;
-  const date = new Date(value);
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
-const getHoldEventTimestamp = (item: ActivityItem) => {
-  if (item.kind === 'HOLD_CREATED') {
-    return item.createdAt;
-  }
-  if (item.kind === 'HOLD_CAPTURED') {
-    return item.capturedAt;
-  }
-  if (item.kind === 'HOLD_RELEASED') {
-    return item.releasedAt;
-  }
-  if (item.kind === 'HOLD_FAILED') {
-    return item.failedAt;
-  }
-  return '';
-};
-
-const getActivityTimestamp = (item: ActivityItem) => {
-  if (item.kind === 'POSTED_TRANSACTION') {
-    return item.postedAt;
-  }
-  return getHoldEventTimestamp(item);
-};
-
-const getActivityKey = (item: ActivityItem) =>
-  item.kind === 'POSTED_TRANSACTION'
-    ? `txn-${item.transactionId}`
-    : `hold-${item.holdId}-${item.kind}-${getHoldEventTimestamp(item)}`;
 
 export function ContractDetailsPanel({
   contract,
@@ -158,10 +119,8 @@ export function ContractDetailsPanel({
   errorMessage,
 }: ContractDetailsPanelProps) {
   const [activeOperation, setActiveOperation] = useState<string | null>(null);
-  const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
-  const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(
-    null
-  );
+  const navigate = useNavigate();
+  const location = useLocation();
   const { data: accounts } = useAccounts();
   const activityQuery = useActivity({
     accountNumber: contract?.accountNumber ?? null,
@@ -189,8 +148,6 @@ export function ContractDetailsPanel({
 
   useEffect(() => {
     setActiveOperation(null);
-    setActiveActivityId(null);
-    setSelectedActivity(null);
   }, [contract?.sessionId]);
 
   const restoredDocument = restoreInlineTypes(contract?.document);
@@ -245,82 +202,40 @@ export function ContractDetailsPanel({
     [activityQuery.data?.items]
   );
 
-  const activityByTransactionId = useMemo(() => {
-    const map = new Map<string, ActivityItem>();
-    for (const item of activityItems) {
-      if (item.kind === 'POSTED_TRANSACTION') {
-        map.set(item.transactionId, item);
-      }
-    }
-    return map;
-  }, [activityItems]);
-
-  const activityByHoldId = useMemo(() => {
-    const map = new Map<string, ActivityItem>();
-    for (const item of activityItems) {
-      if (item.kind === 'POSTED_TRANSACTION') {
-        continue;
-      }
-
-      const existing = map.get(item.holdId);
-      if (!existing) {
-        map.set(item.holdId, item);
-        continue;
-      }
-
-      const existingTime = Date.parse(getActivityTimestamp(existing));
-      const nextTime = Date.parse(getActivityTimestamp(item));
-      if (Number.isNaN(existingTime) || nextTime > existingTime) {
-        map.set(item.holdId, item);
-      }
-    }
-
-    return map;
-  }, [activityItems]);
-
-  const relatedTransactionItems = useMemo(
-    () =>
-      relatedTransactions
-        .map(txnId => activityByTransactionId.get(txnId))
-        .filter((item): item is ActivityItem => Boolean(item)),
-    [activityByTransactionId, relatedTransactions]
-  );
-
-  const relatedHoldItems = useMemo(
-    () =>
-      relatedHolds
-        .map(holdId => activityByHoldId.get(holdId))
-        .filter((item): item is ActivityItem => Boolean(item)),
-    [activityByHoldId, relatedHolds]
-  );
-
-  const missingTransactionIds = useMemo(
-    () =>
-      relatedTransactions.filter(txnId => !activityByTransactionId.has(txnId)),
-    [activityByTransactionId, relatedTransactions]
-  );
-
-  const missingHoldIds = useMemo(
-    () => relatedHolds.filter(holdId => !activityByHoldId.has(holdId)),
-    [activityByHoldId, relatedHolds]
-  );
+  const {
+    relatedTransactionItems,
+    relatedHoldItems,
+    missingTransactionIds,
+    missingHoldIds,
+  } = useRelatedActivityItems({
+    activityItems,
+    relatedTransactionIds: relatedTransactions,
+    relatedHoldIds: relatedHolds,
+  });
 
   const handleActivitySelect = (activity: ActivityItem) => {
-    if (!contract?.accountNumber) {
+    if (!contract?.accountNumber || !account?.accountId) {
       return;
     }
 
-    setSelectedActivity(activity);
-    setActiveActivityId(activity.activityId);
+    navigate(buildTransactionDetailsPath(account.accountId, activity.activityId), {
+      state: {
+        from: `${location.pathname}${location.search}`,
+        selectedActivity: activity,
+      },
+    });
   };
 
   const handleFallbackActivityOpen = (activityId: string) => {
-    if (!contract?.accountNumber) {
+    if (!contract?.accountNumber || !account?.accountId) {
       return;
     }
 
-    setSelectedActivity(null);
-    setActiveActivityId(activityId);
+    navigate(buildTransactionDetailsPath(account.accountId, activityId), {
+      state: {
+        from: `${location.pathname}${location.search}`,
+      },
+    });
   };
 
   const isActivityLoading =
@@ -364,10 +279,12 @@ export function ContractDetailsPanel({
           <span className="app-chip app-chip-neutral">
             {contract.displayName}
           </span>
-          <span className="app-chip">{formatStatus(contract.status)}</span>
+          <span className="app-chip">
+            {formatStatusLabel(contract.status)}
+          </span>
           {statusTimestamp && (
             <span className="app-chip app-chip-neutral">
-              Updated {formatDate(statusTimestamp)}
+              Updated {formatShortDateTime(statusTimestamp)}
             </span>
           )}
         </div>
@@ -606,7 +523,7 @@ export function ContractDetailsPanel({
             <div>
               <span className="text-slate-500">Created</span>
               <p className="font-medium text-slate-900">
-                {formatDate(contract.createdAt)}
+                {formatShortDateTime(contract.createdAt)}
               </p>
             </div>
           </div>
@@ -621,7 +538,7 @@ export function ContractDetailsPanel({
                   <div key={key} className="flex items-center justify-between">
                     <span>{formatKeyLabel(key)}</span>
                     <span className="font-medium text-slate-900">
-                      {formatDate(value) ?? value}
+                      {formatShortDateTime(value) ?? value}
                     </span>
                   </div>
                 ))}
@@ -682,19 +599,6 @@ export function ContractDetailsPanel({
         </div>
       </details>
 
-      <TransactionDetailsModal
-        isOpen={!!activeActivityId}
-        onClose={() => {
-          setActiveActivityId(null);
-          setSelectedActivity(null);
-        }}
-        accountId={account?.accountId ?? ''}
-        accountNumber={contract.accountNumber ?? ''}
-        activityId={activeActivityId ?? ''}
-        selectedActivity={selectedActivity ?? undefined}
-        currentAccountNumber={contract.accountNumber ?? undefined}
-        accounts={accounts}
-      />
     </Card>
   );
 }

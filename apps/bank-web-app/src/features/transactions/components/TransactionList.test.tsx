@@ -1,10 +1,21 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { ActivityItem } from '../hooks/useActivity';
 import { TransactionList } from './TransactionList';
 
-const onActivitySelectSpy = vi.fn();
+const navigateSpy = vi.fn();
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>(
+    'react-router-dom'
+  );
+  return {
+    ...actual,
+    useNavigate: () => navigateSpy,
+    useLocation: () => ({ pathname: '/transactions', search: '' }),
+  };
+});
 
 vi.mock('./TransactionItem', () => ({
   TransactionItem: ({
@@ -19,30 +30,11 @@ vi.mock('./TransactionItem', () => ({
     <button
       type="button"
       data-testid={testId}
-      onClick={() => {
-        onActivitySelect(item);
-        onActivitySelectSpy(item);
-      }}
+      onClick={() => onActivitySelect(item)}
     >
       Mock Activity Item - {item.kind}
     </button>
   ),
-}));
-
-const modalSpy = vi.fn();
-
-vi.mock('./TransactionDetailsModal', () => ({
-  TransactionDetailsModal: (props: any) => {
-    modalSpy(props);
-    if (!props.isOpen) {
-      return null;
-    }
-    return (
-      <div data-testid="transaction-modal">
-        Mock Transaction Modal - {props.activityId}
-      </div>
-    );
-  },
 }));
 
 const postedTransaction: ActivityItem = {
@@ -73,8 +65,7 @@ const holdCreated: ActivityItem = {
 
 describe('TransactionList', () => {
   beforeEach(() => {
-    modalSpy.mockClear();
-    onActivitySelectSpy.mockClear();
+    navigateSpy.mockClear();
   });
 
   it('renders loading state', () => {
@@ -150,13 +141,11 @@ describe('TransactionList', () => {
     ).toBeInTheDocument();
   });
 
-  it('opens modal when posted transaction row is clicked', () => {
+  it('navigates to posted transaction details when row is clicked', () => {
     render(
       <TransactionList
         activityItems={[postedTransaction]}
         accountId="acc-1"
-        currentAccountNumber="1234567890"
-        accounts={[]}
         isLoading={false}
         isError={false}
         isEmpty={false}
@@ -166,19 +155,22 @@ describe('TransactionList', () => {
 
     fireEvent.click(screen.getByTestId('activity-item-txn-txn-123'));
 
-    expect(onActivitySelectSpy).toHaveBeenCalledWith(postedTransaction);
-    expect(
-      screen.getByText('Mock Transaction Modal - TXN#txn-123')
-    ).toBeInTheDocument();
+    expect(navigateSpy).toHaveBeenCalledWith(
+      '/transactions/acc-1/TXN--txn-123',
+      {
+        state: {
+          from: '/transactions',
+          selectedActivity: postedTransaction,
+        },
+      }
+    );
   });
 
-  it('opens modal when hold row is clicked', () => {
+  it('navigates to hold details when row is clicked', () => {
     render(
       <TransactionList
         activityItems={[holdCreated]}
         accountId="acc-1"
-        currentAccountNumber="1234567890"
-        accounts={[]}
         isLoading={false}
         isError={false}
         isEmpty={false}
@@ -188,44 +180,14 @@ describe('TransactionList', () => {
 
     fireEvent.click(screen.getByTestId('activity-item-hold_created-hold-1'));
 
-    expect(onActivitySelectSpy).toHaveBeenCalledWith(holdCreated);
-    expect(
-      screen.getByText('Mock Transaction Modal - HOLD#hold-1')
-    ).toBeInTheDocument();
-  });
-
-  it('clears selection when account context changes', () => {
-    const { rerender } = render(
-      <TransactionList
-        activityItems={[postedTransaction]}
-        accountId="acc-1"
-        currentAccountNumber="1234567890"
-        accounts={[]}
-        isLoading={false}
-        isError={false}
-        isEmpty={false}
-        data-testid="activity-list"
-      />
+    expect(navigateSpy).toHaveBeenCalledWith(
+      '/transactions/acc-1/HOLD--hold-1',
+      {
+        state: {
+          from: '/transactions',
+          selectedActivity: holdCreated,
+        },
+      }
     );
-
-    fireEvent.click(screen.getByTestId('activity-item-txn-txn-123'));
-    expect(
-      screen.getByText('Mock Transaction Modal - TXN#txn-123')
-    ).toBeInTheDocument();
-
-    rerender(
-      <TransactionList
-        activityItems={[postedTransaction]}
-        accountId="acc-2"
-        currentAccountNumber="1111111111"
-        accounts={[]}
-        isLoading={false}
-        isError={false}
-        isEmpty={false}
-        data-testid="activity-list"
-      />
-    );
-
-    expect(screen.queryByTestId('transaction-modal')).not.toBeInTheDocument();
   });
 });

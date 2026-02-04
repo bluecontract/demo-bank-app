@@ -249,26 +249,24 @@ test.describe('Banking Core Flows', () => {
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
 
-    // Click on the first transaction to open details modal
-    await page.click('[data-testid^="activity-item-"]');
+    // Click on the first transaction to open details page
+    await Promise.all([
+      page.waitForURL('**/transactions/**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      page.click('[data-testid^="activity-item-"]'),
+    ]);
 
-    // Wait for modal to open and verify content
+    await expect(page.getByTestId('transaction-details-page')).toBeVisible();
     await expect(
-      page.locator('[data-testid="transaction-modal-content"]')
+      page.getByRole('heading', { name: 'Transaction details' })
     ).toBeVisible();
-    await expect(page.getByText('Transaction Details')).toBeVisible();
-    // Use a more specific selector for the incoming transfer heading
+
+    const details = page.getByTestId('transaction-details');
     await expect(
-      page
-        .locator('[data-testid="transaction-modal-content"]')
-        .getByRole('heading', { name: 'Incoming transfer' })
+      details.getByRole('heading', { name: 'Incoming transfer' })
     ).toBeVisible();
-    // Scope the amount to the modal
-    await expect(
-      page
-        .locator('[data-testid="transaction-modal-content"]')
-        .getByText('+$85.50')
-    ).toBeVisible();
+    await expect(details.getByText('+$85.50')).toBeVisible();
   });
 
   test('should show transaction details for outgoing transfer', async ({
@@ -348,27 +346,27 @@ test.describe('Banking Core Flows', () => {
     });
 
     // Click on the outgoing transfer transaction specifically
-    await page
-      .locator('[data-testid="transaction-history-list"]')
-      .getByText('-$40')
-      .locator('..')
-      .click();
+    await Promise.all([
+      page.waitForURL('**/transactions/**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      page
+        .locator('[data-testid="transaction-history-list"]')
+        .getByText('-$40')
+        .locator('..')
+        .click(),
+    ]);
 
-    // Wait for modal to open and verify content
+    await expect(page.getByTestId('transaction-details-page')).toBeVisible();
     await expect(
-      page.locator('[data-testid="transaction-modal-content"]')
+      page.getByRole('heading', { name: 'Transaction details' })
     ).toBeVisible();
-    await expect(page.getByText('Transaction Details')).toBeVisible();
 
-    // Check for either outgoing or incoming transfer heading (depends on transaction perspective)
-    const modalContent = page.locator(
-      '[data-testid="transaction-modal-content"]'
-    );
+    const details = page.getByTestId('transaction-details');
     await expect(
-      modalContent.getByRole('heading', { name: 'Outgoing transfer' })
+      details.getByRole('heading', { name: 'Outgoing transfer' })
     ).toBeVisible();
-    // If it's outgoing, check for negative amount
-    await expect(modalContent.getByText('-$40')).toBeVisible();
+    await expect(details.getByText('-$40')).toBeVisible();
   });
 
   test('should show hold details when selecting a hold activity item', async ({
@@ -442,28 +440,32 @@ test.describe('Banking Core Flows', () => {
     const holdRow = page.getByTestId('activity-item-hold_created-hold-123');
     await expect(holdRow).toBeVisible();
 
-    await holdRow.click();
+    await Promise.all([
+      page.waitForURL('**/transactions/**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      holdRow.click(),
+    ]);
 
-    const modal = page.locator('[data-testid="transaction-modal-content"]');
-    await expect(modal).toBeVisible();
-    await expect(modal.getByText('Hold Details')).toBeVisible();
-    await expect(modal.getByText('Hold overview')).toBeVisible();
+    await expect(page.getByTestId('transaction-details-page')).toBeVisible();
     await expect(
-      modal
-        .locator('[data-testid="modal-hold-details"]')
-        .locator('text=Hold ID: hold-123')
-        .first()
+      page.getByRole('heading', { name: 'Transaction details' })
+    ).toBeVisible();
+
+    const holdDetails = page.getByTestId('hold-details');
+    await expect(
+      holdDetails.getByRole('heading', { name: 'Hold overview' })
     ).toBeVisible();
     await expect(
-      modal
-        .getByTestId('modal-hold-details')
-        .getByText('$123.45', { exact: true })
-        .first()
+      holdDetails.locator('text=Hold ID: hold-123').first()
     ).toBeVisible();
     await expect(
-      modal.getByText('Pending hold for vendor authorization')
+      holdDetails.locator('text=$123.45').first()
     ).toBeVisible();
-    await expect(modal.getByText('Hold placed')).toBeVisible();
+    await expect(
+      holdDetails.getByText('Pending hold for vendor authorization')
+    ).toBeVisible();
+    await expect(holdDetails.getByText('Hold placed')).toBeVisible();
 
     await page.unroute('**/v1/activity/**');
     await page.unroute('**/v1/accounts/**/activity/**');
@@ -578,20 +580,27 @@ test.describe('Banking Core Flows', () => {
     const activityRow = page.getByTestId('activity-item-txn-txn-paynote-001');
     await expect(activityRow).toBeVisible();
 
-    await activityRow.click();
+    await Promise.all([
+      page.waitForURL('**/transactions/**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      activityRow.click(),
+    ]);
 
-    const modal = page.locator('[data-testid="transaction-modal-content"]');
-    await expect(modal).toBeVisible();
+    await expect(page.getByTestId('transaction-details-page')).toBeVisible();
     await expect(
-      modal.getByText('PayNote Transfer', { exact: true })
+      page.getByRole('heading', { name: 'Transaction details' })
     ).toBeVisible();
+
+    const details = page.getByTestId('transaction-details');
+    await expect(details.getByText('Transfer with PayNote')).toBeVisible();
     await expect(
-      modal.getByText('This transaction is part of a PayNote transfer.')
+      details.getByText('This transaction is part of a PayNote transfer.')
     ).toBeVisible();
 
-    await modal.getByRole('button', { name: 'See details' }).click();
+    await details.getByRole('button', { name: 'See details' }).click();
 
-    const payNoteView = modal.getByTestId('paynote-details-view');
+    const payNoteView = page.getByTestId('paynote-details-view');
     await expect(payNoteView).toBeVisible();
     await expect(
       payNoteView.getByText('PayNote transfer details')
@@ -602,7 +611,7 @@ test.describe('Banking Core Flows', () => {
 
     await payNoteView.getByTestId('paynote-back-button').click();
 
-    await expect(modal.getByTestId('modal-transaction-details')).toBeVisible();
+    await expect(page.getByTestId('transaction-details')).toBeVisible();
 
     await page.unroute('**/v1/activity/**');
     await page.unroute('**/v1/activity/**/records/**');

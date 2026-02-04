@@ -67,7 +67,7 @@ describe('TransactionDetails', () => {
       screen.getByRole('heading', { name: 'Outgoing transfer' })
     ).toBeInTheDocument();
     expect(screen.getByText('-$10.00')).toBeInTheDocument();
-    expect(screen.getByText('Standard Transfer')).toBeInTheDocument();
+    expect(screen.getByText('Operation')).toBeInTheDocument();
     expect(screen.getAllByText('01/01/2024')).toHaveLength(2);
     expect(screen.getByText('txn-123')).toBeInTheDocument();
   });
@@ -99,11 +99,13 @@ describe('TransactionDetails', () => {
   it('should display account names with account numbers', () => {
     render(<TransactionDetails {...defaultProps} />);
 
+    expect(screen.getByText('From account')).toBeInTheDocument();
+    expect(screen.getByText('To account')).toBeInTheDocument();
     expect(
-      screen.getByText('To **** 4321 (Test Account 2)')
+      screen.getByText('**** 7890 (Test Account 1)')
     ).toBeInTheDocument();
     expect(
-      screen.getByText('From: **** 7890 (Test Account 1)')
+      screen.getByText('**** 4321 (Test Account 2)')
     ).toBeInTheDocument();
   });
 
@@ -125,11 +127,13 @@ describe('TransactionDetails', () => {
 
     render(<TransactionDetails {...props} transaction={incomingTransaction} />);
 
+    expect(screen.getByText('From account')).toBeInTheDocument();
+    expect(screen.getByText('To account')).toBeInTheDocument();
     expect(
-      screen.getByText('From **** 7890 (Test Account 1)')
+      screen.getByText('**** 7890 (Test Account 1)')
     ).toBeInTheDocument();
     expect(
-      screen.getByText('To: **** 4321 (Test Account 2)')
+      screen.getByText('**** 4321 (Test Account 2)')
     ).toBeInTheDocument();
   });
 
@@ -193,8 +197,8 @@ describe('TransactionDetails', () => {
 
     render(<TransactionDetails {...propsWithoutAccountNames} />);
 
-    expect(screen.getByText('To **** 4321')).toBeInTheDocument();
-    expect(screen.getByText('From: **** 7890')).toBeInTheDocument();
+    expect(screen.getByText('**** 4321')).toBeInTheDocument();
+    expect(screen.getByText('**** 7890')).toBeInTheDocument();
   });
 
   it('should display payment number as transaction ID', () => {
@@ -223,8 +227,7 @@ describe('TransactionDetails', () => {
     expect(
       screen.getByRole('heading', { name: 'Card purchase' })
     ).toBeInTheDocument();
-    expect(screen.getByText('Card Purchase')).toBeInTheDocument();
-    expect(screen.getByText('**** 4242')).toBeInTheDocument();
+    expect(screen.getAllByText('**** 4242')).toHaveLength(2);
     expect(screen.getByText('Demo Shop')).toBeInTheDocument();
     expect(screen.getByText('ch_123')).toBeInTheDocument();
     expect(screen.getByText('hold-123')).toBeInTheDocument();
@@ -233,7 +236,7 @@ describe('TransactionDetails', () => {
   it('should show empty related contracts state by default', () => {
     render(<TransactionDetails {...defaultProps} />);
 
-    expect(screen.getByText('Related contracts')).toBeInTheDocument();
+    expect(screen.getByText('Linked contracts')).toBeInTheDocument();
     expect(screen.getByText('No related contracts found.')).toBeInTheDocument();
   });
 

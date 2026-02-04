@@ -463,7 +463,9 @@ describe('TransactionDetailsModal', () => {
     expect(
       screen.queryByText(/This transaction is part of a PayNote transfer/i)
     ).not.toBeInTheDocument();
-    expect(screen.getByText('Standard Transfer')).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Incoming transfer' })
+    ).toBeInTheDocument();
     expect(latestOptions?.enabled).toBe(false);
   });
 

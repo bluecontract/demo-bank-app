@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { ProposalDetailsPanel } from './ProposalDetailsPanel';
 import type { PayNoteDeliveryDetailsSanitized } from '../../../types/api';
+import { routerFutureConfig } from '../../../app/routerFutureConfig';
 
 vi.mock('../hooks', () => ({
   useAcceptPayNoteDelivery: () => ({
@@ -35,10 +37,6 @@ vi.mock('../../transactions/hooks/useActivity', () => ({
   }),
 }));
 
-vi.mock('../../transactions/components/TransactionDetailsModal', () => ({
-  TransactionDetailsModal: () => null,
-}));
-
 const proposal: PayNoteDeliveryDetailsSanitized = {
   deliveryId: 'delivery-1',
   deliverySessionId: 'session-1',
@@ -59,7 +57,11 @@ const proposal: PayNoteDeliveryDetailsSanitized = {
 
 describe('ProposalDetailsPanel', () => {
   it('shows related activity placeholders for proposal transactions', () => {
-    render(<ProposalDetailsPanel proposal={proposal} sessionId="session-1" />);
+    render(
+      <MemoryRouter future={routerFutureConfig}>
+        <ProposalDetailsPanel proposal={proposal} sessionId="session-1" />
+      </MemoryRouter>
+    );
 
     expect(screen.getByText('Related activity')).toBeInTheDocument();
     expect(screen.getByText('Transaction txn-123')).toBeInTheDocument();

@@ -1,22 +1,26 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Card } from '../../../ui/Card';
 import { Spinner } from '../../../ui/Spinner';
 import { Button } from '../../../ui/Button';
 import type { PayNoteDeliveryDetailsSanitized } from '../../../types/api';
 import { formatCurrency } from '../../../lib/formatCurrency';
+import { formatShortDateTime } from '../../../lib/formatDate';
 import {
   useAcceptPayNoteDelivery,
   useRejectPayNoteDelivery,
   useProposalSummary,
 } from '../hooks';
 import { SummaryPanel } from './SummaryPanel';
-import { TransactionDetailsModal } from '../../transactions/components/TransactionDetailsModal';
 import { TransactionItem } from '../../transactions/components/TransactionItem';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
 import {
   ActivityItem,
   useActivity,
 } from '../../transactions/hooks/useActivity';
+import { useRelatedActivityItems } from '../../transactions/hooks/useRelatedActivityItems';
+import { buildTransactionDetailsPath } from '../../transactions/lib/activityRoutes';
+import { getActivityKey } from '../../transactions/lib/activityUtils';
 
 interface ProposalDetailsPanelProps {
   proposal?: PayNoteDeliveryDetailsSanitized | null;
@@ -27,44 +31,6 @@ interface ProposalDetailsPanelProps {
   onDecisionComplete?: () => void;
 }
 
-const formatDate = (value?: string) => {
-  if (!value) return null;
-  const date = new Date(value);
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
-const getHoldEventTimestamp = (item: ActivityItem) => {
-  if (item.kind === 'HOLD_CREATED') {
-    return item.createdAt;
-  }
-  if (item.kind === 'HOLD_CAPTURED') {
-    return item.capturedAt;
-  }
-  if (item.kind === 'HOLD_RELEASED') {
-    return item.releasedAt;
-  }
-  if (item.kind === 'HOLD_FAILED') {
-    return item.failedAt;
-  }
-  return '';
-};
-
-const getActivityTimestamp = (item: ActivityItem) => {
-  if (item.kind === 'POSTED_TRANSACTION') {
-    return item.postedAt;
-  }
-  return getHoldEventTimestamp(item);
-};
-
-const getActivityKey = (item: ActivityItem) =>
-  item.kind === 'POSTED_TRANSACTION'
-    ? `txn-${item.transactionId}`
-    : `hold-${item.holdId}-${item.kind}-${getHoldEventTimestamp(item)}`;
 
 export function ProposalDetailsPanel({
   proposal,
@@ -76,10 +42,8 @@ export function ProposalDetailsPanel({
 }: ProposalDetailsPanelProps) {
   const acceptMutation = useAcceptPayNoteDelivery();
   const rejectMutation = useRejectPayNoteDelivery();
-  const [activeActivityId, setActiveActivityId] = useState<string | null>(null);
-  const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(
-    null
-  );
+  const navigate = useNavigate();
+  const location = useLocation();
   const { data: accounts } = useAccounts();
   const activityQuery = useActivity({
     accountNumber: proposal?.accountNumber ?? null,
@@ -122,93 +86,45 @@ export function ProposalDetailsPanel({
     () => activityQuery.data?.items ?? [],
     [activityQuery.data?.items]
   );
-
-  const activityByTransactionId = useMemo(() => {
-    const map = new Map<string, ActivityItem>();
-    for (const item of activityItems) {
-      if (item.kind === 'POSTED_TRANSACTION') {
-        map.set(item.transactionId, item);
-      }
-    }
-    return map;
-  }, [activityItems]);
-
-  const activityByHoldId = useMemo(() => {
-    const map = new Map<string, ActivityItem>();
-    for (const item of activityItems) {
-      if (item.kind === 'POSTED_TRANSACTION') {
-        continue;
-      }
-
-      const existing = map.get(item.holdId);
-      if (!existing) {
-        map.set(item.holdId, item);
-        continue;
-      }
-
-      const existingTime = Date.parse(getActivityTimestamp(existing));
-      const nextTime = Date.parse(getActivityTimestamp(item));
-      if (Number.isNaN(existingTime) || nextTime > existingTime) {
-        map.set(item.holdId, item);
-      }
-    }
-
-    return map;
-  }, [activityItems]);
-
-  const relatedTransactionItems = useMemo(
-    () =>
-      relatedTransactions
-        .map(txnId => activityByTransactionId.get(txnId))
-        .filter((item): item is ActivityItem => Boolean(item)),
-    [activityByTransactionId, relatedTransactions]
-  );
-
-  const relatedHoldItems = useMemo(
-    () =>
-      relatedHolds
-        .map(holdId => activityByHoldId.get(holdId))
-        .filter((item): item is ActivityItem => Boolean(item)),
-    [activityByHoldId, relatedHolds]
-  );
-
-  const missingTransactionIds = useMemo(
-    () =>
-      relatedTransactions.filter(txnId => !activityByTransactionId.has(txnId)),
-    [activityByTransactionId, relatedTransactions]
-  );
-
-  const missingHoldIds = useMemo(
-    () => relatedHolds.filter(holdId => !activityByHoldId.has(holdId)),
-    [activityByHoldId, relatedHolds]
-  );
+  const {
+    relatedTransactionItems,
+    relatedHoldItems,
+    missingTransactionIds,
+    missingHoldIds,
+  } = useRelatedActivityItems({
+    activityItems,
+    relatedTransactionIds: relatedTransactions,
+    relatedHoldIds: relatedHolds,
+  });
 
   const handleActivitySelect = (activity: ActivityItem) => {
-    if (!proposal?.accountNumber) {
+    if (!proposal?.accountNumber || !account?.accountId) {
       return;
     }
 
-    setSelectedActivity(activity);
-    setActiveActivityId(activity.activityId);
+    navigate(buildTransactionDetailsPath(account.accountId, activity.activityId), {
+      state: {
+        from: `${location.pathname}${location.search}`,
+        selectedActivity: activity,
+      },
+    });
   };
 
   const handleFallbackActivityOpen = (activityId: string) => {
-    if (!proposal?.accountNumber) {
+    if (!proposal?.accountNumber || !account?.accountId) {
       return;
     }
 
-    setSelectedActivity(null);
-    setActiveActivityId(activityId);
+    navigate(buildTransactionDetailsPath(account.accountId, activityId), {
+      state: {
+        from: `${location.pathname}${location.search}`,
+      },
+    });
   };
 
   const isActivityLoading =
     activityQuery.isLoading &&
     (relatedTransactions.length > 0 || relatedHolds.length > 0);
-
-  useEffect(() => {
-    setActiveActivityId(null);
-    setSelectedActivity(null);
-  }, [proposal?.deliverySessionId, proposal?.deliveryId]);
 
   const handleAccept = () => {
     if (!decisionSessionId) return;
@@ -291,7 +207,7 @@ export function ProposalDetailsPanel({
           </span>
           {proposal.updatedAt && (
             <span className="app-chip app-chip-neutral">
-              Updated {formatDate(proposal.updatedAt)}
+              Updated {formatShortDateTime(proposal.updatedAt)}
             </span>
           )}
         </div>
@@ -480,19 +396,6 @@ export function ProposalDetailsPanel({
         </p>
       )}
 
-      <TransactionDetailsModal
-        isOpen={!!activeActivityId}
-        onClose={() => {
-          setActiveActivityId(null);
-          setSelectedActivity(null);
-        }}
-        accountId={account?.accountId ?? ''}
-        accountNumber={proposal.accountNumber ?? ''}
-        activityId={activeActivityId ?? ''}
-        selectedActivity={selectedActivity ?? undefined}
-        currentAccountNumber={proposal.accountNumber ?? undefined}
-        accounts={accounts}
-      />
     </Card>
   );
 }
