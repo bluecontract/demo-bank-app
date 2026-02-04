@@ -37,6 +37,14 @@ const getItemSortUpdatedAt = (item: ContractOrProposalItem): string =>
     ? item.sortUpdatedAt
     : item.updatedAt;
 
+const isContractReadyForInbox = (contract: ContractSummary): boolean => {
+  const status = contract.status?.trim().toLowerCase();
+  if (!status) {
+    return false;
+  }
+  return status !== 'bootstrapped';
+};
+
 export function mergeContractsAndProposals(
   contracts: ContractSummary[],
   proposals: PayNoteDeliverySummary[]
@@ -63,8 +71,7 @@ export function mergeContractsAndProposals(
     if (matchingSessionId) {
       const contract = contractBySessionId.get(matchingSessionId);
       if (contract) {
-        const contractStatus = contract.status?.toLowerCase();
-        if (contractStatus === 'bootstrapped') {
+        if (!isContractReadyForInbox(contract)) {
           matchedContractSessionIds.add(matchingSessionId);
           mergedItems.push({
             ...proposal,
