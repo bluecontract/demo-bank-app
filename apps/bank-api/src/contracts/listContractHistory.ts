@@ -32,11 +32,20 @@ export const listContractHistoryHandler = async (
   const items = await contractRepository.listContractHistory(
     contract.contractId
   );
+  const seen = new Set<string>();
+  const dedupedItems = items.filter(item => {
+    const key = `${item.kind}|${item.short}|${item.more ?? ''}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 
   return {
     status: 200 as const,
     body: {
-      items: items.map(item => ({
+      items: dedupedItems.map(item => ({
         id: item.id,
         kind: item.kind,
         short: item.short,

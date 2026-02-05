@@ -243,9 +243,9 @@ export function ContractAiChatDrawer({
     : null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex">
+    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center px-4 py-4 lg:items-stretch lg:justify-start lg:px-0 lg:py-0">
       <div
-        className="w-full max-w-[720px] h-full bg-[color:var(--color-surface)] flex flex-col"
+        className="w-full max-w-[720px] h-full max-h-full bg-[color:var(--color-surface)] flex flex-col rounded-2xl overflow-hidden lg:rounded-none"
         onClick={event => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -261,7 +261,19 @@ export function ContractAiChatDrawer({
             onClick={onClose}
             aria-label="Close"
           >
-            <span aria-hidden="true">×</span>
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
           </button>
         </header>
 
@@ -349,22 +361,39 @@ export function ContractAiChatDrawer({
                 className="rounded-lg"
               />
             </div>
-            <Button
+            <button
               type="submit"
-              variant="primary"
-              size="sm"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50"
               disabled={
                 !draft.trim() || chat.isPending || runOperation.isPending
               }
+              aria-label="Send message"
             >
-              Send
-            </Button>
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M22 2L11 13"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M22 2L15 22l-4-9-9-4 20-7z"
+                />
+              </svg>
+            </button>
           </form>
         </footer>
       </div>
 
       <div
-        className="flex-1"
+        className="hidden lg:block flex-1"
         role="presentation"
         onClick={() => {
           if (!runOperation.isPending) {

@@ -70,6 +70,14 @@ export function App() {
             }
           />
           <Route
+            path="/contracts/archive"
+            element={
+              <ProtectedRoute>
+                <ContractsPage view="archive" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/contracts/:sessionId"
             element={
               <ProtectedRoute>

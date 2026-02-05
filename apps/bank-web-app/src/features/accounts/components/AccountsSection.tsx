@@ -25,7 +25,7 @@ export function AccountsSection({
   cardSize = 'default',
 }: AccountsSectionProps) {
   return (
-    <section className="app-surface">
+    <section className="app-surface rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
       <div className="px-4 pt-4">
         <h2 className="text-base font-semibold text-slate-900">Accounts</h2>
       </div>

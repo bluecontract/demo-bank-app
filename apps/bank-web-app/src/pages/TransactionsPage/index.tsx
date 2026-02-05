@@ -89,7 +89,7 @@ function TransactionsPageContent({
           <h1 className="text-3xl font-semibold text-slate-900">
             Transactions
           </h1>
-          <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <span className="text-sm text-slate-600">{userEmail}</span>
             <button
               type="button"
@@ -115,7 +115,7 @@ function TransactionsPageContent({
         </div>
       }
     >
-      <div className="app-surface p-4 sm:p-6">
+      <div className="app-surface p-4 sm:p-6 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
         <div className="grid gap-4 sm:grid-cols-2">
           <Select
             value={accountSelectValue}

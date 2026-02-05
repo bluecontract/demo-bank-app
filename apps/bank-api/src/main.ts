@@ -1,6 +1,10 @@
 import { createLambdaHandler, tsr } from '@ts-rest/serverless/aws';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
-import { signUpHandler, signInHandler } from './auth/handlers';
+import {
+  signUpHandler,
+  signInHandler,
+  updateUserProfileHandler,
+} from './auth/handlers';
 
 import { createErrorHandler } from './errors';
 import {
@@ -72,6 +76,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
 
     signUp: signUpHandler,
     signIn: signInHandler,
+    updateUserProfile: updateUserProfileHandler,
 
     banking: {
       createAccount: createAccountHandler,
@@ -115,7 +120,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
   {
     cors: {
       origin: true,
-      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
       allowHeaders: [
         'Content-Type',
         'X-Amz-Date',

@@ -31,8 +31,6 @@ interface HoldDetailsProps {
   currentAccountNumber?: string;
   isLoadingAccounts?: boolean;
   'data-testid'?: string;
-  showPayNoteHelper?: boolean;
-  onViewPayNoteDetails?: () => void;
   relatedContracts?: RelatedContractItem[] | null;
   isRelatedContractsLoading?: boolean;
   relatedContractsError?: string;
@@ -170,8 +168,6 @@ export function HoldDetails({
   currentAccountNumber,
   isLoadingAccounts,
   'data-testid': testId,
-  showPayNoteHelper = false,
-  onViewPayNoteDetails,
   relatedContracts,
   isRelatedContractsLoading = false,
   relatedContractsError,
@@ -201,11 +197,7 @@ export function HoldDetails({
   const isCardHold = Boolean(
     hold.cardLast4 || hold.merchantName || hold.processorChargeId
   );
-  const methodLabel = isCardHold
-    ? 'Card Authorization'
-    : showPayNoteHelper
-    ? 'PayNote Transfer'
-    : 'Standard Transfer';
+  const methodLabel = isCardHold ? 'Card Authorization' : 'Standard Transfer';
 
   const { visibleRelatedContracts } =
     getVisibleRelatedContracts(relatedContracts);
@@ -367,21 +359,6 @@ export function HoldDetails({
                 {hold.description}
               </p>
             </div>
-          </div>
-        )}
-
-        {showPayNoteHelper && (
-          <div className="px-4 py-3 border-t border-slate-200">
-            <p className="text-sm text-slate-700">
-              This transaction is part of a PayNote transfer.{' '}
-              <button
-                type="button"
-                className="text-emerald-700 font-medium hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] rounded"
-                onClick={() => onViewPayNoteDetails?.()}
-              >
-                See details
-              </button>
-            </p>
           </div>
         )}
 

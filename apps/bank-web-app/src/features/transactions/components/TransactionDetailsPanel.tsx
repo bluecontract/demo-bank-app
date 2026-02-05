@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useState } from 'react';
 import { TransactionDetails } from './TransactionDetails';
 import { HoldDetails } from './HoldDetails';
 import { useActivityDetail, ActivityDetail } from '../hooks/useActivityDetail';
@@ -10,9 +9,6 @@ import { Spinner } from '../../../ui/Spinner';
 import { Button } from '../../../ui/Button';
 import { Account } from '../../../types/api';
 import { ActivityItem } from '../hooks/useActivity';
-import { usePayNoteDetails } from '../hooks/usePayNoteDetails';
-import { PayNoteDetailsPanel } from './PayNoteDetailsPanel';
-import { getHoldTimelinePayNoteDocumentId } from '../lib/holdPayNoteUtils';
 
 interface TransactionDetailsPanelProps {
   accountId: string;
@@ -41,9 +37,6 @@ export function TransactionDetailsPanel({
   showFooterAction = false,
   onClose,
 }: TransactionDetailsPanelProps) {
-  const [view, setView] = useState<'activity' | 'paynote'>('activity');
-  const isPayNoteView = view === 'paynote';
-
   const {
     data: activityDetail,
     isLoading,
@@ -57,16 +50,6 @@ export function TransactionDetailsPanel({
 
   const { data: fetchedAccounts, isLoading: isLoadingAccounts } = useAccounts();
   const accounts = propAccounts || fetchedAccounts || [];
-
-  useEffect(() => {
-    if (!isActive) {
-      setView('activity');
-    }
-  }, [isActive]);
-
-  useEffect(() => {
-    setView('activity');
-  }, [activityId, accountNumber]);
 
   const fallbackTransactionId =
     selectedActivity?.kind === 'POSTED_TRANSACTION'
@@ -154,73 +137,6 @@ export function TransactionDetailsPanel({
     isHoldContractsError && holdContractsError instanceof Error
       ? holdContractsError.message
       : undefined;
-  const holdTimelinePayNoteDocumentId = useMemo(
-    () => getHoldTimelinePayNoteDocumentId(holdDetail, selectedActivity),
-    [holdDetail, selectedActivity]
-  );
-
-  const transactionSide = useMemo(() => {
-    if (activityDetail?.kind === 'POSTED_TRANSACTION') {
-      return activityDetail.side;
-    }
-    if (resolvedTransaction?.side) {
-      return resolvedTransaction.side;
-    }
-    if (selectedActivity?.kind === 'POSTED_TRANSACTION') {
-      return selectedActivity.side;
-    }
-    return undefined;
-  }, [activityDetail, resolvedTransaction, selectedActivity]);
-
-  const shouldSuppressPayNote = transactionSide === 'CREDIT';
-
-  const payNoteReference = useMemo(() => {
-    if (shouldSuppressPayNote) {
-      return null;
-    }
-    if (activityDetail?.payNote) {
-      return activityDetail.payNote;
-    }
-    if (resolvedTransaction?.payNote) {
-      return resolvedTransaction.payNote;
-    }
-    if (holdTimelinePayNoteDocumentId) {
-      return { payNoteDocumentId: holdTimelinePayNoteDocumentId };
-    }
-    if (selectedActivity?.payNote) {
-      return selectedActivity.payNote;
-    }
-    return null;
-  }, [
-    activityDetail,
-    resolvedTransaction,
-    holdTimelinePayNoteDocumentId,
-    shouldSuppressPayNote,
-    selectedActivity,
-  ]);
-  const hasPayNote = !!payNoteReference;
-  const transactionHasPayNote =
-    !shouldSuppressPayNote &&
-    !!(
-      resolvedTransaction?.payNote ||
-      (activityDetail?.kind === 'POSTED_TRANSACTION' &&
-        activityDetail?.payNote) ||
-      (selectedActivity?.kind === 'POSTED_TRANSACTION' &&
-        selectedActivity?.payNote)
-    );
-  const holdHasPayNote =
-    !shouldSuppressPayNote &&
-    !!(
-      holdTimelinePayNoteDocumentId ||
-      (activityDetail?.kind === 'HOLD' && activityDetail.payNote) ||
-      (selectedActivity?.kind !== 'POSTED_TRANSACTION' &&
-        selectedActivity?.payNote)
-    );
-  useEffect(() => {
-    if (!hasPayNote) {
-      setView('activity');
-    }
-  }, [hasPayNote]);
 
   const hasResolvedTransaction = !!resolvedTransaction;
   const hasHoldDetail = !!holdDetail;
@@ -236,32 +152,6 @@ export function TransactionDetailsPanel({
     (fallbackError instanceof Error && fallbackError.message) ||
     (error instanceof Error && error.message) ||
     'We could not load the selected activity item.';
-  const {
-    data: payNoteDetails,
-    isLoading: isPayNoteLoading,
-    isError: isPayNoteError,
-    error: payNoteError,
-    refetch: refetchPayNoteDetails,
-  } = usePayNoteDetails({
-    accountNumber: accountNumber ?? null,
-    payNoteDocumentId: payNoteReference?.payNoteDocumentId,
-    enabled: isActive && isPayNoteView && hasPayNote,
-  });
-  const payNoteErrorStatus = (payNoteError as { status?: number } | undefined)
-    ?.status;
-  const payNoteErrorMessage =
-    payNoteErrorStatus === 404
-      ? 'PayNote details are not available yet.'
-      : payNoteError?.message;
-
-  const handleShowPayNoteDetails = () => {
-    if (hasPayNote) {
-      setView('paynote');
-    }
-  };
-  const handleBackToActivityView = () => {
-    setView('activity');
-  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -304,27 +194,13 @@ export function TransactionDetailsPanel({
         </div>
       )}
 
-      {isPayNoteView && hasPayNote && (
-        <PayNoteDetailsPanel
-          details={payNoteDetails}
-          isLoading={isPayNoteLoading}
-          isError={isPayNoteError}
-          errorMessage={payNoteErrorMessage}
-          errorStatus={payNoteErrorStatus}
-          onRetry={refetchPayNoteDetails}
-          onBack={handleBackToActivityView}
-        />
-      )}
-
-      {!isPayNoteView && resolvedTransaction && (
+      {resolvedTransaction && (
         <TransactionDetails
           transaction={resolvedTransaction}
           currentAccountId={accountId}
           currentAccountNumber={currentAccountNumber || accountNumber || ''}
           accounts={accounts || []}
           data-testid="transaction-details"
-          showPayNoteHelper={transactionHasPayNote}
-          onViewPayNoteDetails={handleShowPayNoteDetails}
           relatedContracts={relatedContracts ?? []}
           isRelatedContractsLoading={isRelatedContractsLoading}
           relatedContractsError={relatedContractsErrorMessage}
@@ -332,7 +208,7 @@ export function TransactionDetailsPanel({
         />
       )}
 
-      {!isPayNoteView && holdDetail && (
+      {holdDetail && (
         <HoldDetails
           hold={holdDetail}
           accountId={accountId}
@@ -340,8 +216,6 @@ export function TransactionDetailsPanel({
           isLoadingAccounts={isLoadingAccounts}
           accounts={accounts || []}
           data-testid="hold-details"
-          showPayNoteHelper={holdHasPayNote}
-          onViewPayNoteDetails={handleShowPayNoteDetails}
           relatedContracts={relatedHoldContracts ?? []}
           isRelatedContractsLoading={isHoldContractsLoading}
           relatedContractsError={holdContractsErrorMessage}

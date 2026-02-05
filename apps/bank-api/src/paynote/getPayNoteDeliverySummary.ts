@@ -7,6 +7,7 @@ import {
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { getDependencies } from './dependencies';
 import { normalizeContractSummary } from '../contracts/summaryNormalization';
+import { generatePayNoteDeliverySummaryForSessionId } from './generatePayNoteDeliverySummary';
 
 export const getPayNoteDeliverySummaryHandler = async (
   request: ServerInferRequest<
@@ -14,7 +15,8 @@ export const getPayNoteDeliverySummaryHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { payNoteDeliveryRepository } = await getDependencies();
+  const { payNoteDeliveryRepository, getOpenAiApiKey, logger } =
+    await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const { sessionId } = request.params;
 
@@ -30,7 +32,24 @@ export const getPayNoteDeliverySummaryHandler = async (
     });
   }
 
-  if (!record.summary || !record.summaryUpdatedAt) {
+  const refreshed = await generatePayNoteDeliverySummaryForSessionId({
+    sessionId,
+    force: false,
+    payNoteDeliveryRepository,
+    getOpenAiApiKey,
+    logger,
+  });
+  const summaryPayload = refreshed?.summary ?? record.summary;
+  const summaryUpdatedAt =
+    refreshed?.summaryUpdatedAt ?? record.summaryUpdatedAt;
+  const summarySourceUpdatedAt =
+    refreshed?.summarySourceUpdatedAt ?? record.summarySourceUpdatedAt;
+  const summaryInputBlueId =
+    refreshed?.summaryInputBlueId ?? record.summaryInputBlueId;
+  const summaryModel = refreshed?.model ?? record.summaryModel;
+  const cached = refreshed?.cached ?? true;
+
+  if (!summaryPayload || !summaryUpdatedAt) {
     return problemResponse({
       status: 404,
       code: ERROR_CODES.PAYNOTE_DELIVERY_NOT_FOUND,
@@ -44,7 +63,7 @@ export const getPayNoteDeliverySummaryHandler = async (
       : null;
 
   const normalizedSummary = normalizeContractSummary(
-    record.summary,
+    summaryPayload,
     payNoteName ?? 'PayNote proposal'
   );
   if (!normalizedSummary) {
@@ -59,14 +78,12 @@ export const getPayNoteDeliverySummaryHandler = async (
     status: 200 as const,
     body: {
       summary: normalizedSummary,
-      summaryUpdatedAt: record.summaryUpdatedAt,
+      summaryUpdatedAt,
       summarySourceUpdatedAt:
-        record.summarySourceUpdatedAt ??
-        record.deliveryUpdatedAt ??
-        record.updatedAt,
-      summaryInputBlueId: record.summaryInputBlueId,
-      cached: true,
-      model: record.summaryModel,
+        summarySourceUpdatedAt ?? record.deliveryUpdatedAt ?? record.updatedAt,
+      summaryInputBlueId,
+      cached,
+      model: summaryModel,
     },
   };
 };

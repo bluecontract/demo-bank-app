@@ -22,15 +22,16 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
   GetCommand: vi.fn(),
   QueryCommand: vi.fn(),
   TransactWriteCommand: vi.fn(),
+  UpdateCommand: vi.fn(),
 }));
 
 // Get typed access to mocked constructors
-const { GetCommand, QueryCommand, TransactWriteCommand } = await import(
-  '@aws-sdk/lib-dynamodb'
-);
+const { GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand } =
+  await import('@aws-sdk/lib-dynamodb');
 const mockGetCommand = vi.mocked(GetCommand);
 const mockQueryCommand = vi.mocked(QueryCommand);
 const mockTransactWriteCommand = vi.mocked(TransactWriteCommand);
+const mockUpdateCommand = vi.mocked(UpdateCommand);
 
 describe('DynamoUserRepository', () => {
   let repository: DynamoUserRepository;
@@ -270,6 +271,37 @@ describe('DynamoUserRepository', () => {
     });
   });
 
+  describe('updateProfile', () => {
+    it('updates merchantName and avatarDataUrl', async () => {
+      const userId = randomUUID();
+      const updatedItem = {
+        PK: `USER#${userId}`,
+        SK: 'PROFILE',
+        AUTH_GSI1PK: 'EMAIL#merchant@example.com',
+        AUTH_GSI1SK: 'PROFILE',
+        id: userId,
+        email: 'merchant@example.com',
+        createdAt: new Date('2024-01-01T00:00:00Z').toISOString(),
+        isTest: false,
+        marketingEmailsOptIn: true,
+        merchantName: 'Demo Merchant',
+        avatarDataUrl: 'data:image/png;base64,abc123',
+      };
+
+      mockSend.mockResolvedValueOnce({ Attributes: updatedItem });
+
+      const result = await repository.updateProfile(userId, {
+        merchantName: 'Demo Merchant',
+        avatarDataUrl: 'data:image/png;base64,abc123',
+      });
+
+      expect(result.merchantName).toBe('Demo Merchant');
+      expect(result.avatarDataUrl).toBe('data:image/png;base64,abc123');
+      expect(mockUpdateCommand).toHaveBeenCalledTimes(1);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('findById', () => {
     it('should return user when found', async () => {
       // Given
@@ -372,6 +404,38 @@ describe('DynamoUserRepository', () => {
       const foundUser = await repository.findById(user.id);
 
       expect(foundUser?.merchantId).toBe('merchant-lookup');
+    });
+
+    it('should map merchantName and avatarDataUrl when present', async () => {
+      const user = new User({
+        id: randomUUID(),
+        email: 'merchant.avatar@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantName: 'Demo Merchant',
+        avatarDataUrl: 'data:image/png;base64,abc123',
+      });
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          PK: `USER#${user.id}`,
+          SK: 'PROFILE',
+          AUTH_GSI1PK: `EMAIL#${user.email}`,
+          AUTH_GSI1SK: 'PROFILE',
+          id: user.id,
+          email: user.email,
+          createdAt: user.createdAt.toISOString(),
+          isTest: false,
+          marketingEmailsOptIn: true,
+          merchantName: 'Demo Merchant',
+          avatarDataUrl: 'data:image/png;base64,abc123',
+        },
+      });
+
+      const foundUser = await repository.findById(user.id);
+
+      expect(foundUser?.merchantName).toBe('Demo Merchant');
+      expect(foundUser?.avatarDataUrl).toBe('data:image/png;base64,abc123');
     });
   });
 

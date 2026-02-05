@@ -98,7 +98,7 @@ export function CardsPanel({ selectedCardId, onSelectCard }: CardsPanelProps) {
   }, [cards, onSelectCard, selectedCardId]);
 
   return (
-    <Card className="flex flex-col min-h-0 p-0 overflow-hidden">
+    <Card className="flex flex-col min-h-0 p-0 overflow-hidden rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
       <div className="flex items-center justify-between gap-4 px-4 py-4 border-b border-slate-200">
         <h2 className="text-base font-semibold text-slate-900">Cards</h2>
         <Button

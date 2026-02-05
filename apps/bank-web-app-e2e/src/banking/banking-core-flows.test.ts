@@ -216,11 +216,14 @@ test.describe('Banking Core Flows', () => {
     ).toBeVisible();
 
     // Verify funding transaction appears - scope to transaction list
-    await expect(
-      page
-        .locator('[data-testid="transaction-history-list"]')
-        .getByText('+$75.25')
-    ).toBeVisible();
+    const fundingRow = page
+      .locator('[data-testid="transaction-history-list"]')
+      .locator('[data-testid^="activity-item-"]')
+      .filter({ hasText: '+$75.25' })
+      .first();
+    await expect(fundingRow).toBeVisible({
+      timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
+    });
   });
 
   test('should show transaction details for incoming transfer', async ({
@@ -336,9 +339,12 @@ test.describe('Banking Core Flows', () => {
     ).toBeVisible();
 
     // Wait specifically for the outgoing transfer transaction to appear (-$40)
-    await expect(
-      page.locator('[data-testid="transaction-history-list"]').getByText('-$40')
-    ).toBeVisible({
+    const outgoingRow = page
+      .locator('[data-testid="transaction-history-list"]')
+      .locator('[data-testid^="activity-item-"]')
+      .filter({ hasText: '-$40' })
+      .first();
+    await expect(outgoingRow).toBeVisible({
       timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
     });
 
@@ -347,11 +353,7 @@ test.describe('Banking Core Flows', () => {
       page.waitForURL('**/transactions/**', {
         timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
       }),
-      page
-        .locator('[data-testid="transaction-history-list"]')
-        .getByText('-$40')
-        .locator('..')
-        .click(),
+      outgoingRow.click(),
     ]);
 
     await expect(page.getByTestId('transaction-details-page')).toBeVisible();
@@ -570,6 +572,33 @@ test.describe('Banking Core Flows', () => {
       });
     });
 
+    await page.route('**/v1/transactions/**/contracts', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              contractId: 'contract-paynote-1',
+              typeBlueId: 'type-paynote',
+              displayName: 'PayNote',
+              documentName: 'Slow Digestion PayNote',
+              sessionId: 'session-paynote-1',
+              documentId: payNoteDocumentId,
+              status: 'reserved',
+              createdAt: new Date('2024-03-10T12:00:00.000Z').toISOString(),
+              updatedAt: new Date('2024-03-10T12:00:00.000Z').toISOString(),
+            },
+          ],
+        }),
+      });
+    });
+
     await createAccountViaModal(page, accountName);
 
     const activityRow = page.getByTestId('activity-item-txn-txn-paynote-001');
@@ -588,30 +617,14 @@ test.describe('Banking Core Flows', () => {
     ).toBeVisible();
 
     const details = page.getByTestId('transaction-details');
-    await expect(details.getByText('Transfer with PayNote')).toBeVisible();
-    await expect(
-      details.getByText('This transaction is part of a PayNote transfer.')
-    ).toBeVisible();
-
-    await details.getByRole('button', { name: 'See details' }).click();
-
-    const payNoteView = page.getByTestId('paynote-details-view');
-    await expect(payNoteView).toBeVisible();
-    await expect(
-      payNoteView.getByText('PayNote transfer details')
-    ).toBeVisible();
-    await expect(payNoteView.getByText('PayNote Document')).toBeVisible();
-    await expect(payNoteView.getByText('Transaction Request')).toBeVisible();
-    await expect(payNoteView.getByText('Triggering Event')).toBeVisible();
-
-    await payNoteView.getByTestId('paynote-back-button').click();
-
-    await expect(page.getByTestId('transaction-details')).toBeVisible();
+    await expect(details.getByText('Linked contracts')).toBeVisible();
+    await expect(details.getByText('Slow Digestion PayNote')).toBeVisible();
 
     await page.unroute('**/v1/activity/**');
     await page.unroute('**/v1/activity/**/records/**');
     await page.unroute('**/v1/activity/**/paynotes/**');
     await page.unroute('**/v1/accounts/**/transactions/**');
+    await page.unroute('**/v1/transactions/**/contracts');
   });
 
   test('should update account balance after fund and transfer operations', async ({

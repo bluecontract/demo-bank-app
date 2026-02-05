@@ -115,6 +115,7 @@ describe('Auth Handlers', () => {
         user: {
           id: 'merchant-user-id',
           email: 'merchant@example.com',
+          merchantName: 'Merchant Demo',
           isTest: false,
           createdAt: '2021-01-01',
           marketingEmailsOptIn: true,
@@ -128,6 +129,7 @@ describe('Auth Handlers', () => {
         {
           body: {
             email: 'merchant@example.com',
+            merchantName: 'Merchant Demo',
             marketingEmailsOptIn: true,
             merchantId: 'merchant-123',
           },
@@ -139,12 +141,14 @@ describe('Auth Handlers', () => {
       expect(result.body).toMatchObject({
         userId: 'merchant-user-id',
         email: 'merchant@example.com',
+        merchantName: 'Merchant Demo',
         marketingEmailsOptIn: true,
         merchantId: 'merchant-123',
       });
       expect(mockSignUp).toHaveBeenCalledWith(
         expect.objectContaining({
           email: 'merchant@example.com',
+          merchantName: 'Merchant Demo',
           marketingEmailsOptIn: true,
           merchantId: 'merchant-123',
         }),
@@ -228,6 +232,7 @@ describe('Auth Handlers', () => {
         {
           body: {
             email: 'merchant@example.com',
+            merchantName: 'Existing Merchant',
             marketingEmailsOptIn: true,
             merchantId: 'merchant-123',
           },
@@ -267,7 +272,13 @@ describe('Auth Handlers', () => {
       const responseHeaders = createMockHeaders();
       await expect(
         signUpHandler(
-          { body: { email: '', marketingEmailsOptIn: true }, query: {} },
+          {
+            body: {
+              email: '',
+              marketingEmailsOptIn: true,
+            },
+            query: {},
+          },
           {
             responseHeaders,
           } as any
@@ -293,7 +304,13 @@ describe('Auth Handlers', () => {
       const responseHeaders = createMockHeaders();
       await expect(
         signUpHandler(
-          { body: { email: '', marketingEmailsOptIn: true }, query: {} },
+          {
+            body: {
+              email: '',
+              marketingEmailsOptIn: true,
+            },
+            query: {},
+          },
           {
             responseHeaders,
           } as any
@@ -313,7 +330,10 @@ describe('Auth Handlers', () => {
       await expect(
         signUpHandler(
           {
-            body: { email: 'testuser@example.com', marketingEmailsOptIn: true },
+            body: {
+              email: 'testuser@example.com',
+              marketingEmailsOptIn: true,
+            },
             query: {},
           },
           {
@@ -321,6 +341,33 @@ describe('Auth Handlers', () => {
           } as any
         )
       ).rejects.toThrow('Database connection failed');
+    });
+
+    it('should return 400 when merchantId is provided without merchantName', async () => {
+      const mockDeps = {
+        logger: mockLogger,
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+      };
+      mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
+
+      const responseHeaders = createMockHeaders();
+      const result = await signUpHandler(
+        {
+          body: {
+            email: 'merchant@example.com',
+            marketingEmailsOptIn: true,
+            merchantId: 'merchant-123',
+          },
+          query: {},
+        },
+        { responseHeaders } as any
+      );
+
+      expect(result.status).toBe(400);
+      expect(result.body).toEqual({
+        error: 'VALIDATION_ERROR',
+        message: 'Merchant name is required when signing up as a merchant',
+      });
     });
   });
 

@@ -88,6 +88,13 @@ test.describe('Sign Up Flow', () => {
 
     // Start typing in the email field
     await page.fill('input[name="email"]', 'a');
+    await page.click('text=I am a merchant');
+    await page.click('button[type="submit"]');
+
+    await expect(page.getByText('Merchant name is required')).toBeVisible();
+    await expect(
+      page.getByText('Merchant ID is required when signing up as a merchant')
+    ).toBeVisible();
 
     // Error should disappear
     await expect(page.getByText('Email is required')).toBeHidden();

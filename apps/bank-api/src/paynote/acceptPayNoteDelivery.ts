@@ -20,6 +20,7 @@ export const acceptPayNoteDeliveryHandler = async (
     holdRepository,
     contractRepository,
     logger,
+    getOpenAiApiKey,
   } = await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const { sessionId } = request.params;
@@ -53,6 +54,7 @@ export const acceptPayNoteDeliveryHandler = async (
       payNoteDeliveryRepository,
       contractRepository,
       logger,
+      getOpenAiApiKey,
     },
     contract: null,
   });

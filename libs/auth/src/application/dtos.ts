@@ -5,6 +5,8 @@ export interface UserResult {
   isTest: boolean;
   marketingEmailsOptIn: boolean;
   merchantId?: string;
+  merchantName?: string;
+  avatarDataUrl?: string;
 }
 
 export interface AuthResult {

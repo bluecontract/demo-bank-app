@@ -17,16 +17,18 @@ export const runContractOperationHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
+  const { sessionId, operation } = request.params;
+
   const {
     payNoteDeliveryRepository,
     contractRepository,
     myOsClient,
     holdRepository,
     logger,
+    getOpenAiApiKey,
   } = await getDependencies();
 
   const { userId } = await extractAuthInfo(context.request);
-  const { sessionId, operation } = request.params;
 
   const contract = await contractRepository.getContractBySessionId(sessionId);
 
@@ -55,6 +57,17 @@ export const runContractOperationHandler = async (
       status: 400,
       code: ERROR_CODES.UNSUPPORTED_CONTRACT_TYPE,
       message: 'Unsupported contract type',
+    });
+  }
+
+  if (
+    supportedContract.typeName === 'PayNote/PayNote Delivery' &&
+    !['acceptPayNote', 'rejectPayNote'].includes(operation)
+  ) {
+    return problemResponse({
+      status: 409,
+      code: ERROR_CODES.VALIDATION_ERROR,
+      message: 'Operation not allowed for PayNote delivery',
     });
   }
 
@@ -117,6 +130,7 @@ export const runContractOperationHandler = async (
       payNoteDeliveryRepository,
       contractRepository,
       logger,
+      getOpenAiApiKey,
     },
     contract,
   });

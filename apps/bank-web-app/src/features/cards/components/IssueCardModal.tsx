@@ -112,7 +112,7 @@ export function IssueCardModal({
                   value={cardholderName}
                   onChange={event => setCardholderName(event.target.value)}
                   className="mt-1 w-full px-3 py-2.5 border border-slate-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]"
-                  placeholder="e.g., Taylor Jordan"
+                  placeholder="e.g., Jon Doe"
                   maxLength={100}
                 />
               </div>

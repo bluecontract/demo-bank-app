@@ -145,10 +145,16 @@ export const contractAiChatHandler = async (
     operationsChannelKey,
     blue,
   });
+  const filteredOperations =
+    supportedContract.typeName === 'PayNote/PayNote Delivery'
+      ? operations.filter(operation =>
+          ['acceptPayNote', 'rejectPayNote'].includes(operation.name)
+        )
+      : operations;
 
-  const eligibleOperationKeys = new Set(operations.map(op => op.name));
+  const eligibleOperationKeys = new Set(filteredOperations.map(op => op.name));
 
-  const operationsContext = operations.map(operation => ({
+  const operationsContext = filteredOperations.map(operation => ({
     key: operation.name,
     label: operation.label,
     description: operation.description ?? null,
@@ -165,7 +171,7 @@ export const contractAiChatHandler = async (
   const allowOperationAvailabilityMention =
     shouldAllowOperationAvailabilityMention({
       lastUserMessage,
-      operations: operations.map(operation => ({
+      operations: filteredOperations.map(operation => ({
         name: operation.name,
         label: operation.label,
       })),

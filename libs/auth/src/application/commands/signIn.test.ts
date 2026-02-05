@@ -14,6 +14,7 @@ const mockUserRepository: UserRepository = {
   save: vi.fn(),
   findById: vi.fn(),
   findByEmail: vi.fn(),
+  updateProfile: vi.fn(),
 };
 
 const mockJwtService: JwtService = {

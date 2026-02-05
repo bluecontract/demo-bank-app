@@ -104,7 +104,7 @@ export function HorizontalAccountsList({
       {showLeftArrow && (
         <button
           onClick={scrollLeft}
-          className="absolute left-4 top-1/2 transform -translate-y-1/2 z-10 bg-white/90 border border-slate-200 shadow-sm rounded-full p-2 hover:shadow-md transition-all"
+          className="hidden sm:inline-flex absolute left-4 top-1/2 transform -translate-y-1/2 z-10 bg-white/90 border border-slate-200 shadow-sm rounded-full p-2 hover:shadow-md transition-all"
           data-testid="scroll-left-btn"
         >
           <svg
@@ -127,7 +127,7 @@ export function HorizontalAccountsList({
       {showRightArrow && (
         <button
           onClick={scrollRight}
-          className="absolute right-4 top-1/2 transform -translate-y-1/2 z-10 bg-white/90 border border-slate-200 shadow-sm rounded-full p-2 hover:shadow-md transition-all"
+          className="hidden sm:inline-flex absolute right-4 top-1/2 transform -translate-y-1/2 z-10 bg-white/90 border border-slate-200 shadow-sm rounded-full p-2 hover:shadow-md transition-all"
           data-testid="scroll-right-btn"
         >
           <svg

@@ -2,6 +2,7 @@ import type { ContractRecord } from '@demo-bank-app/contracts';
 import type { PayNoteDeliveryRecord } from '@demo-bank-app/paynotes';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import type { PaynoteDependencies } from './dependencies';
+import { generatePayNoteDeliverySummaryForSessionId } from './generatePayNoteDeliverySummary';
 
 type DecisionOperation = 'acceptPayNote' | 'rejectPayNote';
 
@@ -12,6 +13,7 @@ type DecisionDeps = Pick<
   | 'payNoteDeliveryRepository'
   | 'contractRepository'
   | 'logger'
+  | 'getOpenAiApiKey'
 >;
 
 const mergeUnique = (existing?: string[], incoming?: string[]) => {
@@ -141,6 +143,24 @@ export const runPayNoteDeliveryDecision = async (input: {
   }
 
   await deps.payNoteDeliveryRepository.saveDelivery(updatedDelivery);
+
+  if (isDecision && operationSessionId) {
+    try {
+      await generatePayNoteDeliverySummaryForSessionId({
+        sessionId: operationSessionId,
+        force: false,
+        payNoteDeliveryRepository: deps.payNoteDeliveryRepository,
+        getOpenAiApiKey: deps.getOpenAiApiKey,
+        logger: deps.logger,
+      });
+    } catch (error) {
+      deps.logger.warn('Failed to refresh PayNote proposal summary', {
+        deliveryId: delivery.deliveryId,
+        sessionId: operationSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   if (contract) {
     const nextStatus =

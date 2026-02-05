@@ -1,4 +1,5 @@
 export * from './useContracts';
+export * from './useContractsBadgeCount';
 export * from './useContractDetails';
 export * from './useContractHistory';
 export * from './useContractSummary';

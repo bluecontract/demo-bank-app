@@ -5,13 +5,18 @@ import type { PayNoteDeliverySummary } from '../../../types/api';
 
 type ProposalsError = Error & { status?: number };
 
+type UseProposalsOptions = {
+  enabled?: boolean;
+  refetchInterval?: number | false;
+};
+
 const makeError = (message: string, status?: number): ProposalsError => {
   const error = new Error(message) as ProposalsError;
   error.status = status;
   return error;
 };
 
-export function useProposals() {
+export function useProposals(options: UseProposalsOptions = {}) {
   const { handleAuthError } = useAuthErrorHandler();
 
   return useQuery<PayNoteDeliverySummary[], ProposalsError>({
@@ -28,7 +33,8 @@ export function useProposals() {
 
       return response.body.items;
     },
-    refetchInterval: 5000,
+    enabled: options.enabled ?? true,
+    refetchInterval: options.refetchInterval ?? 5000,
     staleTime: 5 * 1000,
     gcTime: 2 * 60 * 1000,
     retry: (failureCount, error) => {

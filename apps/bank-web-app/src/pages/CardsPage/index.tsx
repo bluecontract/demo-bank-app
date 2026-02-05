@@ -74,7 +74,7 @@ export function CardsPage() {
         header={
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <h1 className="text-3xl font-semibold text-slate-900">Cards</h1>
-            <div className="flex items-center gap-3">
+            <div className="hidden lg:flex items-center gap-3">
               <span className="text-sm text-slate-600">
                 {user?.email || 'Guest'}
               </span>

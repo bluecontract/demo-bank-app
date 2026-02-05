@@ -64,23 +64,57 @@ export const HealthCheckSchema = z.object({
 });
 
 // Auth schemas
-export const SignUpRequestSchema = z.object({
-  email: createSanitizedStringSchema(z.string().email()),
-  marketingEmailsOptIn: z.boolean(),
-  merchantId: createSanitizedOptionalStringSchema(
-    z.string().trim().min(1).optional()
-  ),
-});
+const MAX_AVATAR_DATA_URL_LENGTH = 200_000;
+const MerchantNameSchema = createSanitizedStringSchema(
+  z.string().trim().min(1).max(140)
+);
+const AvatarDataUrlSchema = z
+  .string()
+  .trim()
+  .max(
+    MAX_AVATAR_DATA_URL_LENGTH,
+    `Avatar must be ${MAX_AVATAR_DATA_URL_LENGTH} characters or less`
+  )
+  .refine(value => value.startsWith('data:image/'), {
+    message: 'Avatar must be a data URL',
+  });
 
-export const SignInRequestSchema = SignUpRequestSchema.pick({
-  email: true,
+export const SignUpRequestSchema = z
+  .object({
+    email: createSanitizedStringSchema(z.string().email()),
+    merchantName: MerchantNameSchema.optional(),
+    marketingEmailsOptIn: z.boolean(),
+    merchantId: createSanitizedOptionalStringSchema(
+      z.string().trim().min(1).optional()
+    ),
+    avatarDataUrl: AvatarDataUrlSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.merchantId && !data.merchantName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Merchant name is required when signing up as a merchant',
+        path: ['merchantName'],
+      });
+    }
+  });
+
+export const SignInRequestSchema = z.object({
+  email: createSanitizedStringSchema(z.string().email()),
 });
 
 export const AuthSuccessResponseSchema = z.object({
   userId: z.string(),
   email: z.string().email(),
+  merchantName: z.string().optional(),
   marketingEmailsOptIn: z.boolean(),
   merchantId: z.string().optional(),
+  avatarDataUrl: z.string().optional(),
+});
+
+export const UpdateUserProfileRequestSchema = z.object({
+  merchantName: MerchantNameSchema.optional(),
+  avatarDataUrl: AvatarDataUrlSchema.optional(),
 });
 
 export const AuthErrorResponseSchema = z.object({
@@ -130,6 +164,18 @@ export const bankApiContract = c.router(
         404: ProblemDto,
       },
       summary: 'Sign in with existing email',
+    },
+
+    updateUserProfile: {
+      method: 'PATCH',
+      path: '/auth/profile',
+      body: UpdateUserProfileRequestSchema,
+      responses: {
+        200: AuthSuccessResponseSchema,
+        400: ProblemDto,
+        401: ProblemDto,
+      },
+      summary: 'Update signed-in user profile',
     },
 
     banking: {
@@ -613,7 +659,7 @@ export const bankApiContract = c.router(
 
       runContractOperation: {
         method: 'POST',
-        path: '/v1/contracts/:sessionId/:operation',
+        path: '/v1/contracts/:sessionId/operations/:operation',
         pathParams: z.object({
           sessionId: z.string(),
           operation: z.string(),

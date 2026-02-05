@@ -350,7 +350,7 @@ describe('ContractDetailsPage', () => {
 
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
-    expect(mockUseContractDetails).toHaveBeenCalledWith(null);
+    expect(mockUseContractDetails).toHaveBeenCalledWith('session-3');
     expect(mockUseProposalDetails).toHaveBeenCalledWith('session-3');
     expect(screen.getByText('Approve the Contract')).toBeInTheDocument();
   });
@@ -403,11 +403,17 @@ describe('ContractDetailsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
     fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
 
-    expect(acceptMock).toHaveBeenCalledWith('session-2');
+    expect(acceptMock).toHaveBeenCalledWith(
+      'session-2',
+      expect.objectContaining({
+        onError: expect.any(Function),
+        onSuccess: expect.any(Function),
+      })
+    );
     expect(rejectMock).not.toHaveBeenCalled();
   });
 
-  it('hides the proposal action card once a decision is recorded', () => {
+  it('shows the accepted message once a decision is recorded', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-2' });
     mockUseLocation.mockReturnValue({
       state: { from: '/contracts', kind: 'proposal' },
@@ -445,5 +451,8 @@ describe('ContractDetailsPage', () => {
     expect(
       screen.queryByRole('button', { name: 'Reject' })
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Thank you for accepting Slow Digestion PayNote.')
+    ).toBeInTheDocument();
   });
 });

@@ -4,6 +4,7 @@ import {
   GetCommand,
   QueryCommand,
   TransactWriteCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import type { UserRepository } from '../application/ports';
 import { User } from '../domain/entities/User';
@@ -46,6 +47,8 @@ interface UserProfileDbItem {
   isTest: boolean;
   marketingEmailsOptIn: boolean;
   merchantId?: User['merchantId'];
+  merchantName?: User['merchantName'];
+  avatarDataUrl?: User['avatarDataUrl'];
   ttl?: number; // Optional TTL for test users
 }
 
@@ -61,6 +64,8 @@ interface UnknownDbItem {
   isTest?: boolean;
   marketingEmailsOptIn?: boolean;
   merchantId?: string;
+  merchantName?: string;
+  avatarDataUrl?: string;
   ttl?: number;
   [key: string]: unknown; // Allow additional properties
 }
@@ -343,6 +348,99 @@ export class DynamoUserRepository implements UserRepository {
     }
   }
 
+  async updateProfile(
+    userId: User['id'],
+    updates: { merchantName?: string; avatarDataUrl?: string }
+  ): Promise<User> {
+    const timing = TimingUtils.startTiming(
+      OPERATION_NAMES.AUTH.USER_REPOSITORY_SAVE
+    );
+
+    this.logger?.info('User repository profile update started', {
+      userId,
+      ...TimingUtils.createTimingMetadata(timing),
+    });
+
+    const updateExpressions: string[] = [];
+    const expressionAttributeNames: Record<string, string> = {};
+    const expressionAttributeValues: Record<string, string> = {};
+
+    if (updates.merchantName !== undefined) {
+      updateExpressions.push('#merchantName = :merchantName');
+      expressionAttributeNames['#merchantName'] = 'merchantName';
+      expressionAttributeValues[':merchantName'] = updates.merchantName;
+    }
+
+    if (updates.avatarDataUrl !== undefined) {
+      updateExpressions.push('#avatarDataUrl = :avatarDataUrl');
+      expressionAttributeNames['#avatarDataUrl'] = 'avatarDataUrl';
+      expressionAttributeValues[':avatarDataUrl'] = updates.avatarDataUrl;
+    }
+
+    if (updateExpressions.length === 0) {
+      const existing = await this.findById(userId);
+      if (!existing) {
+        throw new AuthRepositoryError('update user profile', undefined);
+      }
+      return existing;
+    }
+
+    try {
+      const result = await this.client.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: `USER#${userId}`,
+            SK: 'PROFILE',
+          },
+          UpdateExpression: `SET ${updateExpressions.join(', ')}`,
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: expressionAttributeValues,
+          ConditionExpression: 'attribute_exists(PK)',
+          ReturnValues: 'ALL_NEW',
+        })
+      );
+
+      const completedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.AUTH.USER_REPOSITORY_SAVE_SUCCESS,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      this.logger?.info('User repository profile update completed', {
+        userId,
+        ...TimingUtils.createTimingMetadata(completedTiming),
+      });
+
+      if (!result.Attributes) {
+        throw new AuthRepositoryError('update user profile', undefined);
+      }
+
+      return this.mapToUser(result.Attributes as UnknownDbItem);
+    } catch (error: unknown) {
+      const failedTiming = TimingUtils.endTiming(timing);
+
+      this.logger?.error('User repository profile update failed', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.AUTH.USER_REPOSITORY_SAVE_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      throw new AuthRepositoryError(
+        'update user profile',
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
   private buildEmailReservationItem(user: User): EmailReservationDbItem {
     const item: EmailReservationDbItem = {
       PK: `EMAIL#${user.email}`,
@@ -371,6 +469,8 @@ export class DynamoUserRepository implements UserRepository {
       isTest: user.isTest,
       marketingEmailsOptIn: user.marketingEmailsOptIn,
       ...(user.merchantId ? { merchantId: user.merchantId } : {}),
+      ...(user.merchantName ? { merchantName: user.merchantName } : {}),
+      ...(user.avatarDataUrl ? { avatarDataUrl: user.avatarDataUrl } : {}),
     };
 
     // Add TTL for test users
@@ -436,6 +536,32 @@ export class DynamoUserRepository implements UserRepository {
         throw new Error('Invalid user item: merchantId cannot be empty');
       }
 
+      const merchantNameValue = item.merchantName;
+      if (
+        merchantNameValue !== undefined &&
+        merchantNameValue !== null &&
+        typeof merchantNameValue !== 'string'
+      ) {
+        throw new Error('Invalid user item: merchantName must be string');
+      }
+      const normalizedMerchantName = merchantNameValue?.trim();
+      if (merchantNameValue !== undefined && normalizedMerchantName === '') {
+        throw new Error('Invalid user item: merchantName cannot be empty');
+      }
+
+      const avatarDataUrlValue = item.avatarDataUrl;
+      if (
+        avatarDataUrlValue !== undefined &&
+        avatarDataUrlValue !== null &&
+        typeof avatarDataUrlValue !== 'string'
+      ) {
+        throw new Error('Invalid user item: avatarDataUrl must be string');
+      }
+      const normalizedAvatarDataUrl = avatarDataUrlValue?.trim();
+      if (avatarDataUrlValue !== undefined && normalizedAvatarDataUrl === '') {
+        throw new Error('Invalid user item: avatarDataUrl cannot be empty');
+      }
+
       return new User({
         id: item.id,
         email: item.email,
@@ -443,6 +569,8 @@ export class DynamoUserRepository implements UserRepository {
         isTest,
         marketingEmailsOptIn,
         merchantId: normalizedMerchantId || undefined,
+        merchantName: normalizedMerchantName || undefined,
+        avatarDataUrl: normalizedAvatarDataUrl || undefined,
       });
     } catch (error: unknown) {
       throw new AuthRepositoryError(

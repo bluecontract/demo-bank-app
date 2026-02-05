@@ -381,7 +381,7 @@ const generateOrLoadContractSummary = async (input: {
   force: boolean;
   contractRepository: Pick<
     ContractRepository,
-    'updateContractSummary' | 'addContractHistoryEntry'
+    'updateContractSummary' | 'addContractHistoryEntry' | 'listContractHistory'
   >;
   getOpenAiApiKey: () => Promise<string>;
   logger?: PowertoolsLogger;
@@ -507,13 +507,29 @@ const generateOrLoadContractSummary = async (input: {
       relatedHoldIds: contract.relatedHoldIds,
     });
 
-    await input.contractRepository.addContractHistoryEntry({
-      contractId: contract.contractId,
-      kind: 'contractUpdated',
-      short: summary.lastChange.short || summary.listPreview,
-      more: summary.lastChange.more,
-      createdAt: now,
-    });
+    const historyShort = summary.lastChange.short || summary.listPreview;
+    const historyMore = summary.lastChange.more;
+    const historyKind = 'contractUpdated' as const;
+    const latestHistory = await input.contractRepository.listContractHistory(
+      contract.contractId
+    );
+    const latestEntry = latestHistory[0];
+    const isDuplicate =
+      latestEntry &&
+      latestEntry.kind === historyKind &&
+      latestEntry.short === historyShort &&
+      (latestEntry.more ?? null) === (historyMore ?? null);
+
+    if (!isDuplicate) {
+      await input.contractRepository.addContractHistoryEntry({
+        contractId: contract.contractId,
+        kind: historyKind,
+        short: historyShort,
+        more: historyMore,
+        createdAt: contract.updatedAt,
+        id: `summary:${contract.updatedAt}`,
+      });
+    }
 
     return {
       summary,
@@ -549,6 +565,7 @@ export const prefetchContractSummaryForSessionId = async (input: {
     | 'getContractBySessionId'
     | 'updateContractSummary'
     | 'addContractHistoryEntry'
+    | 'listContractHistory'
   >;
   getOpenAiApiKey: () => Promise<string>;
   logger: PowertoolsLogger;

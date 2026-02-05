@@ -13,6 +13,7 @@ import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 vi.mock('./auth/handlers', () => ({
   signUpHandler: vi.fn(),
   signInHandler: vi.fn(),
+  updateUserProfileHandler: vi.fn(),
 }));
 
 // Mock the auth/errors module
@@ -224,7 +225,7 @@ describe('Bank API Handler', () => {
       expect(result.statusCode).toBe(204);
       expect(result.headers).toMatchObject({
         'access-control-allow-origin': 'https://app.example.com',
-        'access-control-allow-methods': 'GET,POST,OPTIONS',
+        'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
         'access-control-allow-headers':
           'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,Authorization,idempotency-key',
         vary: 'Origin',
@@ -247,7 +248,7 @@ describe('Bank API Handler', () => {
       expect(result.statusCode).toBe(204);
       expect(result.headers).toMatchObject({
         'access-control-allow-origin': 'https://app.example.com',
-        'access-control-allow-methods': 'GET,POST,OPTIONS',
+        'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
         'access-control-allow-headers':
           'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,Authorization,idempotency-key',
         vary: 'Origin',

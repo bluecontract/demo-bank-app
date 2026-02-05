@@ -208,7 +208,7 @@ describe('Bank API Integration Tests', () => {
         });
         expect(result.statusCode).toBe(204);
         expect(result.headers).toMatchObject({
-          'access-control-allow-methods': 'GET,POST,OPTIONS',
+          'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
           'access-control-allow-headers':
             'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,Authorization,idempotency-key',
         });
@@ -248,7 +248,11 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { email: creds.userEmail, marketingEmailsOptIn: true },
+        body: {
+          email: creds.userEmail,
+          merchantName: 'Duplicate Merchant',
+          marketingEmailsOptIn: true,
+        },
       });
       expect(signUp.statusCode).toBe(409);
       expect(signUp.body).toEqual({
@@ -262,7 +266,11 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { email: '', marketingEmailsOptIn: true },
+        body: {
+          email: '',
+          merchantName: 'Demo Merchant',
+          marketingEmailsOptIn: true,
+        },
       });
       expect(signUp.statusCode).toBe(400);
       expect(signUp.body).toEqual({
@@ -285,7 +293,11 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup?dev=true',
-        body: { email, marketingEmailsOptIn: true },
+        body: {
+          email,
+          merchantName: 'Demo Merchant',
+          marketingEmailsOptIn: true,
+        },
       });
       expect(signUp.statusCode).toBe(201);
       const cookieHeader = signUp.headers?.['set-cookie'] as string;
@@ -302,7 +314,11 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { email: maliciousAccountName },
+        body: {
+          email: maliciousAccountName,
+          merchantName: 'Demo Merchant',
+          marketingEmailsOptIn: true,
+        },
       });
 
       expect(signUp.statusCode).toBe(400);
@@ -323,6 +339,7 @@ describe('Bank API Integration Tests', () => {
         path: '/auth/signup',
         body: {
           email: merchantEmail,
+          merchantName: 'Merchant Demo',
           marketingEmailsOptIn: true,
           merchantId,
         },
@@ -373,6 +390,7 @@ describe('Bank API Integration Tests', () => {
         path: '/auth/signup',
         body: {
           email: merchantEmail,
+          merchantName: 'Merchant Demo',
           marketingEmailsOptIn: true,
         },
       });
@@ -384,6 +402,7 @@ describe('Bank API Integration Tests', () => {
         path: '/auth/signup',
         body: {
           email: merchantEmail,
+          merchantName: 'Merchant Demo',
           marketingEmailsOptIn: true,
           merchantId,
         },
@@ -434,6 +453,7 @@ describe('Bank API Integration Tests', () => {
         path: '/auth/signup',
         body: {
           email: merchantEmail,
+          merchantName: 'Merchant Demo',
           marketingEmailsOptIn: true,
           merchantId,
         },
@@ -495,6 +515,7 @@ describe('Bank API Integration Tests', () => {
         userId: creds.userId,
         email: creds.userEmail,
         marketingEmailsOptIn: true,
+        merchantName: creds.merchantName,
       });
       const cookieHeader = signIn.headers?.['set-cookie'] as string | undefined;
       expect(cookieHeader).toBeDefined();
@@ -3281,12 +3302,18 @@ async function signupUniqueTestUser(
   jwtCookie: string;
   userEmail: string;
   marketingEmailsOptIn: boolean;
+  merchantName: string;
 }> {
   const userEmail = generateUniqueTestUserName(namePrefix);
+  const merchantName = `Merchant ${namePrefix}`;
   const signUp = await invokeApi({
     method: 'POST',
     path: isTest ? '/auth/signup?dev=true' : '/auth/signup',
-    body: { email: userEmail, marketingEmailsOptIn: marketingOptIn },
+    body: {
+      email: userEmail,
+      merchantName,
+      marketingEmailsOptIn: marketingOptIn,
+    },
   });
   expect(signUp.statusCode).toBe(201);
   if (!signUp.headers || typeof signUp.headers['set-cookie'] !== 'string') {
@@ -3297,5 +3324,6 @@ async function signupUniqueTestUser(
     jwtCookie: signUp.headers['set-cookie'],
     userEmail,
     marketingEmailsOptIn: signUp.body.marketingEmailsOptIn,
+    merchantName,
   };
 }

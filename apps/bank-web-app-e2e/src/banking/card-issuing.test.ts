@@ -127,13 +127,13 @@ test.describe('Card Issuing Flow', () => {
     });
 
     const history = page.getByTestId('transaction-history-list');
-    await expect(history.getByText('Demo Shop').first()).toBeVisible({
-      timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
-    });
     const demoShopRow = history
       .locator('[data-testid^="activity-item-"]')
       .filter({ hasText: 'Demo Shop' })
       .first();
+    await expect(demoShopRow).toBeVisible({
+      timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
+    });
     await expect(demoShopRow).toContainText(`**** ${last4}`);
   });
 });

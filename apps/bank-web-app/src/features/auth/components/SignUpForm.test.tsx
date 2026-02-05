@@ -48,6 +48,7 @@ const createTestWrapper = () => {
 
 describe('SignUpForm', () => {
   const validEmail = 'john.doe@example.com';
+  const validMerchantName = 'Demo Merchant';
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -66,11 +67,15 @@ describe('SignUpForm', () => {
       screen.getByRole('heading', { name: 'Create Account' })
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Upload logo (optional)')
+    ).not.toBeInTheDocument();
     expect(screen.getByLabelText('I am a merchant')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Create Account' })
     ).toBeInTheDocument();
     expect(screen.getByLabelText(MARKETING_CONSENT_COPY)).toBeChecked();
+    expect(screen.queryByLabelText('Merchant name')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Merchant ID')).not.toBeInTheDocument();
   });
 
@@ -89,8 +94,28 @@ describe('SignUpForm', () => {
       expect(screen.getByText('Email is required')).toBeInTheDocument();
     });
 
+    fireEvent.click(screen.getByLabelText('I am a merchant'));
+    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+
+    expect(
+      await screen.findByText('Merchant name is required')
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        'Merchant ID is required when signing up as a merchant'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText('Upload logo (optional)')).toBeInTheDocument();
+
     const emailInput = screen.getByLabelText('Email');
+    const merchantNameInput = screen.getByLabelText('Merchant name');
     fireEvent.change(emailInput, { target: { value: 'not-an-email' } });
+    fireEvent.change(merchantNameInput, {
+      target: { value: validMerchantName },
+    });
+    fireEvent.change(screen.getByLabelText('Merchant ID'), {
+      target: { value: 'merchant-123' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
 
     expect(
@@ -126,7 +151,11 @@ describe('SignUpForm', () => {
 
     let resolvePromise: (value: {
       status: number;
-      body: { userId: string; email: string; marketingEmailsOptIn: boolean };
+      body: {
+        userId: string;
+        email: string;
+        marketingEmailsOptIn: boolean;
+      };
     }) => void = vi.fn();
     const signUpPromise = new Promise<typeof mockSignUp.arguments>(resolve => {
       resolvePromise = resolve as unknown as typeof resolvePromise;
@@ -148,7 +177,11 @@ describe('SignUpForm', () => {
 
     resolvePromise({
       status: 201,
-      body: { userId: '123', email: validEmail, marketingEmailsOptIn: true },
+      body: {
+        userId: '123',
+        email: validEmail,
+        marketingEmailsOptIn: true,
+      },
     });
     await waitFor(() => {
       expect(
@@ -163,7 +196,12 @@ describe('SignUpForm', () => {
 
     mockSignUp.mockResolvedValue({
       status: 201,
-      body: { userId: '123', email: validEmail, marketingEmailsOptIn: true },
+      body: {
+        userId: '123',
+        email: validEmail,
+        merchantName: validMerchantName,
+        marketingEmailsOptIn: true,
+      },
     });
 
     render(
@@ -172,21 +210,33 @@ describe('SignUpForm', () => {
       </Wrapper>
     );
 
+    fireEvent.click(screen.getByLabelText('I am a merchant'));
+
     const emailInput = screen.getByLabelText('Email');
+    const merchantNameInput = screen.getByLabelText('Merchant name');
     fireEvent.change(emailInput, { target: { value: validEmail } });
+    fireEvent.change(merchantNameInput, {
+      target: { value: validMerchantName },
+    });
+    fireEvent.change(screen.getByLabelText('Merchant ID'), {
+      target: { value: 'merchant-123' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
 
     await waitFor(() => {
       expect(onSuccess).toHaveBeenCalledWith({
         userId: '123',
         email: validEmail,
+        merchantName: validMerchantName,
         marketingEmailsOptIn: true,
       });
       expect(mockSignUp).toHaveBeenCalledWith(
         expect.objectContaining({
           body: {
             email: validEmail,
+            merchantName: validMerchantName,
             marketingEmailsOptIn: true,
+            merchantId: 'merchant-123',
           },
         })
       );
@@ -248,7 +298,12 @@ describe('SignUpForm', () => {
 
     mockSignUp.mockResolvedValue({
       status: 201,
-      body: { userId: '123', email: validEmail, marketingEmailsOptIn: true },
+      body: {
+        userId: '123',
+        email: validEmail,
+        merchantName: validMerchantName,
+        marketingEmailsOptIn: true,
+      },
     });
 
     render(
@@ -260,7 +315,11 @@ describe('SignUpForm', () => {
     fireEvent.click(screen.getByLabelText('I am a merchant'));
 
     const emailInput = screen.getByLabelText('Email');
+    const merchantNameInput = screen.getByLabelText('Merchant name');
     fireEvent.change(emailInput, { target: { value: validEmail } });
+    fireEvent.change(merchantNameInput, {
+      target: { value: validMerchantName },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
 
     expect(
@@ -278,6 +337,7 @@ describe('SignUpForm', () => {
         expect.objectContaining({
           body: {
             email: validEmail,
+            merchantName: validMerchantName,
             marketingEmailsOptIn: true,
             merchantId: 'merchant-123',
           },

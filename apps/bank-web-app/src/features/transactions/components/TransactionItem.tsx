@@ -28,7 +28,6 @@ const getTransactionTypeDisplay = (
 type VisualState = {
   badgeLabel: string;
   badgeClass: string;
-  hasPayNote: boolean;
   icon: string;
   iconClasses: string;
   title: string;
@@ -54,23 +53,6 @@ const formatCardLine = (last4?: string) =>
 const formatChargeLine = (processorChargeId?: string) =>
   processorChargeId ? `Charge: ${processorChargeId}` : undefined;
 
-const PayNoteIcon = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-    focusable="false"
-  >
-    <path
-      d="M5.40723 5.02246C7.37398 5.02246 9.06365 6.14809 10.0332 8.1416L14.4658 17.0488C14.5765 17.2736 14.6595 17.4344 14.7979 17.6592C15.9059 19.6849 17.402 21.164 19.3965 22H16.0166C14.0499 21.9999 12.3328 20.8744 11.3633 18.9131L7.76172 11.6465C7.29089 10.682 6.84782 9.68543 6.29395 8.81738C6.04469 8.43162 5.79549 8.04514 5.51855 7.72363V22H2V5.02246H5.40723ZM22 5.02246H20.0879C19.7004 5.02275 19.3956 5.3763 19.3955 5.82617V21.4531C18.1492 20.7136 17.2072 19.556 16.4316 18.0449L15.8779 16.8877V5.02246H18.7031C19.0909 5.02246 19.3955 4.66888 19.3955 4.21875V2H22V5.02246ZM9.39551 17.9482H6.81934V14.8945H7.87207L9.39551 17.9482Z"
-      fill="currentColor"
-    />
-  </svg>
-);
-
 const normalizeDescription = (description?: string, merchantName?: string) => {
   if (!description) {
     return undefined;
@@ -85,7 +67,6 @@ const buildVisualState = (item: ActivityItem): VisualState => {
   const hasCardContext = Boolean(
     item.cardLast4 || item.merchantName || item.processorChargeId
   );
-  const hasPayNote = Boolean(item.payNote?.payNoteDocumentId);
 
   const cardSubtitleLines = [
     formatCardLine(item.cardLast4),
@@ -112,7 +93,6 @@ const buildVisualState = (item: ActivityItem): VisualState => {
           failed: 'bg-rose-50 text-rose-700 border border-rose-100',
         }[item.status.toLowerCase()] ??
         'bg-slate-100 text-slate-700 border border-slate-200',
-      hasPayNote,
       icon: isCredit ? '↓' : '↑',
       iconClasses: isCredit
         ? 'bg-emerald-50 text-emerald-600'
@@ -155,7 +135,6 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       : [],
     description: normalizeDescription(item.description, item.merchantName),
     amountText: formatCurrency(item.amountMinor),
-    hasPayNote,
   };
 
   switch (item.kind) {
@@ -251,15 +230,6 @@ export function TransactionItem({
     ? formatAccountNumber(counterpartyAccountNumber)
     : '—';
   const dateLabel = formatDate(visualState.timestamp);
-  const payNoteIcon = visualState.hasPayNote ? (
-    <span
-      className="inline-flex items-center justify-center size-6 text-[#0062ff]"
-      role="img"
-      aria-label="PayNote"
-    >
-      <PayNoteIcon />
-    </span>
-  ) : null;
 
   const handleClick = () => {
     if (visualState.clickable) {
@@ -276,7 +246,7 @@ export function TransactionItem({
         onClick={visualState.clickable ? handleClick : undefined}
         data-testid={testId}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-900 truncate">
               {primaryText}
@@ -301,48 +271,51 @@ export function TransactionItem({
       onClick={visualState.clickable ? handleClick : undefined}
       data-testid={testId}
     >
-      <div className="grid w-full items-center gap-3 md:grid-cols-[minmax(0,1fr)_140px_64px_360px_120px] md:gap-4">
-        <div className="min-w-0">
+      <div className="grid w-full items-center gap-3 sm:grid-cols-[minmax(0,1fr)_140px_64px_360px_120px] sm:gap-4">
+        <div className="min-w-0 sm:hidden">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-slate-900 truncate">
+                {primaryText}
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-4 text-xs text-slate-500">
+                <span className="truncate">{cardLabel}</span>
+                <span className="whitespace-nowrap">{dateLabel}</span>
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <div
+                className={`text-sm font-semibold ${visualState.amountClass}`}
+              >
+                {visualState.amountText}
+              </div>
+              <span
+                className={`inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${visualState.badgeClass}`}
+              >
+                {visualState.badgeLabel}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden sm:block min-w-0">
           <div className="text-[13px] font-medium leading-5 text-slate-700 truncate">
             {primaryText}
           </div>
           {secondaryText && (
-            <div className="mt-1 text-xs text-slate-500 truncate md:hidden">
+            <div className="mt-1 text-xs text-slate-500 truncate">
               {secondaryText}
             </div>
           )}
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500 md:hidden">
-            <span className="truncate">{cardLabel}</span>
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 md:hidden">
-            {payNoteIcon ? (
-              payNoteIcon
-            ) : (
-              <span className="size-6" aria-hidden="true" />
-            )}
-            <span
-              className={`inline-flex items-center justify-center min-w-[104px] px-2 py-1 rounded-full text-[11px] font-semibold ${visualState.badgeClass}`}
-            >
-              {visualState.badgeLabel}
-            </span>
-            <span className="text-sm text-slate-500 whitespace-nowrap">
-              {dateLabel}
-            </span>
-          </div>
         </div>
 
-        <div className="hidden md:block min-w-0 text-sm text-slate-500 text-right">
+        <div className="hidden sm:block min-w-0 text-sm text-slate-500 text-right">
           <span className="truncate block">{cardLabel}</span>
         </div>
 
-        <div className="hidden md:block" aria-hidden="true" />
+        <div className="hidden sm:block" aria-hidden="true" />
 
-        <div className="hidden md:grid items-center min-w-0 text-sm text-slate-500 grid-cols-[max-content_1fr] gap-x-2">
-          {payNoteIcon ? (
-            payNoteIcon
-          ) : (
-            <span className="size-6" aria-hidden="true" />
-          )}
+        <div className="hidden sm:grid items-center min-w-0 text-sm text-slate-500">
           <div className="grid grid-cols-[120px_1fr] items-center gap-x-2 min-w-0">
             <span
               className={`inline-flex items-center justify-center min-w-[104px] px-2 py-1 rounded-full text-[11px] font-semibold justify-self-start ${visualState.badgeClass}`}
@@ -354,7 +327,7 @@ export function TransactionItem({
         </div>
 
         <div
-          className={`text-lg font-semibold md:text-right ${visualState.amountClass}`}
+          className={`hidden sm:block text-lg font-semibold text-right ${visualState.amountClass}`}
         >
           {visualState.amountText}
         </div>

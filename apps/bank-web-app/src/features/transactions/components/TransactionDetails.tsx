@@ -34,8 +34,6 @@ interface TransactionDetailsProps {
   accounts: Account[];
   userEmail?: string;
   'data-testid'?: string;
-  showPayNoteHelper?: boolean;
-  onViewPayNoteDetails?: () => void;
   relatedContracts?: RelatedContractItem[] | null;
   isRelatedContractsLoading?: boolean;
   relatedContractsError?: string;
@@ -48,8 +46,6 @@ export function TransactionDetails({
   accounts,
   userEmail,
   'data-testid': testId,
-  showPayNoteHelper = false,
-  onViewPayNoteDetails,
   relatedContracts,
   isRelatedContractsLoading = false,
   relatedContractsError,
@@ -101,8 +97,6 @@ export function TransactionDetails({
   );
   const operationLabel = isCardTransaction
     ? 'Card purchase'
-    : showPayNoteHelper
-    ? 'Transfer with PayNote'
     : `${getTransactionDirection()} transfer`;
 
   const getStatusBadge = (status: string) => {
@@ -285,21 +279,6 @@ export function TransactionDetails({
             </h3>
             <p className="text-sm text-slate-700 leading-relaxed">
               {transaction.description}
-            </p>
-          </div>
-        )}
-
-        {showPayNoteHelper && (
-          <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-4">
-            <p className="text-sm text-slate-700">
-              This transaction is part of a PayNote transfer.{' '}
-              <button
-                type="button"
-                className="text-emerald-700 font-medium hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] rounded"
-                onClick={() => onViewPayNoteDetails?.()}
-              >
-                See details
-              </button>
             </p>
           </div>
         )}

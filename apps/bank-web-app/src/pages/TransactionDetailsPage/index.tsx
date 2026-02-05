@@ -73,7 +73,7 @@ function TransactionDetailsPageContent({
               Transaction details
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <span className="text-sm text-slate-600">{userEmail}</span>
             <button
               type="button"

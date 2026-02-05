@@ -60,6 +60,7 @@ describe('generateContractSummaryHandler', () => {
     getContractBySessionId: vi.fn(),
     updateContractSummary: vi.fn(),
     addContractHistoryEntry: vi.fn(),
+    listContractHistory: vi.fn(),
   };
 
   beforeEach(() => {
@@ -69,9 +70,12 @@ describe('generateContractSummaryHandler', () => {
     contractRepository.getContractBySessionId.mockReset();
     contractRepository.updateContractSummary.mockReset();
     contractRepository.addContractHistoryEntry.mockReset();
+    contractRepository.listContractHistory.mockReset();
     logger.info.mockReset();
     logger.error.mockReset();
     getOpenAiApiKey.mockClear();
+
+    contractRepository.listContractHistory.mockResolvedValue([]);
 
     hoistedDeps.getDependenciesMock.mockResolvedValue({
       logger,
@@ -231,6 +235,50 @@ describe('generateContractSummaryHandler', () => {
         more: summaryFixture.lastChange.more,
       })
     );
+  });
+
+  it('skips adding duplicate history entries when last change matches', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+
+    contractRepository.listContractHistory.mockResolvedValueOnce([
+      {
+        id: 'history-1',
+        contractId: 'sess-1',
+        kind: 'contractUpdated',
+        short: summaryFixture.lastChange.short,
+        more: summaryFixture.lastChange.more,
+        createdAt: '2026-01-02T00:00:00.000Z',
+      },
+    ]);
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: {},
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(contractRepository.updateContractSummary).toHaveBeenCalled();
+    expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
   });
 
   it('returns 400 when type pack is missing required type definitions', async () => {

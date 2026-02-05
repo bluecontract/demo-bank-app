@@ -19,6 +19,8 @@ export interface SignUpCommand {
   isTest?: boolean;
   marketingEmailsOptIn: boolean;
   merchantId?: string;
+  merchantName?: string;
+  avatarDataUrl?: string;
 }
 
 export interface SignUpDependencies {
@@ -37,6 +39,8 @@ function toAuthResult(user: User, token: string): AuthResult {
       isTest: user.isTest,
       marketingEmailsOptIn: user.marketingEmailsOptIn,
       merchantId: user.merchantId,
+      merchantName: user.merchantName,
+      avatarDataUrl: user.avatarDataUrl,
     },
     token,
   };
@@ -48,7 +52,14 @@ export async function signUp(
 ): Promise<AuthResult> {
   const { userRepository, jwtService, logger, metrics } = dependencies;
 
-  const { email, isTest = false, marketingEmailsOptIn, merchantId } = command;
+  const {
+    email,
+    isTest = false,
+    marketingEmailsOptIn,
+    merchantId,
+    merchantName,
+    avatarDataUrl,
+  } = command;
   const timing = TimingUtils.startTiming(OPERATION_NAMES.AUTH.SIGN_UP);
 
   logger.info('User sign-up started', {
@@ -67,6 +78,8 @@ export async function signUp(
       isTest,
       marketingEmailsOptIn,
       merchantId,
+      merchantName,
+      avatarDataUrl,
     });
 
     savedUser = await userRepository.save(user);

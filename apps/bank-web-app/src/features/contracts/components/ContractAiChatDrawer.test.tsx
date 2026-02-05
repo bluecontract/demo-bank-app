@@ -83,7 +83,7 @@ describe('ContractAiChatDrawer', () => {
 
     const input = screen.getByPlaceholderText('Write what you want');
     fireEvent.change(input, { target: { value: 'Run it' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
     await waitFor(() => {
       expect(chatMutateAsync).toHaveBeenCalled();

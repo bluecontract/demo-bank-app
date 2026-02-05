@@ -26,6 +26,10 @@ export interface UserRepository {
   save(user: User): Promise<User>;
   findById(id: User['id']): Promise<User | null>;
   findByEmail(email: User['email']): Promise<User | null>;
+  updateProfile(
+    id: User['id'],
+    updates: { merchantName?: string; avatarDataUrl?: string }
+  ): Promise<User>;
 }
 
 // Service ports

@@ -118,4 +118,68 @@ describe('listContractHistoryHandler', () => {
       },
     ]);
   });
+
+  it('dedupes duplicate entries with the same message', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'type-1',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-02T00:00:00.000Z',
+    });
+
+    contractRepository.listContractHistory.mockResolvedValue([
+      {
+        id: 'history-3',
+        contractId: 'contract-1',
+        kind: 'contractUpdated',
+        short: 'Capture locked by Bank',
+        more: 'Bank confirmed the lock.',
+        createdAt: '2024-01-02T12:00:00.000Z',
+      },
+      {
+        id: 'history-2',
+        contractId: 'contract-1',
+        kind: 'contractUpdated',
+        short: 'Shipment delivered',
+        more: 'Shipment company confirmed delivery.',
+        createdAt: '2024-01-02T11:00:00.000Z',
+      },
+      {
+        id: 'history-1',
+        contractId: 'contract-1',
+        kind: 'contractUpdated',
+        short: 'Capture locked by Bank',
+        more: 'Bank confirmed the lock.',
+        createdAt: '2024-01-02T12:00:00.000Z',
+      },
+    ]);
+
+    const response = await listContractHistoryHandler(
+      {
+        params: { sessionId: 'session-1' },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.items).toEqual([
+      {
+        id: 'history-3',
+        kind: 'contractUpdated',
+        short: 'Capture locked by Bank',
+        more: 'Bank confirmed the lock.',
+        createdAt: '2024-01-02T12:00:00.000Z',
+      },
+      {
+        id: 'history-2',
+        kind: 'contractUpdated',
+        short: 'Shipment delivered',
+        more: 'Shipment company confirmed delivery.',
+        createdAt: '2024-01-02T11:00:00.000Z',
+      },
+    ]);
+  });
 });

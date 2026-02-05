@@ -37,6 +37,7 @@ import { Dropdown, DropdownItem } from '../../ui/Dropdown';
 import { Spinner, SpinnerWithText } from '../../ui/Spinner';
 import { formatShortDateTime } from '../../lib/formatDate';
 import { formatStatusLabel } from '../../lib/formatStatusLabel';
+import { getSupportedContractByTypeBlueId } from '@demo-bank-app/shared-bank-api-contract';
 import type {
   ContractDetails,
   PayNoteDeliveryDetailsSanitized,
@@ -57,6 +58,9 @@ function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
   const acceptMutation = useAcceptPayNoteDelivery();
   const rejectMutation = useRejectPayNoteDelivery();
   const [isDecisionRequested, setDecisionRequested] = useState(false);
+  const [decisionOverride, setDecisionOverride] = useState<
+    'accepted' | 'rejected' | null
+  >(null);
 
   useEffect(() => {
     if (acceptMutation.isError || rejectMutation.isError) {
@@ -64,18 +68,21 @@ function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
     }
   }, [acceptMutation.isError, rejectMutation.isError]);
 
+  useEffect(() => {
+    setDecisionRequested(false);
+    setDecisionOverride(null);
+  }, [proposal?.deliverySessionId, proposal?.clientDecisionStatus, sessionId]);
+
   if (!proposal) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
+      <div className="rounded-xl sm:rounded-2xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
         Pending actions will appear here once they are available.
       </div>
     );
   }
 
-  const decisionStatus = proposal.clientDecisionStatus ?? 'pending';
-  if (decisionStatus === 'accepted' || decisionStatus === 'rejected') {
-    return null;
-  }
+  const decisionStatus =
+    decisionOverride ?? proposal.clientDecisionStatus ?? 'pending';
   const isDecisionLocked =
     decisionStatus === 'accepted' || decisionStatus === 'rejected';
   const isDecisionPending =
@@ -93,20 +100,56 @@ function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
       ? pendingDescription
       : 'Review the latest contract decision below.';
 
+  if (decisionStatus === 'accepted') {
+    return (
+      <div className="rounded-xl sm:rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+        <h3 className="text-lg font-semibold text-emerald-900">
+          Thank you for accepting {proposal.payNote?.name ?? 'this contract'}.
+        </h3>
+        <p className="mt-2 text-sm text-emerald-900/80">
+          We are starting it for you.
+        </p>
+      </div>
+    );
+  }
+
+  if (decisionStatus === 'rejected') {
+    return null;
+  }
+
   const handleAccept = () => {
     if (!decisionSessionId || isDecisionLocked || isDecisionPending) return;
     setDecisionRequested(true);
-    acceptMutation.mutate(decisionSessionId);
+    acceptMutation.mutate(decisionSessionId, {
+      onSuccess: () => {
+        setDecisionRequested(false);
+        setDecisionOverride('accepted');
+      },
+      onError: () => {
+        setDecisionRequested(false);
+      },
+    });
   };
 
   const handleReject = () => {
     if (!decisionSessionId || isDecisionLocked || isDecisionPending) return;
     setDecisionRequested(true);
-    rejectMutation.mutate({ sessionId: decisionSessionId });
+    rejectMutation.mutate(
+      { sessionId: decisionSessionId },
+      {
+        onSuccess: () => {
+          setDecisionRequested(false);
+          setDecisionOverride('rejected');
+        },
+        onError: () => {
+          setDecisionRequested(false);
+        },
+      }
+    );
   };
 
   return (
-    <div className="rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
+    <div className="rounded-xl sm:rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
       <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm text-slate-600">{description}</p>
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
@@ -138,7 +181,7 @@ interface ContractDetailsAccordionProps {
 
 function ContractDetailsAccordion({ contract }: ContractDetailsAccordionProps) {
   return (
-    <details className="rounded-2xl border border-slate-200 bg-white/80">
+    <details className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white/80">
       <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-900">
         <svg
           className="h-4 w-4 text-slate-400"
@@ -162,28 +205,17 @@ function ContractDetailsAccordion({ contract }: ContractDetailsAccordionProps) {
         )}
 
         {contract && (
-          <>
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                Operations
-              </p>
-              <div className="mt-3">
-                <ContractOperationsList contract={contract} variant="compact" />
-              </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              Raw document
+            </p>
+            <div className="mt-3">
+              <ContractRawDocument
+                document={contract.document}
+                emptyLabel="Contract document not available."
+              />
             </div>
-
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                Raw document
-              </p>
-              <div className="mt-3">
-                <ContractRawDocument
-                  document={contract.document}
-                  emptyLabel="Contract document not available."
-                />
-              </div>
-            </div>
-          </>
+          </div>
         )}
       </div>
     </details>
@@ -227,9 +259,7 @@ export function ContractDetailsPage() {
     setSummaryExpanded(false);
   }, [sessionId]);
 
-  const contractQuery = useContractDetails(
-    activeKind === 'contract' ? sessionId ?? null : null
-  );
+  const contractQuery = useContractDetails(sessionId ?? null);
   const proposalQuery = useProposalDetails(
     activeKind === 'proposal' ? sessionId ?? null : null
   );
@@ -252,8 +282,14 @@ export function ContractDetailsPage() {
     return () => setActiveSession(null);
   }, [sessionId, setActiveSession]);
 
-  const contract = contractQuery.data ?? null;
+  const contractData = contractQuery.data ?? null;
+  const contractType = contractData
+    ? getSupportedContractByTypeBlueId(contractData.typeBlueId)?.typeName ??
+      null
+    : null;
+  const isDeliveryContract = contractType === 'PayNote/PayNote Delivery';
   const proposal = proposalQuery.data ?? null;
+  const contract = activeKind === 'contract' ? contractData : null;
   const aiChatSessionId = contract?.sessionId ?? null;
   const relatedActivitySource = contract
     ? contract
@@ -291,6 +327,10 @@ export function ContractDetailsPage() {
     relatedContractsQuery.error instanceof Error
       ? relatedContractsQuery.error.message
       : null;
+  const shouldRenderLinkedContracts =
+    relatedContractsQuery.isLoading ||
+    Boolean(relatedContractsErrorMessage) ||
+    filteredRelatedContracts.length > 0;
   const isLoading =
     !contract &&
     !proposal &&
@@ -306,8 +346,16 @@ export function ContractDetailsPage() {
     if (!contract) {
       return;
     }
-    markReviewed(contract);
-  }, [contract, markReviewed]);
+    if (activeKind === 'contract') {
+      markReviewed(contract);
+    }
+  }, [activeKind, contract, markReviewed]);
+
+  useEffect(() => {
+    if (isDeliveryContract && activeKind !== 'proposal') {
+      setActiveKind('proposal');
+    }
+  }, [activeKind, isDeliveryContract]);
 
   const resolvedDocument = useMemo(
     () => (contract ? restoreInlineTypes(contract.document) : null),
@@ -345,7 +393,6 @@ export function ContractDetailsPage() {
     resolvedSummary?.story?.headline?.trim() ||
     getDocumentName(resolvedDocument) ||
     headerTitle;
-  const summaryTitle = summaryHeadline;
   const summaryOverview = resolvedSummary?.story?.overview ?? [];
   const summaryBullets = resolvedSummary?.story?.bullets ?? [];
   const summaryNextSteps = resolvedSummary?.nextSteps?.items ?? [];
@@ -374,14 +421,13 @@ export function ContractDetailsPage() {
   }, [aiChatSessionId]);
 
   const historyQuery = useContractHistory(
-    activeKind === 'contract' ? sessionId ?? null : null,
-    activeKind === 'contract' && Boolean(sessionId)
+    contractData?.sessionId ?? null,
+    Boolean(contractData?.sessionId)
   );
   const historyItems = historyQuery.data?.items ?? [];
   const hasHistory = historyItems.length > 0;
   const isArchivePending =
     archiveMutation.isPending || unarchiveMutation.isPending;
-  const shouldRenderLinkedContracts = Boolean(relatedActivitySource);
 
   const contractStatusStyles: Record<string, string> = {
     accepted: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
@@ -474,7 +520,7 @@ export function ContractDetailsPage() {
             </button>
             <h1 className="text-3xl font-semibold text-slate-900">Contract</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <span className="text-sm text-slate-600">
               {user?.email || 'Guest'}
             </span>
@@ -502,7 +548,7 @@ export function ContractDetailsPage() {
         </div>
       }
     >
-      <section className="app-surface p-5 sm:p-6">
+      <section className="app-surface p-4 sm:p-6 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
@@ -545,10 +591,14 @@ export function ContractDetailsPage() {
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
           <div className="flex flex-col gap-4">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
+            <div className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <Avatar name={senderName} size="xl" />
+                  <Avatar
+                    name={senderName}
+                    size="xl"
+                    className="h-14 w-14 text-base sm:h-16 sm:w-16 sm:text-lg"
+                  />
                   <div className="text-sm font-semibold text-slate-900">
                     {senderName}
                   </div>
@@ -588,13 +638,13 @@ export function ContractDetailsPage() {
 
                 {resolvedSummary ? (
                   <div>
-                    <h3 className="text-2xl font-semibold text-slate-900 leading-tight">
+                    <h3 className="text-[32px] leading-[40px] font-semibold text-slate-900">
                       {summaryHeadline}
                     </h3>
                     {summaryOverview.map((paragraph, index) => (
                       <p
                         key={`${summaryHeadline}-${index}`}
-                        className="mt-2 whitespace-pre-line break-words text-base text-slate-600 leading-relaxed"
+                        className="mt-2 whitespace-pre-line break-words text-base text-slate-600 leading-6"
                       >
                         {paragraph}
                       </p>
@@ -678,6 +728,17 @@ export function ContractDetailsPage() {
               </div>
             </div>
 
+            {contract && (
+              <section className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4">
+                <h3 className="text-base font-semibold text-slate-900">
+                  Available operations
+                </h3>
+                <div className="mt-4">
+                  <ContractOperationsList contract={contract} />
+                </div>
+              </section>
+            )}
+
             {relatedActivitySource && (
               <ContractRelatedActivitySection
                 contract={relatedActivitySource}
@@ -687,8 +748,8 @@ export function ContractDetailsPage() {
             )}
 
             {shouldRenderLinkedContracts && (
-              <section className="rounded-2xl border border-slate-200 bg-white p-4">
-                <h3 className="text-sm font-semibold text-slate-900">
+              <section className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4">
+                <h3 className="text-base font-semibold text-slate-900">
                   Linked contracts
                 </h3>
 
@@ -702,15 +763,6 @@ export function ContractDetailsPage() {
                   relatedContractsErrorMessage && (
                     <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-600">
                       {relatedContractsErrorMessage}
-                    </div>
-                  )}
-
-                {!relatedContractsQuery.isLoading &&
-                  !relatedContractsErrorMessage &&
-                  (filteredRelatedContracts.length === 0 ||
-                    !hasRelatedContractIds) && (
-                    <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm text-slate-500">
-                      No related contracts found.
                     </div>
                   )}
 
@@ -778,7 +830,17 @@ export function ContractDetailsPage() {
                             }}
                             disabled={!isSelectable}
                           >
-                            <div className="space-y-2">
+                            <div className="sm:hidden">
+                              <p className="text-sm font-semibold text-slate-900 truncate">
+                                {primaryName}
+                              </p>
+                              {contractDate && (
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {contractDate}
+                                </p>
+                              )}
+                            </div>
+                            <div className="hidden sm:block space-y-2">
                               <p className="text-sm font-semibold text-slate-900 truncate">
                                 {primaryName}
                               </p>
@@ -807,7 +869,7 @@ export function ContractDetailsPage() {
             )}
 
             {hasHistory && (
-              <details className="rounded-2xl border border-slate-200 bg-white p-4">
+              <details className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4">
                 <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
                   <svg
                     className="h-4 w-4 text-slate-400"
@@ -884,7 +946,7 @@ export function ContractDetailsPage() {
         <ContractAiChatDrawer
           isOpen={isAiChatOpen}
           sessionId={aiChatSessionId}
-          documentTitle={summaryTitle}
+          documentTitle={headerTitle}
           contractUpdatedAt={contract.updatedAt}
           onClose={() => setIsAiChatOpen(false)}
         />

@@ -14,6 +14,10 @@ import { getDependencies as getBankingDependencies } from '../banking/dependenci
 import { ServerInferRequest } from '@ts-rest/core';
 import { toUnauthorizedResponse } from '../shared/errors';
 import { toUserAlreadyExistsError } from './errors';
+import {
+  extractAuthInfo,
+  type MaybeAuthenticatedTsRestRequestContext,
+} from './middleware';
 
 const COOKIE_CONFIG = {
   NAME: 'demoAuth',
@@ -31,6 +35,15 @@ const getTtlSeconds = (
   return user?.isTest ? config.testUserTtlSeconds : config.jwtTtlSeconds;
 };
 
+const toUserProfileBody = (user: AuthResult['user']) => ({
+  userId: user.id,
+  email: user.email,
+  marketingEmailsOptIn: user.marketingEmailsOptIn,
+  ...(user.merchantId ? { merchantId: user.merchantId } : {}),
+  ...(user.merchantName ? { merchantName: user.merchantName } : {}),
+  ...(user.avatarDataUrl ? { avatarDataUrl: user.avatarDataUrl } : {}),
+});
+
 const toAuthResponse = (
   status: 200 | 201,
   { user, token }: { user: AuthResult['user']; token: string },
@@ -41,12 +54,7 @@ const toAuthResponse = (
   responseHeaders.set('Set-Cookie', createAuthCookie(token, ttlSeconds));
   return {
     status,
-    body: {
-      userId: user.id,
-      email: user.email,
-      marketingEmailsOptIn: user.marketingEmailsOptIn,
-      ...(user.merchantId ? { merchantId: user.merchantId } : {}),
-    },
+    body: toUserProfileBody(user),
   };
 };
 
@@ -100,6 +108,17 @@ export const signUpHandler = async (
   const deps = await getDependencies();
   const { logger, config } = deps;
   const isMerchantSignup = Boolean(body.merchantId);
+  const merchantName = body.merchantName?.trim();
+
+  if (isMerchantSignup && !merchantName) {
+    return {
+      status: 400 as const,
+      body: {
+        error: 'VALIDATION_ERROR',
+        message: 'Merchant name is required when signing up as a merchant',
+      },
+    };
+  }
 
   try {
     const result = await signUp(
@@ -108,6 +127,8 @@ export const signUpHandler = async (
         isTest: query?.dev === 'true',
         marketingEmailsOptIn: body.marketingEmailsOptIn,
         merchantId: body.merchantId,
+        merchantName,
+        avatarDataUrl: body.avatarDataUrl,
       },
       deps
     );
@@ -163,6 +184,51 @@ export const signInHandler = async (
         'User not found. Please check the email and try again or sign up.'
       );
     }
+    throw error;
+  }
+};
+
+export const updateUserProfileHandler = async (
+  { body }: ServerInferRequest<(typeof bankApiContract)['updateUserProfile']>,
+  { request }: { request: MaybeAuthenticatedTsRestRequestContext }
+) => {
+  const deps = await getDependencies();
+  const { logger, userRepository } = deps;
+  const { userId } = await extractAuthInfo(request);
+
+  const hasUpdates =
+    body.merchantName !== undefined || body.avatarDataUrl !== undefined;
+  if (!hasUpdates) {
+    return {
+      status: 400 as const,
+      body: {
+        error: 'VALIDATION_ERROR',
+        message: 'At least one profile field must be provided.',
+      },
+    };
+  }
+
+  try {
+    const updatedUser = await userRepository.updateProfile(userId, {
+      merchantName: body.merchantName,
+      avatarDataUrl: body.avatarDataUrl,
+    });
+
+    return {
+      status: 200 as const,
+      body: toUserProfileBody({
+        id: updatedUser.id,
+        email: updatedUser.email,
+        createdAt: updatedUser.createdAt.toISOString(),
+        isTest: updatedUser.isTest,
+        marketingEmailsOptIn: updatedUser.marketingEmailsOptIn,
+        merchantId: updatedUser.merchantId,
+        merchantName: updatedUser.merchantName,
+        avatarDataUrl: updatedUser.avatarDataUrl,
+      }),
+    };
+  } catch (error: unknown) {
+    logger.error('Update profile failed', { error: String(error) });
     throw error;
   }
 };

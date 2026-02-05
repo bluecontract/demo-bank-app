@@ -155,6 +155,7 @@ export const signUpMerchantAndReachDashboard = async (
   await page.goto(URLS.SIGNUP);
   await page.fill('input[name="email"]', merchantEmail);
   await page.getByLabel('I am a merchant').check();
+  await page.fill('input[name="merchantName"]', 'Demo Merchant');
   await page.fill('input[name="merchantId"]', merchantId);
   await page.click('button[type="submit"]');
 

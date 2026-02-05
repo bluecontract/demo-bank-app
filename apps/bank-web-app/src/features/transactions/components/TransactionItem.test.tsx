@@ -97,9 +97,11 @@ describe('TransactionItem', () => {
 
     expect(screen.getByText('Incoming')).toBeInTheDocument();
     expect(screen.getAllByText('COMPLETED').length).toBeGreaterThan(0);
-    expect(screen.getByText('Deposit from employer')).toBeInTheDocument();
+    expect(screen.getAllByText('Deposit from employer').length).toBeGreaterThan(
+      0
+    );
     expect(screen.getAllByText('123 456 7890').length).toBeGreaterThan(0);
-    expect(screen.getByText('+$1,000')).toBeInTheDocument();
+    expect(screen.getAllByText('+$1,000').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByTestId('activity-row'));
     expect(onSelect).toHaveBeenCalledWith(postedTransaction);
@@ -114,7 +116,7 @@ describe('TransactionItem', () => {
 
     expect(screen.getByText('Outgoing')).toBeInTheDocument();
     expect(screen.getAllByText('098 765 4321').length).toBeGreaterThan(0);
-    expect(screen.getByText('-$500')).toBeInTheDocument();
+    expect(screen.getAllByText('-$500').length).toBeGreaterThan(0);
   });
 
   it('renders hold created entry and triggers click handler', () => {
@@ -130,7 +132,7 @@ describe('TransactionItem', () => {
 
     expect(screen.getByText('Hold Created')).toBeInTheDocument();
     expect(screen.getAllByText('HOLD PLACED').length).toBeGreaterThan(0);
-    expect(screen.getByText('$450')).toBeInTheDocument();
+    expect(screen.getAllByText('$450').length).toBeGreaterThan(0);
     expect(screen.getAllByText('111 111 1222').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByTestId('hold-created'));
@@ -143,7 +145,7 @@ describe('TransactionItem', () => {
     expect(screen.getByText('Hold Captured')).toBeInTheDocument();
     expect(screen.getAllByText('HOLD CAPTURED').length).toBeGreaterThan(0);
     expect(screen.getAllByText('222 233 3344').length).toBeGreaterThan(0);
-    expect(screen.getByText('$95')).toBeInTheDocument();
+    expect(screen.getAllByText('$95').length).toBeGreaterThan(0);
   });
 
   it('renders failed hold with failure messaging', () => {
@@ -151,7 +153,9 @@ describe('TransactionItem', () => {
 
     expect(screen.getByText('Hold Failed')).toBeInTheDocument();
     expect(screen.getAllByText('HOLD FAILED').length).toBeGreaterThan(0);
-    expect(screen.getByText('Available balance too low')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('Available balance too low').length
+    ).toBeGreaterThan(0);
   });
 
   it('renders card transactions with merchant and card context', () => {
@@ -159,13 +163,13 @@ describe('TransactionItem', () => {
       <TransactionItem item={cardTransaction} onActivitySelect={vi.fn()} />
     );
 
-    expect(screen.getByText('Demo Shop')).toBeInTheDocument();
+    expect(screen.getAllByText('Demo Shop').length).toBeGreaterThan(0);
     const cardLabels = screen.getAllByText('**** 4242');
     expect(cardLabels.length).toBeGreaterThan(0);
     expect(screen.queryByText('999 999 9999')).not.toBeInTheDocument();
   });
 
-  it('renders a PayNote icon when paynote metadata is present', () => {
+  it('does not render a PayNote icon when paynote metadata is present', () => {
     const payNoteTransaction: ActivityItem = {
       ...debitTransaction,
       payNote: { payNoteDocumentId: 'doc-paynote-1' },
@@ -175,7 +179,6 @@ describe('TransactionItem', () => {
       <TransactionItem item={payNoteTransaction} onActivitySelect={vi.fn()} />
     );
 
-    const icons = screen.getAllByLabelText('PayNote');
-    expect(icons.length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('PayNote')).not.toBeInTheDocument();
   });
 });

@@ -54,6 +54,24 @@ describe('User', () => {
 
       expect(user.merchantId).toBe('merchant-123');
     });
+
+    it('accepts merchantName and trims whitespace', () => {
+      const user = new User({
+        ...validProps,
+        merchantName: '  Demo Merchant  ',
+      });
+
+      expect(user.merchantName).toBe('Demo Merchant');
+    });
+
+    it('accepts avatar data URL', () => {
+      const user = new User({
+        ...validProps,
+        avatarDataUrl: 'data:image/png;base64,abc123',
+      });
+
+      expect(user.avatarDataUrl).toBe('data:image/png;base64,abc123');
+    });
   });
 
   describe('validation', () => {
@@ -212,6 +230,35 @@ describe('User', () => {
 
         expect(() => new User(props)).toThrow(UserValidationError);
         expect(() => new User(props)).toThrow('Merchant ID cannot be empty');
+      });
+    });
+
+    describe('merchantName validation', () => {
+      it('throws when merchantName is empty', () => {
+        const props = { ...validProps, merchantName: '' };
+
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow('Merchant name cannot be empty');
+      });
+    });
+
+    describe('avatarDataUrl validation', () => {
+      it('throws when avatarDataUrl is empty', () => {
+        const props = { ...validProps, avatarDataUrl: '' };
+
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow(
+          'Avatar data URL cannot be empty'
+        );
+      });
+
+      it('throws when avatarDataUrl is not a data URL', () => {
+        const props = { ...validProps, avatarDataUrl: 'not-a-data-url' };
+
+        expect(() => new User(props)).toThrow(UserValidationError);
+        expect(() => new User(props)).toThrow(
+          'Avatar must be a valid data URL'
+        );
       });
     });
   });

@@ -5,10 +5,20 @@ import { DashboardHeader } from './DashboardHeader';
 import { routerFutureConfig } from '../../../app/routerFutureConfig';
 
 const mockSignOut = vi.fn();
+const mockSignIn = vi.fn();
+const mockUpdateProfile = vi.fn();
 
 vi.mock('../../../app/providers/AuthProvider', () => ({
   useAuth: () => ({
+    user: null,
     signOut: mockSignOut,
+    signIn: mockSignIn,
+  }),
+}));
+
+vi.mock('../../../app/providers/ApiProvider', () => ({
+  useApiClient: () => ({
+    updateUserProfile: mockUpdateProfile,
   }),
 }));
 
@@ -57,7 +67,14 @@ describe('DashboardHeader', () => {
 
     const header = screen.getByTestId('dashboard-header');
     expect(header).toBeInTheDocument();
-    expect(header).toHaveClass('flex', 'gap-6');
+    expect(header).toHaveClass(
+      'flex',
+      'flex-col',
+      'gap-4',
+      'lg:flex-row',
+      'lg:items-center',
+      'lg:justify-between'
+    );
   });
 
   it('should render avatar when user name is provided', () => {
@@ -88,6 +105,9 @@ describe('DashboardHeader', () => {
     fireEvent.click(avatar);
 
     expect(screen.getByRole('menu')).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: 'Change logo' })
+    ).toBeInTheDocument();
     expect(
       screen.getByRole('menuitem', { name: 'Sign Out' })
     ).toBeInTheDocument();

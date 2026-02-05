@@ -120,6 +120,10 @@ const buildProposalFacts = (input: {
   try {
     const summaryInputNode = summaryBlue.jsonValueToNode({
       document: mergedDocument,
+      deliveryStatus: record.deliveryStatus ?? null,
+      clientDecisionStatus: record.clientDecisionStatus ?? null,
+      transactionIdentificationStatus:
+        record.transactionIdentificationStatus ?? null,
     });
     summaryInputBlueId = summaryBlue.calculateBlueIdSync(summaryInputNode);
   } catch (error) {

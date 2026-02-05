@@ -20,7 +20,7 @@ export function AddAccountCard({
   return (
     <Card
       variant="dashed"
-      className={`p-4 ${heightClass}`}
+      className={`p-4 ${heightClass} rounded-lg sm:rounded-2xl shadow-none sm:shadow-[var(--shadow-soft)]`}
       data-testid={testId}
     >
       <button

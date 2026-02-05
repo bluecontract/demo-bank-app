@@ -56,12 +56,12 @@ export function AccountCard({
 
   const cardClassName = isSelected
     ? ACCOUNT_CARD_SELECTED_RING_CLASS
-    : 'hover:shadow-md';
+    : 'sm:hover:shadow-md';
   const heightClass = ACCOUNT_CARD_HEIGHT_CLASSES[size];
 
   return (
     <Card
-      className={`${cardClassName} ${heightClass} p-4 flex flex-col gap-3`}
+      className={`${cardClassName} ${heightClass} p-4 flex flex-col gap-3 rounded-lg sm:rounded-2xl shadow-none sm:shadow-[var(--shadow-soft)]`}
       onClick={isSelectable ? handleSelect : undefined}
       role={isSelectable ? 'button' : undefined}
       tabIndex={isSelectable ? 0 : undefined}

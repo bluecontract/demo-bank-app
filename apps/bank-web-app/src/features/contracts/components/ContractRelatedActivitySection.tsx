@@ -108,11 +108,11 @@ export function ContractRelatedActivitySection({
 
   return (
     <section
-      className={`rounded-2xl border border-slate-200 bg-white p-4 ${className}`.trim()}
+      className={`rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4 ${className}`.trim()}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
           {description && (
             <p className="text-xs text-slate-500 mt-1">{description}</p>
           )}
@@ -137,11 +137,11 @@ export function ContractRelatedActivitySection({
           {relatedTransactions.length > 0 && (
             <div>
               {relatedHolds.length > 0 && (
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                <p className="hidden sm:block text-xs uppercase tracking-[0.2em] text-slate-500">
                   Transactions
                 </p>
               )}
-              <div className="mt-2 rounded-2xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
+              <div className="mt-2 rounded-xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
                 {relatedTransactionItems.map(item => (
                   <TransactionItem
                     key={getActivityKey(item)}
@@ -179,10 +179,10 @@ export function ContractRelatedActivitySection({
 
           {relatedHolds.length > 0 && (
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+              <p className="hidden sm:block text-xs uppercase tracking-[0.2em] text-slate-500">
                 Holds
               </p>
-              <div className="mt-2 rounded-2xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
+              <div className="mt-2 rounded-xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
                 {relatedHoldItems.map(item => (
                   <TransactionItem
                     key={getActivityKey(item)}

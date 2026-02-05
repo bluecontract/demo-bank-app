@@ -1,4 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { vi } from 'vitest';
 import { ContractsPage } from './index';
 import { createTestWrapper } from '../../test-utils';
@@ -23,6 +24,14 @@ vi.mock('../../features/contracts/hooks', () => ({
 
 vi.mock('../../features/dashboard/components', () => ({
   SidebarNav: vi.fn(() => <div data-testid="sidebar-nav" />),
+  DashboardShell: vi.fn(
+    ({ header, children }: { header: ReactNode; children: ReactNode }) => (
+      <div data-testid="dashboard-shell">
+        {header}
+        {children}
+      </div>
+    )
+  ),
   DashboardHeader: vi.fn(({ title }: { title: string }) => (
     <div data-testid="dashboard-header">{title}</div>
   )),
@@ -114,7 +123,7 @@ describe('ContractsPage', () => {
     mockUseNavigate.mockReturnValue(navigateMock);
   });
 
-  it('shows important proposals in inbox and important tabs', () => {
+  it('shows contracts and proposals in the inbox list', () => {
     render(<ContractsPage />, { wrapper: createTestWrapper() });
 
     expect(screen.getAllByText('GE Refrigerator Order').length).toBeGreaterThan(
@@ -123,13 +132,14 @@ describe('ContractsPage', () => {
     expect(
       screen.getAllByText('Slow Digestion PayNote').length
     ).toBeGreaterThan(0);
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: /Important/i }));
+  it('navigates to archive list when archive link is clicked', () => {
+    render(<ContractsPage />, { wrapper: createTestWrapper() });
 
-    expect(
-      screen.getAllByText('Slow Digestion PayNote').length
-    ).toBeGreaterThan(0);
-    expect(screen.queryAllByText('GE Refrigerator Order')).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: /Archive/i }));
+
+    expect(navigateMock).toHaveBeenCalledWith('/contracts/archive');
   });
 
   it('navigates to contract details and marks reviewed when a contract row is clicked', () => {
