@@ -31,7 +31,6 @@ interface ProposalDetailsPanelProps {
   onDecisionComplete?: () => void;
 }
 
-
 export function ProposalDetailsPanel({
   proposal,
   sessionId,
@@ -102,12 +101,15 @@ export function ProposalDetailsPanel({
       return;
     }
 
-    navigate(buildTransactionDetailsPath(account.accountId, activity.activityId), {
-      state: {
-        from: `${location.pathname}${location.search}`,
-        selectedActivity: activity,
-      },
-    });
+    navigate(
+      buildTransactionDetailsPath(account.accountId, activity.activityId),
+      {
+        state: {
+          from: `${location.pathname}${location.search}`,
+          selectedActivity: activity,
+        },
+      }
+    );
   };
 
   const handleFallbackActivityOpen = (activityId: string) => {
@@ -395,7 +397,6 @@ export function ProposalDetailsPanel({
             : 'This proposal has already been rejected.'}
         </p>
       )}
-
     </Card>
   );
 }

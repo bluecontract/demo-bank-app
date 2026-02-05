@@ -5,9 +5,7 @@ import { getHoldTimelinePayNoteDocumentId } from './holdPayNoteUtils';
 
 type HoldDetail = Extract<ActivityDetail, { kind: 'HOLD' }>;
 
-const buildHoldDetail = (
-  timeline: HoldDetail['timeline']
-): HoldDetail => ({
+const buildHoldDetail = (timeline: HoldDetail['timeline']): HoldDetail => ({
   kind: 'HOLD',
   activityId: 'HOLD#hold-1',
   holdId: 'hold-1',
@@ -48,9 +46,9 @@ describe('getHoldTimelinePayNoteDocumentId', () => {
 
     const selectedActivity = buildHoldCapturedActivity('txn-1');
 
-    expect(
-      getHoldTimelinePayNoteDocumentId(holdDetail, selectedActivity)
-    ).toBe('doc-captured');
+    expect(getHoldTimelinePayNoteDocumentId(holdDetail, selectedActivity)).toBe(
+      'doc-captured'
+    );
   });
 
   it('falls back to the created paynote id when capture does not match', () => {
@@ -70,9 +68,9 @@ describe('getHoldTimelinePayNoteDocumentId', () => {
 
     const selectedActivity = buildHoldCapturedActivity('txn-mismatch');
 
-    expect(
-      getHoldTimelinePayNoteDocumentId(holdDetail, selectedActivity)
-    ).toBe('doc-created');
+    expect(getHoldTimelinePayNoteDocumentId(holdDetail, selectedActivity)).toBe(
+      'doc-created'
+    );
   });
 
   it('returns null when no timeline entries include paynote ids', () => {

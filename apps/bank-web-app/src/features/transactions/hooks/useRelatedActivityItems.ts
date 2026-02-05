@@ -64,7 +64,9 @@ export const useRelatedActivityItems = ({
 
   const missingTransactionIds = useMemo(
     () =>
-      relatedTransactionIds.filter(txnId => !activityByTransactionId.has(txnId)),
+      relatedTransactionIds.filter(
+        txnId => !activityByTransactionId.has(txnId)
+      ),
     [activityByTransactionId, relatedTransactionIds]
   );
 

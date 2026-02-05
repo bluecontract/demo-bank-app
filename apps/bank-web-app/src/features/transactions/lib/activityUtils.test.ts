@@ -21,7 +21,7 @@ const buildPostedTransaction = (
     cardLast4: '4242',
     processorChargeId: 'ch-1',
     ...overrides,
-  }) satisfies ActivityItem;
+  } satisfies ActivityItem);
 
 const buildHoldCreated = (
   overrides: Partial<Extract<ActivityItem, { kind: 'HOLD_CREATED' }>> = {}
@@ -34,7 +34,7 @@ const buildHoldCreated = (
     description: 'Hold',
     createdAt: '2024-01-01T00:00:00.000Z',
     ...overrides,
-  }) satisfies ActivityItem;
+  } satisfies ActivityItem);
 
 describe('filterActivityByCardGroups', () => {
   it('keeps holds linked by origin hold id for card activity', () => {
