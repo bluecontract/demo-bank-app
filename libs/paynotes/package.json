@@ -96,7 +96,7 @@
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
     "@blue-labs/language": "3.4.1",
-    "@blue-repository/types": "^0.10.0",
+    "@blue-repository/types": "^0.11.0",
     "@demo-bank-app/banking": "*",
     "@demo-bank-app/contracts": "*",
     "@demo-bank-app/shared-bank-api-contract": "*",
