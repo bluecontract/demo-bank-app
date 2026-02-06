@@ -5,7 +5,7 @@
   "type": "module",
   "dependencies": {
     "@blue-labs/language": "3.4.1",
-    "@blue-repository/types": "^0.11.0",
+    "@blue-repository/types": "^0.13.0",
     "@demo-bank-app/shared-bank-api-client": "*",
     "@demo-bank-app/shared-bank-api-contract": "*",
     "@tanstack/react-query": "^5.17.10",
