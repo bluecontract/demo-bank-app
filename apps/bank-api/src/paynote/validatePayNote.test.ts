@@ -48,6 +48,7 @@ describe('validatePayNoteHandler', () => {
         getPayNote: vi.fn(),
         getPayNoteBySessionId: vi.fn(),
         savePayNote: vi.fn(),
+        markEventProcessed: vi.fn().mockResolvedValue(true),
       },
       payNoteBootstrapRepository: {
         getBootstrapBySessionId: vi.fn(),

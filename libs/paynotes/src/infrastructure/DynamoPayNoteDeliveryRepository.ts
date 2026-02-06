@@ -47,6 +47,25 @@ const SORT_KEYS = {
 
 const USER_SORT_KEY_PREFIX = 'PAYNOTE_DELIVERY#';
 
+const resolveSummaryPreview = (summary?: Record<string, unknown>) => {
+  if (!summary || typeof summary !== 'object') {
+    return undefined;
+  }
+  const summaryRecord = summary as {
+    story?: { headline?: unknown };
+    listPreview?: unknown;
+  };
+  const headline =
+    typeof summaryRecord.story?.headline === 'string'
+      ? summaryRecord.story.headline.trim()
+      : '';
+  const listPreview =
+    typeof summaryRecord.listPreview === 'string'
+      ? summaryRecord.listPreview.trim()
+      : '';
+  return headline || listPreview || undefined;
+};
+
 type DynamoPayNoteDeliveryRepositoryConfig = {
   tableName: string;
   region: string;
@@ -738,6 +757,9 @@ export class DynamoPayNoteDeliveryRepository
 
     return deliveries
       .filter((record): record is PayNoteDeliveryRecord => record !== null)
+      .filter(
+        record => Boolean(record.summary) && Boolean(record.summaryUpdatedAt)
+      )
       .map(record => {
         const deliveryDocument = record.deliveryDocument as
           | {
@@ -752,6 +774,13 @@ export class DynamoPayNoteDeliveryRepository
         const deliveryName = record.deliveryDocument
           ? getDeliveryNameFromDocument(record.deliveryDocument)
           : undefined;
+        const summaryUpdatedAt =
+          record.summarySourceUpdatedAt ??
+          record.summaryUpdatedAt ??
+          record.updatedAt;
+        const summaryPreview = resolveSummaryPreview(
+          record.summary as Record<string, unknown> | undefined
+        );
 
         return {
           deliveryId: record.deliveryId,
@@ -760,6 +789,7 @@ export class DynamoPayNoteDeliveryRepository
           name: payNoteSummary.name ?? deliveryName,
           amountMinor: payNoteSummary.amountMinor,
           currency: payNoteSummary.currency,
+          summaryPreview,
           deliveryStatus: record.deliveryStatus,
           transactionIdentificationStatus:
             record.transactionIdentificationStatus,
@@ -767,7 +797,7 @@ export class DynamoPayNoteDeliveryRepository
           transactionId: record.transactionId,
           holdId: record.holdId,
           createdAt: record.createdAt,
-          updatedAt: record.updatedAt,
+          updatedAt: summaryUpdatedAt,
         };
       });
   }

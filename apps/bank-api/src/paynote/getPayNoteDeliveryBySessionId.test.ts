@@ -59,6 +59,23 @@ describe('getPayNoteDeliveryBySessionIdHandler', () => {
       userId: 'user-1',
       transactionIdentificationStatus: 'identified',
       clientDecisionStatus: 'pending',
+      summary: {
+        story: {
+          headline: 'PayNote proposal',
+          overview: ['A proposal summary.'],
+          bullets: [],
+        },
+        listPreview: 'PayNote proposal updated.',
+        nextSteps: {
+          title: 'Next steps',
+          items: ['Review the proposal.'],
+        },
+        lastChange: {
+          short: 'PayNote proposal updated.',
+          more: 'Details updated.',
+        },
+      },
+      summaryUpdatedAt: '2024-01-01T00:00:00.000Z',
       deliveryDocument: {
         name: 'Merchant Delivery',
         payNoteBootstrapRequest: {

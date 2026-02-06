@@ -36,6 +36,7 @@ describe('getPayNoteDetails', () => {
       }),
       getPayNoteBySessionId: vi.fn(),
       savePayNote: vi.fn(),
+      markEventProcessed: vi.fn(),
     };
 
     const payNoteDeliveryRepository: PayNoteDeliveryRepository = {

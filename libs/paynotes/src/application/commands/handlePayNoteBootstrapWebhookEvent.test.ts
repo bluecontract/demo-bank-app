@@ -55,6 +55,7 @@ const createDependencies = () => {
       getPayNote: vi.fn(),
       getPayNoteBySessionId: vi.fn(),
       savePayNote: vi.fn(),
+      markEventProcessed: vi.fn().mockResolvedValue(true),
     };
 
   const payNoteDeliveryRepository: HandlePayNoteBootstrapWebhookDependencies['payNoteDeliveryRepository'] =
@@ -83,6 +84,7 @@ const createDependencies = () => {
       getContractByDocumentId: vi.fn(),
       getContractBySessionId: vi.fn(),
       saveContract: vi.fn(),
+      markSummaryEventProcessed: vi.fn().mockResolvedValue(true),
       addContractHistoryEntry: vi.fn(),
       listContractHistory: vi.fn(),
       updateContractArchive: vi.fn(),

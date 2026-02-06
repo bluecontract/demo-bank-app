@@ -90,6 +90,23 @@ describe('getContractDetailsHandler', () => {
       relatedHoldIds: ['hold-1'],
       accountNumber: '1234567890',
       document: { name: 'Test PayNote' },
+      summary: {
+        story: {
+          headline: 'PayNote updated',
+          overview: ['A contract summary.'],
+          bullets: [],
+        },
+        listPreview: 'PayNote updated.',
+        nextSteps: {
+          title: 'Next steps',
+          items: ['Review the contract details.'],
+        },
+        lastChange: {
+          short: 'PayNote updated.',
+          more: 'The contract was updated.',
+        },
+      },
+      summaryUpdatedAt: '2024-01-02T00:00:01.000Z',
       userId: 'user-1',
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-02T00:00:00.000Z',

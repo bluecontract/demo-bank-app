@@ -425,6 +425,7 @@ export const PayNoteDeliverySummaryDto = z.object({
   name: z.string().optional(),
   amountMinor: MoneyMinor.optional(),
   currency: z.string().optional(),
+  summaryPreview: z.string().optional(),
   deliveryStatus: z.string().optional(),
   transactionIdentificationStatus: z.string().optional(),
   clientDecisionStatus: z.string().optional(),

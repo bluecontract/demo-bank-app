@@ -41,6 +41,9 @@ const getProposalPreview = (item: ContractOrProposalItem): string => {
   if (!isProposalItem(item)) {
     return '';
   }
+  if (item.summaryPreview) {
+    return item.summaryPreview;
+  }
   if (item.amountMinor != null) {
     const currency = item.currency ? ` ${item.currency}` : '';
     return `${formatCurrency(item.amountMinor)}${currency}`;

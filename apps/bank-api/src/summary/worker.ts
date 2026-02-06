@@ -62,6 +62,6 @@ export const handleSummaryJob = async (event: unknown) => {
       sessionId,
       error: message,
     });
-    return { status: 'error' as const, message };
+    throw error;
   }
 };

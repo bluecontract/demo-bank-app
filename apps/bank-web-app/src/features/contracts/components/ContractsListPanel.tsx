@@ -115,7 +115,10 @@ export function ContractsListPanel({
                 changeType === 'new'
                   ? 'bg-teal-50 text-teal-700 border border-teal-100'
                   : 'bg-cyan-50 text-cyan-700 border border-cyan-100';
-              const amountLine = isProposal ? formatProposalAmount(item) : null;
+              const summaryPreview = item.summaryPreview?.trim() || null;
+              const amountLine =
+                summaryPreview ||
+                (isProposal ? formatProposalAmount(item) : null);
               const transactionLine =
                 isProposal && item.transactionId
                   ? `Transaction ${item.transactionId}`

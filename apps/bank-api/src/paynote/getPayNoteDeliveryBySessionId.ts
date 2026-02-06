@@ -35,6 +35,14 @@ export const getPayNoteDeliveryBySessionIdHandler = async (
     });
   }
 
+  if (!record.summary || !record.summaryUpdatedAt) {
+    return problemResponse({
+      status: 404,
+      code: ERROR_CODES.PAYNOTE_DELIVERY_NOT_FOUND,
+      message: 'PayNote delivery not found',
+    });
+  }
+
   const payNoteSummary = record.deliveryDocument
     ? getPayNoteSummaryFromDocument(
         (

@@ -154,7 +154,7 @@ describe('generateContractSummaryHandler', () => {
     expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
   });
 
-  it('regenerates when summary preview is missing', async () => {
+  it('regenerates when forced even if summary preview is missing', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
       typeBlueId: payNoteTypeBlueId,
@@ -182,7 +182,7 @@ describe('generateContractSummaryHandler', () => {
     const result = await generateContractSummaryHandler(
       {
         params: { sessionId: 'sess-1' },
-        body: { force: false },
+        body: { force: true },
       } as any,
       { request: {} as any }
     );
@@ -194,7 +194,38 @@ describe('generateContractSummaryHandler', () => {
     expect(contractRepository.addContractHistoryEntry).toHaveBeenCalled();
   });
 
-  it('generates a new summary when missing', async () => {
+  it('returns 404 when summary is missing and force is false', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: {},
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(404);
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(getOpenAiApiKey).not.toHaveBeenCalled();
+    expect(contractRepository.updateContractSummary).not.toHaveBeenCalled();
+    expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
+  });
+
+  it('generates a new summary when missing and forced', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
       typeBlueId: payNoteTypeBlueId,
@@ -217,7 +248,7 @@ describe('generateContractSummaryHandler', () => {
     const result = await generateContractSummaryHandler(
       {
         params: { sessionId: 'sess-1' },
-        body: {},
+        body: { force: true },
       } as any,
       { request: {} as any }
     );
@@ -271,7 +302,7 @@ describe('generateContractSummaryHandler', () => {
     const result = await generateContractSummaryHandler(
       {
         params: { sessionId: 'sess-1' },
-        body: {},
+        body: { force: true },
       } as any,
       { request: {} as any }
     );
@@ -300,7 +331,7 @@ describe('generateContractSummaryHandler', () => {
     const result = await generateContractSummaryHandler(
       {
         params: { sessionId: 'sess-1' },
-        body: {},
+        body: { force: true },
       } as any,
       { request: {} as any }
     );
@@ -332,7 +363,7 @@ describe('generateContractSummaryHandler', () => {
     const result = await generateContractSummaryHandler(
       {
         params: { sessionId: 'sess-1' },
-        body: {},
+        body: { force: true },
       } as any,
       { request: {} as any }
     );

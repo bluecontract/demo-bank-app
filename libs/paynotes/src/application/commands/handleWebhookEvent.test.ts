@@ -58,6 +58,7 @@ const createDependencies = () => {
       getPayNote: vi.fn().mockResolvedValue(null),
       getPayNoteBySessionId: vi.fn().mockResolvedValue(null),
       savePayNote: vi.fn(),
+      markEventProcessed: vi.fn().mockResolvedValue(true),
     };
 
   const holdRepository: HandleWebhookEventDependencies['holdRepository'] = {
@@ -87,6 +88,7 @@ const createDependencies = () => {
       getContractBySessionId: vi.fn().mockResolvedValue(null),
       getContractByDocumentId: vi.fn().mockResolvedValue(null),
       saveContract: vi.fn(),
+      markSummaryEventProcessed: vi.fn().mockResolvedValue(true),
       addContractHistoryEntry: vi.fn(),
       listContractHistory: vi.fn(),
       updateContractArchive: vi.fn(),

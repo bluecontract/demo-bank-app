@@ -92,6 +92,7 @@ describe('payNoteWebhookHandler', () => {
         getPayNote: vi.fn(),
         getPayNoteBySessionId: vi.fn(),
         savePayNote: vi.fn(),
+        markEventProcessed: vi.fn().mockResolvedValue(true),
       },
       payNoteDeliveryRepository: {
         markEventProcessed: vi.fn(),
@@ -115,6 +116,7 @@ describe('payNoteWebhookHandler', () => {
         saveContract: vi.fn(),
         updateContractSummary: vi.fn(),
         listContractsByUserId: vi.fn(),
+        markSummaryEventProcessed: vi.fn().mockResolvedValue(true),
       },
       bankingRepository: {
         getAccountIdByNumber: vi.fn(),

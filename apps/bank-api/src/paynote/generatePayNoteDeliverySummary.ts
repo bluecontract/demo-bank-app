@@ -16,6 +16,7 @@ import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { getDependencies } from './dependencies';
 import type { PowertoolsLogger } from '@demo-bank-app/shared-observability';
 import { buildProposalSummaryPrompt } from '../contracts/summaryPrompts';
+import { normalizeContractSummary } from '../contracts/summaryNormalization';
 import {
   ContractSummaryInputError,
   buildTypeDefinitionPack,
@@ -417,6 +418,49 @@ export const generatePayNoteDeliverySummaryHandler = async (
     });
   }
 
+  if (!force) {
+    const cachedSummary = ContractDocumentSummaryDto.safeParse(record.summary);
+    if (cachedSummary.success && record.summaryUpdatedAt) {
+      const payNoteName =
+        record.payNoteDocument &&
+        typeof record.payNoteDocument.name === 'string'
+          ? record.payNoteDocument.name
+          : null;
+      const normalizedSummary = normalizeContractSummary(
+        cachedSummary.data,
+        payNoteName ?? 'PayNote proposal'
+      );
+      if (!normalizedSummary) {
+        return problemResponse({
+          status: 500,
+          code: ERROR_CODES.INTERNAL_ERROR,
+          message: 'PayNote proposal summary is invalid',
+        });
+      }
+
+      return {
+        status: 200 as const,
+        body: {
+          summary: normalizedSummary,
+          summaryUpdatedAt: record.summaryUpdatedAt,
+          summarySourceUpdatedAt:
+            record.summarySourceUpdatedAt ??
+            record.deliveryUpdatedAt ??
+            record.updatedAt,
+          summaryInputBlueId: record.summaryInputBlueId,
+          cached: true,
+          model: record.summaryModel,
+        },
+      };
+    }
+
+    return problemResponse({
+      status: 404,
+      code: ERROR_CODES.PAYNOTE_DELIVERY_NOT_FOUND,
+      message: 'PayNote proposal summary not available',
+    });
+  }
+
   try {
     const result = await generateOrLoadProposalSummary({
       record,
@@ -530,6 +574,6 @@ export const generatePayNoteDeliverySummaryForSessionId = async (input: {
       deliveryId: record.deliveryId,
       error: message,
     });
-    return null;
+    throw error;
   }
 };

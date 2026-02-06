@@ -10,11 +10,13 @@ import type { PayNoteRecord, PayNoteRepository } from '../application/ports';
 const ENTITY_TYPES = {
   PAYNOTE: 'PAYNOTE',
   SESSION: 'PAYNOTE_SESSION',
+  EVENT: 'PAYNOTE_EVENT',
 } as const;
 
 const TABLE_PREFIXES = {
   PAYNOTE: 'PAYNOTE#',
   SESSION: 'PAYNOTE_SESSION#',
+  EVENT: 'PAYNOTE_EVENT#',
 } as const;
 
 const SORT_KEYS = {
@@ -38,6 +40,8 @@ interface PayNoteItem {
   userId?: string;
   holdId?: string;
   transactionId?: string;
+  lastCaptureLockEventId?: string;
+  lastCaptureUnlockEventId?: string;
   payerAccountNumber?: string;
   payeeAccountNumber?: string;
   document?: Record<string, unknown>;
@@ -54,6 +58,15 @@ interface PayNoteSessionItem {
   sessionId: string;
   payNoteDocumentId: string;
   createdAt: string;
+}
+
+interface PayNoteEventItem {
+  PK: string;
+  SK: typeof SORT_KEYS.META;
+  entityType: typeof ENTITY_TYPES.EVENT;
+  eventId: string;
+  createdAt: string;
+  ttl?: number;
 }
 
 export class DynamoPayNoteRepository implements PayNoteRepository {
@@ -79,6 +92,10 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
     return `${TABLE_PREFIXES.SESSION}${sessionId}`;
   }
 
+  private buildEventPk(eventId: string) {
+    return `${TABLE_PREFIXES.EVENT}${eventId}`;
+  }
+
   private mapItemToRecord(item: PayNoteItem): PayNoteRecord {
     return {
       payNoteDocumentId: item.payNoteDocumentId,
@@ -88,6 +105,8 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       userId: item.userId,
       holdId: item.holdId,
       transactionId: item.transactionId,
+      lastCaptureLockEventId: item.lastCaptureLockEventId,
+      lastCaptureUnlockEventId: item.lastCaptureUnlockEventId,
       payerAccountNumber: item.payerAccountNumber,
       payeeAccountNumber: item.payeeAccountNumber,
       document: item.document,
@@ -150,6 +169,8 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       userId: record.userId,
       holdId: record.holdId,
       transactionId: record.transactionId,
+      lastCaptureLockEventId: record.lastCaptureLockEventId,
+      lastCaptureUnlockEventId: record.lastCaptureUnlockEventId,
       payerAccountNumber: record.payerAccountNumber,
       payeeAccountNumber: record.payeeAccountNumber,
       document: record.document,
@@ -186,6 +207,43 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
     });
 
     await Promise.all(writes);
+  }
+
+  async markEventProcessed(eventId: string): Promise<boolean> {
+    const createdAt = new Date().toISOString();
+    const ttl = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7;
+    const item: PayNoteEventItem = {
+      PK: this.buildEventPk(eventId),
+      SK: SORT_KEYS.META,
+      entityType: ENTITY_TYPES.EVENT,
+      eventId,
+      createdAt,
+      ttl,
+    };
+
+    try {
+      await this.client.send(
+        new PutCommand({
+          TableName: this.tableName,
+          Item: item,
+          ConditionExpression: 'attribute_not_exists(#pk)',
+          ExpressionAttributeNames: {
+            '#pk': 'PK',
+          },
+        })
+      );
+      return true;
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        (error as { name?: string }).name === 'ConditionalCheckFailedException'
+      ) {
+        return false;
+      }
+      throw error;
+    }
   }
 }
 

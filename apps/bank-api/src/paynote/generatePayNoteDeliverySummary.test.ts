@@ -150,7 +150,7 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     ).not.toHaveBeenCalled();
   });
 
-  it('generates a new summary when missing', async () => {
+  it('generates a new summary when missing and forced', async () => {
     const payNoteDocument = {
       type: { blueId: payNoteTypeBlueId },
       name: 'Test PayNote',
@@ -177,7 +177,7 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     });
 
     const result = await generatePayNoteDeliverySummaryHandler(
-      { params: { sessionId: 'session-1' } } as any,
+      { params: { sessionId: 'session-1' }, body: { force: true } } as any,
       { request: {} as any }
     );
 

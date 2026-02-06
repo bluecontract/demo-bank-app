@@ -54,6 +54,13 @@ export type ContractSummaryUpdate = {
   summaryInputBlueId?: string | null;
   summaryModel?: string | null;
   summaryError?: string | null;
+  summaryDocument?: Record<string, unknown> | null;
+  summaryDocumentName?: string | null;
+  summaryStatus?: string | null;
+  summaryStatusUpdatedAt?: string | null;
+  summaryStatusTimestamps?: ContractStatusTimestamps | null;
+  summaryTriggerEvent?: unknown | null;
+  summaryEmittedEvents?: unknown[] | null;
   userId?: string | null;
   relatedTransactionIds?: string[] | null;
   relatedHoldIds?: string[] | null;
@@ -93,6 +100,13 @@ export interface ContractRecord {
   summaryModel?: string;
   summaryError?: string;
   summaryPreview?: string;
+  summaryDocument?: Record<string, unknown>;
+  summaryDocumentName?: string;
+  summaryStatus?: string;
+  summaryStatusUpdatedAt?: string;
+  summaryStatusTimestamps?: ContractStatusTimestamps;
+  summaryTriggerEvent?: unknown;
+  summaryEmittedEvents?: unknown[];
   createdAt: string;
   updatedAt: string;
 }
@@ -118,6 +132,7 @@ export interface ContractRepository {
   getContractBySessionId(sessionId: string): Promise<ContractRecord | null>;
   getContractByDocumentId(documentId: string): Promise<ContractRecord | null>;
   saveContract(record: ContractRecord): Promise<void>;
+  markSummaryEventProcessed(eventId: string): Promise<boolean>;
   addContractHistoryEntry(
     entry: ContractHistoryEntryInput
   ): Promise<ContractHistoryEntry>;

@@ -108,6 +108,7 @@ describe('bootstrapPayNoteHandler', () => {
         getPayNote: vi.fn(),
         getPayNoteBySessionId: vi.fn(),
         savePayNote: vi.fn(),
+        markEventProcessed: vi.fn().mockResolvedValue(true),
       },
       myOsClient,
       bankingRepository: {} as any,

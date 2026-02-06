@@ -26,6 +26,7 @@ const ENTITY_TYPES = {
   USER: 'CONTRACT_USER',
   RELATIONSHIP: 'CONTRACT_RELATIONSHIP',
   HISTORY: 'CONTRACT_HISTORY',
+  SUMMARY_EVENT: 'CONTRACT_SUMMARY_EVENT',
 } as const;
 
 const TABLE_PREFIXES = {
@@ -35,6 +36,7 @@ const TABLE_PREFIXES = {
   USER: 'USER#',
   TRANSACTION: 'TXN#',
   HOLD: 'HOLD#',
+  SUMMARY_EVENT: 'CONTRACT_SUMMARY_EVENT#',
 } as const;
 
 const SORT_KEYS = {
@@ -79,6 +81,13 @@ interface ContractItem {
   summaryInputBlueId?: string;
   summaryModel?: string;
   summaryError?: string;
+  summaryDocument?: Record<string, unknown>;
+  summaryDocumentName?: string;
+  summaryStatus?: string;
+  summaryStatusUpdatedAt?: string;
+  summaryStatusTimestamps?: Record<string, string>;
+  summaryTriggerEvent?: unknown;
+  summaryEmittedEvents?: unknown[];
   createdAt: string;
   updatedAt: string;
 }
@@ -116,6 +125,7 @@ interface ContractUserItem {
   summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summaryDocumentName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -136,6 +146,7 @@ interface ContractRelationshipItem {
   summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summaryDocumentName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -150,6 +161,15 @@ interface ContractHistoryItem {
   short: string;
   more?: string;
   createdAt: string;
+}
+
+interface ContractSummaryEventItem {
+  PK: string;
+  SK: typeof SORT_KEYS.META;
+  entityType: typeof ENTITY_TYPES.SUMMARY_EVENT;
+  eventId: string;
+  createdAt: string;
+  ttl?: number;
 }
 
 export class DynamoContractRepository implements ContractRepository {
@@ -195,6 +215,10 @@ export class DynamoContractRepository implements ContractRepository {
     return `${TABLE_PREFIXES.HOLD}${holdId}`;
   }
 
+  private buildSummaryEventPk(eventId: string) {
+    return `${TABLE_PREFIXES.SUMMARY_EVENT}${eventId}`;
+  }
+
   private buildRelationshipSk(contractId: string) {
     return `${RELATIONSHIP_SORT_KEY_PREFIX}${contractId}`;
   }
@@ -208,7 +232,7 @@ export class DynamoContractRepository implements ContractRepository {
       contractId: item.contractId,
       typeBlueId: item.typeBlueId,
       displayName: item.displayName,
-      documentName: item.documentName,
+      documentName: item.summaryDocumentName ?? item.documentName,
       sessionId: item.sessionId,
       documentId: item.documentId,
       document: item.document,
@@ -229,6 +253,13 @@ export class DynamoContractRepository implements ContractRepository {
       summaryInputBlueId: item.summaryInputBlueId,
       summaryModel: item.summaryModel,
       summaryError: item.summaryError,
+      summaryDocument: item.summaryDocument,
+      summaryDocumentName: item.summaryDocumentName,
+      summaryStatus: item.summaryStatus,
+      summaryStatusUpdatedAt: item.summaryStatusUpdatedAt,
+      summaryStatusTimestamps: item.summaryStatusTimestamps,
+      summaryTriggerEvent: item.summaryTriggerEvent,
+      summaryEmittedEvents: item.summaryEmittedEvents,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
@@ -325,6 +356,13 @@ export class DynamoContractRepository implements ContractRepository {
       summaryInputBlueId: record.summaryInputBlueId,
       summaryModel: record.summaryModel,
       summaryError: record.summaryError,
+      summaryDocument: record.summaryDocument,
+      summaryDocumentName: record.summaryDocumentName,
+      summaryStatus: record.summaryStatus,
+      summaryStatusUpdatedAt: record.summaryStatusUpdatedAt,
+      summaryStatusTimestamps: record.summaryStatusTimestamps,
+      summaryTriggerEvent: record.summaryTriggerEvent,
+      summaryEmittedEvents: record.summaryEmittedEvents,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };
@@ -386,6 +424,7 @@ export class DynamoContractRepository implements ContractRepository {
         summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
         summaryUpdatedAt: record.summaryUpdatedAt,
         summarySourceUpdatedAt: record.summarySourceUpdatedAt,
+        summaryDocumentName: record.summaryDocumentName,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
       };
@@ -413,6 +452,7 @@ export class DynamoContractRepository implements ContractRepository {
       summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
       summaryUpdatedAt: record.summaryUpdatedAt,
       summarySourceUpdatedAt: record.summarySourceUpdatedAt,
+      summaryDocumentName: record.summaryDocumentName,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     });
@@ -441,6 +481,43 @@ export class DynamoContractRepository implements ContractRepository {
 
     if (writes.length) {
       await Promise.all(writes);
+    }
+  }
+
+  async markSummaryEventProcessed(eventId: string): Promise<boolean> {
+    const createdAt = new Date().toISOString();
+    const ttl = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7;
+    const item: ContractSummaryEventItem = {
+      PK: this.buildSummaryEventPk(eventId),
+      SK: SORT_KEYS.META,
+      entityType: ENTITY_TYPES.SUMMARY_EVENT,
+      eventId,
+      createdAt,
+      ttl,
+    };
+
+    try {
+      await this.client.send(
+        new PutCommand({
+          TableName: this.tableName,
+          Item: item,
+          ConditionExpression: 'attribute_not_exists(#pk)',
+          ExpressionAttributeNames: {
+            '#pk': 'PK',
+          },
+        })
+      );
+      return true;
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        (error as { name?: string }).name === 'ConditionalCheckFailedException'
+      ) {
+        return false;
+      }
+      throw error;
     }
   }
 
@@ -686,6 +763,48 @@ export class DynamoContractRepository implements ContractRepository {
       ':summaryError',
       update.summaryError
     );
+    handleField(
+      '#summaryDocument',
+      'summaryDocument',
+      ':summaryDocument',
+      update.summaryDocument
+    );
+    handleField(
+      '#summaryDocumentName',
+      'summaryDocumentName',
+      ':summaryDocumentName',
+      update.summaryDocumentName
+    );
+    handleField(
+      '#summaryStatus',
+      'summaryStatus',
+      ':summaryStatus',
+      update.summaryStatus
+    );
+    handleField(
+      '#summaryStatusUpdatedAt',
+      'summaryStatusUpdatedAt',
+      ':summaryStatusUpdatedAt',
+      update.summaryStatusUpdatedAt
+    );
+    handleField(
+      '#summaryStatusTimestamps',
+      'summaryStatusTimestamps',
+      ':summaryStatusTimestamps',
+      update.summaryStatusTimestamps
+    );
+    handleField(
+      '#summaryTriggerEvent',
+      'summaryTriggerEvent',
+      ':summaryTriggerEvent',
+      update.summaryTriggerEvent
+    );
+    handleField(
+      '#summaryEmittedEvents',
+      'summaryEmittedEvents',
+      ':summaryEmittedEvents',
+      update.summaryEmittedEvents
+    );
 
     if (!setters.length && !removals.length) {
       return;
@@ -757,6 +876,12 @@ export class DynamoContractRepository implements ContractRepository {
       'summarySourceUpdatedAt',
       ':summarySourceUpdatedAt',
       update.summarySourceUpdatedAt
+    );
+    setSummaryMetaField(
+      '#summaryDocumentName',
+      'summaryDocumentName',
+      ':summaryDocumentName',
+      update.summaryDocumentName
     );
 
     if (!summaryMetaSetters.length && !summaryMetaRemovals.length) {
@@ -866,7 +991,7 @@ export class DynamoContractRepository implements ContractRepository {
         contractId: item.contractId,
         typeBlueId: item.typeBlueId,
         displayName: item.displayName,
-        documentName: item.documentName,
+        documentName: item.summaryDocumentName ?? item.documentName,
         sessionId: item.sessionId,
         documentId: item.documentId,
         status: item.status,
@@ -914,7 +1039,7 @@ export class DynamoContractRepository implements ContractRepository {
         contractId: item.contractId,
         typeBlueId: item.typeBlueId,
         displayName: item.displayName,
-        documentName: item.documentName,
+        documentName: item.summaryDocumentName ?? item.documentName,
         sessionId: item.sessionId,
         documentId: item.documentId,
         status: item.status,
@@ -962,7 +1087,7 @@ export class DynamoContractRepository implements ContractRepository {
         contractId: item.contractId,
         typeBlueId: item.typeBlueId,
         displayName: item.displayName,
-        documentName: item.documentName,
+        documentName: item.summaryDocumentName ?? item.documentName,
         sessionId: item.sessionId,
         documentId: item.documentId,
         status: item.status,

@@ -34,6 +34,24 @@ export const getContractDetailsHandler = async (
     contract.summary,
     contract.documentName ?? contract.displayName
   );
+  if (!normalizedSummary) {
+    return problemResponse({
+      status: 404,
+      code: ERROR_CODES.CONTRACT_NOT_FOUND,
+      message: 'Contract summary not available',
+    });
+  }
+
+  const hasSummarySnapshot =
+    Boolean(contract.summaryDocument) &&
+    Boolean(contract.summarySourceUpdatedAt);
+  const shouldUseSummarySnapshot =
+    hasSummarySnapshot &&
+    contract.summarySourceUpdatedAt !== contract.updatedAt;
+  const effectiveUpdatedAt =
+    shouldUseSummarySnapshot && contract.summarySourceUpdatedAt
+      ? contract.summarySourceUpdatedAt
+      : contract.updatedAt;
 
   return {
     status: 200 as const,
@@ -43,16 +61,28 @@ export const getContractDetailsHandler = async (
       displayName: contract.displayName,
       sessionId: contract.sessionId,
       documentId: contract.documentId,
-      status: contract.status,
+      status: shouldUseSummarySnapshot
+        ? contract.summaryStatus ?? contract.status
+        : contract.status,
       archivedAt: contract.archivedAt,
-      statusUpdatedAt: contract.statusUpdatedAt,
-      statusTimestamps: contract.statusTimestamps,
-      triggerEvent: contract.triggerEvent,
-      emittedEvents: contract.emittedEvents,
+      statusUpdatedAt: shouldUseSummarySnapshot
+        ? contract.summaryStatusUpdatedAt ?? contract.statusUpdatedAt
+        : contract.statusUpdatedAt,
+      statusTimestamps: shouldUseSummarySnapshot
+        ? contract.summaryStatusTimestamps ?? contract.statusTimestamps
+        : contract.statusTimestamps,
+      triggerEvent: shouldUseSummarySnapshot
+        ? contract.summaryTriggerEvent ?? contract.triggerEvent
+        : contract.triggerEvent,
+      emittedEvents: shouldUseSummarySnapshot
+        ? contract.summaryEmittedEvents ?? contract.emittedEvents
+        : contract.emittedEvents,
       relatedTransactionIds: contract.relatedTransactionIds,
       relatedHoldIds: contract.relatedHoldIds,
       accountNumber: contract.accountNumber,
-      document: contract.document,
+      document: shouldUseSummarySnapshot
+        ? contract.summaryDocument ?? contract.document
+        : contract.document,
       summary: normalizedSummary ?? undefined,
       summaryUpdatedAt: contract.summaryUpdatedAt,
       summarySourceUpdatedAt: contract.summarySourceUpdatedAt,
@@ -60,7 +90,7 @@ export const getContractDetailsHandler = async (
       summaryModel: contract.summaryModel,
       summaryError: contract.summaryError,
       createdAt: contract.createdAt,
-      updatedAt: contract.updatedAt,
+      updatedAt: effectiveUpdatedAt,
     },
   };
 };

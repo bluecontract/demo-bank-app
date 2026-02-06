@@ -134,6 +134,23 @@ describe('DynamoPayNoteDeliveryRepository', () => {
           deliveryId: 'delivery-1',
           createdAt: '2024-01-01T00:00:00.000Z',
           updatedAt: '2024-01-01T00:00:00.000Z',
+          summary: {
+            story: {
+              headline: 'PayNote proposal',
+              overview: ['A proposal summary.'],
+              bullets: [],
+            },
+            listPreview: 'PayNote proposal updated.',
+            nextSteps: {
+              title: 'Next steps',
+              items: ['Review the proposal.'],
+            },
+            lastChange: {
+              short: 'PayNote proposal updated.',
+              more: 'Details updated.',
+            },
+          },
+          summaryUpdatedAt: '2024-01-02T00:00:00.000Z',
           transactionId: 'txn-1',
           deliveryDocument: {
             name: 'Delivery for Invoice',

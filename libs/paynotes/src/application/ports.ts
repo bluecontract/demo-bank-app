@@ -167,6 +167,7 @@ export interface PayNoteDeliverySummary {
   name?: string;
   amountMinor?: number;
   currency?: string;
+  summaryPreview?: string;
   deliveryStatus?: string;
   transactionIdentificationStatus?: string;
   clientDecisionStatus?: string;
@@ -215,6 +216,8 @@ export interface PayNoteRecord {
   userId?: string;
   holdId?: string;
   transactionId?: string;
+  lastCaptureLockEventId?: string;
+  lastCaptureUnlockEventId?: string;
   payerAccountNumber?: string;
   payeeAccountNumber?: string;
   document?: Record<string, unknown>;
@@ -228,6 +231,7 @@ export interface PayNoteRepository {
   getPayNote(documentId: string): Promise<PayNoteRecord | null>;
   getPayNoteBySessionId(sessionId: string): Promise<PayNoteRecord | null>;
   savePayNote(record: PayNoteRecord): Promise<void>;
+  markEventProcessed(eventId: string): Promise<boolean>;
 }
 
 export interface PayNoteBootstrapRecord {

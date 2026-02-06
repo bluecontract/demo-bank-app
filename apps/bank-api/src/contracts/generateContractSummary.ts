@@ -22,6 +22,7 @@ import { ERROR_CODES, problemResponse } from '../shared/errors';
 import {
   getDeliveryStatusFromDocument,
   getPayNoteSummaryFromDocument,
+  buildChannelBindingsFromContracts,
 } from '@demo-bank-app/paynotes';
 import { buildContractSummaryPrompt } from './summaryPrompts';
 import {
@@ -53,6 +54,145 @@ const formatMinorAmount = (amountMinor?: number, currency?: string) => {
   return currency ? `${major} ${currency}` : `$${major}`;
 };
 
+type TriggerEventMeta = {
+  blueId?: string;
+  createdAt?: string;
+  actorAccountId?: string;
+  actorEmail?: string;
+};
+
+const getStringValue = (value: unknown): string | undefined => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.value === 'string') {
+      const trimmed = record.value.trim();
+      return trimmed ? trimmed : undefined;
+    }
+  }
+  return undefined;
+};
+
+const getNumberValue = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (record.value !== undefined) {
+      return getNumberValue(record.value);
+    }
+  }
+  return undefined;
+};
+
+const toEpochMs = (value: number): number | undefined => {
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+  if (value > 1e14) {
+    return Math.round(value / 1000);
+  }
+  if (value > 1e11) {
+    return Math.round(value);
+  }
+  if (value > 1e9) {
+    return Math.round(value * 1000);
+  }
+  return undefined;
+};
+
+const toIsoFromEpoch = (value: number): string | undefined => {
+  const ms = toEpochMs(value);
+  if (ms === undefined) {
+    return undefined;
+  }
+  const date = new Date(ms);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+  return date.toISOString();
+};
+
+const extractTriggerEventMeta = (input: {
+  triggerNode?: BlueNode | null;
+  triggerSimple?: unknown;
+}): TriggerEventMeta | null => {
+  const triggerNode = input.triggerNode ?? null;
+  const triggerSimple = input.triggerSimple;
+
+  let blueId: string | undefined;
+  if (triggerNode) {
+    blueId = triggerNode.getBlueId();
+    if (!blueId) {
+      try {
+        blueId = summaryBlue.calculateBlueIdSync(triggerNode);
+      } catch {
+        blueId = undefined;
+      }
+    }
+  }
+
+  let createdAt: string | undefined;
+  if (triggerNode) {
+    const timestampValue =
+      triggerNode.getAsInteger('/timestamp') ??
+      getNumberValue(triggerNode.getAsNode('/timestamp')?.getValue());
+    if (timestampValue !== undefined) {
+      createdAt = toIsoFromEpoch(timestampValue);
+    }
+  }
+
+  const record =
+    triggerSimple && typeof triggerSimple === 'object'
+      ? (triggerSimple as Record<string, unknown>)
+      : null;
+
+  if (!createdAt && record) {
+    createdAt = getStringValue(record.createdAt);
+    if (!createdAt) {
+      const timestampValue = getNumberValue(record.timestamp);
+      if (timestampValue !== undefined) {
+        createdAt = toIsoFromEpoch(timestampValue);
+      }
+    }
+  }
+
+  let actorAccountId: string | undefined;
+  let actorEmail: string | undefined;
+  if (record) {
+    const actor = record.actor;
+    const actorRecord =
+      actor && typeof actor === 'object'
+        ? (actor as Record<string, unknown>)
+        : null;
+    if (actorRecord) {
+      actorAccountId = getStringValue(actorRecord.accountId);
+      actorEmail = getStringValue(actorRecord.email);
+    }
+  }
+
+  if (!blueId && !createdAt && !actorAccountId && !actorEmail) {
+    return null;
+  }
+
+  return {
+    ...(blueId ? { blueId } : {}),
+    ...(createdAt ? { createdAt } : {}),
+    ...(actorAccountId ? { actorAccountId } : {}),
+    ...(actorEmail ? { actorEmail } : {}),
+  };
+};
+
 type ContractFactsV2 = {
   contract: {
     contractId: string;
@@ -70,9 +210,12 @@ type ContractFactsV2 = {
   transition?: {
     triggerEvent?: unknown;
     emittedEvents?: unknown[];
+    triggerMeta?: TriggerEventMeta;
+    actorIsViewer?: boolean;
   };
   viewer?: {
     channelKey: string;
+    accountId?: string;
   };
   types: {
     definitionsByBlueId: Record<string, unknown>;
@@ -90,6 +233,7 @@ type ContractFactsV2 = {
 type ContractFactsV2Result = {
   facts: ContractFactsV2;
   summaryInputBlueId: string;
+  triggerEventMeta?: TriggerEventMeta;
 };
 
 const buildFactsV2 = (input: {
@@ -231,6 +375,32 @@ const buildFactsV2 = (input: {
     );
   }
 
+  const triggerEventMeta = extractTriggerEventMeta({
+    triggerNode,
+    triggerSimple,
+  });
+
+  let viewerAccountId: string | undefined;
+  if (viewerChannelKey) {
+    const contractsRecord = (mergedDocument as Record<string, unknown>)
+      .contracts;
+    if (
+      contractsRecord &&
+      typeof contractsRecord === 'object' &&
+      !Array.isArray(contractsRecord)
+    ) {
+      const bindings = buildChannelBindingsFromContracts(
+        contractsRecord as Record<string, unknown>
+      );
+      viewerAccountId = bindings[viewerChannelKey]?.accountId;
+    }
+  }
+
+  const actorIsViewer =
+    viewerAccountId && triggerEventMeta?.actorAccountId
+      ? viewerAccountId === triggerEventMeta.actorAccountId
+      : undefined;
+
   let summaryInputBlueId: string;
   try {
     const summaryInputPayload: Record<string, unknown> = {
@@ -305,6 +475,7 @@ const buildFactsV2 = (input: {
 
   return {
     summaryInputBlueId,
+    triggerEventMeta: triggerEventMeta ?? undefined,
     facts: {
       contract: {
         contractId: input.contract.contractId,
@@ -326,6 +497,8 @@ const buildFactsV2 = (input: {
             transition: {
               ...(triggerSimple ? { triggerEvent: triggerSimple } : {}),
               ...(emittedSimple.length ? { emittedEvents: emittedSimple } : {}),
+              ...(triggerEventMeta ? { triggerMeta: triggerEventMeta } : {}),
+              ...(actorIsViewer !== undefined ? { actorIsViewer } : {}),
             },
           }
         : {}),
@@ -333,6 +506,7 @@ const buildFactsV2 = (input: {
         ? {
             viewer: {
               channelKey: viewerChannelKey,
+              ...(viewerAccountId ? { accountId: viewerAccountId } : {}),
             },
           }
         : {}),
@@ -399,7 +573,7 @@ const generateOrLoadContractSummary = async (input: {
   const model = process.env.CONTRACT_SUMMARY_MODEL || DEFAULT_MODEL;
 
   try {
-    const { facts, summaryInputBlueId } = buildFactsV2({
+    const { facts, summaryInputBlueId, triggerEventMeta } = buildFactsV2({
       contract: {
         contractId: contract.contractId,
         typeBlueId: contract.typeBlueId,
@@ -493,15 +667,25 @@ const generateOrLoadContractSummary = async (input: {
     const summary = parseSummary(response);
     const now = new Date().toISOString();
 
+    const summaryPreview =
+      summary.story?.headline?.trim() || summary.listPreview;
+
     await input.contractRepository.updateContractSummary({
       contractId: contract.contractId,
       summary,
-      summaryPreview: summary.listPreview,
+      summaryPreview,
       summaryUpdatedAt: now,
       summarySourceUpdatedAt: contract.updatedAt,
       summaryInputBlueId,
       summaryModel: model,
       summaryError: null,
+      summaryDocument: contract.document,
+      summaryDocumentName: contract.documentName,
+      summaryStatus: contract.status,
+      summaryStatusUpdatedAt: contract.statusUpdatedAt,
+      summaryStatusTimestamps: contract.statusTimestamps,
+      summaryTriggerEvent: contract.triggerEvent,
+      summaryEmittedEvents: contract.emittedEvents,
       userId: contract.userId,
       relatedTransactionIds: contract.relatedTransactionIds,
       relatedHoldIds: contract.relatedHoldIds,
@@ -514,20 +698,26 @@ const generateOrLoadContractSummary = async (input: {
       contract.contractId
     );
     const latestEntry = latestHistory[0];
-    const isDuplicate =
+    const triggerMeta = triggerEventMeta ?? null;
+    const historyId = triggerMeta?.blueId ?? undefined;
+    const historyCreatedAt = triggerMeta?.createdAt ?? contract.updatedAt;
+    const hasExistingId = historyId
+      ? latestHistory.some(entry => entry.id === historyId)
+      : false;
+    const isDuplicateText =
       latestEntry &&
       latestEntry.kind === historyKind &&
       latestEntry.short === historyShort &&
       (latestEntry.more ?? null) === (historyMore ?? null);
 
-    if (!isDuplicate) {
+    if (!hasExistingId && !isDuplicateText) {
       await input.contractRepository.addContractHistoryEntry({
         contractId: contract.contractId,
         kind: historyKind,
         short: historyShort,
         more: historyMore,
-        createdAt: contract.updatedAt,
-        id: `summary:${contract.updatedAt}`,
+        createdAt: historyCreatedAt,
+        id: historyId ?? `summary:${historyCreatedAt}`,
       });
     }
 
@@ -642,6 +832,32 @@ export const generateContractSummaryHandler = async (
     });
   }
 
+  if (!force) {
+    const cachedSummary = ContractDocumentSummaryDto.safeParse(
+      contract.summary
+    );
+    if (cachedSummary.success && contract.summaryUpdatedAt) {
+      return {
+        status: 200 as const,
+        body: {
+          summary: cachedSummary.data,
+          summaryUpdatedAt: contract.summaryUpdatedAt,
+          summarySourceUpdatedAt:
+            contract.summarySourceUpdatedAt ?? contract.updatedAt,
+          summaryInputBlueId: contract.summaryInputBlueId,
+          cached: true,
+          model: contract.summaryModel,
+        },
+      };
+    }
+
+    return problemResponse({
+      status: 404,
+      code: ERROR_CODES.CONTRACT_NOT_FOUND,
+      message: 'Contract summary not available',
+    });
+  }
+
   try {
     const result = await generateOrLoadContractSummary({
       contract,
@@ -730,6 +946,6 @@ export const generateContractSummaryForSessionId = async (input: {
       contractId: contract.contractId,
       error: message,
     });
-    return null;
+    throw error;
   }
 };

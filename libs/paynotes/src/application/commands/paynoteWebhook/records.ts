@@ -171,6 +171,8 @@ export const buildPayNoteRecord = (input: {
     holdId: existingRecord?.holdId ?? deliveryRecord?.holdId,
     transactionId:
       existingRecord?.transactionId ?? deliveryRecord?.transactionId,
+    lastCaptureLockEventId: existingRecord?.lastCaptureLockEventId,
+    lastCaptureUnlockEventId: existingRecord?.lastCaptureUnlockEventId,
     payerAccountNumber,
     payeeAccountNumber,
     document: document ?? resolvedDocument ?? existingRecord?.document,

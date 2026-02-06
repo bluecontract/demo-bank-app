@@ -7,7 +7,6 @@ import {
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { getDependencies } from './dependencies';
 import { normalizeContractSummary } from '../contracts/summaryNormalization';
-import { generatePayNoteDeliverySummaryForSessionId } from './generatePayNoteDeliverySummary';
 
 export const getPayNoteDeliverySummaryHandler = async (
   request: ServerInferRequest<
@@ -15,8 +14,7 @@ export const getPayNoteDeliverySummaryHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { payNoteDeliveryRepository, getOpenAiApiKey, logger } =
-    await getDependencies();
+  const { payNoteDeliveryRepository } = await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const { sessionId } = request.params;
 
@@ -32,22 +30,11 @@ export const getPayNoteDeliverySummaryHandler = async (
     });
   }
 
-  const refreshed = await generatePayNoteDeliverySummaryForSessionId({
-    sessionId,
-    force: false,
-    payNoteDeliveryRepository,
-    getOpenAiApiKey,
-    logger,
-  });
-  const summaryPayload = refreshed?.summary ?? record.summary;
-  const summaryUpdatedAt =
-    refreshed?.summaryUpdatedAt ?? record.summaryUpdatedAt;
-  const summarySourceUpdatedAt =
-    refreshed?.summarySourceUpdatedAt ?? record.summarySourceUpdatedAt;
-  const summaryInputBlueId =
-    refreshed?.summaryInputBlueId ?? record.summaryInputBlueId;
-  const summaryModel = refreshed?.model ?? record.summaryModel;
-  const cached = refreshed?.cached ?? true;
+  const summaryPayload = record.summary;
+  const summaryUpdatedAt = record.summaryUpdatedAt;
+  const summarySourceUpdatedAt = record.summarySourceUpdatedAt;
+  const summaryInputBlueId = record.summaryInputBlueId;
+  const summaryModel = record.summaryModel;
 
   if (!summaryPayload || !summaryUpdatedAt) {
     return problemResponse({
@@ -82,7 +69,6 @@ export const getPayNoteDeliverySummaryHandler = async (
       summarySourceUpdatedAt:
         summarySourceUpdatedAt ?? record.deliveryUpdatedAt ?? record.updatedAt,
       summaryInputBlueId,
-      cached,
       model: summaryModel,
     },
   };

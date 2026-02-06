@@ -11,5 +11,11 @@ export const isContractHiddenFromCustomer = (
   contract: Pick<ContractSummary, 'typeBlueId'>
 ) => hiddenContractTypeBlueIds.has(contract.typeBlueId);
 
+const hasSummaryPreview = (contract: Pick<ContractSummary, 'summaryPreview'>) =>
+  Boolean(contract.summaryPreview);
+
 export const filterCustomerVisibleContracts = (contracts: ContractSummary[]) =>
-  contracts.filter(contract => !isContractHiddenFromCustomer(contract));
+  contracts.filter(
+    contract =>
+      !isContractHiddenFromCustomer(contract) && hasSummaryPreview(contract)
+  );

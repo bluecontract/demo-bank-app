@@ -204,6 +204,13 @@ export const upsertContractRecord = async (input: {
     summaryInputBlueId: existing?.summaryInputBlueId,
     summaryModel: existing?.summaryModel,
     summaryError: existing?.summaryError,
+    summaryDocument: existing?.summaryDocument,
+    summaryDocumentName: existing?.summaryDocumentName,
+    summaryStatus: existing?.summaryStatus,
+    summaryStatusUpdatedAt: existing?.summaryStatusUpdatedAt,
+    summaryStatusTimestamps: existing?.summaryStatusTimestamps,
+    summaryTriggerEvent: existing?.summaryTriggerEvent,
+    summaryEmittedEvents: existing?.summaryEmittedEvents,
     createdAt: existing?.createdAt ?? input.now,
     updatedAt,
   });

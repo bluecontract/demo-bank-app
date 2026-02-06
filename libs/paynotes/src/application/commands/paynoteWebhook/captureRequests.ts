@@ -5,6 +5,7 @@ import type {
   WebhookEmittedEvent,
   WebhookEventObject,
 } from './types';
+import { blue } from '../../../blue';
 import {
   CAPTURE_LOCK_REQUESTED_EVENT_NAME,
   CAPTURE_UNLOCK_REQUESTED_EVENT_NAME,
@@ -26,6 +27,51 @@ type CaptureRequestContext = {
   deps: HandleWebhookEventDependencies;
   logs: LogEntry[];
   credentials: Awaited<ReturnType<MyOsClient['getCredentials']>> | null;
+};
+
+const resolveCaptureEventId = (
+  event: WebhookEmittedEvent
+): string | undefined => {
+  try {
+    const node = blue.jsonValueToNode(event);
+    if (!node) {
+      return undefined;
+    }
+    return blue.calculateBlueIdSync(node);
+  } catch {
+    return undefined;
+  }
+};
+
+const persistCaptureEventId = async (input: {
+  updatedRecord: PayNoteRecord;
+  captureEventId: string;
+  eventType: 'lock' | 'unlock';
+  deps: HandleWebhookEventDependencies;
+  logs: LogEntry[];
+  payNoteDocumentId: string;
+  eventId: string;
+}) => {
+  const { updatedRecord, captureEventId, eventType, deps, logs } = input;
+  const updatedAt = deps.clock.now().toISOString();
+  if (eventType === 'lock') {
+    updatedRecord.lastCaptureLockEventId = captureEventId;
+  } else {
+    updatedRecord.lastCaptureUnlockEventId = captureEventId;
+  }
+  updatedRecord.updatedAt = updatedAt;
+
+  await deps.payNoteRepository.savePayNote({
+    ...updatedRecord,
+    updatedAt,
+  });
+
+  trace(logs, 'Recorded PayNote capture request id', {
+    eventId: input.eventId,
+    payNoteDocumentId: input.payNoteDocumentId,
+    captureEventId,
+    eventType,
+  });
 };
 
 const extractCardTransactionDetails = (
@@ -296,7 +342,7 @@ const applyCaptureLock = async (input: {
   credentials: Awaited<ReturnType<MyOsClient['getCredentials']>> | null;
   deps: HandleWebhookEventDependencies;
   logs: LogEntry[];
-}): Promise<void> => {
+}): Promise<boolean> => {
   const {
     holdId,
     eventId,
@@ -319,7 +365,7 @@ const applyCaptureLock = async (input: {
         holdId,
       },
     });
-    return;
+    return false;
   }
 
   if (updatedHold.status !== 'PENDING' || !updatedHold.captureDisabled) {
@@ -335,7 +381,7 @@ const applyCaptureLock = async (input: {
         captureDisabled: updatedHold.captureDisabled ?? false,
       },
     });
-    return;
+    return false;
   }
 
   if (!credentials) {
@@ -349,7 +395,7 @@ const applyCaptureLock = async (input: {
         holdId,
       },
     });
-    return;
+    return false;
   }
 
   const response = await deps.myOsClient.runDocumentOperation({
@@ -370,7 +416,7 @@ const applyCaptureLock = async (input: {
         body: response.body,
       },
     });
-    return;
+    return false;
   }
 
   logs.push({
@@ -382,6 +428,8 @@ const applyCaptureLock = async (input: {
       holdId,
     },
   });
+
+  return true;
 };
 
 const applyCaptureUnlock = async (input: {
@@ -392,7 +440,7 @@ const applyCaptureUnlock = async (input: {
   credentials: Awaited<ReturnType<MyOsClient['getCredentials']>> | null;
   deps: HandleWebhookEventDependencies;
   logs: LogEntry[];
-}): Promise<void> => {
+}): Promise<boolean> => {
   const {
     holdId,
     eventId,
@@ -415,7 +463,7 @@ const applyCaptureUnlock = async (input: {
         holdId,
       },
     });
-    return;
+    return false;
   }
 
   if (updatedHold.status !== 'PENDING' || updatedHold.captureDisabled) {
@@ -431,7 +479,7 @@ const applyCaptureUnlock = async (input: {
         captureDisabled: updatedHold.captureDisabled ?? false,
       },
     });
-    return;
+    return false;
   }
 
   if (!credentials) {
@@ -445,7 +493,7 @@ const applyCaptureUnlock = async (input: {
         holdId,
       },
     });
-    return;
+    return false;
   }
 
   const response = await deps.myOsClient.runDocumentOperation({
@@ -466,7 +514,7 @@ const applyCaptureUnlock = async (input: {
         body: response.body,
       },
     });
-    return;
+    return false;
   }
 
   logs.push({
@@ -478,6 +526,8 @@ const applyCaptureUnlock = async (input: {
       holdId,
     },
   });
+
+  return true;
 };
 
 const isCaptureRequestEvent = (event: WebhookEmittedEvent): boolean => {
@@ -534,6 +584,22 @@ const handleCaptureRequestEvent = async (
     return;
   }
 
+  const captureEventId = resolveCaptureEventId(event) ?? eventId;
+  const lastCaptureEventId =
+    eventType === CAPTURE_LOCK_REQUESTED_EVENT_NAME
+      ? updatedRecord.lastCaptureLockEventId
+      : updatedRecord.lastCaptureUnlockEventId;
+
+  if (captureEventId && lastCaptureEventId === captureEventId) {
+    trace(logs, 'Skipped duplicate PayNote capture request', {
+      eventId,
+      payNoteDocumentId,
+      captureEventId,
+      eventType,
+    });
+    return;
+  }
+
   const providedCardDetails = extractCardTransactionDetails(
     (event as { cardTransactionDetails?: unknown }).cardTransactionDetails
   );
@@ -572,7 +638,7 @@ const handleCaptureRequestEvent = async (
   }
 
   if (eventType === CAPTURE_LOCK_REQUESTED_EVENT_NAME) {
-    await applyCaptureLock({
+    const confirmed = await applyCaptureLock({
       holdId: captureHold.holdId,
       eventId,
       payNoteDocumentId,
@@ -581,10 +647,21 @@ const handleCaptureRequestEvent = async (
       deps,
       logs,
     });
+    if (confirmed && captureEventId) {
+      await persistCaptureEventId({
+        updatedRecord,
+        captureEventId,
+        eventType: 'lock',
+        deps,
+        logs,
+        payNoteDocumentId,
+        eventId,
+      });
+    }
     return;
   }
 
-  await applyCaptureUnlock({
+  const confirmed = await applyCaptureUnlock({
     holdId: captureHold.holdId,
     eventId,
     payNoteDocumentId,
@@ -593,6 +670,17 @@ const handleCaptureRequestEvent = async (
     deps,
     logs,
   });
+  if (confirmed && captureEventId) {
+    await persistCaptureEventId({
+      updatedRecord,
+      captureEventId,
+      eventType: 'unlock',
+      deps,
+      logs,
+      payNoteDocumentId,
+      eventId,
+    });
+  }
 };
 
 export const handleCaptureRequestEvents = async (input: {

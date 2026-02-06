@@ -52,6 +52,16 @@ export const handleWebhookEvent = async (
   const { eventObject, eventType, document, emittedEvents, events, sessionId } =
     contextResolution.context;
 
+  const firstProcess = await deps.payNoteRepository.markEventProcessed(
+    input.eventId
+  );
+  if (!firstProcess) {
+    trace(logs, 'PayNote webhook already processed', {
+      eventId: input.eventId,
+    });
+    return { note: '', logs };
+  }
+
   trace(logs, 'Resolved PayNote session id', {
     eventId: input.eventId,
     sessionId,

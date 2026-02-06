@@ -366,14 +366,23 @@ export const payNoteWebhookHandler = async (
   const sessionId = (payload as { object?: { sessionId?: unknown } })?.object
     ?.sessionId;
   if (typeof sessionId === 'string' && documentType.isSupportedContract) {
-    void enqueueSummaryJob(
-      {
-        type: 'contract-summary',
+    const firstSummaryEvent =
+      await contractRepository.markSummaryEventProcessed(eventId);
+    if (firstSummaryEvent) {
+      void enqueueSummaryJob(
+        {
+          type: 'contract-summary',
+          sessionId,
+          reason: 'webhook',
+        },
+        logger
+      );
+    } else {
+      logger.debug('Skipped duplicate summary job', {
+        eventId,
         sessionId,
-        reason: 'webhook',
-      },
-      logger
-    );
+      });
+    }
   }
 
   return {
