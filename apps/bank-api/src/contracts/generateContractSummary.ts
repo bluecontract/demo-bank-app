@@ -46,6 +46,8 @@ const SUMMARY_TIMEOUT = Number.isFinite(SUMMARY_TIMEOUT_MS)
 
 const SYSTEM_PROMPT = buildContractSummaryPrompt();
 
+const HISTORY_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
+
 const formatMinorAmount = (amountMinor?: number, currency?: string) => {
   if (typeof amountMinor !== 'number' || Number.isNaN(amountMinor)) {
     return undefined;
@@ -121,6 +123,14 @@ const toIsoFromEpoch = (value: number): string | undefined => {
     return undefined;
   }
   return date.toISOString();
+};
+
+const toIsoMs = (value?: string): number | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? undefined : ms;
 };
 
 const extractTriggerEventMeta = (input: {
@@ -694,21 +704,36 @@ const generateOrLoadContractSummary = async (input: {
     const historyShort = summary.lastChange.short || summary.listPreview;
     const historyMore = summary.lastChange.more;
     const historyKind = 'contractUpdated' as const;
-    const latestHistory = await input.contractRepository.listContractHistory(
+    const historyEntries = await input.contractRepository.listContractHistory(
       contract.contractId
     );
-    const latestEntry = latestHistory[0];
     const triggerMeta = triggerEventMeta ?? null;
     const historyId = triggerMeta?.blueId ?? undefined;
     const historyCreatedAt = triggerMeta?.createdAt ?? contract.updatedAt;
     const hasExistingId = historyId
-      ? latestHistory.some(entry => entry.id === historyId)
+      ? historyEntries.some(entry => entry.id === historyId)
       : false;
-    const isDuplicateText =
-      latestEntry &&
-      latestEntry.kind === historyKind &&
-      latestEntry.short === historyShort &&
-      (latestEntry.more ?? null) === (historyMore ?? null);
+    const historyCreatedAtMs = toIsoMs(historyCreatedAt);
+    const isDuplicateText = historyEntries.some(entry => {
+      if (
+        entry.kind !== historyKind ||
+        entry.short !== historyShort ||
+        (entry.more ?? null) !== (historyMore ?? null)
+      ) {
+        return false;
+      }
+      if (!historyCreatedAtMs) {
+        return true;
+      }
+      const entryCreatedAtMs = toIsoMs(entry.createdAt);
+      if (!entryCreatedAtMs) {
+        return true;
+      }
+      return (
+        Math.abs(entryCreatedAtMs - historyCreatedAtMs) <=
+        HISTORY_DEDUPE_WINDOW_MS
+      );
+    });
 
     if (!hasExistingId && !isDuplicateText) {
       await input.contractRepository.addContractHistoryEntry({

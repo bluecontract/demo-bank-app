@@ -312,6 +312,102 @@ describe('generateContractSummaryHandler', () => {
     expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
   });
 
+  it('skips adding duplicate history entries when matching text exists within the window', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:02:00.000Z',
+    });
+
+    contractRepository.listContractHistory.mockResolvedValueOnce([
+      {
+        id: 'history-2',
+        contractId: 'sess-1',
+        kind: 'contractUpdated',
+        short: 'Some other change',
+        more: 'Other details',
+        createdAt: '2026-01-02T00:03:00.000Z',
+      },
+      {
+        id: 'history-1',
+        contractId: 'sess-1',
+        kind: 'contractUpdated',
+        short: summaryFixture.lastChange.short,
+        more: summaryFixture.lastChange.more,
+        createdAt: '2026-01-02T00:00:00.000Z',
+      },
+    ]);
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(contractRepository.updateContractSummary).toHaveBeenCalled();
+    expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
+  });
+
+  it('adds history when matching text exists outside the window', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T01:00:00.000Z',
+    });
+
+    contractRepository.listContractHistory.mockResolvedValueOnce([
+      {
+        id: 'history-1',
+        contractId: 'sess-1',
+        kind: 'contractUpdated',
+        short: summaryFixture.lastChange.short,
+        more: summaryFixture.lastChange.more,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(contractRepository.updateContractSummary).toHaveBeenCalled();
+    expect(contractRepository.addContractHistoryEntry).toHaveBeenCalled();
+  });
+
   it('returns 400 when type pack is missing required type definitions', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',

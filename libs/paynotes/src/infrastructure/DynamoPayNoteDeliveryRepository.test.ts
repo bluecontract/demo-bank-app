@@ -89,7 +89,9 @@ describe('DynamoPayNoteDeliveryRepository', () => {
 
     const savedItems = mockPutCommand.mock.calls
       .map(call => call[0].Item)
-      .filter((item): item is { PK: string } => Boolean(item));
+      .filter((item): item is { PK: string; merchantId?: string } =>
+        Boolean(item)
+      );
 
     expect(
       savedItems.some(item => item.PK === 'PAYNOTE_DELIVERY#delivery-1')
