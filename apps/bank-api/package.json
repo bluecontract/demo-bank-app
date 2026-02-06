@@ -23,6 +23,7 @@
     "@aws-sdk/client-lambda": "^3.980.0",
     "@aws-sdk/client-secrets-manager": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
+    "@blue-labs/document-processor": "^3.4.1",
     "@blue-labs/language": "3.4.1",
     "@blue-repository/types": "^0.13.0",
     "@demo-bank-app/auth": "*",
