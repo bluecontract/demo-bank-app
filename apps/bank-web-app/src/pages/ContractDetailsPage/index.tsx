@@ -39,6 +39,7 @@ import { formatStatusLabel } from '../../lib/formatStatusLabel';
 import { getSupportedContractByTypeBlueId } from '@demo-bank-app/shared-bank-api-contract';
 import type {
   ContractDetails,
+  ContractSummary,
   PayNoteDeliveryDetailsSanitized,
   RelatedContractItem,
 } from '../../types/api';
@@ -338,14 +339,35 @@ export function ContractDetailsPage() {
     !proposal &&
     (activeKind === 'contract' ? contractQuery.isError : proposalQuery.isError);
 
-  useEffect(() => {
+  const reviewSummary = useMemo<ContractSummary | null>(() => {
     if (!contract) {
+      return null;
+    }
+    return {
+      contractId: contract.contractId,
+      typeBlueId: contract.typeBlueId,
+      displayName: contract.displayName,
+      sessionId: contract.sessionId,
+      documentId: contract.documentId,
+      status: contract.status,
+      archivedAt: contract.archivedAt,
+      summaryPreview: contract.summary?.listPreview,
+      summaryUpdatedAt: contract.summaryUpdatedAt,
+      summarySourceUpdatedAt: contract.summarySourceUpdatedAt,
+      createdAt: contract.createdAt,
+      updatedAt: contract.updatedAt,
+      from: { name: 'Merchant' },
+    };
+  }, [contract]);
+
+  useEffect(() => {
+    if (!reviewSummary) {
       return;
     }
     if (activeKind === 'contract') {
-      markReviewed(contract);
+      markReviewed(reviewSummary);
     }
-  }, [activeKind, contract, markReviewed]);
+  }, [activeKind, reviewSummary, markReviewed]);
 
   useEffect(() => {
     if (isDeliveryContract && activeKind !== 'proposal') {

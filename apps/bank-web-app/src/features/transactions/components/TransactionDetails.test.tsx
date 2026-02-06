@@ -29,6 +29,8 @@ const mockUseActiveContractSession = useActiveContractSession as ReturnType<
 >;
 const mockNavigateTo = navigateTo as ReturnType<typeof vi.fn>;
 
+const merchantFrom = { name: 'Merchant' };
+
 const mockTransaction: Extract<ActivityDetail, { kind: 'POSTED_TRANSACTION' }> =
   {
     kind: 'POSTED_TRANSACTION',
@@ -268,6 +270,7 @@ describe('TransactionDetails', () => {
             status: 'accepted',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T12:00:00.000Z',
+            from: merchantFrom,
           },
         ]}
       />
@@ -296,6 +299,7 @@ describe('TransactionDetails', () => {
             transactionId: 'txn-123',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T00:00:00.000Z',
+            from: merchantFrom,
           },
         ]}
       />
@@ -328,6 +332,7 @@ describe('TransactionDetails', () => {
             transactionId: 'txn-123',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T00:00:00.000Z',
+            from: merchantFrom,
           },
         ]}
       />
@@ -356,6 +361,7 @@ describe('TransactionDetails', () => {
             status: 'accepted',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T12:00:00.000Z',
+            from: merchantFrom,
           },
           {
             kind: 'proposal',
@@ -369,6 +375,7 @@ describe('TransactionDetails', () => {
             transactionId: 'txn-123',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T00:00:00.000Z',
+            from: merchantFrom,
           },
         ]}
       />
@@ -400,6 +407,7 @@ describe('TransactionDetails', () => {
             status: 'accepted',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T12:00:00.000Z',
+            from: merchantFrom,
           },
         ]}
       />

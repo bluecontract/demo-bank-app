@@ -74,6 +74,7 @@ interface ContractItem {
   relatedHoldIds?: string[];
   accountNumber?: string;
   userId?: string;
+  merchantId?: string;
   summary?: ContractDocumentSummary;
   summaryPreview?: string;
   summaryUpdatedAt?: string;
@@ -122,6 +123,7 @@ interface ContractUserItem {
   documentId?: string;
   status?: string;
   archivedAt?: string;
+  merchantId?: string;
   summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
@@ -143,6 +145,7 @@ interface ContractRelationshipItem {
   status?: string;
   userId?: string;
   archivedAt?: string;
+  merchantId?: string;
   summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
@@ -246,6 +249,7 @@ export class DynamoContractRepository implements ContractRepository {
       relatedHoldIds: item.relatedHoldIds,
       accountNumber: item.accountNumber,
       userId: item.userId,
+      merchantId: item.merchantId,
       summary: item.summary,
       summaryPreview: item.summaryPreview,
       summaryUpdatedAt: item.summaryUpdatedAt,
@@ -349,6 +353,7 @@ export class DynamoContractRepository implements ContractRepository {
       relatedHoldIds: record.relatedHoldIds,
       accountNumber: record.accountNumber,
       userId: record.userId,
+      merchantId: record.merchantId,
       summary: record.summary,
       summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
       summaryUpdatedAt: record.summaryUpdatedAt,
@@ -421,6 +426,7 @@ export class DynamoContractRepository implements ContractRepository {
         documentId: record.documentId,
         status: record.status,
         archivedAt: record.archivedAt,
+        merchantId: record.merchantId,
         summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
         summaryUpdatedAt: record.summaryUpdatedAt,
         summarySourceUpdatedAt: record.summarySourceUpdatedAt,
@@ -449,6 +455,7 @@ export class DynamoContractRepository implements ContractRepository {
       status: record.status,
       userId: record.userId,
       archivedAt: record.archivedAt,
+      merchantId: record.merchantId,
       summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
       summaryUpdatedAt: record.summaryUpdatedAt,
       summarySourceUpdatedAt: record.summarySourceUpdatedAt,
@@ -996,6 +1003,7 @@ export class DynamoContractRepository implements ContractRepository {
         documentId: item.documentId,
         status: item.status,
         archivedAt: item.archivedAt,
+        merchantId: item.merchantId,
         summaryPreview: item.summaryPreview,
         summaryUpdatedAt: item.summaryUpdatedAt,
         summarySourceUpdatedAt: item.summarySourceUpdatedAt,
@@ -1044,6 +1052,7 @@ export class DynamoContractRepository implements ContractRepository {
         documentId: item.documentId,
         status: item.status,
         archivedAt: item.archivedAt,
+        merchantId: item.merchantId,
         summaryPreview: item.summaryPreview,
         summaryUpdatedAt: item.summaryUpdatedAt,
         summarySourceUpdatedAt: item.summarySourceUpdatedAt,
@@ -1092,6 +1101,7 @@ export class DynamoContractRepository implements ContractRepository {
         documentId: item.documentId,
         status: item.status,
         archivedAt: item.archivedAt,
+        merchantId: item.merchantId,
         summaryPreview: item.summaryPreview,
         summaryUpdatedAt: item.summaryUpdatedAt,
         summarySourceUpdatedAt: item.summarySourceUpdatedAt,

@@ -3,6 +3,7 @@ import {
   TargetDocumentSessionStartedSchema,
 } from '@blue-repository/types/packages/myos/schemas';
 import type {
+  BootstrapContextRepository,
   ClockPort,
   LogEntry,
   MyOsClient,
@@ -32,6 +33,7 @@ export interface HandlePayNoteBootstrapWebhookDependencies {
   payNoteRepository: PayNoteRepository;
   payNoteDeliveryRepository: PayNoteDeliveryRepository;
   payNoteBootstrapRepository: PayNoteBootstrapRepository;
+  bootstrapContextRepository: BootstrapContextRepository;
   contractRepository: ContractRepository;
   holdRepository: HoldRepository;
   clock: ClockPort;
@@ -162,6 +164,7 @@ const mergePayNoteRecord = (
     userId: updates.userId ?? existing?.userId,
     holdId: updates.holdId ?? existing?.holdId,
     transactionId: updates.transactionId ?? existing?.transactionId,
+    merchantId: updates.merchantId ?? existing?.merchantId,
     payerAccountNumber:
       updates.payerAccountNumber ?? existing?.payerAccountNumber,
     payeeAccountNumber:
@@ -262,6 +265,11 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         bootstrapSessionId
       )
     : null;
+  const bootstrapContext = bootstrapSessionId
+    ? await deps.bootstrapContextRepository.getContextBySessionId(
+        bootstrapSessionId
+      )
+    : null;
 
   if (!deliveryRecord && !bootstrapRecord) {
     log(logs, 'info', 'Bootstrap event ignored (no matching context)', {
@@ -334,6 +342,7 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         userId: deliveryRecord?.userId ?? bootstrapRecord?.userId,
         holdId: deliveryRecord?.holdId,
         transactionId: deliveryRecord?.transactionId,
+        merchantId: deliveryRecord?.merchantId ?? bootstrapContext?.merchantId,
         payerAccountNumber:
           bootstrapRecord?.payerAccountNumber ??
           deliveryRecord?.accountNumber ??

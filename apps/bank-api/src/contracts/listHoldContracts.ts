@@ -6,6 +6,10 @@ import {
 } from '../auth/middleware';
 import { getDependencies } from '../paynote/dependencies';
 import { filterCustomerVisibleContracts } from './contractVisibility';
+import {
+  buildMerchantDirectoryMap,
+  resolveMerchantFrom,
+} from '../shared/merchantDirectory';
 
 export const listHoldContractsHandler = async (
   request: ServerInferRequest<
@@ -13,8 +17,12 @@ export const listHoldContractsHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { contractRepository, payNoteDeliveryRepository, logger } =
-    await getDependencies();
+  const {
+    contractRepository,
+    payNoteDeliveryRepository,
+    merchantDirectoryRepository,
+    logger,
+  } = await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const { holdId } = request.params;
 
@@ -32,10 +40,28 @@ export const listHoldContractsHandler = async (
       kind: 'proposal' as const,
     }));
 
+  const visibleContracts = filterCustomerVisibleContracts(contracts);
+  const directory = await buildMerchantDirectoryMap(
+    [
+      ...visibleContracts.map(item => item.merchantId),
+      ...proposalItems.map(item => item.merchantId),
+    ],
+    merchantDirectoryRepository
+  );
+
   return {
     status: 200 as const,
     body: {
-      items: [...filterCustomerVisibleContracts(contracts), ...proposalItems],
+      items: [
+        ...visibleContracts.map(item => ({
+          ...item,
+          from: resolveMerchantFrom(item.merchantId, directory),
+        })),
+        ...proposalItems.map(item => ({
+          ...item,
+          from: resolveMerchantFrom(item.merchantId, directory),
+        })),
+      ],
     },
   };
 };

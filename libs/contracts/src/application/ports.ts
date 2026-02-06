@@ -93,6 +93,7 @@ export interface ContractRecord {
   relatedHoldIds?: string[];
   accountNumber?: string;
   userId?: string;
+  merchantId?: string;
   summary?: ContractDocumentSummary;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
@@ -120,6 +121,7 @@ export interface ContractSummary {
   documentId?: string;
   status?: string;
   archivedAt?: string;
+  merchantId?: string;
   summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;

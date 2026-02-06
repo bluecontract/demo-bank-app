@@ -72,12 +72,8 @@ const getSubject = (item: ContractOrProposalItem): string => {
   return item.documentName?.trim() || item.displayName?.trim() || 'Contract';
 };
 
-const getSender = (item: ContractOrProposalItem): string => {
-  if (isProposalItem(item)) {
-    return item.name?.trim() || 'PayNote proposal';
-  }
-  return item.displayName?.trim() || 'Contract';
-};
+const getSender = (item: ContractOrProposalItem): string =>
+  item.from?.name?.trim() || 'Merchant';
 
 type ProposalDecisionActionsProps = {
   sessionId: string | null;
@@ -233,8 +229,6 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
   };
 
   const visibleItems = view === 'archive' ? archiveItems : inboxItems;
-  const merchantName = user?.merchantName?.trim() || user?.email || 'Merchant';
-  const merchantAvatar = user?.avatarDataUrl;
 
   const getEmptyState = () => {
     if (view === 'archive') {
@@ -378,7 +372,8 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
               const itemKey = isProposalItem(item)
                 ? `proposal-${item.deliveryId}`
                 : item.contractId;
-              const sender = merchantName || getSender(item);
+              const sender = getSender(item);
+              const senderLogo = item.from?.logoUrl;
               const subject = getSubject(item);
               const preview = isProposalItem(item)
                 ? getProposalPreview(item)
@@ -429,7 +424,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                   <div className="sm:hidden flex gap-3 px-4 py-3">
                     <Avatar
                       name={sender}
-                      src={merchantAvatar}
+                      src={senderLogo}
                       size="lg"
                       className="h-14 w-14 text-base"
                     />
@@ -463,7 +458,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
 
                   <div className="hidden sm:grid w-full grid-cols-[minmax(0,200px)_minmax(0,1fr)_80px_120px] gap-6 px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <Avatar name={sender} src={merchantAvatar} size="sm" />
+                      <Avatar name={sender} src={senderLogo} size="sm" />
                       <span className={`truncate ${senderClassName}`}>
                         {sender}
                       </span>

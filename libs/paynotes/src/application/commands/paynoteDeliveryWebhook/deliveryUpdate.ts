@@ -56,6 +56,7 @@ const persistDeliveryRecord = async (input: {
       ? [deliveryRecord.transactionId]
       : undefined,
     relatedHoldIds: deliveryRecord.holdId ? [deliveryRecord.holdId] : undefined,
+    merchantId: deliveryRecord.merchantId,
     status:
       deliveryRecord.clientDecisionStatus ??
       deliveryRecord.transactionIdentificationStatus ??

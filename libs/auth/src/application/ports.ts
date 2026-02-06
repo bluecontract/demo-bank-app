@@ -32,6 +32,19 @@ export interface UserRepository {
   ): Promise<User>;
 }
 
+export type MerchantDirectoryEntry = {
+  merchantId: string;
+  name: string;
+  logoUrl?: string;
+  ownerUserId: string;
+  updatedAt: string;
+};
+
+export interface MerchantDirectoryRepository {
+  upsertMerchantProfile(entry: MerchantDirectoryEntry): Promise<void>;
+  getMerchantsByIds(merchantIds: string[]): Promise<MerchantDirectoryEntry[]>;
+}
+
 // Service ports
 export interface JwtService {
   /**

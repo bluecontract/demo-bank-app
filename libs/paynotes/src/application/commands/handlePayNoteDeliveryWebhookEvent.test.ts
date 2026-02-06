@@ -12,6 +12,11 @@ const cardDetails = {
   authorizationCode: 'ABC123',
 };
 
+const bootstrapContextRepository = {
+  saveContext: vi.fn(),
+  getContextBySessionId: vi.fn(),
+};
+
 const buildDeliveryDocument = () => {
   const yaml = `name: Delivery for Invoice
 payNoteBootstrapRequest:
@@ -142,6 +147,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         contractRepository: contractRepository as any,
         bankingRepository: {} as any,
         holdRepository: {} as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
       }
     );
@@ -246,6 +252,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         contractRepository: contractRepository as any,
         bankingRepository: {} as any,
         holdRepository: {} as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
       }
     );
@@ -368,6 +375,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         contractRepository: contractRepository as any,
         bankingRepository: bankingRepository as any,
         holdRepository: holdRepository as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
       }
     );
@@ -457,6 +465,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         holdRepository: {
           getHoldByCardTransactionDetails: vi.fn().mockResolvedValue(null),
         } as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
       }
     );
@@ -542,6 +551,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         holdRepository: {
           getHoldByCardTransactionDetails: vi.fn().mockResolvedValue(null),
         } as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
       }
     );
@@ -625,6 +635,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         holdRepository: {
           getHoldByCardTransactionDetails: vi.fn().mockResolvedValue(null),
         } as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
       }
     );
@@ -714,6 +725,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         contractRepository: contractRepository as any,
         bankingRepository: bankingRepository as any,
         holdRepository: holdRepository as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-02T10:00:00.000Z') },
       }
     );
@@ -821,6 +833,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         contractRepository: contractRepository as any,
         bankingRepository: {} as any,
         holdRepository: holdRepository as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date(now) },
       }
     );
@@ -894,6 +907,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         contractRepository: contractRepository as any,
         bankingRepository: {} as any,
         holdRepository: {} as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-04T00:00:00.000Z') },
       }
     );
@@ -965,6 +979,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         contractRepository: contractRepository as any,
         bankingRepository: {} as any,
         holdRepository: holdRepository as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-04T10:00:00.000Z') },
       }
     );
@@ -1058,6 +1073,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         contractRepository: contractRepository as any,
         bankingRepository: {} as any,
         holdRepository: {} as any,
+        bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-05T00:00:00.000Z') },
       }
     );

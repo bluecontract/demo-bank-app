@@ -29,6 +29,8 @@ const mockUseActiveContractSession = useActiveContractSession as ReturnType<
 >;
 const mockNavigateTo = navigateTo as ReturnType<typeof vi.fn>;
 
+const merchantFrom = { name: 'Merchant' };
+
 const mockHold: Extract<ActivityDetail, { kind: 'HOLD' }> = {
   kind: 'HOLD',
   activityId: 'HOLD#hold-123',
@@ -101,6 +103,7 @@ describe('HoldDetails', () => {
             status: 'accepted',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T12:00:00.000Z',
+            from: merchantFrom,
           },
         ]}
       />
@@ -129,6 +132,7 @@ describe('HoldDetails', () => {
             transactionId: 'txn-123',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T00:00:00.000Z',
+            from: merchantFrom,
           },
         ]}
       />
@@ -152,6 +156,7 @@ describe('HoldDetails', () => {
             status: 'accepted',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T12:00:00.000Z',
+            from: merchantFrom,
           },
           {
             kind: 'proposal',
@@ -165,6 +170,7 @@ describe('HoldDetails', () => {
             transactionId: 'txn-123',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T00:00:00.000Z',
+            from: merchantFrom,
           },
         ]}
       />
@@ -194,6 +200,7 @@ describe('HoldDetails', () => {
             transactionId: 'txn-456',
             createdAt: '2024-01-05T00:00:00.000Z',
             updatedAt: '2024-01-06T00:00:00.000Z',
+            from: merchantFrom,
           },
         ]}
       />
@@ -226,6 +233,7 @@ describe('HoldDetails', () => {
             transactionId: 'txn-123',
             createdAt: '2024-01-01T00:00:00.000Z',
             updatedAt: '2024-01-02T00:00:00.000Z',
+            from: merchantFrom,
           },
         ]}
       />

@@ -16,6 +16,7 @@ const buildContractSummary = (
   documentId: overrides.documentId,
   status: overrides.status ?? 'accepted',
   archivedAt: overrides.archivedAt,
+  merchantId: overrides.merchantId,
   summaryPreview: overrides.summaryPreview ?? 'Contract updated.',
   summaryUpdatedAt: overrides.summaryUpdatedAt,
   summarySourceUpdatedAt: overrides.summarySourceUpdatedAt,

@@ -22,16 +22,21 @@ describe('listPayNoteDeliveriesHandler', () => {
   const payNoteDeliveryRepository = {
     listDeliveriesByUserId: vi.fn(),
   };
+  const merchantDirectoryRepository = {
+    getMerchantsByIds: vi.fn(),
+  };
 
   beforeEach(() => {
     hoisted.getDependenciesMock.mockReset();
     hoisted.extractAuthInfoMock.mockReset();
     logger.info.mockReset();
     payNoteDeliveryRepository.listDeliveriesByUserId.mockReset();
+    merchantDirectoryRepository.getMerchantsByIds.mockReset();
 
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       payNoteDeliveryRepository,
+      merchantDirectoryRepository,
     });
 
     hoisted.extractAuthInfoMock.mockResolvedValue({
@@ -40,10 +45,12 @@ describe('listPayNoteDeliveriesHandler', () => {
   });
 
   it('returns identified deliveries only', async () => {
+    const merchantId = 'merchant-1';
     payNoteDeliveryRepository.listDeliveriesByUserId.mockResolvedValue([
       {
         deliveryId: 'delivery-1',
         transactionIdentificationStatus: 'identified',
+        merchantId,
         createdAt: '2024-01-01T00:00:00.000Z',
         updatedAt: '2024-01-01T00:00:00.000Z',
       },
@@ -60,6 +67,15 @@ describe('listPayNoteDeliveriesHandler', () => {
         updatedAt: '2024-01-01T00:00:00.000Z',
       },
     ]);
+    merchantDirectoryRepository.getMerchantsByIds.mockResolvedValue([
+      {
+        merchantId,
+        name: 'Blue Appliances',
+        logoUrl: 'data:image/png;base64,abc',
+        ownerUserId: 'owner-1',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      },
+    ]);
 
     const response = await listPayNoteDeliveriesHandler({} as any, {
       request: {} as any,
@@ -67,7 +83,14 @@ describe('listPayNoteDeliveriesHandler', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.items).toEqual([
-      expect.objectContaining({ deliveryId: 'delivery-1' }),
+      expect.objectContaining({
+        deliveryId: 'delivery-1',
+        from: {
+          merchantId,
+          name: 'Blue Appliances',
+          logoUrl: 'data:image/png;base64,abc',
+        },
+      }),
     ]);
     expect(logger.info).toHaveBeenCalledWith('Listing PayNote deliveries', {
       userId: 'user-1',

@@ -3,6 +3,7 @@ import type { ContractRepository } from '@demo-bank-app/contracts';
 import type {
   BankingFacade,
   ClockPort,
+  BootstrapContextRepository,
   LogEntry,
   MyOsClient,
   PayNoteDeliveryRepository,
@@ -20,6 +21,7 @@ export interface HandleWebhookEventDependencies {
   holdRepository: HoldRepository;
   payNoteRepository: PayNoteRepository;
   payNoteDeliveryRepository: PayNoteDeliveryRepository;
+  bootstrapContextRepository: BootstrapContextRepository;
   contractRepository: ContractRepository;
   clock: ClockPort;
 }

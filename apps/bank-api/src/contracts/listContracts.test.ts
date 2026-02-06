@@ -23,16 +23,21 @@ describe('listContractsHandler', () => {
   const contractRepository = {
     listContractsByUserId: vi.fn(),
   };
+  const merchantDirectoryRepository = {
+    getMerchantsByIds: vi.fn(),
+  };
 
   beforeEach(() => {
     hoisted.getDependenciesMock.mockReset();
     hoisted.extractAuthInfoMock.mockReset();
     logger.info.mockReset();
     contractRepository.listContractsByUserId.mockReset();
+    merchantDirectoryRepository.getMerchantsByIds.mockReset();
 
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       contractRepository,
+      merchantDirectoryRepository,
     });
 
     hoisted.extractAuthInfoMock.mockResolvedValue({
@@ -44,6 +49,18 @@ describe('listContractsHandler', () => {
     const updatedSince = '2024-01-02T10:00:00.000Z';
     const { all: summaries, visible } = createContractSummaryFixtures();
 
+    const merchantId = 'merchant-1';
+    summaries[0] = { ...summaries[0], merchantId };
+    merchantDirectoryRepository.getMerchantsByIds.mockResolvedValue([
+      {
+        merchantId,
+        name: 'Blue Appliances',
+        logoUrl: 'data:image/png;base64,abc',
+        ownerUserId: 'owner-1',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      },
+    ]);
+
     contractRepository.listContractsByUserId.mockResolvedValue(summaries);
 
     const response = await listContractsHandler(
@@ -54,7 +71,16 @@ describe('listContractsHandler', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.body.items).toEqual(visible);
+    expect(response.body.items).toEqual([
+      expect.objectContaining({
+        contractId: visible[0].contractId,
+        from: {
+          merchantId,
+          name: 'Blue Appliances',
+          logoUrl: 'data:image/png;base64,abc',
+        },
+      }),
+    ]);
     expect(contractRepository.listContractsByUserId).toHaveBeenCalledWith(
       'user-1',
       { updatedSince }

@@ -1,6 +1,7 @@
 import type { BankingRepository, HoldRepository } from '@demo-bank-app/banking';
 import type { ContractRepository } from '@demo-bank-app/contracts';
 import type {
+  BootstrapContextRepository,
   ClockPort,
   LogEntry,
   MyOsClient,
@@ -18,6 +19,7 @@ export interface HandlePayNoteDeliveryWebhookDependencies {
   contractRepository: ContractRepository;
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
+  bootstrapContextRepository: BootstrapContextRepository;
   clock: ClockPort;
   enqueuePayNoteDeliverySummary?: (input: {
     sessionId: string;

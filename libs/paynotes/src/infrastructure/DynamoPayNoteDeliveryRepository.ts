@@ -89,6 +89,7 @@ interface PayNoteDeliveryItem {
   userId?: string;
   holdId?: string;
   transactionId?: string;
+  merchantId?: string;
   transactionIdentificationStatus?: string;
   clientDecisionStatus?: string;
   deliveryStatus?: string;
@@ -245,6 +246,7 @@ export class DynamoPayNoteDeliveryRepository
       userId: item.userId,
       holdId: item.holdId,
       transactionId: item.transactionId,
+      merchantId: item.merchantId,
       transactionIdentificationStatus: item.transactionIdentificationStatus,
       clientDecisionStatus: item.clientDecisionStatus,
       deliveryStatus: item.deliveryStatus,
@@ -474,6 +476,7 @@ export class DynamoPayNoteDeliveryRepository
       ...(record.userId ? { userId: record.userId } : {}),
       ...(record.holdId ? { holdId: record.holdId } : {}),
       ...(record.transactionId ? { transactionId: record.transactionId } : {}),
+      ...(record.merchantId ? { merchantId: record.merchantId } : {}),
       ...(record.transactionIdentificationStatus
         ? {
             transactionIdentificationStatus:
@@ -789,6 +792,7 @@ export class DynamoPayNoteDeliveryRepository
           name: payNoteSummary.name ?? deliveryName,
           amountMinor: payNoteSummary.amountMinor,
           currency: payNoteSummary.currency,
+          merchantId: record.merchantId,
           summaryPreview,
           deliveryStatus: record.deliveryStatus,
           transactionIdentificationStatus:

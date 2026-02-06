@@ -8,6 +8,7 @@ import {
 // Mock the auth module
 vi.mock('@demo-bank-app/auth', () => ({
   DynamoUserRepository: vi.fn(() => ({ mockRepo: true })),
+  DynamoMerchantDirectoryRepository: vi.fn(() => ({ mockRepo: true })),
   AwsJwtService: vi.fn(() => ({ mockJwt: true })),
   PowertoolsLogger: vi.fn(() => ({
     info: vi.fn(),

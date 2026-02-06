@@ -15,3 +15,11 @@ export const toUserAlreadyExistsError = (message: string) => {
     message,
   });
 };
+
+export const toMerchantAlreadyRegisteredError = (message: string) => {
+  return problemResponse({
+    status: 409 as const,
+    code: ERROR_CODES.MERCHANT_ALREADY_REGISTERED,
+    message,
+  });
+};

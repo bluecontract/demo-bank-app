@@ -95,6 +95,8 @@ export const handleWebhookEvent = async (
     payNoteDocumentId,
     deps
   );
+  const bootstrapContext =
+    await deps.bootstrapContextRepository.getContextBySessionId(sessionId);
 
   trace(logs, 'Resolved PayNote delivery linkage', {
     eventId: input.eventId,
@@ -122,6 +124,7 @@ export const handleWebhookEvent = async (
       sessionId,
       existingRecord,
       deliveryRecord,
+      bootstrapMerchantId: bootstrapContext?.merchantId,
       document,
       resolvedDocument,
       eventObject,

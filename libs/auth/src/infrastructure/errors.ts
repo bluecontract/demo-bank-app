@@ -57,3 +57,11 @@ export class AuthRepositoryError extends AppError {
     });
   }
 }
+
+export class MerchantDirectoryOwnershipError extends AppError {
+  readonly code = 'MERCHANT_DIRECTORY_OWNERSHIP_ERROR';
+
+  constructor(merchantId: string, cause?: Error) {
+    super(`Merchant '${merchantId}' is owned by another user`, { cause });
+  }
+}

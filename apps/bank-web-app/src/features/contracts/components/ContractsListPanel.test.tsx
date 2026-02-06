@@ -3,6 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { ContractsListPanel } from './ContractsListPanel';
 import type { ProposalListItem } from '../lib/contractsAndProposals';
 
+const merchantFrom = { name: 'Merchant' };
+
 const contracts = [
   {
     contractId: 'contract-1',
@@ -13,6 +15,7 @@ const contracts = [
     status: 'accepted',
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-02T00:00:00.000Z',
+    from: merchantFrom,
   },
   {
     contractId: 'contract-2',
@@ -22,6 +25,7 @@ const contracts = [
     status: 'pending',
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-03T00:00:00.000Z',
+    from: merchantFrom,
   },
 ];
 
@@ -36,6 +40,7 @@ const proposal: ProposalListItem = {
   transactionId: 'txn-9',
   createdAt: '2024-01-01T00:00:00.000Z',
   updatedAt: '2024-01-03T00:00:00.000Z',
+  from: merchantFrom,
 };
 
 describe('ContractsListPanel', () => {

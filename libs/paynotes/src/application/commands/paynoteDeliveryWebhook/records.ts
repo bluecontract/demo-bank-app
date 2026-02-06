@@ -162,6 +162,7 @@ export const buildDeliveryRecord = (input: {
     userId: existing?.userId,
     holdId: existing?.holdId,
     transactionId: existing?.transactionId,
+    merchantId: existing?.merchantId,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };

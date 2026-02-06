@@ -6,6 +6,10 @@ import {
 } from '../auth/middleware';
 import { getDependencies } from '../paynote/dependencies';
 import { filterCustomerVisibleContracts } from './contractVisibility';
+import {
+  buildMerchantDirectoryMap,
+  resolveMerchantFrom,
+} from '../shared/merchantDirectory';
 
 export const listContractsHandler = async (
   request: ServerInferRequest<
@@ -13,7 +17,8 @@ export const listContractsHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { contractRepository, logger } = await getDependencies();
+  const { contractRepository, logger, merchantDirectoryRepository } =
+    await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const updatedSince = request.query?.updatedSince;
 
@@ -22,11 +27,19 @@ export const listContractsHandler = async (
   const items = await contractRepository.listContractsByUserId(userId, {
     updatedSince,
   });
+  const visibleItems = filterCustomerVisibleContracts(items);
+  const directory = await buildMerchantDirectoryMap(
+    visibleItems.map(item => item.merchantId),
+    merchantDirectoryRepository
+  );
 
   return {
     status: 200 as const,
     body: {
-      items: filterCustomerVisibleContracts(items),
+      items: visibleItems.map(item => ({
+        ...item,
+        from: resolveMerchantFrom(item.merchantId, directory),
+      })),
     },
   };
 };

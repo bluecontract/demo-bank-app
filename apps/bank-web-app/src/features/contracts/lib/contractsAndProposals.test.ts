@@ -15,6 +15,9 @@ const baseContract: ContractSummary = {
   sessionId: 'contract-session-1',
   createdAt: '2026-02-01T10:00:00.000Z',
   updatedAt: '2026-02-01T10:05:00.000Z',
+  from: {
+    name: 'Merchant',
+  },
 };
 
 const baseProposal: PayNoteDeliverySummary = {
@@ -23,6 +26,9 @@ const baseProposal: PayNoteDeliverySummary = {
   payNoteSessionIds: ['contract-session-1'],
   createdAt: '2026-02-01T10:02:00.000Z',
   updatedAt: '2026-02-01T10:03:00.000Z',
+  from: {
+    name: 'Merchant',
+  },
 };
 
 describe('mergeContractsAndProposals', () => {

@@ -25,10 +25,12 @@ import {
   DynamoPayNoteDeliveryRepository,
   DynamoPayNoteRepository,
   DynamoPayNoteBootstrapRepository,
+  DynamoBootstrapContextRepository,
   type PayNoteVerificationRepository,
   type PayNoteDeliveryRepository,
   type PayNoteRepository,
   type PayNoteBootstrapRepository,
+  type BootstrapContextRepository,
   type BankingFacade,
   type MyOsClient,
   type BlueIdCalculator,
@@ -40,6 +42,11 @@ import {
   DynamoContractRepository,
   type ContractRepository,
 } from '@demo-bank-app/contracts';
+import {
+  AuthEnvironmentConfiguration,
+  DynamoMerchantDirectoryRepository,
+  type MerchantDirectoryRepository,
+} from '@demo-bank-app/auth';
 
 export type PaynoteDependencies = {
   logger: PowertoolsLogger;
@@ -49,9 +56,11 @@ export type PaynoteDependencies = {
   payNoteDeliveryRepository: PayNoteDeliveryRepository;
   payNoteRepository: PayNoteRepository;
   payNoteBootstrapRepository: PayNoteBootstrapRepository;
+  bootstrapContextRepository: BootstrapContextRepository;
   contractRepository: ContractRepository;
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
+  merchantDirectoryRepository: MerchantDirectoryRepository;
   myOsClient: MyOsClient;
   bankingFacade: BankingFacade;
   blueIdCalculator: BlueIdCalculator;
@@ -62,18 +71,20 @@ export type PaynoteDependencies = {
 
 let cachedDependencies: PaynoteDependencies | null = null;
 
-const initializeDependencies = (): PaynoteDependencies => {
+const initializeDependencies = async (): Promise<PaynoteDependencies> => {
   const logger = getLogger();
   const awsRegion = process.env.AWS_REGION || 'eu-west-1';
   const awsEndpoint = process.env.AWS_ENDPOINT_URL;
   const openAiSecretArn = process.env.OPENAI_API_KEY_SECRET_ARN?.trim();
   const myOsSecretArn = process.env.MYOS_SECRET_ARN?.trim();
   const bankingConfig = new BankingEnvironmentConfiguration();
+  const authConfig = await new AuthEnvironmentConfiguration().getAuthConfig();
 
   const tableName =
     process.env.BANKING_DYNAMO_TABLE_NAME?.trim() ||
     process.env.AUTH_DYNAMO_TABLE_NAME?.trim() ||
     bankingConfig.dynamoTableName;
+  const authTableName = authConfig.dynamoTableName;
 
   const secretsResilienceConfig =
     AwsResilienceConfigBuilder.forSecretsManager();
@@ -125,6 +136,12 @@ const initializeDependencies = (): PaynoteDependencies => {
     endpoint: awsEndpoint,
   });
 
+  const bootstrapContextRepository = new DynamoBootstrapContextRepository({
+    tableName: authTableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
   const contractRepository = new DynamoContractRepository({
     tableName,
     region: awsRegion,
@@ -139,6 +156,12 @@ const initializeDependencies = (): PaynoteDependencies => {
 
   const holdRepository = new DynamoHoldRepository({
     tableName,
+    region: awsRegion,
+    ...(awsEndpoint && { endpoint: awsEndpoint }),
+  });
+
+  const merchantDirectoryRepository = new DynamoMerchantDirectoryRepository({
+    tableName: authTableName,
     region: awsRegion,
     ...(awsEndpoint && { endpoint: awsEndpoint }),
   });
@@ -177,9 +200,11 @@ const initializeDependencies = (): PaynoteDependencies => {
     payNoteDeliveryRepository,
     payNoteRepository,
     payNoteBootstrapRepository,
+    bootstrapContextRepository,
     contractRepository,
     bankingRepository,
     holdRepository,
+    merchantDirectoryRepository,
     myOsClient,
     bankingFacade,
     blueIdCalculator,
@@ -191,7 +216,7 @@ const initializeDependencies = (): PaynoteDependencies => {
 
 export const getDependencies = async (): Promise<PaynoteDependencies> => {
   if (!cachedDependencies) {
-    cachedDependencies = initializeDependencies();
+    cachedDependencies = await initializeDependencies();
   }
 
   return cachedDependencies;

@@ -32,6 +32,7 @@ const baseContract: ContractSummary = {
   sessionId: 'session-1',
   displayName: 'Slow Digestion PayNote',
   status: 'active',
+  from: { name: 'Slow Digestion' },
   createdAt: '2026-02-05T00:00:00.000Z',
   updatedAt: '2026-02-05T01:00:00.000Z',
 } as ContractSummary;
@@ -41,6 +42,7 @@ const baseProposal: PayNoteDeliverySummary = {
   deliverySessionId: 'proposal-session-1',
   name: 'Slow Digestion PayNote',
   clientDecisionStatus: 'pending',
+  from: { name: 'Slow Digestion' },
   createdAt: '2026-02-05T00:00:00.000Z',
   updatedAt: '2026-02-05T01:30:00.000Z',
 } as PayNoteDeliverySummary;

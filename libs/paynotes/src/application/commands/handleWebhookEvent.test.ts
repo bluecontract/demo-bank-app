@@ -61,6 +61,12 @@ const createDependencies = () => {
       markEventProcessed: vi.fn().mockResolvedValue(true),
     };
 
+  const bootstrapContextRepository: HandleWebhookEventDependencies['bootstrapContextRepository'] =
+    {
+      getContextBySessionId: vi.fn().mockResolvedValue(null),
+      saveContext: vi.fn(),
+    };
+
   const holdRepository: HandleWebhookEventDependencies['holdRepository'] = {
     getHold: vi.fn().mockResolvedValue(null),
     getHoldByCardTransactionDetails: vi.fn().mockResolvedValue(null),
@@ -107,6 +113,7 @@ const createDependencies = () => {
       holdRepository,
       payNoteRepository,
       payNoteDeliveryRepository,
+      bootstrapContextRepository,
       contractRepository,
       clock,
     } satisfies HandleWebhookEventDependencies,

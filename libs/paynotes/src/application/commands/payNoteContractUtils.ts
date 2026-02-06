@@ -45,6 +45,7 @@ export const upsertPayNoteContractRecord = async (input: {
     relatedHoldIds:
       relatedHoldIds ??
       (updatedRecord.holdId ? [updatedRecord.holdId] : undefined),
+    merchantId: updatedRecord.merchantId,
     status: updatedRecord.transactionId
       ? 'processed'
       : updatedRecord.holdId

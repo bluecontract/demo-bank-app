@@ -43,6 +43,9 @@ const mockGetBankingDependencies = vi.mocked(getBankingDependencies);
 const mockCreateAccount = vi.mocked(createAccount);
 
 const mockLogger = { error: vi.fn(), info: vi.fn(), debug: vi.fn() };
+const mockMerchantDirectoryRepository = {
+  upsertMerchantProfile: vi.fn(),
+};
 
 // Helper for mock responseHeaders
 const createMockHeaders = () => {
@@ -65,6 +68,7 @@ describe('Auth Handlers', () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockResolvedValue({
@@ -101,6 +105,7 @@ describe('Auth Handlers', () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockGetBankingDependencies.mockResolvedValueOnce({
@@ -162,12 +167,23 @@ describe('Auth Handlers', () => {
         }),
         expect.anything()
       );
+      expect(
+        mockMerchantDirectoryRepository.upsertMerchantProfile
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          merchantId: 'merchant-123',
+          name: 'Merchant Demo',
+          logoUrl: undefined,
+          ownerUserId: 'merchant-user-id',
+        })
+      );
     });
 
     it('should return 409 for UserAlreadyExistsError', async () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockRejectedValue(
@@ -198,6 +214,7 @@ describe('Auth Handlers', () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       const mockRepository = {
         getAccountsByUserId: vi.fn().mockResolvedValue([]),
@@ -264,6 +281,7 @@ describe('Auth Handlers', () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockRejectedValue(
@@ -290,6 +308,7 @@ describe('Auth Handlers', () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = {
@@ -322,6 +341,7 @@ describe('Auth Handlers', () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = new Error('Database connection failed');
@@ -347,6 +367,7 @@ describe('Auth Handlers', () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
 

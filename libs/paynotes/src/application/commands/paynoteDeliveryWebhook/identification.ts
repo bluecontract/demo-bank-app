@@ -46,6 +46,7 @@ export const identifyDeliveryTransaction = async (input: {
     deliveryRecord.accountNumber = account.accountNumber;
     deliveryRecord.holdId = hold.holdId;
     deliveryRecord.transactionId = hold.relatedTransactionId;
+    deliveryRecord.merchantId = hold.merchantId ?? deliveryRecord.merchantId;
     deliveryRecord.transactionIdentificationStatus = 'identified';
   } else {
     deliveryRecord.transactionIdentificationStatus = 'failed';

@@ -5,6 +5,10 @@ import {
   type MaybeAuthenticatedTsRestRequestContext,
 } from '../auth/middleware';
 import { getDependencies } from './dependencies';
+import {
+  buildMerchantDirectoryMap,
+  resolveMerchantFrom,
+} from '../shared/merchantDirectory';
 
 export const listPayNoteDeliveriesHandler = async (
   request: ServerInferRequest<
@@ -12,7 +16,8 @@ export const listPayNoteDeliveriesHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { logger, payNoteDeliveryRepository } = await getDependencies();
+  const { logger, payNoteDeliveryRepository, merchantDirectoryRepository } =
+    await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const clientDecisionStatus = request.query?.clientDecisionStatus;
 
@@ -32,10 +37,18 @@ export const listPayNoteDeliveriesHandler = async (
     );
   }
 
+  const directory = await buildMerchantDirectoryMap(
+    visibleDeliveries.map(delivery => delivery.merchantId),
+    merchantDirectoryRepository
+  );
+
   return {
     status: 200 as const,
     body: {
-      items: visibleDeliveries,
+      items: visibleDeliveries.map(delivery => ({
+        ...delivery,
+        from: resolveMerchantFrom(delivery.merchantId, directory),
+      })),
     },
   };
 };

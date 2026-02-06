@@ -126,6 +126,7 @@ export const buildPayNoteRecord = (input: {
   sessionId: string;
   existingRecord: PayNoteRecord | null;
   deliveryRecord: PayNoteDeliveryRecord | null;
+  bootstrapMerchantId?: string;
   document: Record<string, unknown>;
   resolvedDocument?: Record<string, unknown>;
   eventObject?: WebhookEventObject;
@@ -141,6 +142,7 @@ export const buildPayNoteRecord = (input: {
     sessionId,
     existingRecord,
     deliveryRecord,
+    bootstrapMerchantId,
     document,
     resolvedDocument,
     eventObject,
@@ -171,6 +173,10 @@ export const buildPayNoteRecord = (input: {
     holdId: existingRecord?.holdId ?? deliveryRecord?.holdId,
     transactionId:
       existingRecord?.transactionId ?? deliveryRecord?.transactionId,
+    merchantId:
+      existingRecord?.merchantId ??
+      deliveryRecord?.merchantId ??
+      bootstrapMerchantId,
     lastCaptureLockEventId: existingRecord?.lastCaptureLockEventId,
     lastCaptureUnlockEventId: existingRecord?.lastCaptureUnlockEventId,
     payerAccountNumber,

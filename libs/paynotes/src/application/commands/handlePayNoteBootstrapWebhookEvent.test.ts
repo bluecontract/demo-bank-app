@@ -77,6 +77,11 @@ const createDependencies = () => {
       getBootstrapBySessionId: vi.fn(),
       saveBootstrap: vi.fn(),
     };
+  const bootstrapContextRepository: HandlePayNoteBootstrapWebhookDependencies['bootstrapContextRepository'] =
+    {
+      getContextBySessionId: vi.fn(),
+      saveContext: vi.fn(),
+    };
 
   const contractRepository: HandlePayNoteBootstrapWebhookDependencies['contractRepository'] =
     {
@@ -108,6 +113,7 @@ const createDependencies = () => {
       payNoteRepository,
       payNoteDeliveryRepository,
       payNoteBootstrapRepository,
+      bootstrapContextRepository,
       contractRepository,
       holdRepository,
       clock,
@@ -116,6 +122,7 @@ const createDependencies = () => {
     payNoteRepository,
     payNoteDeliveryRepository,
     payNoteBootstrapRepository,
+    bootstrapContextRepository,
     contractRepository,
   };
 };
@@ -128,6 +135,7 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
       payNoteRepository,
       payNoteDeliveryRepository,
       payNoteBootstrapRepository,
+      bootstrapContextRepository,
       contractRepository,
     } = createDependencies();
 
@@ -145,6 +153,13 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
         accountNumber: 'acct-1',
         payerAccountNumber: 'acct-1',
         payeeAccountNumber: 'acct-2',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+    bootstrapContextRepository.getContextBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-1',
+        merchantId: 'merchant-1',
         createdAt: '2024-01-01T00:00:00.000Z',
       });
 
@@ -180,6 +195,7 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
         accountNumber: 'acct-1',
         payerAccountNumber: 'acct-1',
         payeeAccountNumber: 'acct-2',
+        merchantId: 'merchant-1',
       })
     );
     expect(contractRepository.saveContract).toHaveBeenCalledWith(

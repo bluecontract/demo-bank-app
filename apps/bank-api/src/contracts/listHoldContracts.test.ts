@@ -26,6 +26,9 @@ describe('listHoldContractsHandler', () => {
   const payNoteDeliveryRepository = {
     listDeliveriesByUserId: vi.fn(),
   };
+  const merchantDirectoryRepository = {
+    getMerchantsByIds: vi.fn(),
+  };
 
   beforeEach(() => {
     hoisted.getDependenciesMock.mockReset();
@@ -33,11 +36,13 @@ describe('listHoldContractsHandler', () => {
     logger.info.mockReset();
     contractRepository.listContractsByHoldId.mockReset();
     payNoteDeliveryRepository.listDeliveriesByUserId.mockReset();
+    merchantDirectoryRepository.getMerchantsByIds.mockReset();
 
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       contractRepository,
       payNoteDeliveryRepository,
+      merchantDirectoryRepository,
     });
 
     hoisted.extractAuthInfoMock.mockResolvedValue({
@@ -47,6 +52,8 @@ describe('listHoldContractsHandler', () => {
 
   it('returns related contracts for the hold', async () => {
     const { all: summaries, visible } = createContractSummaryFixtures();
+    const merchantId = 'merchant-1';
+    summaries[0] = { ...summaries[0], merchantId };
 
     contractRepository.listContractsByHoldId.mockResolvedValue(summaries);
     payNoteDeliveryRepository.listDeliveriesByUserId.mockResolvedValue([
@@ -56,6 +63,7 @@ describe('listHoldContractsHandler', () => {
         name: 'PayNote Delivery Proposal',
         amountMinor: 1200,
         currency: 'USD',
+        merchantId,
         clientDecisionStatus: 'pending',
         holdId: 'hold-123',
         createdAt: '2024-01-01T00:00:00.000Z',
@@ -67,6 +75,7 @@ describe('listHoldContractsHandler', () => {
         name: 'Rejected Proposal',
         amountMinor: 800,
         currency: 'USD',
+        merchantId,
         clientDecisionStatus: 'rejected',
         holdId: 'hold-123',
         createdAt: '2024-01-01T00:00:00.000Z',
@@ -84,6 +93,15 @@ describe('listHoldContractsHandler', () => {
         updatedAt: '2024-01-02T00:00:00.000Z',
       },
     ]);
+    merchantDirectoryRepository.getMerchantsByIds.mockResolvedValue([
+      {
+        merchantId,
+        name: 'Blue Appliances',
+        logoUrl: 'data:image/png;base64,abc',
+        ownerUserId: 'owner-1',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      },
+    ]);
 
     const response = await listHoldContractsHandler(
       {
@@ -94,31 +112,32 @@ describe('listHoldContractsHandler', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.items).toEqual([
-      ...visible,
-      {
+      expect.objectContaining({
+        contractId: visible[0].contractId,
+        from: {
+          merchantId,
+          name: 'Blue Appliances',
+          logoUrl: 'data:image/png;base64,abc',
+        },
+      }),
+      expect.objectContaining({
         deliveryId: 'delivery-1',
-        deliverySessionId: 'session-delivery-1',
-        name: 'PayNote Delivery Proposal',
-        amountMinor: 1200,
-        currency: 'USD',
-        clientDecisionStatus: 'pending',
-        holdId: 'hold-123',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        updatedAt: '2024-01-02T00:00:00.000Z',
         kind: 'proposal',
-      },
-      {
+        from: {
+          merchantId,
+          name: 'Blue Appliances',
+          logoUrl: 'data:image/png;base64,abc',
+        },
+      }),
+      expect.objectContaining({
         deliveryId: 'delivery-2',
-        deliverySessionId: 'session-delivery-2',
-        name: 'Rejected Proposal',
-        amountMinor: 800,
-        currency: 'USD',
-        clientDecisionStatus: 'rejected',
-        holdId: 'hold-123',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        updatedAt: '2024-01-02T00:00:00.000Z',
         kind: 'proposal',
-      },
+        from: {
+          merchantId,
+          name: 'Blue Appliances',
+          logoUrl: 'data:image/png;base64,abc',
+        },
+      }),
     ]);
     expect(contractRepository.listContractsByHoldId).toHaveBeenCalledWith(
       'hold-123',

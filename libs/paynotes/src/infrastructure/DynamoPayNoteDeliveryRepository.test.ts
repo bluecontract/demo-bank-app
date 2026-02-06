@@ -82,6 +82,7 @@ describe('DynamoPayNoteDeliveryRepository', () => {
       cardTransactionDetailsKey: cardDetailsKey,
       payNoteDocumentId: 'paynote-doc-1',
       userId: 'user-1',
+      merchantId: 'merchant-1',
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
     });
@@ -110,6 +111,10 @@ describe('DynamoPayNoteDeliveryRepository', () => {
       )
     ).toBe(true);
     expect(savedItems.some(item => item.PK === 'USER#user-1')).toBe(true);
+    expect(
+      savedItems.find(item => item.PK === 'PAYNOTE_DELIVERY#delivery-1')
+        ?.merchantId
+    ).toBe('merchant-1');
   });
 
   it('lists deliveries by user with summary fields', async () => {
@@ -134,6 +139,7 @@ describe('DynamoPayNoteDeliveryRepository', () => {
           deliveryId: 'delivery-1',
           createdAt: '2024-01-01T00:00:00.000Z',
           updatedAt: '2024-01-01T00:00:00.000Z',
+          merchantId: 'merchant-1',
           summary: {
             story: {
               headline: 'PayNote proposal',
@@ -181,6 +187,7 @@ describe('DynamoPayNoteDeliveryRepository', () => {
         amountMinor: 1200,
         currency: 'USD',
         transactionId: 'txn-1',
+        merchantId: 'merchant-1',
       }),
     ]);
   });

@@ -137,6 +137,7 @@ export interface PayNoteDeliveryRecord {
   userId?: string;
   holdId?: string;
   transactionId?: string;
+  merchantId?: string;
   transactionIdentificationStatus?: string;
   clientDecisionStatus?: string;
   deliveryStatus?: string;
@@ -167,6 +168,7 @@ export interface PayNoteDeliverySummary {
   name?: string;
   amountMinor?: number;
   currency?: string;
+  merchantId?: string;
   summaryPreview?: string;
   deliveryStatus?: string;
   transactionIdentificationStatus?: string;
@@ -216,6 +218,7 @@ export interface PayNoteRecord {
   userId?: string;
   holdId?: string;
   transactionId?: string;
+  merchantId?: string;
   lastCaptureLockEventId?: string;
   lastCaptureUnlockEventId?: string;
   payerAccountNumber?: string;
@@ -248,6 +251,19 @@ export interface PayNoteBootstrapRepository {
     bootstrapSessionId: string
   ): Promise<PayNoteBootstrapRecord | null>;
   saveBootstrap(record: PayNoteBootstrapRecord): Promise<void>;
+}
+
+export interface BootstrapContextRecord {
+  bootstrapSessionId: string;
+  merchantId: string;
+  createdAt: string;
+}
+
+export interface BootstrapContextRepository {
+  getContextBySessionId(
+    bootstrapSessionId: string
+  ): Promise<BootstrapContextRecord | null>;
+  saveContext(record: BootstrapContextRecord): Promise<void>;
 }
 
 export interface BankingAccount {

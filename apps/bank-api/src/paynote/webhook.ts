@@ -151,6 +151,7 @@ export const payNoteWebhookHandler = async (
     payNoteRepository,
     payNoteDeliveryRepository,
     payNoteBootstrapRepository,
+    bootstrapContextRepository,
     contractRepository,
     bankingRepository,
     holdRepository,
@@ -305,6 +306,7 @@ export const payNoteWebhookHandler = async (
           contractRepository,
           bankingRepository,
           holdRepository,
+          bootstrapContextRepository,
           clock,
           enqueuePayNoteDeliverySummary: async input => {
             await enqueueSummaryJob(
@@ -331,6 +333,7 @@ export const payNoteWebhookHandler = async (
           payNoteRepository,
           payNoteDeliveryRepository,
           payNoteBootstrapRepository,
+          bootstrapContextRepository,
           contractRepository,
           holdRepository,
           clock,
@@ -352,6 +355,7 @@ export const payNoteWebhookHandler = async (
           holdRepository,
           payNoteRepository,
           payNoteDeliveryRepository,
+          bootstrapContextRepository,
           contractRepository,
           clock,
         }

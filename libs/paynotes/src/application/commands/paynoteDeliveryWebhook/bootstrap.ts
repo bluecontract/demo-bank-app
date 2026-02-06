@@ -691,15 +691,23 @@ const handlePayNoteBootstrapRequest = async (input: {
   });
   const payNoteSummary = getPayNoteSummaryFromDocument(payNoteDocument);
   const payNoteAmountMinor = payNoteSummary.amountMinor;
+  const holdForBootstrap =
+    existingDelivery?.merchantId || payNoteAmountMinor !== undefined
+      ? await resolveHoldForBootstrap({
+          existingDelivery,
+          requestingDeliveryCardDetails,
+          deps,
+        })
+      : null;
+  const merchantId =
+    existingDelivery?.merchantId ?? holdForBootstrap?.merchantId;
 
   if (payNoteAmountMinor !== undefined) {
-    const hold = await resolveHoldForBootstrap({
-      existingDelivery,
-      requestingDeliveryCardDetails,
-      deps,
-    });
-    if (hold && hold.amountMinor !== payNoteAmountMinor) {
-      const deliveryError = `PayNote amount (${payNoteAmountMinor}) does not match transaction amount (${hold.amountMinor})`;
+    if (
+      holdForBootstrap &&
+      holdForBootstrap.amountMinor !== payNoteAmountMinor
+    ) {
+      const deliveryError = `PayNote amount (${payNoteAmountMinor}) does not match transaction amount (${holdForBootstrap.amountMinor})`;
       return rejectPayNoteBootstrapRequest({
         eventId,
         deliveryId,
@@ -707,9 +715,9 @@ const handlePayNoteBootstrapRequest = async (input: {
         reason: deliveryError,
         logMessage: 'PayNote bootstrap request rejected (amount mismatch)',
         logContext: {
-          holdId: hold.holdId,
+          holdId: holdForBootstrap.holdId,
           payNoteAmountMinor,
-          holdAmountMinor: hold.amountMinor,
+          holdAmountMinor: holdForBootstrap.amountMinor,
         },
         credentials,
         deps,
@@ -758,6 +766,14 @@ const handlePayNoteBootstrapRequest = async (input: {
       payNoteBootstrapSessionId:
         existingDelivery.payNoteBootstrapSessionId ?? bootstrapSessionId,
       updatedAt: now,
+    });
+  }
+
+  if (bootstrapSessionId && merchantId) {
+    await deps.bootstrapContextRepository.saveContext({
+      bootstrapSessionId,
+      merchantId,
+      createdAt: now,
     });
   }
 

@@ -66,6 +66,7 @@ const contractSummary = {
   displayName: 'GE Refrigerator Order',
   documentName: 'GE Refrigerator Order',
   status: 'ACTIVE',
+  from: { name: 'Acme Appliances' },
   updatedAt: '2026-02-04T07:20:00.000Z',
 } as ContractSummary;
 
@@ -76,6 +77,7 @@ const proposalSummary = {
   clientDecisionStatus: 'pending',
   amountMinor: 100,
   currency: 'USD',
+  from: { name: 'Slow Digestion' },
   createdAt: '2026-02-04T07:15:00.000Z',
   updatedAt: '2026-02-04T07:21:00.000Z',
   payNoteSessionIds: [],

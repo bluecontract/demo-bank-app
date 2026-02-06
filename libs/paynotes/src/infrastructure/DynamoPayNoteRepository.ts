@@ -40,6 +40,7 @@ interface PayNoteItem {
   userId?: string;
   holdId?: string;
   transactionId?: string;
+  merchantId?: string;
   lastCaptureLockEventId?: string;
   lastCaptureUnlockEventId?: string;
   payerAccountNumber?: string;
@@ -105,6 +106,7 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       userId: item.userId,
       holdId: item.holdId,
       transactionId: item.transactionId,
+      merchantId: item.merchantId,
       lastCaptureLockEventId: item.lastCaptureLockEventId,
       lastCaptureUnlockEventId: item.lastCaptureUnlockEventId,
       payerAccountNumber: item.payerAccountNumber,
@@ -169,6 +171,7 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       userId: record.userId,
       holdId: record.holdId,
       transactionId: record.transactionId,
+      merchantId: record.merchantId,
       lastCaptureLockEventId: record.lastCaptureLockEventId,
       lastCaptureUnlockEventId: record.lastCaptureUnlockEventId,
       payerAccountNumber: record.payerAccountNumber,

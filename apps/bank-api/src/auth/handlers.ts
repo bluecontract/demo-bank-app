@@ -13,11 +13,15 @@ import { getDependencies } from './dependencies';
 import { getDependencies as getBankingDependencies } from '../banking/dependencies';
 import { ServerInferRequest } from '@ts-rest/core';
 import { toUnauthorizedResponse } from '../shared/errors';
-import { toUserAlreadyExistsError } from './errors';
+import {
+  toMerchantAlreadyRegisteredError,
+  toUserAlreadyExistsError,
+} from './errors';
 import {
   extractAuthInfo,
   type MaybeAuthenticatedTsRestRequestContext,
 } from './middleware';
+import { MerchantDirectoryOwnershipError } from '@demo-bank-app/auth';
 
 const COOKIE_CONFIG = {
   NAME: 'demoAuth',
@@ -93,10 +97,20 @@ const finalizeMerchantSignUp = async (
   result: AuthResult,
   isMerchantSignup: boolean,
   config: { jwtTtlSeconds: number; testUserTtlSeconds: number },
-  responseHeaders: Headers
+  responseHeaders: Headers,
+  deps: Awaited<ReturnType<typeof getDependencies>>
 ) => {
   if (isMerchantSignup) {
     await ensureMerchantCreditLineAccount(result.user);
+    if (result.user.merchantId && result.user.merchantName) {
+      await deps.merchantDirectoryRepository.upsertMerchantProfile({
+        merchantId: result.user.merchantId,
+        name: result.user.merchantName,
+        logoUrl: result.user.avatarDataUrl,
+        ownerUserId: result.user.id,
+        updatedAt: new Date().toISOString(),
+      });
+    }
   }
   return toAuthResponse(201, result, config, responseHeaders);
 };
@@ -133,23 +147,48 @@ export const signUpHandler = async (
       deps
     );
 
-    return finalizeMerchantSignUp(
-      result,
-      isMerchantSignup,
-      config,
-      responseHeaders
-    );
+    try {
+      return await finalizeMerchantSignUp(
+        result,
+        isMerchantSignup,
+        config,
+        responseHeaders,
+        deps
+      );
+    } catch (error: unknown) {
+      if (error instanceof MerchantDirectoryOwnershipError) {
+        return toMerchantAlreadyRegisteredError(
+          'Merchant ID is already registered by another account.'
+        );
+      }
+      throw error;
+    }
   } catch (error: unknown) {
     logger.error('Sign-up failed', { error: String(error) });
+    if (error instanceof MerchantDirectoryOwnershipError) {
+      return toMerchantAlreadyRegisteredError(
+        'Merchant ID is already registered by another account.'
+      );
+    }
     if (error instanceof UserAlreadyExistsError) {
       if (isMerchantSignup) {
         const result = await signIn({ email: body.email }, deps);
-        return finalizeMerchantSignUp(
-          result,
-          isMerchantSignup,
-          config,
-          responseHeaders
-        );
+        try {
+          return await finalizeMerchantSignUp(
+            result,
+            isMerchantSignup,
+            config,
+            responseHeaders,
+            deps
+          );
+        } catch (finalizeError: unknown) {
+          if (finalizeError instanceof MerchantDirectoryOwnershipError) {
+            return toMerchantAlreadyRegisteredError(
+              'Merchant ID is already registered by another account.'
+            );
+          }
+          throw finalizeError;
+        }
       }
       return toUserAlreadyExistsError(
         'A user with this email already exists. Please use a different email.'
@@ -193,7 +232,7 @@ export const updateUserProfileHandler = async (
   { request }: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
   const deps = await getDependencies();
-  const { logger, userRepository } = deps;
+  const { logger, userRepository, merchantDirectoryRepository } = deps;
   const { userId } = await extractAuthInfo(request);
 
   const hasUpdates =
@@ -214,6 +253,16 @@ export const updateUserProfileHandler = async (
       avatarDataUrl: body.avatarDataUrl,
     });
 
+    if (updatedUser.merchantId && updatedUser.merchantName) {
+      await merchantDirectoryRepository.upsertMerchantProfile({
+        merchantId: updatedUser.merchantId,
+        name: updatedUser.merchantName,
+        logoUrl: updatedUser.avatarDataUrl,
+        ownerUserId: updatedUser.id,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
     return {
       status: 200 as const,
       body: toUserProfileBody({
@@ -228,6 +277,11 @@ export const updateUserProfileHandler = async (
       }),
     };
   } catch (error: unknown) {
+    if (error instanceof MerchantDirectoryOwnershipError) {
+      return toMerchantAlreadyRegisteredError(
+        'Merchant ID is already registered by another account.'
+      );
+    }
     logger.error('Update profile failed', { error: String(error) });
     throw error;
   }

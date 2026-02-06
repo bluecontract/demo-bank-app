@@ -418,6 +418,12 @@ export const PayNoteSummaryDto = z.object({
   currency: z.string().optional(),
 });
 
+export const MerchantFromDto = z.object({
+  merchantId: z.string().optional(),
+  name: z.string(),
+  logoUrl: z.string().optional(),
+});
+
 export const PayNoteDeliverySummaryDto = z.object({
   deliveryId: z.string(),
   deliverySessionId: z.string().optional(),
@@ -425,6 +431,7 @@ export const PayNoteDeliverySummaryDto = z.object({
   name: z.string().optional(),
   amountMinor: MoneyMinor.optional(),
   currency: z.string().optional(),
+  from: MerchantFromDto,
   summaryPreview: z.string().optional(),
   deliveryStatus: z.string().optional(),
   transactionIdentificationStatus: z.string().optional(),
@@ -477,6 +484,7 @@ export const ContractSummaryDto = z.object({
   documentId: z.string().optional(),
   status: z.string().optional(),
   archivedAt: z.string().datetime({ offset: true }).optional(),
+  from: MerchantFromDto,
   summaryPreview: z.string().optional(),
   summaryUpdatedAt: z.string().datetime({ offset: true }).optional(),
   summarySourceUpdatedAt: z.string().datetime({ offset: true }).optional(),

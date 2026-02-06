@@ -95,6 +95,7 @@ export const upsertContractRecord = async (input: {
   accountNumber?: string;
   relatedTransactionIds?: string[];
   relatedHoldIds?: string[];
+  merchantId?: string;
   status?: string;
   statusTimestamps?: ContractStatusTimestamps;
   triggerEvent?: unknown;
@@ -166,6 +167,7 @@ export const upsertContractRecord = async (input: {
   );
   const nextAccountNumber = input.accountNumber ?? existing?.accountNumber;
   const nextUserId = input.userId ?? existing?.userId;
+  const nextMerchantId = input.merchantId ?? existing?.merchantId;
 
   const summaryInputsChanged =
     !areJsonValuesEqual(nextDocument, existing?.document) ||
@@ -198,6 +200,7 @@ export const upsertContractRecord = async (input: {
     relatedHoldIds: nextRelatedHoldIds,
     accountNumber: nextAccountNumber,
     userId: nextUserId,
+    merchantId: nextMerchantId,
     summary: existing?.summary,
     summaryUpdatedAt: existing?.summaryUpdatedAt,
     summarySourceUpdatedAt: existing?.summarySourceUpdatedAt,
