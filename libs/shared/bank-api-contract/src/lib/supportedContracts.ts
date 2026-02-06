@@ -7,7 +7,6 @@ import {
   PayNoteSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
 import { z } from 'zod';
-import { createDefaultMergingProcessor } from '@blue-labs/document-processor';
 
 export type SupportedContract = {
   typeBlueId: string;
@@ -30,7 +29,6 @@ const buildDisplayName = (typeName: string) =>
 
 export const blue = new Blue({
   repositories: [repository],
-  mergingProcessor: createDefaultMergingProcessor(),
 });
 
 const supportedContractDefinitions: SupportedContractDefinition[] = [

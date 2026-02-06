@@ -17,11 +17,9 @@ import { DocumentSessionBootstrapSchema } from '@blue-repository/types/packages/
 import { getDependencies } from './dependencies';
 import type { SummaryJob } from '../summary/types';
 import type { PowertoolsLogger } from '@demo-bank-app/shared-observability';
-import { createDefaultMergingProcessor } from '@blue-labs/document-processor';
 
 const blue = new Blue({
   repositories: [repository],
-  mergingProcessor: createDefaultMergingProcessor(),
 });
 
 let cachedLambdaClient: LambdaClient | null = null;

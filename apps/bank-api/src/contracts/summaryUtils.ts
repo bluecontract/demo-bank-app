@@ -3,7 +3,6 @@ import {
   getTypeAliasByBlueId,
   repository as blueRepository,
 } from '@blue-repository/types';
-import { createDefaultMergingProcessor } from '@blue-labs/document-processor';
 
 export class ContractSummaryInputError extends Error {
   override name = 'ContractSummaryInputError';
@@ -11,7 +10,6 @@ export class ContractSummaryInputError extends Error {
 
 export const summaryBlue = new Blue({
   repositories: [blueRepository],
-  mergingProcessor: createDefaultMergingProcessor(),
 });
 
 export const toBlueNode = (value: unknown): BlueNode | null => {

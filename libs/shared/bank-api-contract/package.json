@@ -38,7 +38,6 @@
     }
   },
   "dependencies": {
-    "@blue-labs/document-processor": "^3.4.1",
     "@blue-labs/language": "3.4.1",
     "@blue-repository/types": "^0.13.0",
     "@ts-rest/core": "^3.52.1",
