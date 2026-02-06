@@ -46,8 +46,6 @@ const SUMMARY_TIMEOUT = Number.isFinite(SUMMARY_TIMEOUT_MS)
 
 const SYSTEM_PROMPT = buildContractSummaryPrompt();
 
-const HISTORY_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
-
 const formatMinorAmount = (amountMinor?: number, currency?: string) => {
   if (typeof amountMinor !== 'number' || Number.isNaN(amountMinor)) {
     return undefined;
@@ -123,14 +121,6 @@ const toIsoFromEpoch = (value: number): string | undefined => {
     return undefined;
   }
   return date.toISOString();
-};
-
-const toIsoMs = (value?: string): number | undefined => {
-  if (!value) {
-    return undefined;
-  }
-  const ms = Date.parse(value);
-  return Number.isNaN(ms) ? undefined : ms;
 };
 
 const extractTriggerEventMeta = (input: {
@@ -708,41 +698,20 @@ const generateOrLoadContractSummary = async (input: {
       contract.contractId
     );
     const triggerMeta = triggerEventMeta ?? null;
-    const historyId = triggerMeta?.blueId ?? undefined;
+    const historyId =
+      triggerMeta?.blueId ??
+      `init:${contract.documentId ?? contract.contractId}`;
     const historyCreatedAt = triggerMeta?.createdAt ?? contract.updatedAt;
-    const hasExistingId = historyId
-      ? historyEntries.some(entry => entry.id === historyId)
-      : false;
-    const historyCreatedAtMs = toIsoMs(historyCreatedAt);
-    const isDuplicateText = historyEntries.some(entry => {
-      if (
-        entry.kind !== historyKind ||
-        entry.short !== historyShort ||
-        (entry.more ?? null) !== (historyMore ?? null)
-      ) {
-        return false;
-      }
-      if (!historyCreatedAtMs) {
-        return true;
-      }
-      const entryCreatedAtMs = toIsoMs(entry.createdAt);
-      if (!entryCreatedAtMs) {
-        return true;
-      }
-      return (
-        Math.abs(entryCreatedAtMs - historyCreatedAtMs) <=
-        HISTORY_DEDUPE_WINDOW_MS
-      );
-    });
+    const hasExistingId = historyEntries.some(entry => entry.id === historyId);
 
-    if (!hasExistingId && !isDuplicateText) {
+    if (!hasExistingId) {
       await input.contractRepository.addContractHistoryEntry({
         contractId: contract.contractId,
         kind: historyKind,
         short: historyShort,
         more: historyMore,
         createdAt: historyCreatedAt,
-        id: historyId ?? `summary:${historyCreatedAt}`,
+        id: historyId,
       });
     }
 

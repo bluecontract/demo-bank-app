@@ -35,6 +35,7 @@ export function useContractDetails(sessionId: string | null) {
     enabled: !!sessionId,
     staleTime: 30 * 1000,
     gcTime: 2 * 60 * 1000,
+    refetchOnMount: 'always',
     retry: (failureCount, error) => {
       if (error.status === 401 || error.status === 403) {
         return false;

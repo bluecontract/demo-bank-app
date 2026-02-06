@@ -1,4 +1,5 @@
 import { useMemo, type MouseEvent, type KeyboardEvent } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import {
@@ -181,6 +182,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
   const { markItemReviewed, reviewedMap } = useContractReviewState();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
 
   const refreshInterval = getContractsPollingInterval();
   const contractsQuery = useContracts({ refetchInterval: refreshInterval });
@@ -219,6 +221,8 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
     if (!sid) {
       return;
     }
+    queryClient.removeQueries({ queryKey: ['contract-details', sid] });
+    queryClient.removeQueries({ queryKey: ['proposal-details', sid] });
     markItemReviewed(item);
     navigate(`/contracts/${sid}`, {
       state: {

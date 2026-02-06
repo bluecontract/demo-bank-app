@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateContractSummaryHandler } from './generateContractSummary';
+import { summaryBlue } from './summaryUtils';
 import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 
 const hoistedOpenAI = vi.hoisted(() => {
@@ -268,7 +269,14 @@ describe('generateContractSummaryHandler', () => {
     );
   });
 
-  it('skips adding duplicate history entries when last change matches', async () => {
+  it('skips adding duplicate history entries when history id matches', async () => {
+    const triggerEvent = {
+      timestamp: 1767312000000,
+      actor: { accountId: 'acct-1' },
+    };
+    const triggerNode = summaryBlue.jsonValueToNode(triggerEvent);
+    const triggerId = summaryBlue.calculateBlueIdSync(triggerNode);
+
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
       typeBlueId: payNoteTypeBlueId,
@@ -279,6 +287,7 @@ describe('generateContractSummaryHandler', () => {
         name: 'Test PayNote',
         contracts: {},
       },
+      triggerEvent,
       userId: 'user-123',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:00:00.000Z',
@@ -286,7 +295,7 @@ describe('generateContractSummaryHandler', () => {
 
     contractRepository.listContractHistory.mockResolvedValueOnce([
       {
-        id: 'history-1',
+        id: triggerId,
         contractId: 'sess-1',
         kind: 'contractUpdated',
         short: summaryFixture.lastChange.short,
@@ -312,7 +321,7 @@ describe('generateContractSummaryHandler', () => {
     expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
   });
 
-  it('skips adding duplicate history entries when matching text exists within the window', async () => {
+  it('uses init history id when trigger event is missing', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
       typeBlueId: payNoteTypeBlueId,
@@ -328,24 +337,7 @@ describe('generateContractSummaryHandler', () => {
       updatedAt: '2026-01-02T00:02:00.000Z',
     });
 
-    contractRepository.listContractHistory.mockResolvedValueOnce([
-      {
-        id: 'history-2',
-        contractId: 'sess-1',
-        kind: 'contractUpdated',
-        short: 'Some other change',
-        more: 'Other details',
-        createdAt: '2026-01-02T00:03:00.000Z',
-      },
-      {
-        id: 'history-1',
-        contractId: 'sess-1',
-        kind: 'contractUpdated',
-        short: summaryFixture.lastChange.short,
-        more: summaryFixture.lastChange.more,
-        createdAt: '2026-01-02T00:00:00.000Z',
-      },
-    ]);
+    contractRepository.listContractHistory.mockResolvedValueOnce([]);
 
     hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
       output_parsed: summaryFixture,
@@ -361,51 +353,11 @@ describe('generateContractSummaryHandler', () => {
 
     expect(result.status).toBe(200);
     expect(contractRepository.updateContractSummary).toHaveBeenCalled();
-    expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
-  });
-
-  it('adds history when matching text exists outside the window', async () => {
-    contractRepository.getContractBySessionId.mockResolvedValueOnce({
-      contractId: 'sess-1',
-      typeBlueId: payNoteTypeBlueId,
-      displayName: 'PayNote',
-      sessionId: 'sess-1',
-      document: {
-        type: { blueId: payNoteTypeBlueId },
-        name: 'Test PayNote',
-        contracts: {},
-      },
-      userId: 'user-123',
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-02T01:00:00.000Z',
-    });
-
-    contractRepository.listContractHistory.mockResolvedValueOnce([
-      {
-        id: 'history-1',
-        contractId: 'sess-1',
-        kind: 'contractUpdated',
-        short: summaryFixture.lastChange.short,
-        more: summaryFixture.lastChange.more,
-        createdAt: '2026-01-01T00:00:00.000Z',
-      },
-    ]);
-
-    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
-      output_parsed: summaryFixture,
-    });
-
-    const result = await generateContractSummaryHandler(
-      {
-        params: { sessionId: 'sess-1' },
-        body: { force: true },
-      } as any,
-      { request: {} as any }
+    expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'init:sess-1',
+      })
     );
-
-    expect(result.status).toBe(200);
-    expect(contractRepository.updateContractSummary).toHaveBeenCalled();
-    expect(contractRepository.addContractHistoryEntry).toHaveBeenCalled();
   });
 
   it('returns 400 when type pack is missing required type definitions', async () => {
