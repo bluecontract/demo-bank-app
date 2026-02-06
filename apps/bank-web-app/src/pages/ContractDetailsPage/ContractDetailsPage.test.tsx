@@ -201,9 +201,9 @@ describe('ContractDetailsPage', () => {
       screen.getByText('Funds will be held until delivery is confirmed.')
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument();
-    expect(screen.queryByText('View details')).not.toBeInTheDocument();
+    expect(screen.queryByText('Highlights')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'More' }));
-    expect(screen.getByText('View details')).toBeInTheDocument();
+    expect(screen.getByText('Highlights')).toBeInTheDocument();
     expect(screen.queryByText('View history')).not.toBeInTheDocument();
     expect(markReviewedMock).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-1' })

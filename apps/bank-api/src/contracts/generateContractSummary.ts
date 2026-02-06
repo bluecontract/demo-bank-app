@@ -166,9 +166,14 @@ const extractTriggerEventMeta = (input: {
 
   let createdAt: string | undefined;
   if (triggerNode) {
-    const timestampValue =
-      triggerNode.getAsInteger('/timestamp') ??
-      getNumberValue(triggerNode.getAsNode('/timestamp')?.getValue());
+    let timestampValue: number | undefined;
+    try {
+      timestampValue =
+        triggerNode.getAsInteger('/timestamp') ??
+        getNumberValue(triggerNode.getAsNode('/timestamp')?.getValue());
+    } catch {
+      timestampValue = undefined;
+    }
     if (timestampValue !== undefined) {
       createdAt = toIsoFromEpoch(timestampValue);
     }
@@ -697,12 +702,9 @@ const generateOrLoadContractSummary = async (input: {
       summary.story?.headline?.trim() || summary.listPreview;
 
     const summarySnapshotPayload = {
-      summaryDocument: contract.document,
       summaryStatus: contract.status,
       summaryStatusUpdatedAt: contract.statusUpdatedAt,
       summaryStatusTimestamps: contract.statusTimestamps,
-      summaryTriggerEvent: contract.triggerEvent,
-      summaryEmittedEvents: contract.emittedEvents,
       summarySourceUpdatedAt: contract.updatedAt,
       summaryUpdatedAt: now,
       summaryInputBlueId,
@@ -725,13 +727,10 @@ const generateOrLoadContractSummary = async (input: {
         summaryInputBlueId,
         summaryModel: model,
         summaryError: null,
-        summaryDocument: contract.document,
         summaryDocumentName: contract.documentName,
         summaryStatus: contract.status,
         summaryStatusUpdatedAt: contract.statusUpdatedAt,
         summaryStatusTimestamps: contract.statusTimestamps,
-        summaryTriggerEvent: contract.triggerEvent,
-        summaryEmittedEvents: contract.emittedEvents,
         userId: contract.userId,
         relatedTransactionIds: contract.relatedTransactionIds,
         relatedHoldIds: contract.relatedHoldIds,
@@ -743,9 +742,6 @@ const generateOrLoadContractSummary = async (input: {
           sessionId: contract.sessionId,
           snapshotSizeBytes,
           fieldSizes: {
-            summaryDocument: getJsonSizeBytes(contract.document),
-            summaryTriggerEvent: getJsonSizeBytes(contract.triggerEvent),
-            summaryEmittedEvents: getJsonSizeBytes(contract.emittedEvents),
             summaryStatus: getJsonSizeBytes(contract.status),
             summaryStatusUpdatedAt: getJsonSizeBytes(contract.statusUpdatedAt),
             summaryStatusTimestamps: getJsonSizeBytes(

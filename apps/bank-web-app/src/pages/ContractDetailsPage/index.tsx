@@ -27,7 +27,6 @@ import {
   isProposalRelatedContract,
 } from '../../features/transactions/lib/relatedContracts';
 import { ContractOperationsList } from '../../features/contracts/components/ContractOperationsList';
-import { ContractRawDocument } from '../../features/contracts/components/ContractRawDocument';
 import { ContractRelatedActivitySection } from '../../features/contracts/components/ContractRelatedActivitySection';
 import { ContractAiChatDrawer } from '../../features/contracts/components/ContractAiChatDrawer';
 import { Avatar } from '../../ui/Avatar';
@@ -38,7 +37,6 @@ import { formatShortDateTime } from '../../lib/formatDate';
 import { formatStatusLabel } from '../../lib/formatStatusLabel';
 import { getSupportedContractByTypeBlueId } from '@demo-bank-app/shared-bank-api-contract';
 import type {
-  ContractDetails,
   ContractSummary,
   PayNoteDeliveryDetailsSanitized,
   RelatedContractItem,
@@ -169,53 +167,6 @@ function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
         </Button>
       </div>
     </div>
-  );
-}
-
-interface ContractDetailsAccordionProps {
-  contract: ContractDetails | null;
-}
-
-function ContractDetailsAccordion({ contract }: ContractDetailsAccordionProps) {
-  return (
-    <details className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white/80">
-      <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-sm font-semibold text-slate-900">
-        <svg
-          className="h-4 w-4 text-slate-400"
-          viewBox="0 0 20 20"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            fillRule="evenodd"
-            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-            clipRule="evenodd"
-          />
-        </svg>
-        View details
-      </summary>
-      <div className="border-t border-slate-200 px-4 pb-4 pt-3 space-y-5 text-sm text-slate-600">
-        {!contract && (
-          <p className="text-sm text-slate-500">
-            Contract details will appear once the proposal is accepted.
-          </p>
-        )}
-
-        {contract && (
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-              Raw document
-            </p>
-            <div className="mt-3">
-              <ContractRawDocument
-                document={contract.document}
-                emptyLabel="Contract document not available."
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    </details>
   );
 }
 
@@ -421,10 +372,6 @@ export function ContractDetailsPage() {
     resolvedSummary?.nextSteps?.title ?? 'Next steps';
   const summaryLastChangeShort =
     resolvedSummary?.lastChange?.short?.trim() || null;
-  const hasSummaryExtras =
-    summaryBullets.length > 0 ||
-    summaryNextSteps.length > 0 ||
-    Boolean(summaryLastChangeShort);
   const isSummaryLoading =
     proposalSummaryQuery.isLoading && !resolvedSummary && !!proposal;
   const isSummaryFetching =
@@ -740,10 +687,6 @@ export function ContractDetailsPage() {
                           ))}
                         </ul>
                       </div>
-                    )}
-
-                    {(hasSummaryExtras || contract || proposal) && (
-                      <ContractDetailsAccordion contract={contract} />
                     )}
                   </div>
                 )}

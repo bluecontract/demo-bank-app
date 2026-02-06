@@ -48,6 +48,9 @@ const proposal: PayNoteDeliveryDetailsSanitized = {
     amountMinor: 1200,
     currency: 'USD',
   },
+  from: {
+    name: 'Merchant',
+  },
   accountNumber: '1234567890',
   transactionId: 'txn-123',
   holdId: 'hold-55',

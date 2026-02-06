@@ -56,9 +56,7 @@ export const getContractDetailsHandler = async (
     : null;
   const shouldUseSnapshotPayload =
     shouldUseSummarySnapshot &&
-    (summarySnapshot?.summarySourceUpdatedAt ===
-      contract.summarySourceUpdatedAt ||
-      Boolean(contract.summaryDocument));
+    summarySnapshot?.summarySourceUpdatedAt === contract.summarySourceUpdatedAt;
   const effectiveUpdatedAt =
     shouldUseSummarySnapshot && contract.summarySourceUpdatedAt
       ? contract.summarySourceUpdatedAt
@@ -94,24 +92,12 @@ export const getContractDetailsHandler = async (
           contract.summaryStatusTimestamps ??
           contract.statusTimestamps
         : contract.statusTimestamps,
-      triggerEvent: shouldUseSnapshotPayload
-        ? summarySnapshot?.summaryTriggerEvent ??
-          contract.summaryTriggerEvent ??
-          contract.triggerEvent
-        : contract.triggerEvent,
-      emittedEvents: shouldUseSnapshotPayload
-        ? summarySnapshot?.summaryEmittedEvents ??
-          contract.summaryEmittedEvents ??
-          contract.emittedEvents
-        : contract.emittedEvents,
+      triggerEvent: contract.triggerEvent,
+      emittedEvents: contract.emittedEvents,
       relatedTransactionIds: contract.relatedTransactionIds,
       relatedHoldIds: contract.relatedHoldIds,
       accountNumber: contract.accountNumber,
-      document: shouldUseSnapshotPayload
-        ? summarySnapshot?.summaryDocument ??
-          contract.summaryDocument ??
-          contract.document
-        : contract.document,
+      document: contract.document,
       summary: normalizedSummary ?? undefined,
       summaryUpdatedAt: contract.summaryUpdatedAt,
       summarySourceUpdatedAt: contract.summarySourceUpdatedAt,

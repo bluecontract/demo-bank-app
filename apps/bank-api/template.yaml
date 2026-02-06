@@ -10,11 +10,6 @@ Parameters:
   AwsEndpointUrl:
     Type: String
     Default: ''
-  ProvisionedConcurrency:
-    Type: Number
-    Default: 3
-    MinValue: 3
-    Description: 'Minimum number of warm instances to keep for each Lambda'
 
 Globals:
   Function:
@@ -192,8 +187,6 @@ Resources:
       CodeUri: ../../dist/apps/bank-api/lambda/
       Description: Banking API Lambda function
       AutoPublishAlias: live
-      ProvisionedConcurrencyConfig:
-        ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
       Environment:
         Variables:
           AUTH_DYNAMO_TABLE_NAME: !Ref BankTable
@@ -264,8 +257,6 @@ Resources:
       CodeUri: ../../dist/apps/bank-api/lambda/
       Description: Banking summary Lambda function
       AutoPublishAlias: live
-      ProvisionedConcurrencyConfig:
-        ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrency
       Environment:
         Variables:
           AUTH_DYNAMO_TABLE_NAME: !Ref BankTable
