@@ -7,6 +7,10 @@ import {
 import { getDependencies } from '../paynote/dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { normalizeContractSummary } from './summaryNormalization';
+import {
+  buildMerchantDirectoryMap,
+  resolveMerchantFrom,
+} from '../shared/merchantDirectory';
 
 export const getContractDetailsHandler = async (
   request: ServerInferRequest<
@@ -14,7 +18,8 @@ export const getContractDetailsHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { contractRepository, logger } = await getDependencies();
+  const { contractRepository, logger, merchantDirectoryRepository } =
+    await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const { sessionId } = request.params;
 
@@ -52,6 +57,11 @@ export const getContractDetailsHandler = async (
     shouldUseSummarySnapshot && contract.summarySourceUpdatedAt
       ? contract.summarySourceUpdatedAt
       : contract.updatedAt;
+  const directory = await buildMerchantDirectoryMap(
+    [contract.merchantId],
+    merchantDirectoryRepository
+  );
+  const from = resolveMerchantFrom(contract.merchantId, directory);
 
   return {
     status: 200 as const,
@@ -65,6 +75,7 @@ export const getContractDetailsHandler = async (
         ? contract.summaryStatus ?? contract.status
         : contract.status,
       archivedAt: contract.archivedAt,
+      from,
       statusUpdatedAt: shouldUseSummarySnapshot
         ? contract.summaryStatusUpdatedAt ?? contract.statusUpdatedAt
         : contract.statusUpdatedAt,

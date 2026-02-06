@@ -165,6 +165,7 @@ export interface PayNoteDeliverySummary {
   deliveryId: string;
   deliverySessionId?: string;
   payNoteSessionIds?: string[];
+  payNoteDocumentId?: string;
   name?: string;
   amountMinor?: number;
   currency?: string;

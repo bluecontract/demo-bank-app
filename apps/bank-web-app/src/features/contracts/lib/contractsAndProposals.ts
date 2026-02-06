@@ -93,6 +93,11 @@ export function mergeContractsAndProposals(
       .map(contract => [contract.sessionId, contract] as const)
       .filter((entry): entry is [string, ContractSummary] => Boolean(entry[0]))
   );
+  const contractByDocumentId = new Map(
+    contracts
+      .map(contract => [contract.documentId, contract] as const)
+      .filter((entry): entry is [string, ContractSummary] => Boolean(entry[0]))
+  );
   const contractSessionIds = new Set(
     contracts
       .map(contract => contract.sessionId)
@@ -115,10 +120,19 @@ export function mergeContractsAndProposals(
     const matchingSessionId = Array.from(candidateSessionIds).find(id =>
       contractSessionIds.has(id)
     );
-    if (!isRejected && matchingSessionId) {
-      const contract = contractBySessionId.get(matchingSessionId);
+    const matchingContract =
+      (matchingSessionId
+        ? contractBySessionId.get(matchingSessionId)
+        : undefined) ??
+      (proposal.payNoteDocumentId
+        ? contractByDocumentId.get(proposal.payNoteDocumentId)
+        : undefined);
+    if (!isRejected && matchingContract) {
+      const contract = matchingContract;
       if (contract) {
-        matchedContractSessionIds.add(matchingSessionId);
+        if (matchingSessionId) {
+          matchedContractSessionIds.add(matchingSessionId);
+        }
         matchedContractIds.add(contract.contractId);
         mergedItems.push({
           ...contract,

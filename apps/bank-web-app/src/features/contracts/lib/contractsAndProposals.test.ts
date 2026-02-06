@@ -13,6 +13,7 @@ const baseContract: ContractSummary = {
   typeBlueId: 'type-blue-1',
   displayName: 'Sample Contract',
   sessionId: 'contract-session-1',
+  documentId: 'contract-doc-1',
   createdAt: '2026-02-01T10:00:00.000Z',
   updatedAt: '2026-02-01T10:05:00.000Z',
   from: {
@@ -76,6 +77,23 @@ describe('mergeContractsAndProposals', () => {
     const result = mergeContractsAndProposals(
       [{ ...baseContract, sessionId: 'proposal-session-1' }],
       [{ ...baseProposal, payNoteSessionIds: [] }]
+    );
+
+    expect(result).toHaveLength(1);
+    expect(isProposalItem(result[0])).toBe(false);
+  });
+
+  it('replaces proposal when paynote document id matches', () => {
+    const result = mergeContractsAndProposals(
+      [{ ...baseContract, sessionId: undefined, documentId: 'doc-42' }],
+      [
+        {
+          ...baseProposal,
+          payNoteSessionIds: [],
+          deliverySessionId: undefined,
+          payNoteDocumentId: 'doc-42',
+        },
+      ]
     );
 
     expect(result).toHaveLength(1);

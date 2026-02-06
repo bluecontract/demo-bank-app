@@ -7,6 +7,10 @@ import {
 import { getDependencies } from './dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { getPayNoteSummaryFromDocument } from '@demo-bank-app/paynotes';
+import {
+  buildMerchantDirectoryMap,
+  resolveMerchantFrom,
+} from '../shared/merchantDirectory';
 
 export const getPayNoteDeliveryBySessionIdHandler = async (
   request: ServerInferRequest<
@@ -14,7 +18,8 @@ export const getPayNoteDeliveryBySessionIdHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { payNoteDeliveryRepository, logger } = await getDependencies();
+  const { payNoteDeliveryRepository, logger, merchantDirectoryRepository } =
+    await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const { sessionId } = request.params;
 
@@ -53,6 +58,12 @@ export const getPayNoteDeliveryBySessionIdHandler = async (
       )
     : {};
 
+  const directory = await buildMerchantDirectoryMap(
+    [record.merchantId],
+    merchantDirectoryRepository
+  );
+  const from = resolveMerchantFrom(record.merchantId, directory);
+
   return {
     status: 200 as const,
     body: {
@@ -63,6 +74,7 @@ export const getPayNoteDeliveryBySessionIdHandler = async (
       clientDecisionStatus: record.clientDecisionStatus,
       cardTransactionDetails: record.cardTransactionDetails,
       payNote: payNoteSummary,
+      from,
       accountNumber: record.accountNumber,
       holdId: record.holdId,
       transactionId: record.transactionId,

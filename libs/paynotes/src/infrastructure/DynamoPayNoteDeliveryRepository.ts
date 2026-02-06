@@ -789,6 +789,7 @@ export class DynamoPayNoteDeliveryRepository
           deliveryId: record.deliveryId,
           deliverySessionId: record.deliverySessionId,
           payNoteSessionIds: record.payNoteSessionIds,
+          payNoteDocumentId: record.payNoteDocumentId,
           name: payNoteSummary.name ?? deliveryName,
           amountMinor: payNoteSummary.amountMinor,
           currency: payNoteSummary.currency,

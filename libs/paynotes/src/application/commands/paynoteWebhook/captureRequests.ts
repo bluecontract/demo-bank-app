@@ -638,6 +638,30 @@ const handleCaptureRequestEvent = async (
   }
 
   if (eventType === CAPTURE_LOCK_REQUESTED_EVENT_NAME) {
+    if (captureHold.hold.captureDisabled) {
+      trace(
+        logs,
+        'Skipped PayNote capture lock confirmation (already locked)',
+        {
+          eventId,
+          payNoteDocumentId,
+          holdId: captureHold.holdId,
+          captureEventId,
+        }
+      );
+      if (captureEventId) {
+        await persistCaptureEventId({
+          updatedRecord,
+          captureEventId,
+          eventType: 'lock',
+          deps,
+          logs,
+          payNoteDocumentId,
+          eventId,
+        });
+      }
+      return;
+    }
     const confirmed = await applyCaptureLock({
       holdId: captureHold.holdId,
       eventId,
@@ -652,6 +676,31 @@ const handleCaptureRequestEvent = async (
         updatedRecord,
         captureEventId,
         eventType: 'lock',
+        deps,
+        logs,
+        payNoteDocumentId,
+        eventId,
+      });
+    }
+    return;
+  }
+
+  if (!captureHold.hold.captureDisabled) {
+    trace(
+      logs,
+      'Skipped PayNote capture unlock confirmation (already unlocked)',
+      {
+        eventId,
+        payNoteDocumentId,
+        holdId: captureHold.holdId,
+        captureEventId,
+      }
+    );
+    if (captureEventId) {
+      await persistCaptureEventId({
+        updatedRecord,
+        captureEventId,
+        eventType: 'unlock',
         deps,
         logs,
         payNoteDocumentId,

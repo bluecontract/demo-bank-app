@@ -23,6 +23,9 @@ describe('getPayNoteDeliveryBySessionIdHandler', () => {
   const payNoteDeliveryRepository = {
     getDeliveryBySessionId: vi.fn(),
   };
+  const merchantDirectoryRepository = {
+    getMerchantsByIds: vi.fn(),
+  };
 
   beforeEach(() => {
     hoisted.getDependenciesMock.mockReset();
@@ -30,9 +33,12 @@ describe('getPayNoteDeliveryBySessionIdHandler', () => {
     logger.info.mockReset();
     payNoteDeliveryRepository.getDeliveryBySessionId.mockReset();
 
+    merchantDirectoryRepository.getMerchantsByIds.mockResolvedValue([]);
+
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       payNoteDeliveryRepository,
+      merchantDirectoryRepository,
     });
 
     hoisted.extractAuthInfoMock.mockResolvedValue({
@@ -57,6 +63,7 @@ describe('getPayNoteDeliveryBySessionIdHandler', () => {
       deliveryId: 'delivery-1',
       deliverySessionId: 'session-1',
       userId: 'user-1',
+      merchantId: 'merchant-1',
       transactionIdentificationStatus: 'identified',
       clientDecisionStatus: 'pending',
       summary: {
@@ -109,6 +116,9 @@ describe('getPayNoteDeliveryBySessionIdHandler', () => {
           name: 'Invoice 42',
           amountMinor: 1200,
           currency: 'USD',
+        },
+        from: {
+          name: 'Merchant',
         },
       })
     );

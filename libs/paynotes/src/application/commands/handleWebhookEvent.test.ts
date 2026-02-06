@@ -299,6 +299,57 @@ describe('handleWebhookEvent', () => {
     );
   });
 
+  it('skips confirming capture lock when hold already locked', async () => {
+    const { deps, fetchEvent } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: { type: 'PayNote/PayNote', name: 'Slow Digestion PayNote' },
+          emitted: [
+            {
+              type: { name: 'PayNote/Card Transaction Capture Lock Requested' },
+              cardTransactionDetails: {
+                authorizationCode: { value: 'AUTH01' },
+              },
+            },
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      holdId: 'hold-1',
+      lastCaptureLockEventId: 'previous-lock',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    (deps.holdRepository.getHold as any).mockResolvedValue({
+      holdId: 'hold-1',
+      payerAccountNumber: '955',
+      amountMinor: 12000,
+      currency: 'USD',
+      status: 'PENDING',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '111111111111',
+        systemTraceAuditNumber: '222222',
+        transmissionDateTime: '0101000000',
+        authorizationCode: 'AUTH01',
+      },
+      captureDisabled: true,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.holdRepository.disableHoldCapture).not.toHaveBeenCalled();
+    expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+  });
+
   it('transfers funds when capture immediately is requested', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     fetchEvent.mockResolvedValueOnce({

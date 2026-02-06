@@ -23,6 +23,9 @@ describe('getContractDetailsHandler', () => {
   const contractRepository = {
     getContractBySessionId: vi.fn(),
   };
+  const merchantDirectoryRepository = {
+    getMerchantsByIds: vi.fn(),
+  };
 
   beforeEach(() => {
     hoisted.getDependenciesMock.mockReset();
@@ -30,9 +33,12 @@ describe('getContractDetailsHandler', () => {
     logger.info.mockReset();
     contractRepository.getContractBySessionId.mockReset();
 
+    merchantDirectoryRepository.getMerchantsByIds.mockResolvedValue([]);
+
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       contractRepository,
+      merchantDirectoryRepository,
     });
 
     hoisted.extractAuthInfoMock.mockResolvedValue({
@@ -84,6 +90,7 @@ describe('getContractDetailsHandler', () => {
       sessionId: 'session-1',
       documentId: 'doc-1',
       status: 'accepted',
+      merchantId: 'merchant-1',
       statusUpdatedAt: '2024-01-02T00:00:00.000Z',
       statusTimestamps: { acceptedAt: '2024-01-02T00:00:00.000Z' },
       relatedTransactionIds: ['txn-1'],
@@ -126,6 +133,9 @@ describe('getContractDetailsHandler', () => {
         displayName: 'PayNote',
         sessionId: 'session-1',
         relatedTransactionIds: ['txn-1'],
+        from: {
+          name: 'Merchant',
+        },
       })
     );
   });

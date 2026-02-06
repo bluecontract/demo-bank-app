@@ -43,6 +43,9 @@ export function useContractDetails(sessionId: string | null) {
       return failureCount < 2;
     },
     throwOnError: error => {
+      if (error.status === 404) {
+        return false;
+      }
       if (!handleAuthError(error)) {
         return true;
       }

@@ -386,7 +386,10 @@ export function ContractDetailsPage() {
     null;
   const proposalTitle = proposal?.payNote?.name?.trim() || null;
   const headerTitle = contractTitle || proposalTitle || 'Contract';
-  const senderName = contract?.displayName || proposalTitle || 'Contract';
+  const senderFrom = contract?.from ?? proposal?.from ?? null;
+  const senderName =
+    senderFrom?.name ?? contract?.displayName ?? proposalTitle ?? 'Contract';
+  const senderLogo = senderFrom?.logoUrl ?? undefined;
   const proposalSummarySessionId =
     proposal?.deliverySessionId ?? sessionId ?? null;
   const proposalSummaryQuery = useProposalSummary(
@@ -611,13 +614,14 @@ export function ContractDetailsPage() {
           <div className="flex flex-col gap-4">
             <div className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <Avatar
                     name={senderName}
-                    size="xl"
-                    className="h-14 w-14 text-base sm:h-16 sm:w-16 sm:text-lg"
+                    src={senderLogo}
+                    size="md"
+                    className="h-10 w-10 text-sm sm:h-12 sm:w-12 sm:text-base"
                   />
-                  <div className="text-sm font-semibold text-slate-900">
+                  <div className="text-sm font-semibold leading-6 text-slate-900">
                     {senderName}
                   </div>
                 </div>
