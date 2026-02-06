@@ -28,9 +28,11 @@ import {
   normalizeSourceUpdatedAt,
 } from '../summary/inputStore';
 import type { PowertoolsLogger } from '@demo-bank-app/shared-observability';
+import { createDefaultMergingProcessor } from '@blue-labs/document-processor';
 
 const blue = new Blue({
   repositories: [repository],
+  mergingProcessor: createDefaultMergingProcessor(),
 });
 
 let cachedLambdaClient: LambdaClient | null = null;
