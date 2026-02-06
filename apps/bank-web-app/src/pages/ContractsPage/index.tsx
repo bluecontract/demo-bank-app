@@ -344,7 +344,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
             <span>From</span>
             <span>Contract</span>
             <span className="sr-only">Actions</span>
-            <span className="text-right">Last change</span>
+            <span>Last change</span>
           </div>
         </div>
 

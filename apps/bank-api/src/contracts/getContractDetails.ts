@@ -47,12 +47,18 @@ export const getContractDetailsHandler = async (
     });
   }
 
-  const hasSummarySnapshot =
-    Boolean(contract.summaryDocument) &&
-    Boolean(contract.summarySourceUpdatedAt);
+  const hasSummarySnapshot = Boolean(contract.summarySourceUpdatedAt);
   const shouldUseSummarySnapshot =
     hasSummarySnapshot &&
     contract.summarySourceUpdatedAt !== contract.updatedAt;
+  const summarySnapshot = shouldUseSummarySnapshot
+    ? await contractRepository.getContractSummarySnapshot(contract.contractId)
+    : null;
+  const shouldUseSnapshotPayload =
+    shouldUseSummarySnapshot &&
+    (summarySnapshot?.summarySourceUpdatedAt ===
+      contract.summarySourceUpdatedAt ||
+      Boolean(contract.summaryDocument));
   const effectiveUpdatedAt =
     shouldUseSummarySnapshot && contract.summarySourceUpdatedAt
       ? contract.summarySourceUpdatedAt
@@ -71,28 +77,40 @@ export const getContractDetailsHandler = async (
       displayName: contract.displayName,
       sessionId: contract.sessionId,
       documentId: contract.documentId,
-      status: shouldUseSummarySnapshot
-        ? contract.summaryStatus ?? contract.status
+      status: shouldUseSnapshotPayload
+        ? summarySnapshot?.summaryStatus ??
+          contract.summaryStatus ??
+          contract.status
         : contract.status,
       archivedAt: contract.archivedAt,
       from,
-      statusUpdatedAt: shouldUseSummarySnapshot
-        ? contract.summaryStatusUpdatedAt ?? contract.statusUpdatedAt
+      statusUpdatedAt: shouldUseSnapshotPayload
+        ? summarySnapshot?.summaryStatusUpdatedAt ??
+          contract.summaryStatusUpdatedAt ??
+          contract.statusUpdatedAt
         : contract.statusUpdatedAt,
-      statusTimestamps: shouldUseSummarySnapshot
-        ? contract.summaryStatusTimestamps ?? contract.statusTimestamps
+      statusTimestamps: shouldUseSnapshotPayload
+        ? summarySnapshot?.summaryStatusTimestamps ??
+          contract.summaryStatusTimestamps ??
+          contract.statusTimestamps
         : contract.statusTimestamps,
-      triggerEvent: shouldUseSummarySnapshot
-        ? contract.summaryTriggerEvent ?? contract.triggerEvent
+      triggerEvent: shouldUseSnapshotPayload
+        ? summarySnapshot?.summaryTriggerEvent ??
+          contract.summaryTriggerEvent ??
+          contract.triggerEvent
         : contract.triggerEvent,
-      emittedEvents: shouldUseSummarySnapshot
-        ? contract.summaryEmittedEvents ?? contract.emittedEvents
+      emittedEvents: shouldUseSnapshotPayload
+        ? summarySnapshot?.summaryEmittedEvents ??
+          contract.summaryEmittedEvents ??
+          contract.emittedEvents
         : contract.emittedEvents,
       relatedTransactionIds: contract.relatedTransactionIds,
       relatedHoldIds: contract.relatedHoldIds,
       accountNumber: contract.accountNumber,
-      document: shouldUseSummarySnapshot
-        ? contract.summaryDocument ?? contract.document
+      document: shouldUseSnapshotPayload
+        ? summarySnapshot?.summaryDocument ??
+          contract.summaryDocument ??
+          contract.document
         : contract.document,
       summary: normalizedSummary ?? undefined,
       summaryUpdatedAt: contract.summaryUpdatedAt,

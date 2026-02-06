@@ -66,6 +66,19 @@ export type ContractSummaryUpdate = {
   relatedHoldIds?: string[] | null;
 };
 
+export type ContractSummarySnapshot = {
+  contractId: string;
+  summaryDocument?: Record<string, unknown> | null;
+  summaryStatus?: string | null;
+  summaryStatusUpdatedAt?: string | null;
+  summaryStatusTimestamps?: ContractStatusTimestamps | null;
+  summaryTriggerEvent?: unknown | null;
+  summaryEmittedEvents?: unknown[] | null;
+  summarySourceUpdatedAt?: string | null;
+  summaryUpdatedAt?: string | null;
+  summaryInputBlueId?: string | null;
+};
+
 export type ContractArchiveUpdate = {
   contractId: string;
   archivedAt: string | null;
@@ -133,7 +146,11 @@ export interface ContractRepository {
   getContract(contractId: string): Promise<ContractRecord | null>;
   getContractBySessionId(sessionId: string): Promise<ContractRecord | null>;
   getContractByDocumentId(documentId: string): Promise<ContractRecord | null>;
+  getContractSummarySnapshot(
+    contractId: string
+  ): Promise<ContractSummarySnapshot | null>;
   saveContract(record: ContractRecord): Promise<void>;
+  saveContractSummarySnapshot(snapshot: ContractSummarySnapshot): Promise<void>;
   markSummaryEventProcessed(eventId: string): Promise<boolean>;
   addContractHistoryEntry(
     entry: ContractHistoryEntryInput

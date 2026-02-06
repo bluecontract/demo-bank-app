@@ -22,6 +22,7 @@ describe('getContractDetailsHandler', () => {
 
   const contractRepository = {
     getContractBySessionId: vi.fn(),
+    getContractSummarySnapshot: vi.fn(),
   };
   const merchantDirectoryRepository = {
     getMerchantsByIds: vi.fn(),
@@ -32,8 +33,10 @@ describe('getContractDetailsHandler', () => {
     hoisted.extractAuthInfoMock.mockReset();
     logger.info.mockReset();
     contractRepository.getContractBySessionId.mockReset();
+    contractRepository.getContractSummarySnapshot.mockReset();
 
     merchantDirectoryRepository.getMerchantsByIds.mockResolvedValue([]);
+    contractRepository.getContractSummarySnapshot.mockResolvedValue(null);
 
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,

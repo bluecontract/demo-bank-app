@@ -15,6 +15,7 @@ import type {
   ContractDocumentSummary,
   ContractHistoryEntry,
   ContractHistoryEntryInput,
+  ContractSummarySnapshot,
   ContractSummaryUpdate,
   ContractArchiveUpdate,
 } from '../application/ports';
@@ -27,6 +28,8 @@ const ENTITY_TYPES = {
   RELATIONSHIP: 'CONTRACT_RELATIONSHIP',
   HISTORY: 'CONTRACT_HISTORY',
   SUMMARY_EVENT: 'CONTRACT_SUMMARY_EVENT',
+  SUMMARY_SNAPSHOT: 'CONTRACT_SUMMARY_SNAPSHOT',
+  CONTRACT_DOCUMENT: 'CONTRACT_DOCUMENT',
 } as const;
 
 const TABLE_PREFIXES = {
@@ -41,6 +44,8 @@ const TABLE_PREFIXES = {
 
 const SORT_KEYS = {
   META: 'META',
+  SUMMARY: 'SUMMARY',
+  DOCUMENT: 'DOCUMENT',
 } as const;
 
 const USER_SORT_KEY_PREFIX = 'CONTRACT#';
@@ -111,6 +116,16 @@ interface ContractDocumentItem {
   createdAt: string;
 }
 
+interface ContractDocumentSnapshotItem {
+  PK: string;
+  SK: typeof SORT_KEYS.DOCUMENT;
+  entityType: typeof ENTITY_TYPES.CONTRACT_DOCUMENT;
+  contractId: string;
+  document?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface ContractUserItem {
   PK: string;
   SK: string;
@@ -175,6 +190,24 @@ interface ContractSummaryEventItem {
   ttl?: number;
 }
 
+interface ContractSummarySnapshotItem {
+  PK: string;
+  SK: typeof SORT_KEYS.SUMMARY;
+  entityType: typeof ENTITY_TYPES.SUMMARY_SNAPSHOT;
+  contractId: string;
+  summaryDocument?: Record<string, unknown>;
+  summaryStatus?: string;
+  summaryStatusUpdatedAt?: string;
+  summaryStatusTimestamps?: Record<string, string>;
+  summaryTriggerEvent?: unknown;
+  summaryEmittedEvents?: unknown[];
+  summarySourceUpdatedAt?: string;
+  summaryUpdatedAt?: string;
+  summaryInputBlueId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class DynamoContractRepository implements ContractRepository {
   private readonly tableName: string;
   private readonly client: DynamoDBDocumentClient;
@@ -202,6 +235,10 @@ export class DynamoContractRepository implements ContractRepository {
     return `${TABLE_PREFIXES.DOCUMENT}${documentId}`;
   }
 
+  private buildContractDocumentPk(contractId: string) {
+    return this.buildContractPk(contractId);
+  }
+
   private buildUserPk(userId: string) {
     return `${TABLE_PREFIXES.USER}${userId}`;
   }
@@ -216,6 +253,10 @@ export class DynamoContractRepository implements ContractRepository {
 
   private buildHoldPk(holdId: string) {
     return `${TABLE_PREFIXES.HOLD}${holdId}`;
+  }
+
+  private buildSummarySnapshotPk(contractId: string) {
+    return this.buildContractPk(contractId);
   }
 
   private buildSummaryEventPk(eventId: string) {
@@ -284,7 +325,24 @@ export class DynamoContractRepository implements ContractRepository {
       return null;
     }
 
-    return this.mapItemToRecord(response.Item as ContractItem);
+    const record = this.mapItemToRecord(response.Item as ContractItem);
+    const documentResponse = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: this.buildContractDocumentPk(contractId),
+          SK: SORT_KEYS.DOCUMENT,
+        },
+        ConsistentRead: true,
+      })
+    );
+    const documentItem = documentResponse.Item as
+      | ContractDocumentSnapshotItem
+      | undefined;
+    if (documentItem?.document) {
+      record.document = documentItem.document;
+    }
+    return record;
   }
 
   async getContractBySessionId(
@@ -331,6 +389,38 @@ export class DynamoContractRepository implements ContractRepository {
     return this.getContract(contractId);
   }
 
+  async getContractSummarySnapshot(
+    contractId: string
+  ): Promise<ContractSummarySnapshot | null> {
+    const response = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: this.buildSummarySnapshotPk(contractId),
+          SK: SORT_KEYS.SUMMARY,
+        },
+      })
+    );
+
+    const item = response.Item as ContractSummarySnapshotItem | undefined;
+    if (!item) {
+      return null;
+    }
+
+    return {
+      contractId: item.contractId,
+      summaryDocument: item.summaryDocument,
+      summaryStatus: item.summaryStatus,
+      summaryStatusUpdatedAt: item.summaryStatusUpdatedAt,
+      summaryStatusTimestamps: item.summaryStatusTimestamps,
+      summaryTriggerEvent: item.summaryTriggerEvent,
+      summaryEmittedEvents: item.summaryEmittedEvents,
+      summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+      summaryUpdatedAt: item.summaryUpdatedAt,
+      summaryInputBlueId: item.summaryInputBlueId,
+    };
+  }
+
   async saveContract(record: ContractRecord): Promise<void> {
     const item: ContractItem = {
       PK: this.buildContractPk(record.contractId),
@@ -342,7 +432,7 @@ export class DynamoContractRepository implements ContractRepository {
       documentName: record.documentName,
       sessionId: record.sessionId,
       documentId: record.documentId,
-      document: record.document,
+      document: undefined,
       status: record.status,
       archivedAt: record.archivedAt,
       statusUpdatedAt: record.statusUpdatedAt,
@@ -361,7 +451,7 @@ export class DynamoContractRepository implements ContractRepository {
       summaryInputBlueId: record.summaryInputBlueId,
       summaryModel: record.summaryModel,
       summaryError: record.summaryError,
-      summaryDocument: record.summaryDocument,
+      summaryDocument: undefined,
       summaryDocumentName: record.summaryDocumentName,
       summaryStatus: record.summaryStatus,
       summaryStatusUpdatedAt: record.summaryStatusUpdatedAt,
@@ -409,6 +499,23 @@ export class DynamoContractRepository implements ContractRepository {
       writes.push(
         this.client.send(
           new PutCommand({ TableName: this.tableName, Item: documentItem })
+        )
+      );
+    }
+
+    if (record.document) {
+      const documentSnapshot: ContractDocumentSnapshotItem = {
+        PK: this.buildContractDocumentPk(record.contractId),
+        SK: SORT_KEYS.DOCUMENT,
+        entityType: ENTITY_TYPES.CONTRACT_DOCUMENT,
+        contractId: record.contractId,
+        document: record.document,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      };
+      writes.push(
+        this.client.send(
+          new PutCommand({ TableName: this.tableName, Item: documentSnapshot })
         )
       );
     }
@@ -489,6 +596,36 @@ export class DynamoContractRepository implements ContractRepository {
     if (writes.length) {
       await Promise.all(writes);
     }
+  }
+
+  async saveContractSummarySnapshot(
+    snapshot: ContractSummarySnapshot
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    const item: ContractSummarySnapshotItem = {
+      PK: this.buildSummarySnapshotPk(snapshot.contractId),
+      SK: SORT_KEYS.SUMMARY,
+      entityType: ENTITY_TYPES.SUMMARY_SNAPSHOT,
+      contractId: snapshot.contractId,
+      summaryDocument: snapshot.summaryDocument ?? undefined,
+      summaryStatus: snapshot.summaryStatus ?? undefined,
+      summaryStatusUpdatedAt: snapshot.summaryStatusUpdatedAt ?? undefined,
+      summaryStatusTimestamps: snapshot.summaryStatusTimestamps ?? undefined,
+      summaryTriggerEvent: snapshot.summaryTriggerEvent ?? undefined,
+      summaryEmittedEvents: snapshot.summaryEmittedEvents ?? undefined,
+      summarySourceUpdatedAt: snapshot.summarySourceUpdatedAt ?? undefined,
+      summaryUpdatedAt: snapshot.summaryUpdatedAt ?? undefined,
+      summaryInputBlueId: snapshot.summaryInputBlueId ?? undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: item,
+      })
+    );
   }
 
   async markSummaryEventProcessed(eventId: string): Promise<boolean> {
@@ -771,12 +908,6 @@ export class DynamoContractRepository implements ContractRepository {
       update.summaryError
     );
     handleField(
-      '#summaryDocument',
-      'summaryDocument',
-      ':summaryDocument',
-      update.summaryDocument
-    );
-    handleField(
       '#summaryDocumentName',
       'summaryDocumentName',
       ':summaryDocumentName',
@@ -800,18 +931,13 @@ export class DynamoContractRepository implements ContractRepository {
       ':summaryStatusTimestamps',
       update.summaryStatusTimestamps
     );
-    handleField(
-      '#summaryTriggerEvent',
-      'summaryTriggerEvent',
-      ':summaryTriggerEvent',
-      update.summaryTriggerEvent
-    );
-    handleField(
-      '#summaryEmittedEvents',
-      'summaryEmittedEvents',
-      ':summaryEmittedEvents',
-      update.summaryEmittedEvents
-    );
+    const shouldWriteSnapshot =
+      update.summaryDocument !== undefined ||
+      update.summaryTriggerEvent !== undefined ||
+      update.summaryEmittedEvents !== undefined ||
+      update.summaryStatus !== undefined ||
+      update.summaryStatusUpdatedAt !== undefined ||
+      update.summaryStatusTimestamps !== undefined;
 
     if (!setters.length && !removals.length) {
       return;
@@ -840,6 +966,21 @@ export class DynamoContractRepository implements ContractRepository {
           : {}),
       })
     );
+
+    if (shouldWriteSnapshot) {
+      await this.saveContractSummarySnapshot({
+        contractId: update.contractId,
+        summaryDocument: update.summaryDocument,
+        summaryStatus: update.summaryStatus,
+        summaryStatusUpdatedAt: update.summaryStatusUpdatedAt,
+        summaryStatusTimestamps: update.summaryStatusTimestamps,
+        summaryTriggerEvent: update.summaryTriggerEvent,
+        summaryEmittedEvents: update.summaryEmittedEvents,
+        summarySourceUpdatedAt: update.summarySourceUpdatedAt,
+        summaryUpdatedAt: update.summaryUpdatedAt,
+        summaryInputBlueId: update.summaryInputBlueId,
+      });
+    }
 
     const summaryMetaSetters: string[] = [];
     const summaryMetaRemovals: string[] = [];

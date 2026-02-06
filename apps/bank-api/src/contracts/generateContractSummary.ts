@@ -54,6 +54,28 @@ const formatMinorAmount = (amountMinor?: number, currency?: string) => {
   return currency ? `${major} ${currency}` : `$${major}`;
 };
 
+const getJsonSizeBytes = (value: unknown): number => {
+  if (value === undefined) {
+    return 0;
+  }
+  try {
+    return Buffer.byteLength(JSON.stringify(value), 'utf8');
+  } catch {
+    return -1;
+  }
+};
+
+const isDynamoItemSizeError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const message =
+    'message' in error && typeof error.message === 'string'
+      ? error.message
+      : '';
+  return message.includes('Item size has exceeded the maximum allowed size');
+};
+
 type TriggerEventMeta = {
   blueId?: string;
   createdAt?: string;
@@ -289,8 +311,10 @@ const buildFactsV2 = (input: {
     path: ['document'],
     ignoredStubKeys: new Set(['prevEntry']),
   });
+  const enforceBlueIdValidation =
+    process.env.CONTRACT_SUMMARY_ENFORCE_BLUEID_VALIDATION === '1';
 
-  if (documentStubs.length) {
+  if (documentStubs.length && enforceBlueIdValidation) {
     throw new ContractSummaryInputError(
       `Contract document contains non-type {blueId} references which cannot be sent to the LLM: ${documentStubs
         .slice(0, 5)
@@ -363,16 +387,18 @@ const buildFactsV2 = (input: {
   ];
 
   if (transitionStubs.length) {
-    throw new ContractSummaryInputError(
-      `Transition events contain non-type {blueId} references which cannot be sent to the LLM: ${transitionStubs
-        .slice(0, 5)
-        .map(s => `${s.blueId} @ ${s.path}`)
-        .join(', ')}${
-        transitionStubs.length > 5
-          ? ` (+${transitionStubs.length - 5} more)`
-          : ''
-      }`
-    );
+    if (enforceBlueIdValidation) {
+      throw new ContractSummaryInputError(
+        `Transition events contain non-type {blueId} references which cannot be sent to the LLM: ${transitionStubs
+          .slice(0, 5)
+          .map(s => `${s.blueId} @ ${s.path}`)
+          .join(', ')}${
+          transitionStubs.length > 5
+            ? ` (+${transitionStubs.length - 5} more)`
+            : ''
+        }`
+      );
+    }
   }
 
   const triggerEventMeta = extractTriggerEventMeta({
@@ -670,26 +696,71 @@ const generateOrLoadContractSummary = async (input: {
     const summaryPreview =
       summary.story?.headline?.trim() || summary.listPreview;
 
-    await input.contractRepository.updateContractSummary({
-      contractId: contract.contractId,
-      summary,
-      summaryPreview,
-      summaryUpdatedAt: now,
-      summarySourceUpdatedAt: contract.updatedAt,
-      summaryInputBlueId,
-      summaryModel: model,
-      summaryError: null,
+    const summarySnapshotPayload = {
       summaryDocument: contract.document,
-      summaryDocumentName: contract.documentName,
       summaryStatus: contract.status,
       summaryStatusUpdatedAt: contract.statusUpdatedAt,
       summaryStatusTimestamps: contract.statusTimestamps,
       summaryTriggerEvent: contract.triggerEvent,
       summaryEmittedEvents: contract.emittedEvents,
-      userId: contract.userId,
-      relatedTransactionIds: contract.relatedTransactionIds,
-      relatedHoldIds: contract.relatedHoldIds,
+      summarySourceUpdatedAt: contract.updatedAt,
+      summaryUpdatedAt: now,
+      summaryInputBlueId,
+      summaryDocumentName: contract.documentName,
+    };
+    const snapshotSizeBytes = getJsonSizeBytes(summarySnapshotPayload);
+    input.logger?.debug?.('Contract summary snapshot size', {
+      contractId: contract.contractId,
+      sessionId: contract.sessionId,
+      snapshotSizeBytes,
     });
+
+    try {
+      await input.contractRepository.updateContractSummary({
+        contractId: contract.contractId,
+        summary,
+        summaryPreview,
+        summaryUpdatedAt: now,
+        summarySourceUpdatedAt: contract.updatedAt,
+        summaryInputBlueId,
+        summaryModel: model,
+        summaryError: null,
+        summaryDocument: contract.document,
+        summaryDocumentName: contract.documentName,
+        summaryStatus: contract.status,
+        summaryStatusUpdatedAt: contract.statusUpdatedAt,
+        summaryStatusTimestamps: contract.statusTimestamps,
+        summaryTriggerEvent: contract.triggerEvent,
+        summaryEmittedEvents: contract.emittedEvents,
+        userId: contract.userId,
+        relatedTransactionIds: contract.relatedTransactionIds,
+        relatedHoldIds: contract.relatedHoldIds,
+      });
+    } catch (error) {
+      if (isDynamoItemSizeError(error)) {
+        input.logger?.error?.('Contract summary snapshot exceeds size limit', {
+          contractId: contract.contractId,
+          sessionId: contract.sessionId,
+          snapshotSizeBytes,
+          fieldSizes: {
+            summaryDocument: getJsonSizeBytes(contract.document),
+            summaryTriggerEvent: getJsonSizeBytes(contract.triggerEvent),
+            summaryEmittedEvents: getJsonSizeBytes(contract.emittedEvents),
+            summaryStatus: getJsonSizeBytes(contract.status),
+            summaryStatusUpdatedAt: getJsonSizeBytes(contract.statusUpdatedAt),
+            summaryStatusTimestamps: getJsonSizeBytes(
+              contract.statusTimestamps
+            ),
+            summarySourceUpdatedAt: getJsonSizeBytes(contract.updatedAt),
+            summaryUpdatedAt: getJsonSizeBytes(now),
+            summaryInputBlueId: getJsonSizeBytes(summaryInputBlueId),
+            summaryDocumentName: getJsonSizeBytes(contract.documentName),
+            summary: getJsonSizeBytes(summary),
+          },
+        });
+      }
+      throw error;
+    }
 
     const historyShort = summary.lastChange.short || summary.listPreview;
     const historyMore = summary.lastChange.more;

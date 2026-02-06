@@ -391,6 +391,10 @@ describe('generateContractSummaryHandler', () => {
   });
 
   it('returns 400 when contracts contain non-type {blueId} stubs', async () => {
+    const previousValidationFlag =
+      process.env.CONTRACT_SUMMARY_ENFORCE_BLUEID_VALIDATION;
+    process.env.CONTRACT_SUMMARY_ENFORCE_BLUEID_VALIDATION = '1';
+
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
       typeBlueId: payNoteTypeBlueId,
@@ -416,9 +420,18 @@ describe('generateContractSummaryHandler', () => {
       { request: {} as any }
     );
 
-    expect(result.status).toBe(400);
-    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
-    expect(getOpenAiApiKey).not.toHaveBeenCalled();
-    expect(contractRepository.updateContractSummary).toHaveBeenCalled();
+    try {
+      expect(result.status).toBe(400);
+      expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+      expect(getOpenAiApiKey).not.toHaveBeenCalled();
+      expect(contractRepository.updateContractSummary).toHaveBeenCalled();
+    } finally {
+      if (previousValidationFlag === undefined) {
+        delete process.env.CONTRACT_SUMMARY_ENFORCE_BLUEID_VALIDATION;
+      } else {
+        process.env.CONTRACT_SUMMARY_ENFORCE_BLUEID_VALIDATION =
+          previousValidationFlag;
+      }
+    }
   });
 });
