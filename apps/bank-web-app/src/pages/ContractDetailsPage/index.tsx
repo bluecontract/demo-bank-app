@@ -3,7 +3,6 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { DashboardShell } from '../../features/dashboard/components';
 import {
-  useAcceptPayNoteDelivery,
   useActiveContractSession,
   useContractDetails,
   useContractHistory,
@@ -11,7 +10,7 @@ import {
   useRelatedContracts,
   useProposalDetails,
   useProposalSummary,
-  useRejectPayNoteDelivery,
+  useProposalDecision,
   useArchiveContract,
   useUnarchiveContract,
 } from '../../features/contracts/hooks';
@@ -55,18 +54,25 @@ interface ProposalActionCardProps {
 }
 
 function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
-  const acceptMutation = useAcceptPayNoteDelivery();
-  const rejectMutation = useRejectPayNoteDelivery();
   const [isDecisionRequested, setDecisionRequested] = useState(false);
   const [decisionOverride, setDecisionOverride] = useState<
     'accepted' | 'rejected' | null
   >(null);
-
-  useEffect(() => {
-    if (acceptMutation.isError || rejectMutation.isError) {
+  const decisionSessionId = proposal?.deliverySessionId ?? sessionId;
+  const { accept, reject, isPending } = useProposalDecision({
+    sessionId: decisionSessionId,
+    onAccepted: () => {
       setDecisionRequested(false);
-    }
-  }, [acceptMutation.isError, rejectMutation.isError]);
+      setDecisionOverride('accepted');
+    },
+    onRejected: () => {
+      setDecisionRequested(false);
+      setDecisionOverride('rejected');
+    },
+    onError: () => {
+      setDecisionRequested(false);
+    },
+  });
 
   useEffect(() => {
     setDecisionRequested(false);
@@ -85,9 +91,7 @@ function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
     decisionOverride ?? proposal.clientDecisionStatus ?? 'pending';
   const isDecisionLocked =
     decisionStatus === 'accepted' || decisionStatus === 'rejected';
-  const isDecisionPending =
-    acceptMutation.isPending || rejectMutation.isPending || isDecisionRequested;
-  const decisionSessionId = proposal.deliverySessionId ?? sessionId;
+  const isDecisionPending = isPending || isDecisionRequested;
   const pendingTitle = 'Approve the Contract';
   const pendingDescription =
     'If you reject the contract, the source transaction will be handled as a standard transfer.';
@@ -101,10 +105,11 @@ function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
       : 'Review the latest contract decision below.';
 
   if (decisionStatus === 'accepted') {
+    const contractName = proposal.payNote?.name?.trim() || 'this contract';
     return (
       <div className="rounded-xl sm:rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
         <h3 className="text-lg font-semibold text-emerald-900">
-          Thank you for accepting {proposal.payNote?.name ?? 'this contract'}.
+          Thank you for accepting {contractName}.
         </h3>
         <p className="mt-2 text-sm text-emerald-900/80">
           We are starting it for you.
@@ -114,38 +119,29 @@ function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
   }
 
   if (decisionStatus === 'rejected') {
-    return null;
+    const contractName = proposal.payNote?.name?.trim() || 'this contract';
+    return (
+      <div className="rounded-xl sm:rounded-2xl border border-rose-200 bg-rose-50/60 p-4">
+        <h3 className="text-lg font-semibold text-rose-900">
+          You rejected {contractName}.
+        </h3>
+        <p className="mt-2 text-sm text-rose-900/80">
+          The source transaction will be handled as a standard transfer.
+        </p>
+      </div>
+    );
   }
 
   const handleAccept = () => {
     if (!decisionSessionId || isDecisionLocked || isDecisionPending) return;
     setDecisionRequested(true);
-    acceptMutation.mutate(decisionSessionId, {
-      onSuccess: () => {
-        setDecisionRequested(false);
-        setDecisionOverride('accepted');
-      },
-      onError: () => {
-        setDecisionRequested(false);
-      },
-    });
+    accept();
   };
 
   const handleReject = () => {
     if (!decisionSessionId || isDecisionLocked || isDecisionPending) return;
     setDecisionRequested(true);
-    rejectMutation.mutate(
-      { sessionId: decisionSessionId },
-      {
-        onSuccess: () => {
-          setDecisionRequested(false);
-          setDecisionOverride('rejected');
-        },
-        onError: () => {
-          setDecisionRequested(false);
-        },
-      }
-    );
+    reject();
   };
 
   return (

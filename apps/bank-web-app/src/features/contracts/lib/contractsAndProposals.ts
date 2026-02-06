@@ -27,8 +27,6 @@ const parseTimestamp = (value?: string) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-const normalizeName = (value?: string) => value?.trim().toLowerCase() || '';
-
 export const getItemSessionId = (
   item: ContractOrProposalItem
 ): string | undefined =>
@@ -95,7 +93,6 @@ export function mergeContractsAndProposals(
       .map(contract => [contract.sessionId, contract] as const)
       .filter((entry): entry is [string, ContractSummary] => Boolean(entry[0]))
   );
-  const contractByName = new Map<string, ContractSummary>();
   const contractSessionIds = new Set(
     contracts
       .map(contract => contract.sessionId)
@@ -105,22 +102,6 @@ export function mergeContractsAndProposals(
   const matchedContractSessionIds = new Set<string>();
   const matchedContractIds = new Set<string>();
   const mergedItems: ContractOrProposalItem[] = [];
-
-  for (const contract of contracts) {
-    const nameKey = normalizeName(
-      contract.documentName ?? contract.displayName
-    );
-    if (!nameKey) {
-      continue;
-    }
-    const existing = contractByName.get(nameKey);
-    if (
-      !existing ||
-      parseTimestamp(contract.updatedAt) > parseTimestamp(existing.updatedAt)
-    ) {
-      contractByName.set(nameKey, contract);
-    }
-  }
 
   for (const proposal of proposals) {
     const decisionStatus = proposal.clientDecisionStatus?.trim().toLowerCase();
@@ -138,24 +119,6 @@ export function mergeContractsAndProposals(
       const contract = contractBySessionId.get(matchingSessionId);
       if (contract) {
         matchedContractSessionIds.add(matchingSessionId);
-        matchedContractIds.add(contract.contractId);
-        mergedItems.push({
-          ...contract,
-          originProposalDeliveryId: proposal.deliveryId,
-          originProposalSessionId: proposal.deliverySessionId,
-          sortUpdatedAt: proposal.updatedAt,
-        });
-        continue;
-      }
-    }
-
-    if (!isRejected && decisionStatus === 'accepted') {
-      const nameKey = normalizeName(proposal.name);
-      const contract = nameKey ? contractByName.get(nameKey) : undefined;
-      if (contract) {
-        if (contract.sessionId) {
-          matchedContractSessionIds.add(contract.sessionId);
-        }
         matchedContractIds.add(contract.contractId);
         mergedItems.push({
           ...contract,

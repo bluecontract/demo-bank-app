@@ -8,6 +8,7 @@ import {
   useContracts,
   useContractReviewState,
   useProposals,
+  useProposalDecision,
 } from '../../features/contracts/hooks';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { ContractSummary, PayNoteDeliverySummary } from '../../types/api';
@@ -20,6 +21,7 @@ vi.mock('../../features/contracts/hooks', () => ({
   useContracts: vi.fn(),
   useContractReviewState: vi.fn(),
   useProposals: vi.fn(),
+  useProposalDecision: vi.fn(),
 }));
 
 vi.mock('../../features/dashboard/components', () => ({
@@ -54,6 +56,7 @@ const mockUseProposals = useProposals as ReturnType<typeof vi.fn>;
 const mockUseContractReviewState = useContractReviewState as ReturnType<
   typeof vi.fn
 >;
+const mockUseProposalDecision = useProposalDecision as ReturnType<typeof vi.fn>;
 const mockUseLocation = useLocation as ReturnType<typeof vi.fn>;
 const mockUseNavigate = useNavigate as ReturnType<typeof vi.fn>;
 
@@ -114,6 +117,12 @@ describe('ContractsPage', () => {
       markItemReviewed: markItemReviewedMock,
     });
 
+    mockUseProposalDecision.mockReturnValue({
+      accept: vi.fn(),
+      reject: vi.fn(),
+      isPending: false,
+    });
+
     mockUseLocation.mockReturnValue({
       pathname: '/contracts',
       search: '',
@@ -146,7 +155,7 @@ describe('ContractsPage', () => {
     render(<ContractsPage />, { wrapper: createTestWrapper() });
 
     const [contractLabel] = screen.getAllByText('GE Refrigerator Order');
-    const contractRow = contractLabel.closest('button');
+    const contractRow = contractLabel.closest('[role="button"]');
 
     expect(contractRow).not.toBeNull();
     fireEvent.click(contractRow as HTMLElement);
@@ -160,5 +169,20 @@ describe('ContractsPage', () => {
         kind: 'contract',
       },
     });
+  });
+
+  it('shows quick decision actions for pending proposals', () => {
+    render(<ContractsPage />, { wrapper: createTestWrapper() });
+
+    expect(
+      screen.getAllByRole('button', {
+        name: /Accept Slow Digestion PayNote/i,
+      }).length
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole('button', {
+        name: /Reject Slow Digestion PayNote/i,
+      }).length
+    ).toBeGreaterThan(0);
   });
 });

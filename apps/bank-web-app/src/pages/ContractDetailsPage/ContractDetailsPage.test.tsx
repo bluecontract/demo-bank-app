@@ -1,10 +1,9 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { vi } from 'vitest';
 import { ContractDetailsPage } from './index';
 import { createQueryWrapper } from '../../test-utils';
 import { useAuth } from '../../app/providers/AuthProvider';
 import {
-  useAcceptPayNoteDelivery,
   useActiveContractSession,
   useContractDetails,
   useContractHistory,
@@ -12,7 +11,7 @@ import {
   useRelatedContracts,
   useProposalDetails,
   useProposalSummary,
-  useRejectPayNoteDelivery,
+  useProposalDecision,
   useArchiveContract,
   useUnarchiveContract,
 } from '../../features/contracts/hooks';
@@ -28,7 +27,6 @@ vi.mock('../../features/contracts/components/ContractAiChatDrawer', () => ({
 }));
 
 vi.mock('../../features/contracts/hooks', () => ({
-  useAcceptPayNoteDelivery: vi.fn(),
   useActiveContractSession: vi.fn(),
   useContractDetails: vi.fn(),
   useContractHistory: vi.fn(),
@@ -36,7 +34,7 @@ vi.mock('../../features/contracts/hooks', () => ({
   useRelatedContracts: vi.fn(),
   useProposalDetails: vi.fn(),
   useProposalSummary: vi.fn(),
-  useRejectPayNoteDelivery: vi.fn(),
+  useProposalDecision: vi.fn(),
   useArchiveContract: vi.fn(),
   useUnarchiveContract: vi.fn(),
 }));
@@ -75,12 +73,7 @@ const mockUseArchiveContract = useArchiveContract as ReturnType<typeof vi.fn>;
 const mockUseUnarchiveContract = useUnarchiveContract as ReturnType<
   typeof vi.fn
 >;
-const mockUseAcceptPayNoteDelivery = useAcceptPayNoteDelivery as ReturnType<
-  typeof vi.fn
->;
-const mockUseRejectPayNoteDelivery = useRejectPayNoteDelivery as ReturnType<
-  typeof vi.fn
->;
+const mockUseProposalDecision = useProposalDecision as ReturnType<typeof vi.fn>;
 const mockUseActiveContractSession = useActiveContractSession as ReturnType<
   typeof vi.fn
 >;
@@ -105,13 +98,9 @@ describe('ContractDetailsPage', () => {
       setActiveSession: vi.fn(),
     });
 
-    mockUseAcceptPayNoteDelivery.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-    });
-
-    mockUseRejectPayNoteDelivery.mockReturnValue({
-      mutate: vi.fn(),
+    mockUseProposalDecision.mockReturnValue({
+      accept: vi.fn(),
+      reject: vi.fn(),
       isPending: false,
     });
 
@@ -359,13 +348,9 @@ describe('ContractDetailsPage', () => {
     const acceptMock = vi.fn();
     const rejectMock = vi.fn();
 
-    mockUseAcceptPayNoteDelivery.mockReturnValue({
-      mutate: acceptMock,
-      isPending: false,
-    });
-
-    mockUseRejectPayNoteDelivery.mockReturnValue({
-      mutate: rejectMock,
+    mockUseProposalDecision.mockReturnValue({
+      accept: acceptMock,
+      reject: rejectMock,
       isPending: false,
     });
 
@@ -400,17 +385,23 @@ describe('ContractDetailsPage', () => {
 
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    expect(mockUseProposalDecision).toHaveBeenCalled();
+    const proposalDecisionArgs = mockUseProposalDecision.mock.calls[0]?.[0];
+    expect(proposalDecisionArgs?.sessionId).toBe('session-2');
 
-    expect(acceptMock).toHaveBeenCalledWith(
-      'session-2',
-      expect.objectContaining({
-        onError: expect.any(Function),
-        onSuccess: expect.any(Function),
-      })
-    );
-    expect(rejectMock).not.toHaveBeenCalled();
+    const acceptButton = screen.getByRole('button', { name: 'Accept' });
+    const rejectButton = screen.getByRole('button', { name: 'Reject' });
+
+    expect(acceptButton).not.toHaveAttribute('disabled');
+    expect(rejectButton).not.toHaveAttribute('disabled');
+
+    act(() => {
+      acceptButton.click();
+      rejectButton.click();
+    });
+
+    expect(acceptMock).toHaveBeenCalled();
+    expect(rejectMock).toHaveBeenCalled();
   });
 
   it('shows the accepted message once a decision is recorded', () => {

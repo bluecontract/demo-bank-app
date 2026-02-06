@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type MouseEvent, type KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import {
@@ -10,6 +10,7 @@ import {
   useContracts,
   useProposals,
   useContractReviewState,
+  useProposalDecision,
 } from '../../features/contracts/hooks';
 import type { ContractOrProposalItem } from '../../features/contracts/lib/contractsAndProposals';
 import { dedupeContracts } from '../../features/contracts/lib/dedupeContracts';
@@ -19,6 +20,7 @@ import {
   getItemUpdatedAt,
   isProposalItem,
 } from '../../features/contracts/lib/contractsAndProposals';
+import { getContractsPollingInterval } from '../../features/contracts/lib/contractsPolling';
 import {
   getProposalDecisionStatus,
   isContractArchived,
@@ -29,13 +31,9 @@ import { getItemChangeType } from '../../features/contracts/lib/contractReview';
 import { Avatar } from '../../ui/Avatar';
 import { formatCurrency } from '../../lib/formatCurrency';
 import { formatRelativeListDate } from '../../lib/formatDate';
+import { formatStatusLabel } from '../../lib/formatStatusLabel';
 
 type ContractsView = 'inbox' | 'archive';
-
-const formatStatus = (value?: string) => {
-  if (!value) return 'Unknown';
-  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
-};
 
 const getProposalPreview = (item: ContractOrProposalItem): string => {
   if (!isProposalItem(item)) {
@@ -51,7 +49,7 @@ const getProposalPreview = (item: ContractOrProposalItem): string => {
   if (item.transactionId) {
     return `Transaction ${item.transactionId}`;
   }
-  return formatStatus(getProposalDecisionStatus(item));
+  return formatStatusLabel(getProposalDecisionStatus(item));
 };
 
 const getContractPreview = (item: ContractOrProposalItem): string => {
@@ -62,7 +60,7 @@ const getContractPreview = (item: ContractOrProposalItem): string => {
     return item.summaryPreview;
   }
   if (item.status) {
-    return `Status: ${formatStatus(item.status)}`;
+    return `Status: ${formatStatusLabel(item.status)}`;
   }
   return 'Contract updated';
 };
@@ -81,6 +79,103 @@ const getSender = (item: ContractOrProposalItem): string => {
   return item.displayName?.trim() || 'Contract';
 };
 
+type ProposalDecisionActionsProps = {
+  sessionId: string | null;
+  label: string;
+  size?: 'sm' | 'md';
+  onDecision?: () => void;
+};
+
+function ProposalDecisionActions({
+  sessionId,
+  label,
+  size = 'md',
+  onDecision,
+}: ProposalDecisionActionsProps) {
+  const { accept, reject, isPending } = useProposalDecision({
+    sessionId,
+    onAccepted: () => onDecision?.(),
+    onRejected: () => onDecision?.(),
+  });
+
+  if (!sessionId) {
+    return null;
+  }
+
+  const buttonSize = size === 'sm' ? 'h-6 w-6' : 'h-8 w-8';
+  const iconSize = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
+  const padding = size === 'sm' ? 'p-0.5' : 'p-1';
+  const baseButton =
+    'inline-flex items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50';
+
+  const handleAccept = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (isPending) {
+      return;
+    }
+    accept();
+  };
+
+  const handleReject = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (isPending) {
+      return;
+    }
+    reject();
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        aria-label={`Accept ${label}`}
+        className={`${baseButton} ${buttonSize} ${padding} bg-[color:var(--color-primary)] text-white`}
+        onClick={handleAccept}
+        disabled={isPending}
+      >
+        <svg
+          className={iconSize}
+          viewBox="0 0 20 20"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M5 10.5l3.2 3.2L15 7"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      <button
+        type="button"
+        aria-label={`Reject ${label}`}
+        className={`${baseButton} ${buttonSize} ${padding} bg-[#d32f2f] text-white`}
+        onClick={handleReject}
+        disabled={isPending}
+      >
+        <svg
+          className={iconSize}
+          viewBox="0 0 20 20"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M6 6l8 8M14 6l-8 8"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 interface ContractsPageProps {
   view?: ContractsView;
 }
@@ -91,8 +186,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const disablePolling = __UI_REFRESH_DISABLE_POLLING__ === 'true';
-  const refreshInterval = disablePolling ? false : 5000;
+  const refreshInterval = getContractsPollingInterval();
   const contractsQuery = useContracts({ refetchInterval: refreshInterval });
   const proposalsQuery = useProposals({ refetchInterval: refreshInterval });
   const dedupedContracts = useMemo(
@@ -248,9 +342,10 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
 
       <section className="app-surface overflow-hidden flex flex-col min-h-0 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
         <div className="border-b border-[color:var(--color-border)] hidden sm:block">
-          <div className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_120px] gap-6 px-4 py-2 text-xs font-semibold text-slate-500">
+          <div className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_80px_120px] gap-6 px-4 py-2 text-xs font-semibold text-slate-500">
             <span>From</span>
             <span>Contract</span>
+            <span className="sr-only">Actions</span>
             <span className="text-right">Last change</span>
           </div>
         </div>
@@ -291,24 +386,45 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
               const updatedAt = formatRelativeListDate(getItemUpdatedAt(item));
               const changeType = getItemChangeType(item, reviewedMap);
               const isUnread = Boolean(changeType);
+              const shouldShowActions =
+                isProposalItem(item) &&
+                getProposalDecisionStatus(item) === 'pending';
               const senderClassName = isUnread
                 ? 'text-sm font-semibold text-slate-900'
                 : 'text-sm font-normal text-slate-900';
               const subjectClassName = isUnread
                 ? 'shrink-0 font-semibold text-slate-900'
                 : 'shrink-0 font-normal text-slate-900';
+              const handleRowClick = () => {
+                if (!sessionId) {
+                  return;
+                }
+                handleSelectItem(item);
+              };
+              const handleRowKeyDown = (
+                event: KeyboardEvent<HTMLDivElement>
+              ) => {
+                if (!sessionId) {
+                  return;
+                }
+                if (event.target !== event.currentTarget) {
+                  return;
+                }
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  handleSelectItem(item);
+                }
+              };
 
               return (
-                <button
+                <div
                   key={itemKey}
-                  type="button"
-                  className="w-full text-left transition hover:bg-slate-50"
-                  onClick={() => {
-                    if (!sessionId) {
-                      return;
-                    }
-                    handleSelectItem(item);
-                  }}
+                  role="button"
+                  tabIndex={sessionId ? 0 : -1}
+                  aria-disabled={!sessionId}
+                  className="w-full text-left transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-primary)]"
+                  onClick={handleRowClick}
+                  onKeyDown={handleRowKeyDown}
                 >
                   <div className="sm:hidden flex gap-3 px-4 py-3">
                     <Avatar
@@ -322,9 +438,19 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                         <span className={`truncate ${senderClassName}`}>
                           {sender}
                         </span>
-                        <span className="text-xs text-slate-500">
-                          {updatedAt}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {shouldShowActions && (
+                            <ProposalDecisionActions
+                              sessionId={sessionId ?? null}
+                              label={subject}
+                              size="sm"
+                              onDecision={() => markItemReviewed(item)}
+                            />
+                          )}
+                          <span className="text-xs text-slate-500">
+                            {updatedAt}
+                          </span>
+                        </div>
                       </div>
                       <p className={`mt-1 text-sm ${subjectClassName}`}>
                         {subject}
@@ -335,7 +461,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                     </div>
                   </div>
 
-                  <div className="hidden sm:grid w-full grid-cols-[minmax(0,200px)_minmax(0,1fr)_120px] gap-6 px-4 py-3">
+                  <div className="hidden sm:grid w-full grid-cols-[minmax(0,200px)_minmax(0,1fr)_80px_120px] gap-6 px-4 py-3">
                     <div className="flex items-center gap-3">
                       <Avatar name={sender} src={merchantAvatar} size="sm" />
                       <span className={`truncate ${senderClassName}`}>
@@ -349,11 +475,20 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                         {preview}
                       </span>
                     </div>
+                    <div className="flex items-center justify-center">
+                      {shouldShowActions ? (
+                        <ProposalDecisionActions
+                          sessionId={sessionId ?? null}
+                          label={subject}
+                          onDecision={() => markItemReviewed(item)}
+                        />
+                      ) : null}
+                    </div>
                     <div className="text-right text-xs text-slate-500">
                       {updatedAt}
                     </div>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

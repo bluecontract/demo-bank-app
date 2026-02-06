@@ -76,7 +76,7 @@ describe('mergeContractsAndProposals', () => {
     expect(isProposalItem(result[0])).toBe(false);
   });
 
-  it('replaces accepted proposal with contract when names match', () => {
+  it('keeps accepted proposal until a matching session id is available', () => {
     const result = mergeContractsAndProposals(
       [
         {
@@ -96,8 +96,8 @@ describe('mergeContractsAndProposals', () => {
       ]
     );
 
-    expect(result).toHaveLength(1);
-    expect(isProposalItem(result[0])).toBe(false);
+    expect(result).toHaveLength(2);
+    expect(result.some(item => isProposalItem(item))).toBe(true);
   });
 
   it('keeps rejected proposals even when session id matches', () => {

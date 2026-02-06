@@ -4,23 +4,20 @@ import { useContractReviewState } from './useContractReviewState';
 import { useContracts } from './useContracts';
 import { useProposals } from './useProposals';
 import { dedupeContracts } from '../lib/dedupeContracts';
-import { getContractChangeType } from '../lib/contractReview';
+import { getItemChangeType } from '../lib/contractReview';
 import {
   mergeContractsAndProposals,
-  isProposalItem,
+  getItemSessionId,
 } from '../lib/contractsAndProposals';
-import {
-  isInboxContract,
-  isImportantProposal,
-} from '../lib/contractListFilters';
-
-const POLLING_INTERVAL_MS = 5000;
+import { isInboxItem } from '../lib/contractListFilters';
+import { getContractsPollingInterval } from '../lib/contractsPolling';
 
 export function useContractsBadgeCount() {
   const { reviewedMap } = useContractReviewState();
   const { activeSessionId } = useActiveContractSession();
-  const contractsQuery = useContracts({ refetchInterval: POLLING_INTERVAL_MS });
-  const proposalsQuery = useProposals();
+  const refetchInterval = getContractsPollingInterval();
+  const contractsQuery = useContracts({ refetchInterval });
+  const proposalsQuery = useProposals({ refetchInterval });
 
   return useMemo(() => {
     const contracts = contractsQuery.data
@@ -33,17 +30,15 @@ export function useContractsBadgeCount() {
     }
 
     const listItems = mergeContractsAndProposals(contracts, proposals);
-    const inboxContracts = listItems.filter(isInboxContract);
-    const inboxCount = inboxContracts.filter(contract => {
-      if (activeSessionId && contract.sessionId === activeSessionId) {
+    const inboxItems = listItems.filter(isInboxItem);
+    const inboxCount = inboxItems.filter(item => {
+      const sessionId = getItemSessionId(item);
+      if (activeSessionId && sessionId && sessionId === activeSessionId) {
         return false;
       }
-      return Boolean(getContractChangeType(contract, reviewedMap));
+      return Boolean(getItemChangeType(item, reviewedMap));
     }).length;
-    const importantCount = listItems.filter(
-      item => isProposalItem(item) && isImportantProposal(item)
-    ).length;
 
-    return inboxCount + importantCount;
+    return inboxCount;
   }, [activeSessionId, contractsQuery.data, proposalsQuery.data, reviewedMap]);
 }

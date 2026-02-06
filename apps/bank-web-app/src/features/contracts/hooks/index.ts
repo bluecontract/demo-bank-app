@@ -11,6 +11,7 @@ export * from './useRelatedContracts';
 export * from './useProposals';
 export * from './useProposalDetails';
 export * from './useProposalSummary';
+export * from './useProposalDecision';
 export * from './useAcceptPayNoteDelivery';
 export * from './useRejectPayNoteDelivery';
 export * from './useUnarchiveContract';
