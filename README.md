@@ -161,6 +161,11 @@ docker ps --filter "name=${LOCALSTACK_CONTAINER_NAME:-localstack-demo-bank-app}"
 docker stop "${LOCALSTACK_CONTAINER_NAME:-localstack-demo-bank-app}"
 ```
 
+#### Troubleshooting LocalStack deploy
+
+- If you see `ResourceConflictException` / `Alias already exists` during local deploy, the LocalStack deploy wrapper auto-deletes the conflicting Lambda alias and retries.
+- `npm run serve:all` preserves local data (DynamoDB + Secrets); the wrapper only deletes Lambda aliases when this specific conflict occurs.
+
 ### Git Worktrees + LocalStack (Parallel Agents)
 
 Each worktree should run its own LocalStack container and ports. Use a
