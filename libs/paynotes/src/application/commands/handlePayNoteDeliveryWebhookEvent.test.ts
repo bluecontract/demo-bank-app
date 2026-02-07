@@ -654,6 +654,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
   it('identifies delivery and reports status for delivery documents', async () => {
     const deliveryDocument = buildDeliveryDocument();
     const deliveryId = buildCardTransactionDetailsKey(cardDetails);
+    const enqueuePayNoteDeliverySummary = vi.fn().mockResolvedValue(undefined);
 
     const myOsClient = {
       getCredentials: vi.fn().mockResolvedValue({
@@ -726,6 +727,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         bankingRepository: bankingRepository as any,
         holdRepository: holdRepository as any,
         bootstrapContextRepository,
+        enqueuePayNoteDeliverySummary,
         clock: { now: () => new Date('2024-01-02T10:00:00.000Z') },
       }
     );
@@ -748,12 +750,17 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         payload: true,
       })
     );
+    expect(enqueuePayNoteDeliverySummary).toHaveBeenCalledWith({
+      sessionId: 'delivery-session-1',
+      reason: 'delivery-update',
+    });
   });
 
   it('promotes pending identification when user is already linked', async () => {
     const deliveryDocument = buildDeliveryDocument();
     const deliveryId = buildCardTransactionDetailsKey(cardDetails);
     const now = '2024-01-03T10:00:00.000Z';
+    const enqueuePayNoteDeliverySummary = vi.fn().mockResolvedValue(undefined);
 
     const myOsClient = {
       getCredentials: vi.fn().mockResolvedValue({
@@ -834,6 +841,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         bankingRepository: {} as any,
         holdRepository: holdRepository as any,
         bootstrapContextRepository,
+        enqueuePayNoteDeliverySummary,
         clock: { now: () => new Date(now) },
       }
     );
@@ -855,6 +863,10 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         payload: true,
       })
     );
+    expect(enqueuePayNoteDeliverySummary).toHaveBeenCalledWith({
+      sessionId: 'delivery-session-1',
+      reason: 'delivery-update',
+    });
   });
 
   it('skips processing when event is already processed', async () => {
@@ -920,6 +932,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
   it('reports identification failure when hold is missing', async () => {
     const deliveryDocument = buildDeliveryDocument();
     const deliveryId = buildCardTransactionDetailsKey(cardDetails);
+    const enqueuePayNoteDeliverySummary = vi.fn().mockResolvedValue(undefined);
 
     const myOsClient = {
       getCredentials: vi.fn().mockResolvedValue({
@@ -980,6 +993,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         bankingRepository: {} as any,
         holdRepository: holdRepository as any,
         bootstrapContextRepository,
+        enqueuePayNoteDeliverySummary,
         clock: { now: () => new Date('2024-01-04T10:00:00.000Z') },
       }
     );
@@ -998,6 +1012,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         payload: false,
       })
     );
+    expect(enqueuePayNoteDeliverySummary).not.toHaveBeenCalled();
   });
 
   it('logs errors when delivery bootstrap fails', async () => {

@@ -86,6 +86,22 @@ const getPayNoteBootstrapDocument = (
   return toSimpleRecord(request?.document);
 };
 
+const resolvePayNoteProposalDocument = (
+  deliveryRecord: PayNoteDeliveryRecord
+): Record<string, unknown> | null => {
+  const deliveryDocument = toSimpleRecord(deliveryRecord.deliveryDocument);
+  const bootstrapRequest = toSimpleRecord(
+    deliveryDocument?.payNoteBootstrapRequest
+  );
+
+  return (
+    toSimpleRecord(bootstrapRequest?.document) ??
+    toSimpleRecord(deliveryDocument?.payNote) ??
+    toSimpleRecord(deliveryRecord.payNoteDocument) ??
+    null
+  );
+};
+
 export const handleDeliveryDocumentUpdate = async (input: {
   eventId: string;
   eventType?: string;
@@ -195,6 +211,27 @@ export const handleDeliveryDocumentUpdate = async (input: {
     now,
     deps,
   });
+
+  const enqueuePayNoteDeliverySummary = deps.enqueuePayNoteDeliverySummary;
+  const shouldEnqueuePayNoteDeliverySummary =
+    enqueuePayNoteDeliverySummary &&
+    sessionId &&
+    (eventType === 'DOCUMENT_CREATED' ||
+      eventType === 'DOCUMENT_EPOCH_ADVANCED') &&
+    deliveryRecord.transactionIdentificationStatus === 'identified' &&
+    Boolean(resolvePayNoteProposalDocument(deliveryRecord));
+
+  if (shouldEnqueuePayNoteDeliverySummary) {
+    await enqueuePayNoteDeliverySummary({
+      sessionId,
+      reason: 'delivery-update',
+    });
+    trace(logs, 'Enqueued PayNote Delivery summary', {
+      eventId,
+      deliveryId,
+      sessionId,
+    });
+  }
 
   const payNotePayload = getPayNoteBootstrapDocument(documentPayload);
   const payNoteSummary = getPayNoteSummaryFromDocument(payNotePayload);
