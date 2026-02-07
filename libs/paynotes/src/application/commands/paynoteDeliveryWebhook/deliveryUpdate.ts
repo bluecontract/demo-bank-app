@@ -48,6 +48,7 @@ const persistDeliveryRecord = async (input: {
     sessionId,
     documentId: deliveryRecord.deliveryDocumentId ?? deliveryDocumentId,
     eventType,
+    eventEpoch: eventObject?.epoch,
     userId: deliveryRecord.userId,
     accountNumber: deliveryRecord.accountNumber,
     triggerEvent: eventObject?.triggeredBy,

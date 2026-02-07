@@ -198,6 +198,7 @@ export const upsertPayNoteContract = async (input: {
   sessionId: string;
   payNoteDocumentId: string;
   eventType?: string;
+  eventEpoch?: number;
   triggerEvent?: unknown;
   emittedEvents?: WebhookEmittedEvent[];
   now: string;
@@ -210,6 +211,7 @@ export const upsertPayNoteContract = async (input: {
     sessionId,
     payNoteDocumentId,
     eventType,
+    eventEpoch,
     triggerEvent,
     emittedEvents,
     now,
@@ -225,6 +227,7 @@ export const upsertPayNoteContract = async (input: {
     documentId: payNoteDocumentId,
     document: updatedRecord.document,
     eventType,
+    eventEpoch,
     triggerEvent,
     emittedEvents,
     relatedHoldIds,
@@ -260,6 +263,7 @@ export const persistPayNoteRecord = async (input: {
     sessionId,
     payNoteDocumentId,
     eventType,
+    eventEpoch: eventObject?.epoch,
     triggerEvent: eventObject?.triggeredBy,
     emittedEvents,
     now,

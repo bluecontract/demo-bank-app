@@ -42,6 +42,7 @@ export type WebhookEventObject = {
   document?: unknown;
   emitted?: WebhookEmittedEvent[];
   triggeredBy?: unknown;
+  epoch?: number;
 };
 
 export type WebhookEventPayload = {

@@ -91,6 +91,7 @@ export const upsertContractRecord = async (input: {
   sessionId?: string;
   documentId?: string;
   eventType?: string;
+  eventEpoch?: number;
   userId?: string;
   accountNumber?: string;
   relatedTransactionIds?: string[];
@@ -132,7 +133,11 @@ export const upsertContractRecord = async (input: {
   const existing =
     existingByDocumentId ??
     (await input.contractRepository.getContract(contractId));
-  if (!existing && input.eventType === 'DOCUMENT_EPOCH_ADVANCED') {
+  const shouldSkipEpochAdvancedCreate =
+    !existing &&
+    input.eventType === 'DOCUMENT_EPOCH_ADVANCED' &&
+    input.eventEpoch !== 0;
+  if (shouldSkipEpochAdvancedCreate) {
     return null;
   }
   const status = input.status ?? existing?.status;
