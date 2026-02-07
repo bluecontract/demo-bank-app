@@ -7,6 +7,7 @@ import {
   handleWebhookEvent as handleWebhookEventUseCase,
   handlePayNoteDeliveryWebhookEvent,
   handlePayNoteBootstrapWebhookEvent,
+  consumePendingPayNoteBootstrapEvents,
   getDocumentBootstrapRequestFromEvent,
   getPayloadSummary,
 } from '@demo-bank-app/paynotes';
@@ -150,6 +151,7 @@ export const payNoteWebhookHandler = async (
     payNoteDeliveryRepository,
     payNoteBootstrapRepository,
     bootstrapContextRepository,
+    pendingBootstrapEventRepository,
     contractRepository,
     bankingRepository,
     holdRepository,
@@ -317,6 +319,23 @@ export const payNoteWebhookHandler = async (
               logger
             );
           },
+          consumePendingBootstrapEvents: async bootstrapSessionId => {
+            const consumeResult = await consumePendingPayNoteBootstrapEvents(
+              { bootstrapSessionId },
+              {
+                myOsClient,
+                payNoteRepository,
+                payNoteDeliveryRepository,
+                payNoteBootstrapRepository,
+                bootstrapContextRepository,
+                pendingBootstrapEventRepository,
+                contractRepository,
+                holdRepository,
+                clock,
+              }
+            );
+            logHandlerResult(consumeResult, 'No pending bootstrap events');
+          },
         }
       )
     : null;
@@ -332,6 +351,7 @@ export const payNoteWebhookHandler = async (
           payNoteDeliveryRepository,
           payNoteBootstrapRepository,
           bootstrapContextRepository,
+          pendingBootstrapEventRepository,
           contractRepository,
           holdRepository,
           clock,

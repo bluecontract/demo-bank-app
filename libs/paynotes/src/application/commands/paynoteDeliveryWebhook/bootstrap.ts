@@ -777,6 +777,18 @@ const handlePayNoteBootstrapRequest = async (input: {
     });
   }
 
+  if (bootstrapSessionId && deps.consumePendingBootstrapEvents) {
+    try {
+      await deps.consumePendingBootstrapEvents(bootstrapSessionId);
+    } catch (error) {
+      log(logs, 'error', 'Failed consuming pending bootstrap events', {
+        eventId,
+        bootstrapSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   log(logs, 'info', 'PayNote bootstrap requested', {
     eventId,
     bootstrapSessionId,

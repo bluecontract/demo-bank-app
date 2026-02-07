@@ -113,6 +113,11 @@ describe('payNoteWebhookHandler', () => {
         getContextBySessionId: vi.fn(),
         saveContext: vi.fn(),
       },
+      pendingBootstrapEventRepository: {
+        addPending: vi.fn(),
+        listPending: vi.fn(),
+        deletePending: vi.fn(),
+      },
       contractRepository: {
         getContract: vi.fn(),
         getContractBySessionId: vi.fn(),

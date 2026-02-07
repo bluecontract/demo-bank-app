@@ -26,6 +26,7 @@ export interface HandlePayNoteDeliveryWebhookDependencies {
     reason?: string;
     force?: boolean;
   }) => Promise<void>;
+  consumePendingBootstrapEvents?: (bootstrapSessionId: string) => Promise<void>;
 }
 
 export interface HandlePayNoteDeliveryWebhookResult {

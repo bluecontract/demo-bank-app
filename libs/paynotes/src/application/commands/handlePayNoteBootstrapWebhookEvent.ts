@@ -7,6 +7,7 @@ import type {
   ClockPort,
   LogEntry,
   MyOsClient,
+  PendingBootstrapEventRepository,
   PayNoteBootstrapRepository,
   PayNoteDeliveryRepository,
   PayNoteRepository,
@@ -26,6 +27,8 @@ import { getPayloadSummary, toBlueNode } from './webhookUtils';
 export interface HandlePayNoteBootstrapWebhookInput {
   payload: unknown;
   eventId?: string;
+  skipEventIdempotencyClaim?: boolean;
+  skipPendingBuffer?: boolean;
 }
 
 export interface HandlePayNoteBootstrapWebhookDependencies {
@@ -34,6 +37,7 @@ export interface HandlePayNoteBootstrapWebhookDependencies {
   payNoteDeliveryRepository: PayNoteDeliveryRepository;
   payNoteBootstrapRepository: PayNoteBootstrapRepository;
   bootstrapContextRepository: BootstrapContextRepository;
+  pendingBootstrapEventRepository: PendingBootstrapEventRepository;
   contractRepository: ContractRepository;
   holdRepository: HoldRepository;
   clock: ClockPort;
@@ -42,6 +46,17 @@ export interface HandlePayNoteBootstrapWebhookDependencies {
 export interface HandlePayNoteBootstrapWebhookResult {
   handled: boolean;
   note?: string;
+  logs: LogEntry[];
+}
+
+export interface ConsumePendingPayNoteBootstrapEventsInput {
+  bootstrapSessionId: string;
+}
+
+export interface ConsumePendingPayNoteBootstrapEventsResult {
+  handled: boolean;
+  consumedCount: number;
+  remainingCount: number;
   logs: LogEntry[];
 }
 
@@ -127,6 +142,15 @@ const fetchDocumentMessages = {
   networkError: 'Unexpected error resolving PayNote document',
 };
 
+const fetchEventMessages = {
+  notFound: 'Failed to resolve pending bootstrap event from MyOS',
+  httpError: 'Failed to resolve pending bootstrap event from MyOS',
+  parseError: 'Failed to parse pending bootstrap event response',
+  networkError: 'Unexpected error resolving pending bootstrap event',
+};
+
+const PENDING_BOOTSTRAP_EVENT_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 const resolvePayNoteDocument = async (
   sessionId: string,
   logs: LogEntry[],
@@ -177,6 +201,46 @@ const mergePayNoteRecord = (
   };
 };
 
+const bufferPendingBootstrapEvent = async (input: {
+  eventId: string;
+  bootstrapSessionId: string;
+  now: string;
+  logs: LogEntry[];
+  deps: HandlePayNoteBootstrapWebhookDependencies;
+}): Promise<void> => {
+  const { eventId, bootstrapSessionId, now, logs, deps } = input;
+  const ttl =
+    Math.floor(new Date(now).getTime() / 1000) +
+    PENDING_BOOTSTRAP_EVENT_TTL_SECONDS;
+
+  try {
+    await deps.pendingBootstrapEventRepository.addPending({
+      bootstrapSessionId,
+      eventId,
+      createdAt: now,
+      ttl,
+    });
+
+    log(logs, 'info', 'Buffered bootstrap event (missing context)', {
+      eventId,
+      bootstrapSessionId,
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name === 'ConditionalCheckFailedException'
+    ) {
+      trace(logs, 'Bootstrap event already buffered', {
+        eventId,
+        bootstrapSessionId,
+      });
+      return;
+    }
+
+    throw error;
+  }
+};
+
 export const handlePayNoteBootstrapWebhookEvent = async (
   input: HandlePayNoteBootstrapWebhookInput,
   deps: HandlePayNoteBootstrapWebhookDependencies
@@ -220,14 +284,17 @@ export const handlePayNoteBootstrapWebhookEvent = async (
     return { handled: false, logs };
   }
 
-  const firstProcess = await deps.payNoteDeliveryRepository.markEventProcessed(
-    eventId
-  );
-  if (!firstProcess) {
-    log(logs, 'info', 'PayNote bootstrap webhook already processed', {
-      eventId,
-    });
-    return { handled: true, logs };
+  const now = deps.clock.now().toISOString();
+
+  if (!input.skipEventIdempotencyClaim) {
+    const firstProcess =
+      await deps.payNoteDeliveryRepository.markEventProcessed(eventId);
+    if (!firstProcess) {
+      log(logs, 'info', 'PayNote bootstrap webhook already processed', {
+        eventId,
+      });
+      return { handled: true, logs };
+    }
   }
 
   const bootstrapSessionId =
@@ -272,11 +339,30 @@ export const handlePayNoteBootstrapWebhookEvent = async (
     : null;
 
   if (!deliveryRecord && !bootstrapRecord) {
-    log(logs, 'info', 'Bootstrap event ignored (no matching context)', {
+    if (bootstrapSessionId && !input.skipPendingBuffer) {
+      await bufferPendingBootstrapEvent({
+        eventId,
+        bootstrapSessionId,
+        now,
+        logs,
+        deps,
+      });
+      return {
+        handled: true,
+        note: 'Buffered waiting for bootstrap context',
+        logs,
+      };
+    }
+
+    log(logs, 'info', 'Bootstrap event deferred (no matching context)', {
       eventId,
       bootstrapSessionId,
     });
-    return { handled: true, logs };
+    return {
+      handled: true,
+      note: 'Deferred waiting for bootstrap context',
+      logs,
+    };
   }
 
   trace(logs, 'Bootstrap context resolved', {
@@ -285,8 +371,6 @@ export const handlePayNoteBootstrapWebhookEvent = async (
     hasDeliveryRecord: Boolean(deliveryRecord),
     hasBootstrapRecord: Boolean(bootstrapRecord),
   });
-
-  const now = deps.clock.now().toISOString();
 
   for (const { sessionIds } of targetEvents) {
     if (!sessionIds.length) {
@@ -405,4 +489,82 @@ export const handlePayNoteBootstrapWebhookEvent = async (
   }
 
   return { handled: true, logs };
+};
+
+export const consumePendingPayNoteBootstrapEvents = async (
+  input: ConsumePendingPayNoteBootstrapEventsInput,
+  deps: HandlePayNoteBootstrapWebhookDependencies
+): Promise<ConsumePendingPayNoteBootstrapEventsResult> => {
+  const logs: LogEntry[] = [];
+  const bootstrapSessionId = input.bootstrapSessionId?.trim();
+
+  if (!bootstrapSessionId) {
+    log(
+      logs,
+      'warn',
+      'Pending bootstrap consumption skipped (missing session)',
+      {
+        bootstrapSessionId: input.bootstrapSessionId,
+      }
+    );
+    return { handled: false, consumedCount: 0, remainingCount: 0, logs };
+  }
+
+  const pendingEvents = await deps.pendingBootstrapEventRepository.listPending(
+    bootstrapSessionId
+  );
+
+  if (!pendingEvents.length) {
+    trace(logs, 'No pending bootstrap events to consume', {
+      bootstrapSessionId,
+    });
+    return { handled: true, consumedCount: 0, remainingCount: 0, logs };
+  }
+
+  let consumedCount = 0;
+  let remainingCount = 0;
+
+  for (const pendingEvent of pendingEvents) {
+    const { eventId } = pendingEvent;
+    const eventResult = await deps.myOsClient.fetchEvent(eventId);
+
+    if (eventResult.kind !== 'success') {
+      remainingCount += 1;
+      logMyOsFetchError(
+        eventResult,
+        logs,
+        { bootstrapSessionId, eventId },
+        fetchEventMessages
+      );
+      continue;
+    }
+
+    const processingResult = await handlePayNoteBootstrapWebhookEvent(
+      {
+        eventId,
+        payload: eventResult.payload,
+        skipEventIdempotencyClaim: true,
+        skipPendingBuffer: true,
+      },
+      deps
+    );
+    logs.push(...processingResult.logs);
+
+    if (processingResult.note === 'Deferred waiting for bootstrap context') {
+      remainingCount += 1;
+      continue;
+    }
+
+    await deps.pendingBootstrapEventRepository.deletePending({
+      bootstrapSessionId,
+      eventId,
+    });
+    consumedCount += 1;
+    trace(logs, 'Consumed pending bootstrap event', {
+      bootstrapSessionId,
+      eventId,
+    });
+  }
+
+  return { handled: true, consumedCount, remainingCount, logs };
 };

@@ -267,6 +267,24 @@ export interface BootstrapContextRepository {
   saveContext(record: BootstrapContextRecord): Promise<void>;
 }
 
+export interface PendingBootstrapEventRecord {
+  bootstrapSessionId: string;
+  eventId: string;
+  createdAt: string;
+  ttl?: number;
+}
+
+export interface PendingBootstrapEventRepository {
+  addPending(record: PendingBootstrapEventRecord): Promise<void>;
+  listPending(
+    bootstrapSessionId: string
+  ): Promise<PendingBootstrapEventRecord[]>;
+  deletePending(input: {
+    bootstrapSessionId: string;
+    eventId: string;
+  }): Promise<void>;
+}
+
 export interface BankingAccount {
   id: string;
   accountNumber: string;

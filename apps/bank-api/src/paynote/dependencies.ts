@@ -26,11 +26,13 @@ import {
   DynamoPayNoteRepository,
   DynamoPayNoteBootstrapRepository,
   DynamoBootstrapContextRepository,
+  DynamoPendingBootstrapEventRepository,
   type PayNoteVerificationRepository,
   type PayNoteDeliveryRepository,
   type PayNoteRepository,
   type PayNoteBootstrapRepository,
   type BootstrapContextRepository,
+  type PendingBootstrapEventRepository,
   type BankingFacade,
   type MyOsClient,
   type BlueIdCalculator,
@@ -57,6 +59,7 @@ export type PaynoteDependencies = {
   payNoteRepository: PayNoteRepository;
   payNoteBootstrapRepository: PayNoteBootstrapRepository;
   bootstrapContextRepository: BootstrapContextRepository;
+  pendingBootstrapEventRepository: PendingBootstrapEventRepository;
   contractRepository: ContractRepository;
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
@@ -142,6 +145,13 @@ const initializeDependencies = async (): Promise<PaynoteDependencies> => {
     endpoint: awsEndpoint,
   });
 
+  const pendingBootstrapEventRepository =
+    new DynamoPendingBootstrapEventRepository({
+      tableName: authTableName,
+      region: awsRegion,
+      endpoint: awsEndpoint,
+    });
+
   const contractRepository = new DynamoContractRepository({
     tableName,
     region: awsRegion,
@@ -201,6 +211,7 @@ const initializeDependencies = async (): Promise<PaynoteDependencies> => {
     payNoteRepository,
     payNoteBootstrapRepository,
     bootstrapContextRepository,
+    pendingBootstrapEventRepository,
     contractRepository,
     bankingRepository,
     holdRepository,
