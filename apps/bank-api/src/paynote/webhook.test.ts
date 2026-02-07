@@ -11,6 +11,10 @@ const hoistedPaynotes = vi.hoisted(() => ({
   handlePayNoteDeliveryWebhookEventMock: vi.fn(),
 }));
 
+const hoistedRepositories = vi.hoisted(() => ({
+  contractRepository: null as any,
+}));
+
 const hoistedAdapters = vi.hoisted(() => ({
   fetchEventImpl: vi.fn(),
   fetchDocumentImpl: vi.fn(),
@@ -84,6 +88,17 @@ describe('payNoteWebhookHandler', () => {
       captureHold: hoistedAdapters.captureHoldMock,
     };
 
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractBySessionId: vi.fn(),
+      getContractByDocumentId: vi.fn(),
+      saveContract: vi.fn(),
+      updateContractSummary: vi.fn(),
+      listContractsByUserId: vi.fn(),
+      markSummaryEventProcessed: vi.fn().mockResolvedValue(true),
+    };
+    hoistedRepositories.contractRepository = contractRepository;
+
     hoistedDeps.getDependenciesMock.mockResolvedValue({
       logger,
       myOsClient,
@@ -118,15 +133,7 @@ describe('payNoteWebhookHandler', () => {
         listPending: vi.fn(),
         deletePending: vi.fn(),
       },
-      contractRepository: {
-        getContract: vi.fn(),
-        getContractBySessionId: vi.fn(),
-        getContractByDocumentId: vi.fn(),
-        saveContract: vi.fn(),
-        updateContractSummary: vi.fn(),
-        listContractsByUserId: vi.fn(),
-        markSummaryEventProcessed: vi.fn().mockResolvedValue(true),
-      },
+      contractRepository,
       bankingRepository: {
         getAccountIdByNumber: vi.fn(),
         getAccountById: vi.fn(),
@@ -360,5 +367,63 @@ describe('payNoteWebhookHandler', () => {
       { eventId: 'event-bootstrap', payload },
       expect.any(Object)
     );
+  });
+
+  it('skips contract summary enqueue for non-canonical sessions', async () => {
+    hoistedRepositories.contractRepository.getContractBySessionId.mockResolvedValue(
+      null
+    );
+
+    const response = await payNoteWebhookHandler({
+      body: {
+        id: 'event-non-canonical',
+        object: {
+          sessionId: 'session-non-canonical',
+          document: { type: { blueId: PAYNOTE_DELIVERY_BLUE_ID } },
+        },
+      },
+    } as any);
+
+    expect(response.status).toBe(200);
+    expect(
+      hoistedRepositories.contractRepository.getContractBySessionId
+    ).toHaveBeenCalledWith('session-non-canonical');
+    expect(
+      hoistedRepositories.contractRepository.markSummaryEventProcessed
+    ).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Skipping contract-summary enqueue (no contract for session; non-canonical session?)',
+      expect.objectContaining({
+        eventId: 'event-non-canonical',
+        sessionId: 'session-non-canonical',
+      })
+    );
+  });
+
+  it('keeps summary dedupe flow for canonical sessions', async () => {
+    hoistedRepositories.contractRepository.getContractBySessionId.mockResolvedValue(
+      { contractId: 'contract-1' }
+    );
+    hoistedRepositories.contractRepository.markSummaryEventProcessed.mockResolvedValue(
+      true
+    );
+
+    const response = await payNoteWebhookHandler({
+      body: {
+        id: 'event-canonical',
+        object: {
+          sessionId: 'session-canonical',
+          document: { type: { blueId: PAYNOTE_DELIVERY_BLUE_ID } },
+        },
+      },
+    } as any);
+
+    expect(response.status).toBe(200);
+    expect(
+      hoistedRepositories.contractRepository.getContractBySessionId
+    ).toHaveBeenCalledWith('session-canonical');
+    expect(
+      hoistedRepositories.contractRepository.markSummaryEventProcessed
+    ).toHaveBeenCalledWith('event-canonical');
   });
 });

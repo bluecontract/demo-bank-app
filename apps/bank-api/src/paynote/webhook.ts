@@ -388,22 +388,33 @@ export const payNoteWebhookHandler = async (
   const sessionId = (payload as { object?: { sessionId?: unknown } })?.object
     ?.sessionId;
   if (typeof sessionId === 'string' && documentType.isSupportedContract) {
-    const firstSummaryEvent =
-      await contractRepository.markSummaryEventProcessed(eventId);
-    if (firstSummaryEvent) {
-      void enqueueSummaryJob(
+    const contract = await contractRepository.getContractBySessionId(sessionId);
+    if (!contract) {
+      logger.debug(
+        'Skipping contract-summary enqueue (no contract for session; non-canonical session?)',
         {
-          type: 'contract-summary',
+          eventId,
           sessionId,
-          reason: 'webhook',
-        },
-        logger
+        }
       );
     } else {
-      logger.debug('Skipped duplicate summary job', {
-        eventId,
-        sessionId,
-      });
+      const firstSummaryEvent =
+        await contractRepository.markSummaryEventProcessed(eventId);
+      if (firstSummaryEvent) {
+        void enqueueSummaryJob(
+          {
+            type: 'contract-summary',
+            sessionId,
+            reason: 'webhook',
+          },
+          logger
+        );
+      } else {
+        logger.debug('Skipped duplicate summary job', {
+          eventId,
+          sessionId,
+        });
+      }
     }
   }
 
