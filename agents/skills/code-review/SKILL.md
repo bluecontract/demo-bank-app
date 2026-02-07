@@ -52,6 +52,9 @@ agents/skills/code-review/scripts/run-review.sh short-slug
 Notes:
 
 - Configure timeout with `REVIEW_TIMEOUT_SECONDS` (default: 600 seconds per model).
+- Gemini is run with shell/git tool access by default so it can inspect staged diffs directly:
+  - `GEMINI_APPROVAL_MODE` (default: `yolo`)
+  - `GEMINI_ALLOWED_TOOLS` (default: `run_shell_command,read_file,search_file_content,save_memory`)
 - If a model fails or times out, its output file will contain the error details.
 
 # Command Template (manual fallback)
@@ -85,8 +88,18 @@ EOF
 prompt=$(cat "$prompt_file")
 
 claude --model sonnet -p "$prompt" > "${review_dir}/claude.md"
-gemini -m gemini-3-pro-preview --allowed-tools= "$prompt" > "${review_dir}/gemini.md" \
-  || gemini -m gemini-3-flash-preview --allowed-tools= "$prompt" > "${review_dir}/gemini.md"
+gemini --approval-mode yolo \
+  --allowed-tools run_shell_command \
+  --allowed-tools read_file \
+  --allowed-tools search_file_content \
+  --allowed-tools save_memory \
+  -m gemini-3-pro-preview -p "$prompt" > "${review_dir}/gemini.md" \
+  || gemini --approval-mode yolo \
+    --allowed-tools run_shell_command \
+    --allowed-tools read_file \
+    --allowed-tools search_file_content \
+    --allowed-tools save_memory \
+    -m gemini-3-flash-preview -p "$prompt" > "${review_dir}/gemini.md"
 # Uses the default codex CLI model; optionally override with CODEX_REVIEW_MODEL.
 codex review "$prompt" > "${review_dir}/codex.md"
 

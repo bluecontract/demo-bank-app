@@ -9,6 +9,9 @@ prompt_file="${review_dir}/context.md"
 result_file="${review_dir}/result.md"
 # Default: 600s (10 minutes) per model unless overridden via REVIEW_TIMEOUT_SECONDS.
 timeout_seconds="${REVIEW_TIMEOUT_SECONDS:-600}"
+# Gemini needs shell tool access to inspect staged diffs via git.
+gemini_approval_mode="${GEMINI_APPROVAL_MODE:-yolo}"
+gemini_allowed_tools="${GEMINI_ALLOWED_TOOLS:-run_shell_command,read_file,search_file_content,save_memory}"
 
 if git diff --cached --quiet; then
   echo "No staged changes to review." >&2
@@ -156,10 +159,18 @@ run_model() {
 
 run_model "claude" "${review_dir}/claude.md" claude --model sonnet -p "$prompt"
 run_gemini_with_fallback() {
-  if run_model "gemini" "${review_dir}/gemini.md" gemini -m gemini-3-pro-preview --allowed-tools= "$prompt"; then
+  local -a base_args=(--approval-mode "${gemini_approval_mode}")
+  IFS=',' read -r -a gemini_tools <<< "${gemini_allowed_tools}"
+  for tool_name in "${gemini_tools[@]}"; do
+    if [[ -n "${tool_name}" ]]; then
+      base_args+=(--allowed-tools "${tool_name}")
+    fi
+  done
+
+  if run_model "gemini" "${review_dir}/gemini.md" gemini "${base_args[@]}" -m gemini-3-pro-preview -p "$prompt"; then
     return 0
   fi
-  run_model "gemini (fallback)" "${review_dir}/gemini.md" gemini -m gemini-3-flash-preview --allowed-tools= "$prompt"
+  run_model "gemini (fallback)" "${review_dir}/gemini.md" gemini "${base_args[@]}" -m gemini-3-flash-preview -p "$prompt"
 }
 
 run_gemini_with_fallback
