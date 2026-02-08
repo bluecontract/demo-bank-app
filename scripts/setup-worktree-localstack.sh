@@ -585,9 +585,47 @@ const applyEndpoint = section => {
   }
 };
 
+const deriveEnvironmentName = section => {
+  if (!section || typeof section !== 'object') {
+    return 'dev';
+  }
+
+  const serviceName =
+    typeof section.SERVICE_NAME === 'string' ? section.SERVICE_NAME.trim() : '';
+  if (serviceName) {
+    const parts = serviceName.split('-').filter(Boolean);
+    if (parts.length > 0) {
+      return parts[parts.length - 1];
+    }
+  }
+
+  const tableName =
+    typeof section.BANKING_DYNAMO_TABLE_NAME === 'string'
+      ? section.BANKING_DYNAMO_TABLE_NAME.trim()
+      : '';
+  if (tableName) {
+    const parts = tableName.split('-').filter(Boolean);
+    if (parts.length > 0) {
+      return parts[parts.length - 1];
+    }
+  }
+
+  return 'dev';
+};
+
+const applySummaryQueueUrl = section => {
+  if (!section || typeof section !== 'object') return;
+  const environment = deriveEnvironmentName(section);
+  const endpointBase = dockerEndpoint.replace(/\/+$/, '');
+  section.SUMMARY_QUEUE_URL = `${endpointBase}/000000000000/demo-bank-summary-jobs-${environment}.fifo`;
+};
+
 applyEndpoint(json.Parameters);
 applyEndpoint(json.BankLambdaFunction);
 applyEndpoint(json.SummaryLambdaFunction);
+applySummaryQueueUrl(json.Parameters);
+applySummaryQueueUrl(json.BankLambdaFunction);
+applySummaryQueueUrl(json.SummaryLambdaFunction);
 
 const applySecrets = (section, values) => {
   if (!section || typeof section !== 'object' || !values) return;
