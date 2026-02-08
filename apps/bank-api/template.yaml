@@ -10,6 +10,10 @@ Parameters:
   AwsEndpointUrl:
     Type: String
     Default: ''
+  EnableLambdaAlias:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
 
 Globals:
   Function:
@@ -23,6 +27,9 @@ Globals:
         NODE_ENV: !Ref Environment
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
         CONTRACT_SUMMARY_TIMEOUT_MS: 45000
+
+Conditions:
+  UseLambdaAlias: !Equals [!Ref EnableLambdaAlias, 'true']
 
 Resources:
   # DynamoDB Table for Single Table Design
@@ -186,7 +193,6 @@ Resources:
       Handler: main.handler
       CodeUri: ../../dist/apps/bank-api/lambda/
       Description: Banking API Lambda function
-      AutoPublishAlias: live
       Environment:
         Variables:
           AUTH_DYNAMO_TABLE_NAME: !Ref BankTable
@@ -256,7 +262,6 @@ Resources:
       Handler: summary.handler
       CodeUri: ../../dist/apps/bank-api/lambda/
       Description: Banking summary Lambda function
-      AutoPublishAlias: live
       Environment:
         Variables:
           AUTH_DYNAMO_TABLE_NAME: !Ref BankTable
@@ -313,6 +318,36 @@ Resources:
             RestApiId: !Ref BankApi
             Path: /v1/contracts/{sessionId}/summary
             Method: POST
+
+  BankLambdaFunctionVersion:
+    Type: AWS::Lambda::Version
+    Condition: UseLambdaAlias
+    Properties:
+      FunctionName: !Ref BankLambdaFunction
+      Description: !Sub 'bank-api-live-${Environment}'
+
+  BankLambdaFunctionAliasLive:
+    Type: AWS::Lambda::Alias
+    Condition: UseLambdaAlias
+    Properties:
+      FunctionName: !Ref BankLambdaFunction
+      FunctionVersion: !GetAtt BankLambdaFunctionVersion.Version
+      Name: live
+
+  SummaryLambdaFunctionVersion:
+    Type: AWS::Lambda::Version
+    Condition: UseLambdaAlias
+    Properties:
+      FunctionName: !Ref SummaryLambdaFunction
+      Description: !Sub 'bank-summary-live-${Environment}'
+
+  SummaryLambdaFunctionAliasLive:
+    Type: AWS::Lambda::Alias
+    Condition: UseLambdaAlias
+    Properties:
+      FunctionName: !Ref SummaryLambdaFunction
+      FunctionVersion: !GetAtt SummaryLambdaFunctionVersion.Version
+      Name: live
   # ------------------------------------------------------------------
   # Seed the FUNDING_SOURCE account and its BALANCE row (idempotent)
   # ------------------------------------------------------------------

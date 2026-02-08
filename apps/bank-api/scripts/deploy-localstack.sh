@@ -13,6 +13,8 @@ set -euo pipefail
 # deleting the failed stack and retrying deploy once.
 
 ENVIRONMENT="${ENVIRONMENT:-dev}"
+# LocalStack default should avoid Lambda aliases unless explicitly enabled.
+ENABLE_LAMBDA_ALIAS="${ENABLE_LAMBDA_ALIAS:-false}"
 
 AWS_CLI_AVAILABLE=false
 if command -v aws >/dev/null 2>&1; then
@@ -86,6 +88,12 @@ is_stack_rollback_complete_error() {
   local log_file="$1"
   grep -q "ROLLBACK_COMPLETE" "${log_file}" \
     && grep -Eqi "can not be updated|cannot be updated" "${log_file}"
+}
+
+is_alias_fn_sub_changeset_error() {
+  local log_file="$1"
+  grep -q "Undefined variable name in Fn::Sub string template 'BankLambdaFunctionAliaslive'" "${log_file}" \
+    || grep -q "Undefined variable name in Fn::Sub string template 'SummaryLambdaFunctionAliaslive'" "${log_file}"
 }
 
 resolve_stack_name_from_args() {
@@ -205,8 +213,61 @@ recover_from_rollback_complete() {
   delete_stack_and_wait "${stack_name}"
 }
 
+inject_enable_lambda_alias_override() {
+  local desired_value="EnableLambdaAlias=${ENABLE_LAMBDA_ALIAS}"
+  local index
+
+  for index in "${!deploy_args[@]}"; do
+    local arg="${deploy_args[${index}]}"
+    case "${arg}" in
+      --parameter-overrides=*)
+        local overrides="${arg#--parameter-overrides=}"
+        if [[ "${overrides}" == *"EnableLambdaAlias="* ]]; then
+          return 0
+        fi
+        deploy_args[${index}]="--parameter-overrides=${overrides} ${desired_value}"
+        return 0
+        ;;
+    esac
+  done
+
+  for index in "${!deploy_args[@]}"; do
+    if [[ "${deploy_args[${index}]}" != "--parameter-overrides" ]]; then
+      continue
+    fi
+
+    local scan_index=$((index + 1))
+    local has_override=false
+    while ((scan_index < ${#deploy_args[@]})); do
+      local token="${deploy_args[${scan_index}]}"
+      if [[ "${token}" == --* ]]; then
+        break
+      fi
+      if [[ "${token}" == EnableLambdaAlias=* ]]; then
+        has_override=true
+        break
+      fi
+      ((scan_index++))
+    done
+
+    if [[ "${has_override}" == "true" ]]; then
+      return 0
+    fi
+
+    deploy_args=(
+      "${deploy_args[@]:0:${scan_index}}"
+      "${desired_value}"
+      "${deploy_args[@]:${scan_index}}"
+    )
+    return 0
+  done
+
+  deploy_args+=("--parameter-overrides" "${desired_value}")
+}
+
 echo "Running samlocal deploy..."
 deploy_args=("$@")
+inject_enable_lambda_alias_override
 
 deploy_log="$(mktemp)"
 trap 'rm -f "${deploy_log}"' EXIT
@@ -243,6 +304,15 @@ if [[ "${deploy_status}" -ne 0 ]] && is_stack_rollback_complete_error "${deploy_
   samlocal deploy "${deploy_args[@]}" 2>&1 | tee "${deploy_log}"
   deploy_status=${PIPESTATUS[0]}
   set -e
+fi
+
+if [[ "${deploy_status}" -ne 0 ]] && is_alias_fn_sub_changeset_error "${deploy_log}"; then
+  echo "Error: LocalStack CloudFormation failed with known Fn::Sub alias bug (BankLambdaFunctionAliaslive)." >&2
+  echo "Explicit recovery required (no automatic fallback):" >&2
+  echo "  1) ensure local aliases are disabled (EnableLambdaAlias=false; default in this script)," >&2
+  echo "  2) remove the failed LocalStack stack if needed:" >&2
+  echo "     aws ${AWS_ARGS[*]} cloudformation delete-stack --stack-name demo-bank-blue" >&2
+  echo "  3) redeploy." >&2
 fi
 
 exit "${deploy_status}"
