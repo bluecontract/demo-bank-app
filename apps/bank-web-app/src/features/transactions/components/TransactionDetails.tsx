@@ -3,12 +3,10 @@ import type { RelatedContractItem } from '../../../types/api';
 import { Card } from '../../../ui/Card';
 import { formatCurrency } from '../../../lib/formatCurrency';
 import { formatAccountNumber } from '../../../lib/formatAccountNumber';
-import { formatShortDate, formatLongDate } from '../../../lib/formatDate';
-import { formatStatusLabel } from '../../../lib/formatStatusLabel';
+import { formatShortDate } from '../../../lib/formatDate';
 import { Spinner } from '../../../ui/Spinner';
 import { navigateTo } from '../../../lib/navigation';
 import { useActiveContractSession } from '../../contracts/hooks';
-import { getContractLastChangeAt } from '../../contracts/lib/contractTimestamps';
 import {
   getRelatedContractTarget,
   getRelatedContractSessionId,
@@ -38,6 +36,45 @@ interface TransactionDetailsProps {
   isRelatedContractsLoading?: boolean;
   relatedContractsError?: string;
 }
+
+const formatStatusText = (value?: string): string | null => {
+  if (!value) {
+    return null;
+  }
+  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+};
+
+const getRelatedContractName = (contract: RelatedContractItem): string => {
+  if (isProposalRelatedContract(contract)) {
+    return contract.name?.trim() || 'PayNote proposal';
+  }
+  return contract.documentName?.trim() || contract.displayName;
+};
+
+const getRelatedContractPreview = (
+  contract: RelatedContractItem
+): string | null => {
+  const summaryPreview = contract.summaryPreview?.trim();
+  if (summaryPreview) {
+    return summaryPreview;
+  }
+
+  if (isProposalRelatedContract(contract)) {
+    if (contract.amountMinor != null) {
+      const currency = contract.currency ? ` ${contract.currency}` : '';
+      return `${formatCurrency(contract.amountMinor)}${currency}`;
+    }
+    if (contract.transactionId) {
+      return `Transaction ${contract.transactionId}`;
+    }
+    return (
+      formatStatusText(contract.clientDecisionStatus) ?? 'Proposal updated'
+    );
+  }
+
+  const statusLabel = formatStatusText(contract.status);
+  return statusLabel ? `Status: ${statusLabel}` : 'Contract updated';
+};
 
 export function TransactionDetails({
   transaction,
@@ -122,15 +159,6 @@ export function TransactionDetails({
 
   const { visibleRelatedContracts } =
     getVisibleRelatedContracts(relatedContracts);
-
-  const formatContractStatus = formatStatusLabel;
-
-  const contractStatusStyles: Record<string, string> = {
-    accepted: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
-    rejected: 'bg-rose-50 text-rose-700 border border-rose-100',
-    pending: 'bg-amber-50 text-amber-700 border border-amber-100',
-    bootstrapped: 'bg-sky-50 text-sky-700 border border-sky-100',
-  };
 
   const handleContractClick = (contract: RelatedContractItem) => {
     const sessionId = getRelatedContractSessionId(contract);
@@ -318,23 +346,8 @@ export function TransactionDetails({
                 const isSelectable = isProposal
                   ? Boolean(contract.deliverySessionId)
                   : Boolean(contract.sessionId);
-                const primaryName = isProposal
-                  ? contract.name?.trim() || 'PayNote proposal'
-                  : contract.documentName?.trim() || contract.displayName;
-                const statusValue = isProposal
-                  ? contract.clientDecisionStatus ?? 'pending'
-                  : contract.status;
-                const statusKey = statusValue?.toLowerCase() ?? '';
-                const statusStyle =
-                  contractStatusStyles[statusKey] ??
-                  'bg-slate-100 text-slate-700 border border-slate-200';
-                const contractDate = formatLongDate(
-                  isProposal
-                    ? contract.updatedAt ?? contract.createdAt
-                    : getContractLastChangeAt(contract) ??
-                        contract.updatedAt ??
-                        contract.createdAt
-                );
+                const primaryName = getRelatedContractName(contract);
+                const preview = getRelatedContractPreview(contract);
 
                 return (
                   <button
@@ -357,27 +370,13 @@ export function TransactionDetails({
                     }}
                     disabled={!isSelectable}
                   >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-slate-900">
-                          {primaryName}
-                        </p>
-                        {contractDate && (
-                          <p className="text-xs text-slate-500">
-                            {contractDate}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="app-chip app-chip-neutral">
-                          {isProposal ? 'Proposal' : contract.displayName}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-1 font-semibold ${statusStyle}`}
-                        >
-                          {formatContractStatus(statusValue)}
-                        </span>
-                      </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {primaryName}
+                      </p>
+                      {preview && (
+                        <p className="text-sm text-slate-600">{preview}</p>
+                      )}
                     </div>
                   </button>
                 );

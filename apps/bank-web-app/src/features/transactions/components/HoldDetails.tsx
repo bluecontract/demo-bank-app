@@ -36,6 +36,46 @@ interface HoldDetailsProps {
   relatedContractsError?: string;
 }
 
+const formatRelatedContractStatus = (value?: string): string | null => {
+  if (!value) {
+    return null;
+  }
+  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+};
+
+const getRelatedContractName = (contract: RelatedContractItem): string => {
+  if (isProposalRelatedContract(contract)) {
+    return contract.name?.trim() || 'PayNote proposal';
+  }
+  return contract.documentName?.trim() || contract.displayName;
+};
+
+const getRelatedContractPreview = (
+  contract: RelatedContractItem
+): string | null => {
+  const summaryPreview = contract.summaryPreview?.trim();
+  if (summaryPreview) {
+    return summaryPreview;
+  }
+
+  if (isProposalRelatedContract(contract)) {
+    if (contract.amountMinor != null) {
+      const currency = contract.currency ? ` ${contract.currency}` : '';
+      return `${formatCurrency(contract.amountMinor)}${currency}`;
+    }
+    if (contract.transactionId) {
+      return `Transaction ${contract.transactionId}`;
+    }
+    return (
+      formatRelatedContractStatus(contract.clientDecisionStatus) ??
+      'Proposal updated'
+    );
+  }
+
+  const statusLabel = formatRelatedContractStatus(contract.status);
+  return statusLabel ? `Status: ${statusLabel}` : 'Contract updated';
+};
+
 const statusStyles: Record<
   Extract<ActivityDetail, { kind: 'HOLD' }>['status'],
   string
@@ -147,18 +187,6 @@ const formatStatusLabel = (status: HoldStatus) => {
     default:
       return 'Pending';
   }
-};
-
-const formatContractStatus = (value?: string) => {
-  if (!value) return 'Unknown';
-  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
-};
-
-const contractStatusStyles: Record<string, string> = {
-  accepted: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
-  rejected: 'bg-rose-50 text-rose-700 border border-rose-100',
-  pending: 'bg-amber-50 text-amber-700 border border-amber-100',
-  bootstrapped: 'bg-sky-50 text-sky-700 border border-sky-100',
 };
 
 export function HoldDetails({
@@ -396,16 +424,8 @@ export function HoldDetails({
                   const isSelectable = isProposal
                     ? Boolean(contract.deliverySessionId)
                     : Boolean(contract.sessionId);
-                  const primaryName = isProposal
-                    ? contract.name?.trim() || 'PayNote proposal'
-                    : contract.documentName?.trim() || contract.displayName;
-                  const statusValue = isProposal
-                    ? contract.clientDecisionStatus ?? 'pending'
-                    : contract.status;
-                  const statusKey = statusValue?.toLowerCase() ?? '';
-                  const statusStyle =
-                    contractStatusStyles[statusKey] ??
-                    'bg-slate-100 text-slate-700 border border-slate-200';
+                  const primaryName = getRelatedContractName(contract);
+                  const preview = getRelatedContractPreview(contract);
 
                   return (
                     <button
@@ -428,25 +448,13 @@ export function HoldDetails({
                       }}
                       disabled={!isSelectable}
                     >
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <p className="text-sm font-semibold text-slate-900 truncate">
                           {primaryName}
                         </p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="app-chip app-chip-neutral">
-                            {isProposal ? 'Proposal' : contract.displayName}
-                          </span>
-                          {isProposal && (
-                            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-100">
-                              Proposal
-                            </span>
-                          )}
-                          <span
-                            className={`text-xs font-semibold px-2 py-1 rounded-full ${statusStyle}`}
-                          >
-                            {formatContractStatus(statusValue)}
-                          </span>
-                        </div>
+                        {preview && (
+                          <p className="text-sm text-slate-600">{preview}</p>
+                        )}
                       </div>
                     </button>
                   );

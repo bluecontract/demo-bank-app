@@ -109,8 +109,8 @@ describe('HoldDetails', () => {
       />
     );
 
-    expect(screen.getAllByText('PayNote Voucher')).toHaveLength(2);
-    expect(screen.getByText('Accepted')).toBeInTheDocument();
+    expect(screen.getByText('PayNote Voucher')).toBeInTheDocument();
+    expect(screen.getByText('Status: Accepted')).toBeInTheDocument();
     expect(
       screen.queryByText('No related contracts found.')
     ).not.toBeInTheDocument();
@@ -139,8 +139,8 @@ describe('HoldDetails', () => {
     );
 
     expect(screen.getByText('Slow Digestion PayNote')).toBeInTheDocument();
-    expect(screen.getAllByText('Proposal').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Pending').length).toBeGreaterThan(0);
+    expect(screen.getByText('$12.00 USD')).toBeInTheDocument();
+    expect(screen.queryByText('Proposal')).not.toBeInTheDocument();
   });
 
   it('hides proposal when matching contract exists', () => {
@@ -207,8 +207,8 @@ describe('HoldDetails', () => {
     );
 
     expect(screen.getByText('Delayed PayNote')).toBeInTheDocument();
-    expect(screen.getAllByText('Proposal').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Pending').length).toBeGreaterThan(0);
+    expect(screen.getByText('$24.00 USD')).toBeInTheDocument();
+    expect(screen.queryByText('Proposal')).not.toBeInTheDocument();
   });
 
   it('navigates to proposal details when clicking a linked proposal', () => {

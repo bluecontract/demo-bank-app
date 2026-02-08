@@ -276,8 +276,8 @@ describe('TransactionDetails', () => {
       />
     );
 
-    expect(screen.getAllByText('PayNote Voucher')).toHaveLength(2);
-    expect(screen.getByText('Accepted')).toBeInTheDocument();
+    expect(screen.getByText('PayNote Voucher')).toBeInTheDocument();
+    expect(screen.getByText('Status: Accepted')).toBeInTheDocument();
     expect(
       screen.queryByText('No related contracts found.')
     ).not.toBeInTheDocument();
@@ -306,8 +306,8 @@ describe('TransactionDetails', () => {
     );
 
     expect(screen.getByText('Slow Digestion PayNote')).toBeInTheDocument();
-    expect(screen.getAllByText('Proposal').length).toBeGreaterThan(0);
-    expect(screen.getByText('Pending')).toBeInTheDocument();
+    expect(screen.getByText('$12.00 USD')).toBeInTheDocument();
+    expect(screen.queryByText('Proposal')).not.toBeInTheDocument();
   });
 
   it('navigates to proposal details when clicking a linked proposal', () => {
