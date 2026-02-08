@@ -343,8 +343,8 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
           <div className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_80px_120px] gap-6 px-4 py-2 text-xs font-semibold text-slate-500">
             <span>From</span>
             <span>Contract</span>
-            <span className="sr-only">Actions</span>
-            <span>Last change</span>
+            <span className="invisible">Actions</span>
+            <div className="col-start-4 w-full text-right">Last change</div>
           </div>
         </div>
 
