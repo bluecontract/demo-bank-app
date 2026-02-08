@@ -23,6 +23,7 @@ const fetchDocumentMessages = {
 type PayNoteDocumentResolution = {
   payNoteDocumentId: string;
   resolvedDocument?: Record<string, unknown>;
+  resolvedDocumentRaw?: unknown;
 };
 
 export const resolvePayNoteDocumentId = async (input: {
@@ -38,6 +39,7 @@ export const resolvePayNoteDocumentId = async (input: {
   const { eventId, sessionId, payNoteRecord, deps, logs } = input;
   let payNoteDocumentId = payNoteRecord?.payNoteDocumentId;
   let resolvedDocument: Record<string, unknown> | undefined;
+  let resolvedDocumentRaw: unknown;
 
   if (!payNoteDocumentId) {
     const documentResult = await deps.myOsClient.fetchDocument(sessionId);
@@ -54,8 +56,9 @@ export const resolvePayNoteDocumentId = async (input: {
     }
 
     payNoteDocumentId = documentResult.document.documentId;
+    resolvedDocumentRaw = documentResult.document.document;
     resolvedDocument =
-      toSimpleRecord(documentResult.document.document) ??
+      toSimpleRecord(resolvedDocumentRaw) ??
       (documentResult.document.document as Record<string, unknown> | undefined);
 
     trace(logs, 'Resolved PayNote document id from MyOS', {
@@ -75,7 +78,9 @@ export const resolvePayNoteDocumentId = async (input: {
     return { result: { note, logs } };
   }
 
-  return { resolution: { payNoteDocumentId, resolvedDocument } };
+  return {
+    resolution: { payNoteDocumentId, resolvedDocument, resolvedDocumentRaw },
+  };
 };
 
 export const resolveDeliveryRecord = async (
@@ -238,6 +243,7 @@ export const upsertPayNoteContract = async (input: {
 
 export const persistPayNoteRecord = async (input: {
   updatedRecord: PayNoteRecord;
+  documentForStorage?: Record<string, unknown>;
   sessionId: string;
   payNoteDocumentId: string;
   eventType?: string;
@@ -248,6 +254,7 @@ export const persistPayNoteRecord = async (input: {
 }): Promise<void> => {
   const {
     updatedRecord,
+    documentForStorage,
     sessionId,
     payNoteDocumentId,
     eventType,
@@ -257,9 +264,13 @@ export const persistPayNoteRecord = async (input: {
     deps,
   } = input;
 
-  await deps.payNoteRepository.savePayNote(updatedRecord);
+  const persistedRecord = documentForStorage
+    ? { ...updatedRecord, document: documentForStorage }
+    : updatedRecord;
+
+  await deps.payNoteRepository.savePayNote(persistedRecord);
   await upsertPayNoteContract({
-    updatedRecord,
+    updatedRecord: persistedRecord,
     sessionId,
     payNoteDocumentId,
     eventType,

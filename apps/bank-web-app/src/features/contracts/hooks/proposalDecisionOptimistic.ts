@@ -22,8 +22,7 @@ export type ProposalDecisionOptimisticSnapshot = {
 const applyDecisionOnList = (
   items: PayNoteDeliverySummary[] | undefined,
   sessionId: string,
-  decision: ProposalDecision,
-  optimisticUpdatedAt: string
+  decision: ProposalDecision
 ): PayNoteDeliverySummary[] | undefined => {
   if (!items) {
     return items;
@@ -37,15 +36,13 @@ const applyDecisionOnList = (
     return {
       ...item,
       clientDecisionStatus: decision,
-      updatedAt: optimisticUpdatedAt,
     };
   });
 };
 
 const applyDecisionOnDetails = (
   details: PayNoteDeliveryDetailsSanitized | undefined,
-  decision: ProposalDecision,
-  optimisticUpdatedAt: string
+  decision: ProposalDecision
 ): PayNoteDeliveryDetailsSanitized | undefined => {
   if (!details) {
     return details;
@@ -54,7 +51,6 @@ const applyDecisionOnDetails = (
   return {
     ...details,
     clientDecisionStatus: decision,
-    updatedAt: optimisticUpdatedAt,
   };
 };
 
@@ -64,7 +60,6 @@ export async function applyOptimisticProposalDecision(
   decision: ProposalDecision
 ): Promise<ProposalDecisionOptimisticSnapshot> {
   const proposalDetailsQueryKey = ['proposal-details', sessionId] as const;
-  const optimisticUpdatedAt = new Date().toISOString();
 
   await Promise.all([
     queryClient.cancelQueries({ queryKey: PROPOSALS_QUERY_KEY }),
@@ -98,19 +93,17 @@ export async function applyOptimisticProposalDecision(
 
   queryClient.setQueryData<PayNoteDeliverySummary[] | undefined>(
     PROPOSALS_QUERY_KEY,
-    current =>
-      applyDecisionOnList(current, sessionId, decision, optimisticUpdatedAt)
+    current => applyDecisionOnList(current, sessionId, decision)
   );
   queryClient.setQueryData<PayNoteDeliverySummary[] | undefined>(
     PAYNOTE_DELIVERIES_QUERY_KEY,
-    current =>
-      applyDecisionOnList(current, sessionId, decision, optimisticUpdatedAt)
+    current => applyDecisionOnList(current, sessionId, decision)
   );
 
   if (hadProposalDetails) {
     queryClient.setQueryData<PayNoteDeliveryDetailsSanitized | undefined>(
       proposalDetailsQueryKey,
-      current => applyDecisionOnDetails(current, decision, optimisticUpdatedAt)
+      current => applyDecisionOnDetails(current, decision)
     );
   }
 

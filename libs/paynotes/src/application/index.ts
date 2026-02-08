@@ -6,6 +6,7 @@ export * from './commands/handlePayNoteDeliveryWebhookEvent';
 export * from './commands/handlePayNoteBootstrapWebhookEvent';
 export * from './commands/paynoteDeliveryWebhook/bootstrap';
 export * from './commands/webhookUtils';
+export * from './blue/compactBlue';
 export * from './queries/getPayNoteDetails';
 export * from './payNoteDelivery/blueUtils';
 export * from './payNoteDelivery/schema';

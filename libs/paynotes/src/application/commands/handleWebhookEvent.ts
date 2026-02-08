@@ -18,6 +18,7 @@ import { handleCaptureRequestEvents } from './paynoteWebhook/captureRequests';
 import { handleTransferEvents } from './paynoteWebhook/transfers';
 import { trace } from './paynoteWebhook/logging';
 import { getString } from './paynoteWebhook/utils';
+import { toCompactBlueJsonValue } from '../blue/compactBlue';
 
 export type {
   HandleWebhookEventDependencies,
@@ -29,6 +30,13 @@ export const handleWebhookEvent = async (
   input: HandleWebhookEventInput,
   deps: HandleWebhookEventDependencies
 ): Promise<HandleWebhookEventResult> => {
+  const asRecord = (value: unknown): Record<string, unknown> | undefined => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined;
+    }
+    return value as Record<string, unknown>;
+  };
+
   const logs: HandleWebhookEventResult['logs'] = [];
   trace(logs, 'PayNote webhook processing', {
     eventId: input.eventId,
@@ -83,7 +91,8 @@ export const handleWebhookEvent = async (
     return documentResolution.result;
   }
 
-  const { payNoteDocumentId, resolvedDocument } = documentResolution.resolution;
+  const { payNoteDocumentId, resolvedDocument, resolvedDocumentRaw } =
+    documentResolution.resolution;
 
   const now = deps.clock.now().toISOString();
   const existingRecord =
@@ -134,6 +143,10 @@ export const handleWebhookEvent = async (
 
   await persistPayNoteRecord({
     updatedRecord,
+    documentForStorage:
+      asRecord(toCompactBlueJsonValue(eventObject?.document)) ??
+      asRecord(toCompactBlueJsonValue(resolvedDocumentRaw)) ??
+      updatedRecord.document,
     sessionId,
     payNoteDocumentId,
     eventType,

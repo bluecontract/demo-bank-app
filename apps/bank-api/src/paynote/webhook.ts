@@ -10,12 +10,14 @@ import {
   consumePendingPayNoteBootstrapEvents,
   getDocumentBootstrapRequestFromEvent,
   getPayloadSummary,
+  toCompactBlueJsonValue,
 } from '@demo-bank-app/paynotes';
 import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { Blue } from '@blue-labs/language';
 import { repository } from '@blue-repository/types';
 import { DocumentSessionBootstrapSchema } from '@blue-repository/types/packages/myos/schemas';
+import type { ContractRecord } from '@demo-bank-app/contracts';
 import { getDependencies } from './dependencies';
 import type {
   ContractSummaryJob,
@@ -204,6 +206,73 @@ const hasDocumentBootstrapRequest = (payload: unknown): boolean => {
   return emitted.some(event =>
     Boolean(getDocumentBootstrapRequestFromEvent(event))
   );
+};
+
+const toCompactBlueEventArray = (value: unknown): unknown[] | undefined => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => toCompactBlueJsonValue(item));
+  }
+
+  if (value && typeof value === 'object') {
+    const items = (value as { items?: unknown }).items;
+    if (Array.isArray(items)) {
+      return items.map(item => toCompactBlueJsonValue(item));
+    }
+  }
+
+  return undefined;
+};
+
+const toCompactContractSnapshot = (
+  contract: ContractRecord
+): ContractRecord => {
+  const compactEmittedEvents = toCompactBlueEventArray(contract.emittedEvents);
+  const compactSummaryEmittedEvents = toCompactBlueEventArray(
+    contract.summaryEmittedEvents
+  );
+
+  return {
+    ...contract,
+    ...(contract.document !== undefined
+      ? {
+          document: toCompactBlueJsonValue(contract.document) as Record<
+            string,
+            unknown
+          >,
+        }
+      : {}),
+    ...(contract.triggerEvent !== undefined
+      ? { triggerEvent: toCompactBlueJsonValue(contract.triggerEvent) }
+      : {}),
+    ...(compactEmittedEvents !== undefined
+      ? {
+          emittedEvents: compactEmittedEvents,
+        }
+      : {}),
+    ...(contract.summaryDocument !== undefined
+      ? {
+          summaryDocument: toCompactBlueJsonValue(
+            contract.summaryDocument
+          ) as Record<string, unknown>,
+        }
+      : {}),
+    ...(contract.summaryTriggerEvent !== undefined
+      ? {
+          summaryTriggerEvent: toCompactBlueJsonValue(
+            contract.summaryTriggerEvent
+          ),
+        }
+      : {}),
+    ...(compactSummaryEmittedEvents !== undefined
+      ? {
+          summaryEmittedEvents: compactSummaryEmittedEvents,
+        }
+      : {}),
+  };
 };
 
 export const payNoteWebhookHandler = async (
@@ -495,7 +564,7 @@ export const payNoteWebhookHandler = async (
         sourceUpdatedAt,
         sourceEpoch,
         eventId,
-        contractSnapshot: contract,
+        contractSnapshot: toCompactContractSnapshot(contract),
         createdAt: now,
       });
 

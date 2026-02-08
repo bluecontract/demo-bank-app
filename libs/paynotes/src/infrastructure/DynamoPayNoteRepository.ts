@@ -3,6 +3,7 @@ import {
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 import type { PayNoteRecord, PayNoteRepository } from '../application/ports';
@@ -160,33 +161,155 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
   }
 
   async savePayNote(record: PayNoteRecord): Promise<void> {
-    const item: PayNoteItem = {
-      PK: this.buildPayNotePk(record.payNoteDocumentId),
-      SK: SORT_KEYS.META,
-      entityType: ENTITY_TYPES.PAYNOTE,
-      payNoteDocumentId: record.payNoteDocumentId,
-      sessionIds: record.sessionIds,
-      deliveryId: record.deliveryId,
-      accountNumber: record.accountNumber,
-      userId: record.userId,
-      holdId: record.holdId,
-      transactionId: record.transactionId,
-      merchantId: record.merchantId,
-      lastCaptureLockEventId: record.lastCaptureLockEventId,
-      lastCaptureUnlockEventId: record.lastCaptureUnlockEventId,
-      payerAccountNumber: record.payerAccountNumber,
-      payeeAccountNumber: record.payeeAccountNumber,
-      document: record.document,
-      transactionRequest: record.transactionRequest,
-      triggerEvent: record.triggerEvent,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt,
+    const expressionAttributeNames: Record<string, string> = {
+      '#entityType': 'entityType',
+      '#payNoteDocumentId': 'payNoteDocumentId',
+      '#createdAt': 'createdAt',
+      '#updatedAt': 'updatedAt',
+    };
+    const expressionAttributeValues: Record<string, unknown> = {
+      ':entityType': ENTITY_TYPES.PAYNOTE,
+      ':payNoteDocumentId': record.payNoteDocumentId,
+      ':createdAt': record.createdAt,
+      ':updatedAt': record.updatedAt,
     };
 
+    const setExpressions: string[] = [
+      '#entityType = :entityType',
+      '#payNoteDocumentId = :payNoteDocumentId',
+      '#createdAt = :createdAt',
+      '#updatedAt = :updatedAt',
+    ];
+    const removeExpressions: string[] = [];
+
+    const addOptionalAttribute = (input: {
+      nameKey: string;
+      valueKey: string;
+      attributeName: string;
+      value: unknown;
+      preserveOnUndefined?: boolean;
+    }) => {
+      const { nameKey, valueKey, attributeName, value, preserveOnUndefined } =
+        input;
+
+      if (value !== undefined) {
+        expressionAttributeNames[nameKey] = attributeName;
+        expressionAttributeValues[valueKey] = value;
+        setExpressions.push(`${nameKey} = ${valueKey}`);
+        return;
+      }
+
+      if (!preserveOnUndefined) {
+        expressionAttributeNames[nameKey] = attributeName;
+        removeExpressions.push(nameKey);
+      }
+    };
+
+    addOptionalAttribute({
+      nameKey: '#sessionIds',
+      valueKey: ':sessionIds',
+      attributeName: 'sessionIds',
+      value: record.sessionIds,
+    });
+    addOptionalAttribute({
+      nameKey: '#deliveryId',
+      valueKey: ':deliveryId',
+      attributeName: 'deliveryId',
+      value: record.deliveryId,
+    });
+    addOptionalAttribute({
+      nameKey: '#accountNumber',
+      valueKey: ':accountNumber',
+      attributeName: 'accountNumber',
+      value: record.accountNumber,
+    });
+    addOptionalAttribute({
+      nameKey: '#userId',
+      valueKey: ':userId',
+      attributeName: 'userId',
+      value: record.userId,
+    });
+    addOptionalAttribute({
+      nameKey: '#holdId',
+      valueKey: ':holdId',
+      attributeName: 'holdId',
+      value: record.holdId,
+    });
+    addOptionalAttribute({
+      nameKey: '#transactionId',
+      valueKey: ':transactionId',
+      attributeName: 'transactionId',
+      value: record.transactionId,
+    });
+    addOptionalAttribute({
+      nameKey: '#merchantId',
+      valueKey: ':merchantId',
+      attributeName: 'merchantId',
+      value: record.merchantId,
+    });
+    addOptionalAttribute({
+      nameKey: '#lastCaptureLockEventId',
+      valueKey: ':lastCaptureLockEventId',
+      attributeName: 'lastCaptureLockEventId',
+      value: record.lastCaptureLockEventId,
+      preserveOnUndefined: true,
+    });
+    addOptionalAttribute({
+      nameKey: '#lastCaptureUnlockEventId',
+      valueKey: ':lastCaptureUnlockEventId',
+      attributeName: 'lastCaptureUnlockEventId',
+      value: record.lastCaptureUnlockEventId,
+      preserveOnUndefined: true,
+    });
+    addOptionalAttribute({
+      nameKey: '#payerAccountNumber',
+      valueKey: ':payerAccountNumber',
+      attributeName: 'payerAccountNumber',
+      value: record.payerAccountNumber,
+    });
+    addOptionalAttribute({
+      nameKey: '#payeeAccountNumber',
+      valueKey: ':payeeAccountNumber',
+      attributeName: 'payeeAccountNumber',
+      value: record.payeeAccountNumber,
+    });
+    addOptionalAttribute({
+      nameKey: '#document',
+      valueKey: ':document',
+      attributeName: 'document',
+      value: record.document,
+    });
+    addOptionalAttribute({
+      nameKey: '#transactionRequest',
+      valueKey: ':transactionRequest',
+      attributeName: 'transactionRequest',
+      value: record.transactionRequest,
+    });
+    addOptionalAttribute({
+      nameKey: '#triggerEvent',
+      valueKey: ':triggerEvent',
+      attributeName: 'triggerEvent',
+      value: record.triggerEvent,
+    });
+
+    const updateExpressionParts: string[] = [];
+    if (setExpressions.length) {
+      updateExpressionParts.push(`SET ${setExpressions.join(', ')}`);
+    }
+    if (removeExpressions.length) {
+      updateExpressionParts.push(`REMOVE ${removeExpressions.join(', ')}`);
+    }
+
     await this.client.send(
-      new PutCommand({
+      new UpdateCommand({
         TableName: this.tableName,
-        Item: item,
+        Key: {
+          PK: this.buildPayNotePk(record.payNoteDocumentId),
+          SK: SORT_KEYS.META,
+        },
+        UpdateExpression: updateExpressionParts.join(' '),
+        ExpressionAttributeNames: expressionAttributeNames,
+        ExpressionAttributeValues: expressionAttributeValues,
       })
     );
 

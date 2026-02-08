@@ -448,6 +448,15 @@ describe('payNoteWebhookHandler', () => {
         sessionId: 'session-canonical',
         documentId: 'document-1',
         updatedAt: '2026-02-08T00:00:00.000Z',
+        document: { type: { blueId: PAYNOTE_DELIVERY_BLUE_ID } },
+        emittedEvents: [
+          {
+            type: {
+              blueId: paynoteBlueIds['PayNote/PayNote Cancelled'],
+              name: 'PayNote Cancelled',
+            },
+          },
+        ],
       }
     );
 
@@ -474,5 +483,12 @@ describe('payNoteWebhookHandler', () => {
         sourceEpoch: 3,
       })
     );
+
+    const snapshot =
+      hoistedRepositories.summaryInputStore.save.mock.calls[0]?.[0];
+    const emittedEvents = snapshot?.contractSnapshot?.emittedEvents;
+    expect(Array.isArray(emittedEvents)).toBe(true);
+    expect((emittedEvents as { items?: unknown })?.items).toBeUndefined();
+    expect(emittedEvents).toHaveLength(1);
   });
 });
