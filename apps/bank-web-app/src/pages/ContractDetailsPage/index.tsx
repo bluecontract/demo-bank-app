@@ -412,12 +412,14 @@ export function ContractDetailsPage() {
     setIsAiChatOpen(false);
   }, [aiChatSessionId]);
 
+  const historySessionId =
+    resolvedKind === 'contract' ? contractData?.sessionId ?? null : null;
   const historyQuery = useContractHistory(
-    contractData?.sessionId ?? null,
-    Boolean(contractData?.sessionId)
+    historySessionId,
+    resolvedKind === 'contract' && Boolean(historySessionId)
   );
   const historyItems = historyQuery.data?.items ?? [];
-  const hasHistory = historyItems.length > 0;
+  const hasHistory = resolvedKind === 'contract' && historyItems.length > 0;
   const isArchivePending =
     archiveMutation.isPending || unarchiveMutation.isPending;
 

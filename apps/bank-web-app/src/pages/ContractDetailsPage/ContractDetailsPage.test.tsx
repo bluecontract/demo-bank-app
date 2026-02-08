@@ -308,6 +308,74 @@ describe('ContractDetailsPage', () => {
     expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
   });
 
+  it('does not render history section in proposal view', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-2' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'proposal' },
+      pathname: '/contracts/session-2',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-2',
+        contractId: 'contract-2',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'Accepted Contract',
+        document: { name: 'Accepted Contract' },
+        summary: {
+          story: {
+            headline: 'Accepted Contract',
+            overview: ['Contract is active.'],
+            bullets: [],
+          },
+          listPreview: 'Contract is active.',
+          nextSteps: { title: 'Next steps', items: [] },
+          lastChange: { short: 'Accepted', more: 'Accepted by client.' },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: {
+        deliverySessionId: 'session-2',
+        clientDecisionStatus: 'pending',
+        payNote: {
+          name: 'Slow Digestion PayNote',
+          amountMinor: 100,
+          currency: 'USD',
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseContractHistory.mockReturnValue({
+      data: {
+        items: [
+          {
+            id: 'history-1',
+            short: 'Contract accepted',
+            more: 'Accepted by client.',
+            createdAt: '2026-02-08T10:00:00.000Z',
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    expect(screen.queryByText('View history')).not.toBeInTheDocument();
+    expect(mockUseContractHistory).toHaveBeenCalledWith(null, false);
+  });
+
   it('does not render linked contracts section while related contracts are still loading without resolved items', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-1' });
     mockUseLocation.mockReturnValue({
