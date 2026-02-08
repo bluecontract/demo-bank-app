@@ -312,6 +312,7 @@ export class DynamoPayNoteDeliveryRepository
           PK: this.buildDeliveryPk(deliveryId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -332,6 +333,7 @@ export class DynamoPayNoteDeliveryRepository
           PK: this.buildDeliveryDocumentPk(documentId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -402,6 +404,7 @@ export class DynamoPayNoteDeliveryRepository
           PK: this.buildPayNoteDocumentPk(payNoteDocumentId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -426,6 +429,7 @@ export class DynamoPayNoteDeliveryRepository
           PK: this.buildCardTransactionPk(key),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -743,6 +747,7 @@ export class DynamoPayNoteDeliveryRepository
       new QueryCommand({
         TableName: this.tableName,
         KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
+        ConsistentRead: true,
         ExpressionAttributeNames: {
           '#pk': 'PK',
           '#sk': 'SK',

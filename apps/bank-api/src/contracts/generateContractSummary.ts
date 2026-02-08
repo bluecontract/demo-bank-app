@@ -599,7 +599,12 @@ const generateOrLoadContractSummary = async (input: {
 
   const parsedSummary = ContractDocumentSummaryDto.safeParse(contract.summary);
   const cachedSummary = parsedSummary.success ? parsedSummary.data : null;
-  const hasSummaryPreview = Boolean(contract.summaryPreview);
+  const cachedSummaryHeadline = cachedSummary?.story.headline?.trim();
+  const cachedSummaryPreview =
+    contract.summaryPreview ??
+    (cachedSummaryHeadline
+      ? cachedSummaryHeadline
+      : cachedSummary?.listPreview);
   const previousSummary = cachedSummary ?? undefined;
   const model = process.env.CONTRACT_SUMMARY_MODEL || DEFAULT_MODEL;
 
@@ -625,7 +630,6 @@ const generateOrLoadContractSummary = async (input: {
     if (
       !input.force &&
       cachedSummary &&
-      hasSummaryPreview &&
       !contract.summaryError &&
       contract.summaryUpdatedAt
     ) {
@@ -636,11 +640,25 @@ const generateOrLoadContractSummary = async (input: {
         !contract.summaryInputBlueId &&
         contract.summarySourceUpdatedAt === contract.updatedAt;
       if (hasMatchingSummaryInput || hasMatchingTimestamp) {
+        const summarySourceUpdatedAt =
+          contract.summarySourceUpdatedAt ?? contract.updatedAt;
+        await input.contractRepository.updateContractSummary({
+          contractId: contract.contractId,
+          summaryPreview: cachedSummaryPreview,
+          summaryUpdatedAt: contract.summaryUpdatedAt,
+          summarySourceUpdatedAt,
+          summaryInputBlueId: contract.summaryInputBlueId ?? summaryInputBlueId,
+          summaryError: null,
+          summaryDocumentName: contract.documentName,
+          userId: contract.userId,
+          relatedTransactionIds: contract.relatedTransactionIds,
+          relatedHoldIds: contract.relatedHoldIds,
+        });
+
         return {
           summary: cachedSummary,
           summaryUpdatedAt: contract.summaryUpdatedAt,
-          summarySourceUpdatedAt:
-            contract.summarySourceUpdatedAt ?? contract.updatedAt,
+          summarySourceUpdatedAt,
           summaryInputBlueId: contract.summaryInputBlueId ?? summaryInputBlueId,
           cached: true,
           model: contract.summaryModel,

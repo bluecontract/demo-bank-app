@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { DashboardShell } from '../../features/dashboard/components';
@@ -189,6 +189,14 @@ export function ContractDetailsPage() {
   const [activeKind, setActiveKind] = useState<'contract' | 'proposal'>(
     requestedKind ?? 'contract'
   );
+  const lastSessionIdRef = useRef<string | null>(sessionId ?? null);
+  const isSessionChanged = lastSessionIdRef.current !== (sessionId ?? null);
+  const resolvedKind = isSessionChanged
+    ? requestedKind ?? 'contract'
+    : activeKind;
+  if (isSessionChanged) {
+    lastSessionIdRef.current = sessionId ?? null;
+  }
   const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<
     Record<string, boolean>
@@ -196,11 +204,10 @@ export function ContractDetailsPage() {
   const [isSummaryExpanded, setSummaryExpanded] = useState(false);
 
   useEffect(() => {
-    if (!requestedKind) {
-      return;
+    if (activeKind !== resolvedKind) {
+      setActiveKind(resolvedKind);
     }
-    setActiveKind(requestedKind);
-  }, [requestedKind, sessionId]);
+  }, [activeKind, resolvedKind]);
 
   useEffect(() => {
     setExpandedHistory({});
@@ -209,18 +216,18 @@ export function ContractDetailsPage() {
 
   const contractQuery = useContractDetails(sessionId ?? null);
   const proposalQuery = useProposalDetails(
-    activeKind === 'proposal' ? sessionId ?? null : null
+    resolvedKind === 'proposal' ? sessionId ?? null : null
   );
 
   useEffect(() => {
     if (
-      activeKind === 'contract' &&
+      resolvedKind === 'contract' &&
       contractQuery.isError &&
       contractQuery.error?.status === 404
     ) {
       setActiveKind('proposal');
     }
-  }, [activeKind, contractQuery.error, contractQuery.isError]);
+  }, [resolvedKind, contractQuery.error, contractQuery.isError]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -237,7 +244,7 @@ export function ContractDetailsPage() {
     : null;
   const isDeliveryContract = contractType === 'PayNote/PayNote Delivery';
   const proposal = proposalQuery.data ?? null;
-  const contract = activeKind === 'contract' ? contractData : null;
+  const contract = resolvedKind === 'contract' ? contractData : null;
   const aiChatSessionId = contract?.sessionId ?? null;
   const relatedActivitySource = contract
     ? contract
@@ -282,13 +289,15 @@ export function ContractDetailsPage() {
   const isLoading =
     !contract &&
     !proposal &&
-    (activeKind === 'contract'
+    (resolvedKind === 'contract'
       ? contractQuery.isLoading
       : proposalQuery.isLoading);
   const isError =
     !contract &&
     !proposal &&
-    (activeKind === 'contract' ? contractQuery.isError : proposalQuery.isError);
+    (resolvedKind === 'contract'
+      ? contractQuery.isError
+      : proposalQuery.isError);
 
   const reviewSummary = useMemo<ContractSummary | null>(() => {
     if (!contract) {
@@ -315,16 +324,16 @@ export function ContractDetailsPage() {
     if (!reviewSummary) {
       return;
     }
-    if (activeKind === 'contract') {
+    if (resolvedKind === 'contract') {
       markReviewed(reviewSummary);
     }
-  }, [activeKind, reviewSummary, markReviewed]);
+  }, [resolvedKind, reviewSummary, markReviewed]);
 
   useEffect(() => {
-    if (isDeliveryContract && activeKind !== 'proposal') {
+    if (isDeliveryContract && resolvedKind !== 'proposal') {
       setActiveKind('proposal');
     }
-  }, [activeKind, isDeliveryContract]);
+  }, [resolvedKind, isDeliveryContract]);
 
   const resolvedDocument = useMemo(
     () => (contract ? restoreInlineTypes(contract.document) : null),
@@ -410,10 +419,13 @@ export function ContractDetailsPage() {
     if (!target || !itemSessionId) {
       return;
     }
+    const nextKind = isProposalRelatedContract(item) ? 'proposal' : 'contract';
+    setActiveKind(nextKind);
     setActiveSession(itemSessionId);
     navigate(target, {
       state: {
         from: `${location.pathname}${location.search}`,
+        kind: nextKind,
       },
     });
   };

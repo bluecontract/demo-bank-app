@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { generateContractSummaryHandler } from './generateContractSummary';
+import {
+  generateContractSummaryForSessionId,
+  generateContractSummaryHandler,
+} from './generateContractSummary';
 import { summaryBlue } from './summaryUtils';
 import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 
@@ -193,6 +196,102 @@ describe('generateContractSummaryHandler', () => {
     expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalled();
     expect(contractRepository.updateContractSummary).toHaveBeenCalled();
     expect(contractRepository.addContractHistoryEntry).toHaveBeenCalled();
+  });
+
+  it('repairs summary index fields when returning a cached summary', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      userId: 'user-123',
+      relatedTransactionIds: ['txn-1'],
+      relatedHoldIds: ['hold-1'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      summary: summaryFixture,
+      summaryPreview: 'PayNote updated.',
+      summaryUpdatedAt: '2026-01-02T00:00:01.000Z',
+      summarySourceUpdatedAt: '2026-01-02T00:00:00.000Z',
+      summaryModel: 'gpt-5',
+      summaryError: undefined,
+    });
+
+    const result = await generateContractSummaryForSessionId({
+      sessionId: 'sess-1',
+      force: false,
+      contractRepository: contractRepository as any,
+      getOpenAiApiKey,
+      logger: logger as any,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        cached: true,
+        summaryUpdatedAt: '2026-01-02T00:00:01.000Z',
+        summarySourceUpdatedAt: '2026-01-02T00:00:00.000Z',
+      })
+    );
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(contractRepository.updateContractSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'sess-1',
+        summaryPreview: 'PayNote updated.',
+        summaryUpdatedAt: '2026-01-02T00:00:01.000Z',
+        summarySourceUpdatedAt: '2026-01-02T00:00:00.000Z',
+        summaryError: null,
+        userId: 'user-123',
+        relatedTransactionIds: ['txn-1'],
+        relatedHoldIds: ['hold-1'],
+      })
+    );
+    expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
+  });
+
+  it('uses cached summary and derives preview when only summary payload is present', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      summary: summaryFixture,
+      summaryUpdatedAt: '2026-01-02T00:00:01.000Z',
+      summarySourceUpdatedAt: '2026-01-02T00:00:00.000Z',
+      summaryModel: 'gpt-5',
+      summaryError: undefined,
+    });
+
+    const result = await generateContractSummaryForSessionId({
+      sessionId: 'sess-1',
+      force: false,
+      contractRepository: contractRepository as any,
+      getOpenAiApiKey,
+      logger: logger as any,
+    });
+
+    expect(result?.cached).toBe(true);
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(contractRepository.updateContractSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'sess-1',
+        summaryPreview: 'PayNote',
+        summaryUpdatedAt: '2026-01-02T00:00:01.000Z',
+        summarySourceUpdatedAt: '2026-01-02T00:00:00.000Z',
+      })
+    );
   });
 
   it('returns 404 when summary is missing and force is false', async () => {

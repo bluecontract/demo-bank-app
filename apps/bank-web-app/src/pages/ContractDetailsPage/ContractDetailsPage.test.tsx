@@ -344,6 +344,110 @@ describe('ContractDetailsPage', () => {
     expect(screen.getByText('Approve the Contract')).toBeInTheDocument();
   });
 
+  it('does not request proposal details after navigating from proposal to contract session', () => {
+    type MockLocationState = {
+      from: string;
+      kind: 'proposal' | 'contract';
+    };
+    type MockLocation = {
+      state: MockLocationState | null;
+      pathname: string;
+      search: string;
+    };
+
+    let currentSessionId = 'proposal-session';
+    let currentLocation: MockLocation = {
+      state: { from: '/contracts', kind: 'proposal' as const },
+      pathname: '/contracts/proposal-session',
+      search: '',
+    };
+
+    mockUseParams.mockImplementation(() => ({ sessionId: currentSessionId }));
+    mockUseLocation.mockImplementation(() => currentLocation);
+
+    mockUseContractDetails.mockImplementation((sessionId: string | null) => {
+      if (sessionId === 'contract-session') {
+        return {
+          data: {
+            sessionId: 'contract-session',
+            typeBlueId: 'PayNote/Contract',
+            displayName: 'Accepted Contract',
+            document: { name: 'Accepted Contract' },
+            summary: {
+              story: {
+                headline: 'Accepted Contract',
+                overview: ['Contract is active.'],
+                bullets: [],
+              },
+              listPreview: 'Contract is active.',
+              nextSteps: { title: 'Next steps', items: [] },
+              lastChange: { short: 'Accepted', more: 'Accepted by client.' },
+            },
+          },
+          isLoading: false,
+          isError: false,
+          error: null,
+        };
+      }
+
+      return {
+        data: null,
+        isLoading: false,
+        isError: false,
+        error: null,
+      };
+    });
+
+    mockUseProposalDetails.mockImplementation((sessionId: string | null) => {
+      if (sessionId === 'proposal-session') {
+        return {
+          data: {
+            deliveryId: 'delivery-1',
+            deliverySessionId: 'proposal-session',
+            clientDecisionStatus: 'pending',
+            payNote: { name: 'Proposal Contract' },
+            accountNumber: '1234',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          },
+          isLoading: false,
+          isError: false,
+          error: null,
+        };
+      }
+
+      return {
+        data: null,
+        isLoading: false,
+        isError: false,
+        error: null,
+      };
+    });
+
+    const { rerender } = render(<ContractDetailsPage />, {
+      wrapper: createQueryWrapper(),
+    });
+
+    expect(mockUseProposalDetails).toHaveBeenCalledWith('proposal-session');
+
+    currentSessionId = 'contract-session';
+    currentLocation = {
+      state: {
+        from: '/contracts/proposal-session',
+        kind: 'contract',
+      },
+      pathname: '/contracts/contract-session',
+      search: '',
+    };
+
+    act(() => {
+      rerender(<ContractDetailsPage />);
+    });
+
+    expect(mockUseProposalDetails).toHaveBeenLastCalledWith(null);
+    expect(mockUseContractDetails).toHaveBeenLastCalledWith('contract-session');
+  });
+
   it('triggers proposal decision mutations when actions are clicked', () => {
     const acceptMock = vi.fn();
     const rejectMock = vi.fn();

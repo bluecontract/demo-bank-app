@@ -318,6 +318,7 @@ export class DynamoContractRepository implements ContractRepository {
           PK: this.buildContractPk(contractId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -1145,6 +1146,7 @@ export class DynamoContractRepository implements ContractRepository {
       new QueryCommand({
         TableName: this.tableName,
         KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
+        ConsistentRead: true,
         ExpressionAttributeNames: {
           '#pk': 'PK',
           '#sk': 'SK',
@@ -1194,6 +1196,7 @@ export class DynamoContractRepository implements ContractRepository {
       new QueryCommand({
         TableName: this.tableName,
         KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
+        ConsistentRead: true,
         ...(options?.userId ? { FilterExpression: '#userId = :userId' } : {}),
         ExpressionAttributeNames: {
           '#pk': 'PK',
@@ -1243,6 +1246,7 @@ export class DynamoContractRepository implements ContractRepository {
       new QueryCommand({
         TableName: this.tableName,
         KeyConditionExpression: '#pk = :pk AND begins_with(#sk, :skPrefix)',
+        ConsistentRead: true,
         ...(options?.userId ? { FilterExpression: '#userId = :userId' } : {}),
         ExpressionAttributeNames: {
           '#pk': 'PK',
