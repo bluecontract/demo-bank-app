@@ -187,4 +187,37 @@ describe('ContractsPage', () => {
       }).length
     ).toBeGreaterThan(0);
   });
+
+  it('hides proposal actions immediately after accept and keeps them hidden before server refresh', () => {
+    mockUseProposalDecision.mockImplementation(({ onAccepted }) => ({
+      accept: () => onAccepted?.(),
+      reject: vi.fn(),
+      isPending: false,
+    }));
+
+    const { rerender } = render(<ContractsPage />, {
+      wrapper: createTestWrapper(),
+    });
+
+    const acceptButtonsBefore = screen.getAllByRole('button', {
+      name: /Accept Slow Digestion PayNote/i,
+    });
+    expect(acceptButtonsBefore.length).toBeGreaterThan(0);
+
+    fireEvent.click(acceptButtonsBefore[0]);
+
+    expect(
+      screen.queryAllByRole('button', {
+        name: /Accept Slow Digestion PayNote/i,
+      })
+    ).toHaveLength(0);
+
+    rerender(<ContractsPage />);
+
+    expect(
+      screen.queryAllByRole('button', {
+        name: /Accept Slow Digestion PayNote/i,
+      })
+    ).toHaveLength(0);
+  });
 });

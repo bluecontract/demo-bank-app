@@ -58,6 +58,13 @@ export const getItemChangeType = (
   item: ContractOrProposalItem,
   reviewedByKey: Record<string, string>
 ): ContractChangeType | null => {
+  if (isProposalItem(item)) {
+    const decisionStatus = item.clientDecisionStatus?.trim().toLowerCase();
+    if (decisionStatus === 'accepted' || decisionStatus === 'rejected') {
+      return null;
+    }
+  }
+
   const key = getItemReviewKey(item);
   if (!key) {
     return null;

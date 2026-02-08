@@ -35,6 +35,7 @@ export function useProposals(options: UseProposalsOptions = {}) {
     },
     enabled: options.enabled ?? true,
     refetchInterval: options.refetchInterval ?? 5000,
+    refetchOnMount: 'always',
     staleTime: 5 * 1000,
     gcTime: 2 * 60 * 1000,
     retry: (failureCount, error) => {

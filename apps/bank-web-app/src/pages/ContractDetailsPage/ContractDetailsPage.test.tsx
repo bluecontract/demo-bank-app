@@ -83,10 +83,12 @@ const mockUseNavigate = useNavigate as ReturnType<typeof vi.fn>;
 
 describe('ContractDetailsPage', () => {
   let markReviewedMock: ReturnType<typeof vi.fn>;
+  let markItemReviewedMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     markReviewedMock = vi.fn();
+    markItemReviewedMock = vi.fn();
 
     mockUseAuth.mockReturnValue({
       user: { email: 'alex@example.com', userId: 'user-1' },
@@ -107,6 +109,7 @@ describe('ContractDetailsPage', () => {
     mockUseContractReviewState.mockReturnValue({
       reviewedMap: {},
       markReviewed: markReviewedMock,
+      markItemReviewed: markItemReviewedMock,
     });
 
     mockUseContractHistory.mockReturnValue({
@@ -303,6 +306,61 @@ describe('ContractDetailsPage', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Accept' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+  });
+
+  it('does not render linked contracts section while related contracts are still loading without resolved items', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'GE Refrigerator Order',
+        document: { name: 'GE Refrigerator Order' },
+        relatedTransactionIds: ['txn-1'],
+        summary: {
+          story: {
+            headline: 'GE Refrigerator Order',
+            overview: ['Funds will be held until delivery is confirmed.'],
+            bullets: [],
+          },
+          listPreview: 'Funds are held until delivery.',
+          nextSteps: { title: 'Next steps', items: [] },
+          lastChange: {
+            short: 'Proposal received.',
+            more: 'A new proposal is awaiting client approval.',
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseRelatedContracts.mockReturnValue({
+      data: [],
+      isLoading: true,
+      isError: false,
+      error: null,
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    expect(
+      screen.queryByRole('heading', { name: 'Linked contracts' })
+    ).not.toBeInTheDocument();
   });
 
   it('uses proposal view when kind is specified in the query string', () => {
@@ -549,5 +607,59 @@ describe('ContractDetailsPage', () => {
     expect(
       screen.getByText('Thank you for accepting Slow Digestion PayNote.')
     ).toBeInTheDocument();
+  });
+
+  it('marks proposal as reviewed when accept callback succeeds', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-2' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'proposal' },
+      pathname: '/contracts/session-2',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: {
+        deliveryId: 'delivery-2',
+        deliverySessionId: 'session-2',
+        clientDecisionStatus: 'pending',
+        from: { name: 'Merchant' },
+        payNote: {
+          name: 'Slow Digestion PayNote',
+          amountMinor: 100,
+          currency: 'USD',
+        },
+        createdAt: '2026-02-01T10:00:00.000Z',
+        updatedAt: '2026-02-01T10:00:00.000Z',
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDecision.mockImplementation(({ onAccepted }) => ({
+      accept: () => onAccepted?.(),
+      reject: vi.fn(),
+      isPending: false,
+    }));
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+
+    expect(markItemReviewedMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'proposal',
+        deliveryId: 'delivery-2',
+        deliverySessionId: 'session-2',
+        clientDecisionStatus: 'accepted',
+      })
+    );
   });
 });

@@ -1,4 +1,10 @@
-import { useMemo, type MouseEvent, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type KeyboardEvent,
+} from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
@@ -76,11 +82,20 @@ const getSubject = (item: ContractOrProposalItem): string => {
 const getSender = (item: ContractOrProposalItem): string =>
   item.from?.name?.trim() || 'Merchant';
 
+type ProposalDecisionKeySource = {
+  deliveryId?: string;
+  deliverySessionId?: string;
+};
+
+const getProposalOverrideKey = (
+  item: ProposalDecisionKeySource
+): string | null => item.deliveryId ?? item.deliverySessionId ?? null;
+
 type ProposalDecisionActionsProps = {
   sessionId: string | null;
   label: string;
   size?: 'sm' | 'md';
-  onDecision?: () => void;
+  onDecision?: (decision: 'accepted' | 'rejected') => void;
 };
 
 function ProposalDecisionActions({
@@ -91,8 +106,8 @@ function ProposalDecisionActions({
 }: ProposalDecisionActionsProps) {
   const { accept, reject, isPending } = useProposalDecision({
     sessionId,
-    onAccepted: () => onDecision?.(),
-    onRejected: () => onDecision?.(),
+    onAccepted: () => onDecision?.('accepted'),
+    onRejected: () => onDecision?.('rejected'),
   });
 
   if (!sessionId) {
@@ -195,6 +210,45 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
     () => proposalsQuery.data ?? [],
     [proposalsQuery.data]
   );
+  const [proposalDecisionOverrides, setProposalDecisionOverrides] = useState<
+    Record<string, 'accepted' | 'rejected'>
+  >({});
+
+  useEffect(() => {
+    setProposalDecisionOverrides(previous => {
+      let changed = false;
+      const next = { ...previous };
+      const activeKeys = new Set<string>();
+
+      for (const proposal of proposals) {
+        const key = getProposalOverrideKey(proposal);
+        if (!key) {
+          continue;
+        }
+
+        activeKeys.add(key);
+        const override = next[key];
+        if (!override) {
+          continue;
+        }
+
+        if (getProposalDecisionStatus(proposal) === override) {
+          delete next[key];
+          changed = true;
+        }
+      }
+
+      for (const key of Object.keys(next)) {
+        if (!activeKeys.has(key)) {
+          delete next[key];
+          changed = true;
+        }
+      }
+
+      return changed ? next : previous;
+    });
+  }, [proposals]);
+
   const listItems = useMemo(
     () => mergeContractsAndProposals(dedupedContracts, proposals),
     [dedupedContracts, proposals]
@@ -385,9 +439,41 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
               const updatedAt = formatRelativeListDate(getItemUpdatedAt(item));
               const changeType = getItemChangeType(item, reviewedMap);
               const isUnread = Boolean(changeType);
+              const effectiveProposalStatus = isProposalItem(item)
+                ? (() => {
+                    const key = getProposalOverrideKey(item);
+                    if (key && proposalDecisionOverrides[key]) {
+                      return proposalDecisionOverrides[key];
+                    }
+                    return getProposalDecisionStatus(item);
+                  })()
+                : undefined;
               const shouldShowActions =
-                isProposalItem(item) &&
-                getProposalDecisionStatus(item) === 'pending';
+                isProposalItem(item) && effectiveProposalStatus === 'pending';
+              const handleProposalDecision = (
+                decision: 'accepted' | 'rejected'
+              ) => {
+                if (!isProposalItem(item)) {
+                  markItemReviewed(item);
+                  return;
+                }
+                const decisionUpdatedAt = new Date().toISOString();
+                markItemReviewed({
+                  ...item,
+                  clientDecisionStatus: decision,
+                  updatedAt: decisionUpdatedAt,
+                });
+                const key = getProposalOverrideKey(item);
+                if (!key) {
+                  return;
+                }
+                setProposalDecisionOverrides(previous => {
+                  if (previous[key] === decision) {
+                    return previous;
+                  }
+                  return { ...previous, [key]: decision };
+                });
+              };
               const senderClassName = isUnread
                 ? 'text-sm font-semibold text-slate-900'
                 : 'text-sm font-normal text-slate-900';
@@ -443,7 +529,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                               sessionId={sessionId ?? null}
                               label={subject}
                               size="sm"
-                              onDecision={() => markItemReviewed(item)}
+                              onDecision={handleProposalDecision}
                             />
                           )}
                           <span className="text-xs text-slate-500">
@@ -479,7 +565,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                         <ProposalDecisionActions
                           sessionId={sessionId ?? null}
                           label={subject}
-                          onDecision={() => markItemReviewed(item)}
+                          onDecision={handleProposalDecision}
                         />
                       ) : null}
                     </div>

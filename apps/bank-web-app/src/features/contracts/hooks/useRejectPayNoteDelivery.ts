@@ -1,6 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
+import {
+  applyOptimisticProposalDecision,
+  rollbackOptimisticProposalDecision,
+  type ProposalDecisionOptimisticSnapshot,
+} from './proposalDecisionOptimistic';
 
 type RejectPayNoteDeliveryError = Error & { status?: number };
 
@@ -38,10 +43,23 @@ export function useRejectPayNoteDelivery() {
 
       return response.body;
     },
-    onSuccess: () => {
+    onMutate: async (input: {
+      sessionId: string;
+      reason?: string;
+    }): Promise<ProposalDecisionOptimisticSnapshot> =>
+      applyOptimisticProposalDecision(queryClient, input.sessionId, 'rejected'),
+    onError: (_error, _input, context) => {
+      if (context) {
+        rollbackOptimisticProposalDecision(queryClient, context);
+      }
+    },
+    onSuccess: (_data, input) => {
       queryClient.invalidateQueries({ queryKey: ['contracts'] });
       queryClient.invalidateQueries({ queryKey: ['proposals'] });
       queryClient.invalidateQueries({ queryKey: ['paynote-deliveries'] });
+      queryClient.invalidateQueries({
+        queryKey: ['proposal-details', input.sessionId],
+      });
     },
     throwOnError: error => {
       handleAuthError(error);

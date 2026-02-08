@@ -37,6 +37,7 @@ export function useContracts(options: UseContractsOptions = {}) {
     },
     enabled: options.enabled ?? true,
     refetchInterval: options.refetchInterval ?? false,
+    refetchOnMount: 'always',
     staleTime: 5 * 1000,
     gcTime: 2 * 60 * 1000,
     retry: (failureCount, error) => {

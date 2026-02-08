@@ -50,9 +50,17 @@ type LocationState = {
 interface ProposalActionCardProps {
   proposal: PayNoteDeliveryDetailsSanitized | null;
   sessionId: string | null;
+  onDecisionRecorded?: (
+    decision: 'accepted' | 'rejected',
+    decisionUpdatedAt: string
+  ) => void;
 }
 
-function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
+function ProposalActionCard({
+  proposal,
+  sessionId,
+  onDecisionRecorded,
+}: ProposalActionCardProps) {
   const [isDecisionRequested, setDecisionRequested] = useState(false);
   const [decisionOverride, setDecisionOverride] = useState<
     'accepted' | 'rejected' | null
@@ -61,12 +69,16 @@ function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
   const { accept, reject, isPending } = useProposalDecision({
     sessionId: decisionSessionId,
     onAccepted: () => {
+      const decisionUpdatedAt = new Date().toISOString();
       setDecisionRequested(false);
       setDecisionOverride('accepted');
+      onDecisionRecorded?.('accepted', decisionUpdatedAt);
     },
     onRejected: () => {
+      const decisionUpdatedAt = new Date().toISOString();
       setDecisionRequested(false);
       setDecisionOverride('rejected');
+      onDecisionRecorded?.('rejected', decisionUpdatedAt);
     },
     onError: () => {
       setDecisionRequested(false);
@@ -173,7 +185,8 @@ function ProposalActionCard({ proposal, sessionId }: ProposalActionCardProps) {
 export function ContractDetailsPage() {
   const { user, signOut } = useAuth();
   const { setActiveSession } = useActiveContractSession();
-  const { markReviewed } = useContractReviewState();
+  const reviewState = useContractReviewState();
+  const { markReviewed } = reviewState;
   const archiveMutation = useArchiveContract();
   const unarchiveMutation = useUnarchiveContract();
   const { sessionId } = useParams();
@@ -283,7 +296,6 @@ export function ContractDetailsPage() {
       ? relatedContractsQuery.error.message
       : null;
   const shouldRenderLinkedContracts =
-    relatedContractsQuery.isLoading ||
     Boolean(relatedContractsErrorMessage) ||
     filteredRelatedContracts.length > 0;
   const isLoading =
@@ -443,6 +455,21 @@ export function ContractDetailsPage() {
 
   const handleBack = () => {
     navigate(backTarget);
+  };
+
+  const handleProposalDecisionRecorded = (
+    decision: 'accepted' | 'rejected',
+    decisionUpdatedAt: string
+  ) => {
+    if (!proposal) {
+      return;
+    }
+    reviewState.markItemReviewed?.({
+      ...proposal,
+      kind: 'proposal',
+      clientDecisionStatus: decision,
+      updatedAt: decisionUpdatedAt,
+    });
   };
 
   if (isLoading) {
@@ -730,21 +757,13 @@ export function ContractDetailsPage() {
                   Linked contracts
                 </h3>
 
-                {relatedContractsQuery.isLoading && (
-                  <div className="flex items-center justify-center py-4">
-                    <Spinner size="md" color="green" />
+                {relatedContractsErrorMessage && (
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-600">
+                    {relatedContractsErrorMessage}
                   </div>
                 )}
 
-                {!relatedContractsQuery.isLoading &&
-                  relatedContractsErrorMessage && (
-                    <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-600">
-                      {relatedContractsErrorMessage}
-                    </div>
-                  )}
-
-                {!relatedContractsQuery.isLoading &&
-                  !relatedContractsErrorMessage &&
+                {!relatedContractsErrorMessage &&
                   filteredRelatedContracts.length > 0 &&
                   hasRelatedContractIds && (
                     <div className="mt-4 space-y-3">
@@ -914,6 +933,7 @@ export function ContractDetailsPage() {
             <ProposalActionCard
               proposal={proposal}
               sessionId={sessionId ?? null}
+              onDecisionRecorded={handleProposalDecisionRecorded}
             />
           </div>
         </div>
