@@ -355,6 +355,7 @@ export class DynamoPayNoteDeliveryRepository
           PK: this.buildSessionPk(sessionId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -377,6 +378,7 @@ export class DynamoPayNoteDeliveryRepository
           PK: this.buildBootstrapPk(bootstrapSessionId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 

@@ -20,8 +20,9 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
   UpdateCommand: vi.fn(payload => payload),
 }));
 
-const { PutCommand } = await import('@aws-sdk/lib-dynamodb');
+const { PutCommand, GetCommand } = await import('@aws-sdk/lib-dynamodb');
 const mockPutCommand = vi.mocked(PutCommand);
+const mockGetCommand = vi.mocked(GetCommand);
 
 const createRepository = () =>
   new DynamoContractRepository({
@@ -73,5 +74,114 @@ describe('DynamoContractRepository', () => {
 
     const holdItem = savedItems.find(item => item.PK === 'HOLD#hold-1');
     expect(holdItem?.merchantId).toBe('merchant-1');
+  });
+
+  it('uses consistent read for session lookup mapping', async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'CONTRACT_SESSION#session-1',
+          SK: 'META',
+          entityType: 'CONTRACT_SESSION',
+          sessionId: 'session-1',
+          contractId: 'contract-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'CONTRACT#contract-1',
+          SK: 'META',
+          entityType: 'CONTRACT',
+          contractId: 'contract-1',
+          typeBlueId: 'type-1',
+          displayName: 'Contract',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({});
+    const repository = createRepository();
+
+    await repository.getContractBySessionId('session-1');
+
+    expect(mockGetCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Key: {
+          PK: 'CONTRACT_SESSION#session-1',
+          SK: 'META',
+        },
+        ConsistentRead: true,
+      })
+    );
+  });
+
+  it('uses consistent read for document lookup mapping', async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'CONTRACT_DOCUMENT#document-1',
+          SK: 'META',
+          entityType: 'CONTRACT_DOCUMENT',
+          documentId: 'document-1',
+          contractId: 'contract-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'CONTRACT#contract-1',
+          SK: 'META',
+          entityType: 'CONTRACT',
+          contractId: 'contract-1',
+          typeBlueId: 'type-1',
+          displayName: 'Contract',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({});
+    const repository = createRepository();
+
+    await repository.getContractByDocumentId('document-1');
+
+    expect(mockGetCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Key: {
+          PK: 'CONTRACT_DOCUMENT#document-1',
+          SK: 'META',
+        },
+        ConsistentRead: true,
+      })
+    );
+  });
+
+  it('links additional session mapping to existing contract', async () => {
+    mockSend.mockResolvedValueOnce({});
+    const repository = createRepository();
+
+    await repository.linkSessionToContract({
+      sessionId: 'session-2',
+      contractId: 'contract-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    expect(mockPutCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Item: expect.objectContaining({
+          PK: 'CONTRACT_SESSION#session-2',
+          SK: 'META',
+          sessionId: 'session-2',
+          contractId: 'contract-1',
+        }),
+        ConditionExpression: 'attribute_not_exists(PK) OR contractId = :cid',
+        ExpressionAttributeValues: {
+          ':cid': 'contract-1',
+        },
+      })
+    );
   });
 });

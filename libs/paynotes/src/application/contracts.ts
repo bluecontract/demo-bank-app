@@ -121,6 +121,11 @@ export const upsertContractRecord = async (input: {
     existingByDocumentId.sessionId &&
     input.sessionId !== existingByDocumentId.sessionId
   ) {
+    await input.contractRepository.linkSessionToContract?.({
+      sessionId: input.sessionId,
+      contractId: existingByDocumentId.contractId,
+      createdAt: existingByDocumentId.createdAt ?? input.now,
+    });
     return existingByDocumentId.contractId;
   }
 

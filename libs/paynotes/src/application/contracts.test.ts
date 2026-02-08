@@ -14,6 +14,7 @@ const payNoteDocument = {
 const createContractRepository = () => {
   const repository = {
     getContractByDocumentId: vi.fn().mockResolvedValue(null),
+    linkSessionToContract: vi.fn().mockResolvedValue(undefined),
     getContract: vi.fn().mockResolvedValue(null),
     saveContract: vi.fn().mockResolvedValue(undefined),
   };
@@ -103,5 +104,28 @@ describe('upsertContractRecord', () => {
 
     expect(result).toBe('session-1');
     expect(mocks.saveContract).toHaveBeenCalledTimes(1);
+  });
+
+  it('links non-canonical session id when document already exists', async () => {
+    const { repository, mocks } = createContractRepository();
+    mocks.getContractByDocumentId.mockResolvedValue(buildExistingContract());
+
+    const result = await upsertContractRecord({
+      contractRepository: repository,
+      document: payNoteDocument,
+      sessionId: 'session-2',
+      documentId: 'doc-1',
+      eventType: 'DOCUMENT_EPOCH_ADVANCED',
+      eventEpoch: 3,
+      now,
+    });
+
+    expect(result).toBe('session-1');
+    expect(mocks.linkSessionToContract).toHaveBeenCalledWith({
+      sessionId: 'session-2',
+      contractId: 'session-1',
+      createdAt: now,
+    });
+    expect(mocks.saveContract).not.toHaveBeenCalled();
   });
 });

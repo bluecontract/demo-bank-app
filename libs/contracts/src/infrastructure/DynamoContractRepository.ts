@@ -355,6 +355,7 @@ export class DynamoContractRepository implements ContractRepository {
           PK: this.buildSessionPk(sessionId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -377,6 +378,7 @@ export class DynamoContractRepository implements ContractRepository {
           PK: this.buildDocumentPk(documentId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -387,6 +389,32 @@ export class DynamoContractRepository implements ContractRepository {
     }
 
     return this.getContract(contractId);
+  }
+
+  async linkSessionToContract(input: {
+    sessionId: string;
+    contractId: string;
+    createdAt: string;
+  }): Promise<void> {
+    const sessionItem: ContractSessionItem = {
+      PK: this.buildSessionPk(input.sessionId),
+      SK: SORT_KEYS.META,
+      entityType: ENTITY_TYPES.SESSION,
+      sessionId: input.sessionId,
+      contractId: input.contractId,
+      createdAt: input.createdAt,
+    };
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: sessionItem,
+        ConditionExpression: 'attribute_not_exists(PK) OR contractId = :cid',
+        ExpressionAttributeValues: {
+          ':cid': input.contractId,
+        },
+      })
+    );
   }
 
   async getContractSummarySnapshot(

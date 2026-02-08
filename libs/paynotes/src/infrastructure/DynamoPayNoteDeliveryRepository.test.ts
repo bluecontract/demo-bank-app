@@ -20,8 +20,11 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
   QueryCommand: vi.fn(payload => payload),
 }));
 
-const { PutCommand, QueryCommand } = await import('@aws-sdk/lib-dynamodb');
+const { PutCommand, GetCommand, QueryCommand } = await import(
+  '@aws-sdk/lib-dynamodb'
+);
 const mockPutCommand = vi.mocked(PutCommand);
+const mockGetCommand = vi.mocked(GetCommand);
 const mockQueryCommand = vi.mocked(QueryCommand);
 
 const createRepository = () =>
@@ -192,5 +195,81 @@ describe('DynamoPayNoteDeliveryRepository', () => {
         merchantId: 'merchant-1',
       }),
     ]);
+  });
+
+  it('uses consistent read for session lookup mapping', async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'PAYNOTE_DELIVERY_SESSION#session-1',
+          SK: 'META',
+          entityType: 'PAYNOTE_DELIVERY_SESSION',
+          sessionId: 'session-1',
+          deliveryId: 'delivery-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'PAYNOTE_DELIVERY#delivery-1',
+          SK: 'META',
+          entityType: 'PAYNOTE_DELIVERY',
+          deliveryId: 'delivery-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      });
+    const repository = createRepository();
+
+    await repository.getDeliveryBySessionId('session-1');
+
+    expect(mockGetCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Key: {
+          PK: 'PAYNOTE_DELIVERY_SESSION#session-1',
+          SK: 'META',
+        },
+        ConsistentRead: true,
+      })
+    );
+  });
+
+  it('uses consistent read for bootstrap lookup mapping', async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'PAYNOTE_DELIVERY_BOOTSTRAP#bootstrap-1',
+          SK: 'META',
+          entityType: 'PAYNOTE_DELIVERY_BOOTSTRAP',
+          bootstrapSessionId: 'bootstrap-1',
+          deliveryId: 'delivery-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'PAYNOTE_DELIVERY#delivery-1',
+          SK: 'META',
+          entityType: 'PAYNOTE_DELIVERY',
+          deliveryId: 'delivery-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      });
+    const repository = createRepository();
+
+    await repository.getDeliveryByBootstrapSessionId('bootstrap-1');
+
+    expect(mockGetCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Key: {
+          PK: 'PAYNOTE_DELIVERY_BOOTSTRAP#bootstrap-1',
+          SK: 'META',
+        },
+        ConsistentRead: true,
+      })
+    );
   });
 });

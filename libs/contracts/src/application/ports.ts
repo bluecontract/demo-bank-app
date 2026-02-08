@@ -146,6 +146,11 @@ export interface ContractRepository {
   getContract(contractId: string): Promise<ContractRecord | null>;
   getContractBySessionId(sessionId: string): Promise<ContractRecord | null>;
   getContractByDocumentId(documentId: string): Promise<ContractRecord | null>;
+  linkSessionToContract?(input: {
+    sessionId: string;
+    contractId: string;
+    createdAt: string;
+  }): Promise<void>;
   getContractSummarySnapshot(
     contractId: string
   ): Promise<ContractSummarySnapshot | null>;
