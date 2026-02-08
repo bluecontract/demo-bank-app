@@ -334,6 +334,73 @@ const linkPayNoteHold = async (input: {
   });
 };
 
+const confirmCaptureLock = async (input: {
+  holdId: string;
+  eventId: string;
+  payNoteDocumentId: string;
+  sessionId: string;
+  credentials: Awaited<ReturnType<MyOsClient['getCredentials']>> | null;
+  deps: HandleWebhookEventDependencies;
+  logs: LogEntry[];
+}): Promise<boolean> => {
+  const {
+    holdId,
+    eventId,
+    payNoteDocumentId,
+    sessionId,
+    credentials,
+    deps,
+    logs,
+  } = input;
+
+  if (!credentials) {
+    logs.push({
+      level: 'error',
+      message:
+        'Skipped confirming PayNote card transaction capture locked (missing MyOS credentials)',
+      context: {
+        eventId,
+        payNoteDocumentId,
+        holdId,
+      },
+    });
+    return false;
+  }
+
+  const response = await deps.myOsClient.runDocumentOperation({
+    credentials,
+    sessionId,
+    operation: 'confirmCardTransactionCaptureLocked',
+  });
+
+  if (!response.ok) {
+    logs.push({
+      level: 'error',
+      message: 'Failed to confirm PayNote card transaction capture locked',
+      context: {
+        eventId,
+        payNoteDocumentId,
+        holdId,
+        status: response.status,
+        body: response.body,
+      },
+    });
+    return false;
+  }
+
+  logs.push({
+    level: 'info',
+    message: 'Confirmed PayNote card transaction capture locked',
+    context: {
+      eventId,
+      payNoteDocumentId,
+      holdId,
+    },
+  });
+
+  return true;
+};
+
 const applyCaptureLock = async (input: {
   holdId: string;
   eventId: string;
@@ -384,52 +451,15 @@ const applyCaptureLock = async (input: {
     return false;
   }
 
-  if (!credentials) {
-    logs.push({
-      level: 'error',
-      message:
-        'Skipped confirming PayNote card transaction capture locked (missing MyOS credentials)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        holdId,
-      },
-    });
-    return false;
-  }
-
-  const response = await deps.myOsClient.runDocumentOperation({
-    credentials,
+  return confirmCaptureLock({
+    holdId,
+    eventId,
+    payNoteDocumentId,
     sessionId,
-    operation: 'confirmCardTransactionCaptureLocked',
+    credentials,
+    deps,
+    logs,
   });
-
-  if (!response.ok) {
-    logs.push({
-      level: 'error',
-      message: 'Failed to confirm PayNote card transaction capture locked',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        holdId,
-        status: response.status,
-        body: response.body,
-      },
-    });
-    return false;
-  }
-
-  logs.push({
-    level: 'info',
-    message: 'Confirmed PayNote card transaction capture locked',
-    context: {
-      eventId,
-      payNoteDocumentId,
-      holdId,
-    },
-  });
-
-  return true;
 };
 
 const applyCaptureUnlock = async (input: {
@@ -641,7 +671,7 @@ const handleCaptureRequestEvent = async (
     if (captureHold.hold.captureDisabled) {
       trace(
         logs,
-        'Skipped PayNote capture lock confirmation (already locked)',
+        'PayNote capture already locked locally; confirming in MyOS',
         {
           eventId,
           payNoteDocumentId,
@@ -649,7 +679,16 @@ const handleCaptureRequestEvent = async (
           captureEventId,
         }
       );
-      if (captureEventId) {
+      const confirmed = await confirmCaptureLock({
+        holdId: captureHold.holdId,
+        eventId,
+        payNoteDocumentId,
+        sessionId,
+        credentials,
+        deps,
+        logs,
+      });
+      if (confirmed && captureEventId) {
         await persistCaptureEventId({
           updatedRecord,
           captureEventId,

@@ -301,7 +301,7 @@ describe('handleWebhookEvent', () => {
     );
   });
 
-  it('skips confirming capture lock when hold already locked', async () => {
+  it('confirms capture lock when hold is already locked locally', async () => {
     const { deps, fetchEvent } = createDependencies();
     fetchEvent.mockResolvedValueOnce({
       kind: 'success',
@@ -344,12 +344,21 @@ describe('handleWebhookEvent', () => {
       captureDisabled: true,
       createdAt: '2024-01-01T00:00:00.000Z',
     });
+    (deps.myOsClient.runDocumentOperation as any).mockResolvedValue({
+      ok: true,
+      status: 200,
+    });
 
     const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
 
     expect(result.note).toBe('');
     expect(deps.holdRepository.disableHoldCapture).not.toHaveBeenCalled();
-    expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        operation: 'confirmCardTransactionCaptureLocked',
+      })
+    );
   });
 
   it('transfers funds when capture immediately is requested', async () => {

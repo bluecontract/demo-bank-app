@@ -9,7 +9,6 @@ type DecisionOperation = 'acceptPayNote' | 'rejectPayNote';
 type DecisionDeps = Pick<
   PaynoteDependencies,
   | 'myOsClient'
-  | 'holdRepository'
   | 'payNoteDeliveryRepository'
   | 'contractRepository'
   | 'logger'
@@ -142,9 +141,6 @@ export const runPayNoteDeliveryDecision = async (input: {
   }
 
   if (isAcceptance) {
-    if (delivery.holdId) {
-      await deps.holdRepository.disableHoldCapture(delivery.holdId);
-    }
     deps.logger.info('PayNote bootstrap deferred to webhook handler', {
       deliveryId: delivery.deliveryId,
       sessionId,

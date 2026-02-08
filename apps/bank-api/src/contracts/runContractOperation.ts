@@ -23,7 +23,6 @@ export const runContractOperationHandler = async (
     payNoteDeliveryRepository,
     contractRepository,
     myOsClient,
-    holdRepository,
     logger,
     getOpenAiApiKey,
   } = await getDependencies();
@@ -126,7 +125,6 @@ export const runContractOperationHandler = async (
     now,
     deps: {
       myOsClient,
-      holdRepository,
       payNoteDeliveryRepository,
       contractRepository,
       logger,

@@ -89,7 +89,7 @@ describe('runContractOperationHandler', () => {
     vi.useRealTimers();
   });
 
-  it('accepts a delivery and disables capture', async () => {
+  it('accepts a delivery without forcing hold capture lock', async () => {
     const payNotePayload = buildPayNotePayload();
 
     contractRepository.getContractBySessionId.mockResolvedValue({
@@ -146,7 +146,7 @@ describe('runContractOperationHandler', () => {
         }),
       })
     );
-    expect(holdRepository.disableHoldCapture).toHaveBeenCalledWith('hold-1');
+    expect(holdRepository.disableHoldCapture).not.toHaveBeenCalled();
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     expect(payNoteDeliveryRepository.saveDelivery).toHaveBeenCalledWith(
       expect.objectContaining({

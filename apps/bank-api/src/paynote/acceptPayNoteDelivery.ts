@@ -17,7 +17,6 @@ export const acceptPayNoteDeliveryHandler = async (
   const {
     payNoteDeliveryRepository,
     myOsClient,
-    holdRepository,
     contractRepository,
     logger,
     getOpenAiApiKey,
@@ -77,7 +76,6 @@ export const acceptPayNoteDeliveryHandler = async (
     now,
     deps: {
       myOsClient,
-      holdRepository,
       payNoteDeliveryRepository,
       contractRepository,
       logger,
