@@ -5,6 +5,7 @@ import {
   PutCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
+import type { ContractRecord } from '@demo-bank-app/contracts';
 
 const SUMMARY_INPUT_SK_PREFIX = 'SUMMARY_INPUT#';
 const SUMMARY_INPUT_RETENTION_SECONDS = 60 * 60 * 24 * 14;
@@ -23,6 +24,7 @@ type ContractSummaryInputItem = {
   sourceUpdatedAt: string;
   sourceEpoch?: number;
   eventId?: string;
+  contractSnapshot?: ContractRecord;
   createdAt: string;
   ttl?: number;
 };
@@ -33,6 +35,7 @@ export type ContractSummaryInputSnapshot = {
   sourceUpdatedAt: string;
   sourceEpoch?: number;
   eventId?: string;
+  contractSnapshot?: ContractRecord;
   createdAt: string;
 };
 
@@ -94,6 +97,7 @@ export const buildContractSummaryInputSnapshot = (input: {
   sourceUpdatedAt: string;
   sourceEpoch?: number;
   eventId?: string;
+  contractSnapshot?: ContractRecord;
   createdAt: string;
 }): ContractSummaryInputSnapshot => {
   const summaryInputKey = buildSummaryInputKey({
@@ -107,6 +111,9 @@ export const buildContractSummaryInputSnapshot = (input: {
     sourceUpdatedAt: input.sourceUpdatedAt,
     sourceEpoch: input.sourceEpoch,
     eventId: input.eventId,
+    ...(input.contractSnapshot
+      ? { contractSnapshot: input.contractSnapshot }
+      : {}),
     createdAt: input.createdAt,
   };
 };
@@ -146,6 +153,9 @@ export class DynamoContractSummaryInputStore {
         ? { sourceEpoch: snapshot.sourceEpoch }
         : {}),
       ...(snapshot.eventId ? { eventId: snapshot.eventId } : {}),
+      ...(snapshot.contractSnapshot
+        ? { contractSnapshot: snapshot.contractSnapshot }
+        : {}),
       createdAt: snapshot.createdAt,
       ttl,
     };
@@ -184,6 +194,7 @@ export class DynamoContractSummaryInputStore {
       sourceUpdatedAt: item.sourceUpdatedAt,
       sourceEpoch: item.sourceEpoch,
       eventId: item.eventId,
+      contractSnapshot: item.contractSnapshot,
       createdAt: item.createdAt,
     };
   }

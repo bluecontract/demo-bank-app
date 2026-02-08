@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
+import { getContractsPollingInterval } from '../lib/contractsPolling';
 import type { ContractHistoryResponse } from '../../../types/api';
 
 type ContractHistoryError = Error & { status?: number };
@@ -13,6 +14,7 @@ const makeError = (message: string, status?: number): ContractHistoryError => {
 
 export function useContractHistory(sessionId: string | null, enabled = true) {
   const { handleAuthError } = useAuthErrorHandler();
+  const refetchInterval = getContractsPollingInterval();
 
   return useQuery<ContractHistoryResponse, ContractHistoryError>({
     queryKey: ['contract-history', sessionId ?? 'unknown'],
@@ -39,6 +41,7 @@ export function useContractHistory(sessionId: string | null, enabled = true) {
     enabled: Boolean(sessionId) && enabled,
     staleTime: 60 * 1000,
     gcTime: 5 * 60 * 1000,
+    refetchInterval,
     retry: (failureCount, error) => {
       if (error.status === 401 || error.status === 403) {
         return false;

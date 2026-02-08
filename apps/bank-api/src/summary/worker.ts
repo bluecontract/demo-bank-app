@@ -142,44 +142,35 @@ export const handleSummaryJob = async (
     localstackHostname: process.env.LOCALSTACK_HOSTNAME ?? null,
   });
 
+  let contractSummarySnapshot: Awaited<
+    ReturnType<typeof summaryInputStore.get>
+  > | null = null;
+
   try {
     if (type === 'contract-summary') {
-      const snapshot = await summaryInputStore.get({
+      contractSummarySnapshot = await summaryInputStore.get({
         contractId: event.contractId,
         summaryInputKey: event.summaryInputKey,
       });
-      if (!snapshot) {
+      if (!contractSummarySnapshot) {
         throw new SummaryNotReadyError('Summary input snapshot not found');
       }
 
-      const latestContract = await contractRepository.getContract(
-        event.contractId
-      );
-      if (!latestContract) {
+      const contractForSummary =
+        contractSummarySnapshot.contractSnapshot ??
+        (await contractRepository.getContract(event.contractId));
+      if (!contractForSummary) {
         throw new SummaryNotReadyError('Contract not found for summary job');
       }
 
-      if (
-        latestContract.summarySourceUpdatedAt &&
-        latestContract.summarySourceUpdatedAt > snapshot.sourceUpdatedAt
-      ) {
-        logger.info('Skipping stale contract summary job', {
-          contractId: event.contractId,
-          summaryInputKey: event.summaryInputKey,
-          sourceUpdatedAt: snapshot.sourceUpdatedAt,
-          latestSummarySourceUpdatedAt: latestContract.summarySourceUpdatedAt,
-        });
-        return { status: 'stale' as const };
-      }
-
-      if (!latestContract.document) {
+      if (!contractForSummary.document) {
         throw new SummaryNotReadyError(
           'Contract document not available for summary job'
         );
       }
 
       await generateContractSummaryForContract({
-        contract: latestContract,
+        contract: contractForSummary,
         force: Boolean(force),
         contractRepository,
         getOpenAiApiKey,
@@ -203,6 +194,29 @@ export const handleSummaryJob = async (
       typeof error === 'object' &&
       'name' in error &&
       (error as { name?: string }).name === 'ConditionalCheckFailedException';
+
+    if (type === 'contract-summary' && isConditionalCheckFailed) {
+      const latestContract = await contractRepository.getContract(
+        event.contractId
+      );
+      const snapshotSourceUpdatedAt =
+        contractSummarySnapshot?.contractSnapshot?.updatedAt ??
+        contractSummarySnapshot?.sourceUpdatedAt ??
+        event.sourceUpdatedAt;
+      if (
+        latestContract?.summarySourceUpdatedAt &&
+        latestContract.summarySourceUpdatedAt > snapshotSourceUpdatedAt
+      ) {
+        logger.info('Skipping stale contract summary job', {
+          contractId: event.contractId,
+          summaryInputKey: event.summaryInputKey,
+          sourceUpdatedAt: snapshotSourceUpdatedAt,
+          latestSummarySourceUpdatedAt: latestContract.summarySourceUpdatedAt,
+        });
+        return { status: 'stale' as const };
+      }
+    }
+
     if (error instanceof SummaryNotReadyError || isConditionalCheckFailed) {
       await applyNotReadyBackoff({
         logger,

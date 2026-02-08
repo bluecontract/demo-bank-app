@@ -418,6 +418,46 @@ export function ContractDetailsPage() {
     historySessionId,
     resolvedKind === 'contract' && Boolean(historySessionId)
   );
+  const historyRefetch = historyQuery.refetch;
+  const historySyncRef = useRef<{
+    sessionId: string | null;
+    summaryUpdatedAt: string | null;
+  }>({
+    sessionId: null,
+    summaryUpdatedAt: null,
+  });
+
+  useEffect(() => {
+    if (resolvedKind !== 'contract') {
+      historySyncRef.current = {
+        sessionId: null,
+        summaryUpdatedAt: null,
+      };
+      return;
+    }
+
+    const currentSnapshot = {
+      sessionId: historySessionId,
+      summaryUpdatedAt: contractData?.summaryUpdatedAt ?? null,
+    };
+    const previousSnapshot = historySyncRef.current;
+    const shouldRefetchHistory =
+      previousSnapshot.sessionId !== null &&
+      previousSnapshot.sessionId === currentSnapshot.sessionId &&
+      previousSnapshot.summaryUpdatedAt !== currentSnapshot.summaryUpdatedAt;
+
+    historySyncRef.current = currentSnapshot;
+
+    if (shouldRefetchHistory && typeof historyRefetch === 'function') {
+      void historyRefetch();
+    }
+  }, [
+    resolvedKind,
+    historySessionId,
+    contractData?.summaryUpdatedAt,
+    historyRefetch,
+  ]);
+
   const historyItems = historyQuery.data?.items ?? [];
   const hasHistory = resolvedKind === 'contract' && historyItems.length > 0;
   const isArchivePending =

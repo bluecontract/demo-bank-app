@@ -119,7 +119,7 @@ describe('listContractHistoryHandler', () => {
     ]);
   });
 
-  it('dedupes duplicate entries with the same message', async () => {
+  it('returns all history entries even when messages repeat', async () => {
     contractRepository.getContractBySessionId.mockResolvedValue({
       contractId: 'contract-1',
       typeBlueId: 'type-1',
@@ -179,6 +179,13 @@ describe('listContractHistoryHandler', () => {
         short: 'Shipment delivered',
         more: 'Shipment company confirmed delivery.',
         createdAt: '2024-01-02T11:00:00.000Z',
+      },
+      {
+        id: 'history-1',
+        kind: 'contractUpdated',
+        short: 'Capture locked by Bank',
+        more: 'Bank confirmed the lock.',
+        createdAt: '2024-01-02T12:00:00.000Z',
       },
     ]);
   });

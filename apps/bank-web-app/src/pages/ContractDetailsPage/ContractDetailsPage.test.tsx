@@ -376,6 +376,75 @@ describe('ContractDetailsPage', () => {
     expect(mockUseContractHistory).toHaveBeenCalledWith(null, false);
   });
 
+  it('refetches history when summaryUpdatedAt changes for the active contract session', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    const historyRefetchMock = vi.fn();
+    const contractState = {
+      summaryUpdatedAt: '2026-02-08T10:00:00.000Z',
+    };
+
+    mockUseContractDetails.mockImplementation(() => ({
+      data: {
+        sessionId: 'session-1',
+        contractId: 'contract-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'GE Refrigerator Order',
+        document: { name: 'GE Refrigerator Order' },
+        summaryUpdatedAt: contractState.summaryUpdatedAt,
+        summary: {
+          story: {
+            headline: 'GE Refrigerator Order',
+            overview: ['Funds will be held until delivery is confirmed.'],
+            bullets: [],
+          },
+          listPreview: 'Funds are held until delivery.',
+          nextSteps: { title: 'Next steps', items: [] },
+          lastChange: {
+            short: 'Proposal received.',
+            more: 'A new proposal is awaiting client approval.',
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    }));
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseContractHistory.mockReturnValue({
+      data: { items: [] },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: historyRefetchMock,
+    });
+
+    const { rerender } = render(<ContractDetailsPage />, {
+      wrapper: createQueryWrapper(),
+    });
+
+    expect(historyRefetchMock).not.toHaveBeenCalled();
+
+    contractState.summaryUpdatedAt = '2026-02-08T10:00:01.000Z';
+    act(() => {
+      rerender(<ContractDetailsPage />);
+    });
+
+    expect(historyRefetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('does not render linked contracts section while related contracts are still loading without resolved items', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-1' });
     mockUseLocation.mockReturnValue({

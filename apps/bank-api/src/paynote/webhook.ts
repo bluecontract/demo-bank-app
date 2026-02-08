@@ -495,6 +495,7 @@ export const payNoteWebhookHandler = async (
         sourceUpdatedAt,
         sourceEpoch,
         eventId,
+        contractSnapshot: contract,
         createdAt: now,
       });
 
