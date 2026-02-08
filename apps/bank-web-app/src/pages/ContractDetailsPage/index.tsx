@@ -244,6 +244,48 @@ export function ContractDetailsPage() {
   }, [resolvedKind, contractQuery.error, contractQuery.isError]);
 
   useEffect(() => {
+    if (
+      resolvedKind === 'proposal' &&
+      proposalQuery.isError &&
+      proposalQuery.error?.status === 404 &&
+      contractQuery.data
+    ) {
+      setActiveKind('contract');
+
+      const searchParams = new URLSearchParams(location.search);
+      const shouldNormalizeKind =
+        searchParams.get('kind') === 'proposal' ||
+        locationState?.kind === 'proposal';
+      if (shouldNormalizeKind) {
+        searchParams.delete('kind');
+        const nextSearch = searchParams.toString();
+        navigate(
+          {
+            pathname: location.pathname,
+            search: nextSearch ? `?${nextSearch}` : '',
+          },
+          {
+            replace: true,
+            state: {
+              ...(locationState ?? {}),
+              kind: 'contract',
+            },
+          }
+        );
+      }
+    }
+  }, [
+    resolvedKind,
+    proposalQuery.isError,
+    proposalQuery.error,
+    contractQuery.data,
+    location.pathname,
+    location.search,
+    locationState,
+    navigate,
+  ]);
+
+  useEffect(() => {
     if (!sessionId) {
       return;
     }

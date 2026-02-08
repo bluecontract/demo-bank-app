@@ -1,4 +1,10 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from '@testing-library/react';
 import { vi } from 'vitest';
 import { ContractDetailsPage } from './index';
 import { createQueryWrapper } from '../../test-utils';
@@ -878,5 +884,134 @@ describe('ContractDetailsPage', () => {
         clientDecisionStatus: 'accepted',
       })
     );
+  });
+
+  it('falls back to contract view when proposal endpoint returns 404 for the same session', async () => {
+    const navigateMock = vi.fn();
+    mockUseNavigate.mockReturnValue(navigateMock);
+
+    mockUseParams.mockReturnValue({ sessionId: 'session-3' });
+    mockUseLocation.mockReturnValue({
+      state: null,
+      pathname: '/contracts/session-3',
+      search: '?kind=proposal',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-3',
+        contractId: 'contract-3',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'Started PayNote',
+        document: { name: 'Started PayNote' },
+        summary: {
+          story: {
+            headline: 'Started PayNote',
+            overview: ['Contract started successfully.'],
+            bullets: [],
+          },
+          listPreview: 'Contract started successfully.',
+          nextSteps: { title: 'Next steps', items: [] },
+          lastChange: {
+            short: 'Contract started.',
+            more: 'The PayNote contract has started.',
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: true,
+      error: { status: 404 },
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith(
+        {
+          pathname: '/contracts/session-3',
+          search: '',
+        },
+        {
+          replace: true,
+          state: {
+            kind: 'contract',
+          },
+        }
+      );
+    });
+
+    expect(
+      screen.getByRole('heading', { name: 'Started PayNote', level: 2 })
+    ).toBeInTheDocument();
+  });
+
+  it('normalizes state-only proposal navigation to contract when proposal endpoint returns 404', async () => {
+    const navigateMock = vi.fn();
+    mockUseNavigate.mockReturnValue(navigateMock);
+
+    mockUseParams.mockReturnValue({ sessionId: 'session-4' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'proposal' },
+      pathname: '/contracts/session-4',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-4',
+        contractId: 'contract-4',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'Resolved Contract',
+        document: { name: 'Resolved Contract' },
+        summary: {
+          story: {
+            headline: 'Resolved Contract',
+            overview: ['Contract is available.'],
+            bullets: [],
+          },
+          listPreview: 'Contract is available.',
+          nextSteps: { title: 'Next steps', items: [] },
+          lastChange: {
+            short: 'Contract started.',
+            more: 'Contract started.',
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: true,
+      error: { status: 404 },
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    await waitFor(() => {
+      expect(navigateMock).toHaveBeenCalledWith(
+        {
+          pathname: '/contracts/session-4',
+          search: '',
+        },
+        {
+          replace: true,
+          state: {
+            from: '/contracts',
+            kind: 'contract',
+          },
+        }
+      );
+    });
   });
 });

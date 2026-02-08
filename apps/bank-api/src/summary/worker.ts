@@ -1,5 +1,6 @@
 import { ChangeMessageVisibilityCommand, SQSClient } from '@aws-sdk/client-sqs';
 import type { SQSRecord } from 'aws-lambda';
+import type { ContractRecord } from '@demo-bank-app/contracts';
 import { getDependencies } from '../paynote/dependencies';
 import { generateContractSummaryForContract } from '../contracts/generateContractSummary';
 import { generatePayNoteDeliverySummaryForSessionId } from '../paynote/generatePayNoteDeliverySummary';
@@ -10,6 +11,38 @@ const NOT_READY_BACKOFF_SECONDS = [5, 15, 45, 120];
 class SummaryNotReadyError extends Error {
   override name = 'SummaryNotReadyError';
 }
+
+const buildContractForSummary = (input: {
+  latest: ContractRecord;
+  snapshot?: ContractRecord;
+}): ContractRecord => {
+  const { latest, snapshot } = input;
+  if (!snapshot) {
+    return latest;
+  }
+
+  return {
+    ...latest,
+    ...snapshot,
+    // Projection metadata must come from latest persisted core state.
+    userId: latest.userId,
+    relatedTransactionIds: latest.relatedTransactionIds,
+    relatedHoldIds: latest.relatedHoldIds,
+    accountNumber: latest.accountNumber,
+    merchantId: latest.merchantId,
+    summary: latest.summary ?? snapshot.summary,
+    summaryPreview: latest.summaryPreview ?? snapshot.summaryPreview,
+    summaryUpdatedAt: latest.summaryUpdatedAt ?? snapshot.summaryUpdatedAt,
+    summarySourceUpdatedAt:
+      latest.summarySourceUpdatedAt ?? snapshot.summarySourceUpdatedAt,
+    summaryInputBlueId:
+      latest.summaryInputBlueId ?? snapshot.summaryInputBlueId,
+    summaryModel: latest.summaryModel ?? snapshot.summaryModel,
+    summaryError: latest.summaryError ?? snapshot.summaryError,
+    summaryDocumentName:
+      latest.summaryDocumentName ?? snapshot.summaryDocumentName,
+  };
+};
 
 type SummaryJobExecutionContext = {
   sqsRecord?: Pick<SQSRecord, 'receiptHandle' | 'messageId' | 'attributes'>;
@@ -156,16 +189,25 @@ export const handleSummaryJob = async (
         throw new SummaryNotReadyError('Summary input snapshot not found');
       }
 
-      const contractForSummary =
-        contractSummarySnapshot.contractSnapshot ??
-        (await contractRepository.getContract(event.contractId));
-      if (!contractForSummary) {
+      const latestContract = await contractRepository.getContract(
+        event.contractId
+      );
+      if (!latestContract) {
         throw new SummaryNotReadyError('Contract not found for summary job');
       }
+      const contractForSummary = buildContractForSummary({
+        latest: latestContract,
+        snapshot: contractSummarySnapshot.contractSnapshot,
+      });
 
       if (!contractForSummary.document) {
         throw new SummaryNotReadyError(
           'Contract document not available for summary job'
+        );
+      }
+      if (!contractForSummary.userId) {
+        throw new SummaryNotReadyError(
+          'Contract userId not available for summary job'
         );
       }
 
