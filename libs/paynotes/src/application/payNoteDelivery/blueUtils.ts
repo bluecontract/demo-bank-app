@@ -311,6 +311,43 @@ export const getPayNoteSummaryFromDocument = (
   };
 };
 
+const resolveInitialMessageDescription = (
+  initialMessages?:
+    | {
+        defaultMessage?: unknown;
+        perChannel?: Record<string, unknown>;
+      }
+    | undefined
+): string | undefined => {
+  if (!initialMessages) {
+    return undefined;
+  }
+
+  const perChannel =
+    initialMessages.perChannel && typeof initialMessages.perChannel === 'object'
+      ? initialMessages.perChannel
+      : undefined;
+  const payerMessage = getRecordString(perChannel, 'payerChannel');
+  if (payerMessage) {
+    return payerMessage;
+  }
+
+  return getString(initialMessages.defaultMessage);
+};
+
+export const getProposalDescriptionFromDeliveryDocument = (
+  document: unknown
+): string | undefined => {
+  const parsed = parsePayNoteDelivery(document);
+  if (!parsed) {
+    return undefined;
+  }
+
+  return resolveInitialMessageDescription(
+    parsed.output.payNoteBootstrapRequest?.initialMessages
+  );
+};
+
 export const getDeliveryNameFromDocument = (
   document: unknown
 ): string | undefined => {

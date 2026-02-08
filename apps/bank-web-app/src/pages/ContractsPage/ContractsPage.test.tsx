@@ -220,4 +220,47 @@ describe('ContractsPage', () => {
       })
     ).toHaveLength(0);
   });
+
+  it('renders proposal preview with payer-channel proposal description', () => {
+    mockUseProposals.mockReturnValue({
+      data: [
+        {
+          ...proposalSummary,
+          proposalDescription: 'Please review and accept this PayNote.',
+          summaryPreview: 'Fallback summary should not be used.',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+
+    render(<ContractsPage />, { wrapper: createTestWrapper() });
+
+    expect(
+      screen.getAllByText(
+        'Contract proposal: Please review and accept this PayNote.'
+      ).length
+    ).toBeGreaterThan(0);
+  });
+
+  it('falls back to summary preview when proposal description is unavailable', () => {
+    mockUseProposals.mockReturnValue({
+      data: [
+        {
+          ...proposalSummary,
+          summaryPreview: 'LLM generated summary.',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+
+    render(<ContractsPage />, { wrapper: createTestWrapper() });
+
+    expect(
+      screen.getAllByText('Contract proposal: LLM generated summary.').length
+    ).toBeGreaterThan(0);
+  });
 });

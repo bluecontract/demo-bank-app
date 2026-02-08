@@ -230,6 +230,7 @@ const generateOrLoadProposalSummary = async (input: {
       summary?: Record<string, unknown>;
       summaryUpdatedAt?: string;
       summarySourceUpdatedAt?: string;
+      summarySourceEpoch?: number;
       summaryInputBlueId?: string;
       summaryModel?: string;
       summaryError?: string | null;
@@ -239,6 +240,7 @@ const generateOrLoadProposalSummary = async (input: {
 }): Promise<ProposalSummaryGenerationResult> => {
   const { record, payNoteDocument } = input;
   const model = process.env.CONTRACT_SUMMARY_MODEL || DEFAULT_MODEL;
+  const sourceEpoch = record.deliveryEpoch;
 
   const { facts, summaryInputBlueId } = buildProposalFacts({
     record,
@@ -258,11 +260,14 @@ const generateOrLoadProposalSummary = async (input: {
       !record.summaryInputBlueId &&
       record.summarySourceUpdatedAt ===
         (record.deliveryUpdatedAt ?? record.updatedAt);
+    const hasMatchingEpoch =
+      sourceEpoch === undefined || record.summarySourceEpoch === sourceEpoch;
     const parsedSummary = ContractDocumentSummaryDto.safeParse(record.summary);
 
     if (
       parsedSummary.success &&
-      (hasMatchingSummaryInput || hasMatchingTimestamp)
+      (hasMatchingSummaryInput || hasMatchingTimestamp) &&
+      hasMatchingEpoch
     ) {
       return {
         summary: parsedSummary.data,
@@ -326,6 +331,7 @@ const generateOrLoadProposalSummary = async (input: {
       summary,
       summaryUpdatedAt: now,
       summarySourceUpdatedAt: sourceUpdatedAt,
+      summarySourceEpoch: sourceEpoch,
       summaryInputBlueId,
       summaryModel: model,
       summaryError: null,
@@ -349,6 +355,7 @@ const generateOrLoadProposalSummary = async (input: {
       summaryError: message,
       summaryUpdatedAt: record.summaryUpdatedAt ?? now,
       summarySourceUpdatedAt: record.summarySourceUpdatedAt ?? sourceUpdatedAt,
+      summarySourceEpoch: record.summarySourceEpoch ?? sourceEpoch,
       summaryInputBlueId: record.summaryInputBlueId ?? summaryInputBlueId,
       summaryModel: record.summaryModel ?? model,
     });
@@ -520,6 +527,7 @@ export const generatePayNoteDeliverySummaryForSessionId = async (input: {
       summary?: Record<string, unknown>;
       summaryUpdatedAt?: string;
       summarySourceUpdatedAt?: string;
+      summarySourceEpoch?: number;
       summaryInputBlueId?: string;
       summaryModel?: string;
       summaryError?: string | null;

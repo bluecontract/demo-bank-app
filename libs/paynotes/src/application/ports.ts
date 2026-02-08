@@ -130,6 +130,7 @@ export interface PayNoteDeliveryRecord {
   deliveryDocumentId?: string;
   deliverySessionId?: string;
   deliverySessionIds?: string[];
+  deliveryEpoch?: number;
   synchronySessionId?: string;
   cardTransactionDetails?: CardTransactionDetails;
   cardTransactionDetailsKey?: string;
@@ -154,6 +155,7 @@ export interface PayNoteDeliveryRecord {
   summary?: Record<string, unknown>;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summarySourceEpoch?: number;
   summaryInputBlueId?: string;
   summaryModel?: string;
   summaryError?: string;
@@ -167,6 +169,7 @@ export interface PayNoteDeliverySummary {
   payNoteSessionIds?: string[];
   payNoteDocumentId?: string;
   name?: string;
+  proposalDescription?: string;
   amountMinor?: number;
   currency?: string;
   merchantId?: string;
@@ -204,6 +207,7 @@ export interface PayNoteDeliveryRepository {
     summary?: Record<string, unknown>;
     summaryUpdatedAt?: string;
     summarySourceUpdatedAt?: string;
+    summarySourceEpoch?: number;
     summaryInputBlueId?: string;
     summaryModel?: string;
     summaryError?: string | null;

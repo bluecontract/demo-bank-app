@@ -16,6 +16,7 @@ import type { CardTransactionDetails } from '@demo-bank-app/banking';
 import { buildCardTransactionDetailsKey } from '@demo-bank-app/banking';
 import {
   getDeliveryNameFromDocument,
+  getProposalDescriptionFromDeliveryDocument,
   getPayNoteSummaryFromDocument,
 } from '../application/payNoteDelivery/blueUtils';
 
@@ -82,6 +83,7 @@ interface PayNoteDeliveryItem {
   deliveryDocumentId?: string;
   deliverySessionId?: string;
   deliverySessionIds?: string[];
+  deliveryEpoch?: number;
   synchronySessionId?: string;
   cardTransactionDetails?: CardTransactionDetails;
   cardTransactionDetailsKey?: string;
@@ -106,6 +108,7 @@ interface PayNoteDeliveryItem {
   summary?: Record<string, unknown>;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summarySourceEpoch?: number;
   summaryInputBlueId?: string;
   summaryModel?: string;
   summaryError?: string;
@@ -239,6 +242,7 @@ export class DynamoPayNoteDeliveryRepository
       deliveryDocumentId: item.deliveryDocumentId,
       deliverySessionId,
       deliverySessionIds,
+      deliveryEpoch: item.deliveryEpoch,
       synchronySessionId: item.synchronySessionId,
       cardTransactionDetails: item.cardTransactionDetails,
       cardTransactionDetailsKey: item.cardTransactionDetailsKey,
@@ -263,6 +267,7 @@ export class DynamoPayNoteDeliveryRepository
       summary: item.summary,
       summaryUpdatedAt: item.summaryUpdatedAt,
       summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+      summarySourceEpoch: item.summarySourceEpoch,
       summaryInputBlueId: item.summaryInputBlueId,
       summaryModel: item.summaryModel,
       summaryError: item.summaryError,
@@ -469,6 +474,9 @@ export class DynamoPayNoteDeliveryRepository
       ...(normalizedDeliverySessionIds
         ? { deliverySessionIds: normalizedDeliverySessionIds }
         : {}),
+      ...(record.deliveryEpoch !== undefined
+        ? { deliveryEpoch: record.deliveryEpoch }
+        : {}),
       ...(record.synchronySessionId
         ? { synchronySessionId: record.synchronySessionId }
         : {}),
@@ -531,6 +539,9 @@ export class DynamoPayNoteDeliveryRepository
         : {}),
       ...(record.summarySourceUpdatedAt
         ? { summarySourceUpdatedAt: record.summarySourceUpdatedAt }
+        : {}),
+      ...(record.summarySourceEpoch !== undefined
+        ? { summarySourceEpoch: record.summarySourceEpoch }
         : {}),
       ...(record.summaryInputBlueId
         ? { summaryInputBlueId: record.summaryInputBlueId }
@@ -657,6 +668,7 @@ export class DynamoPayNoteDeliveryRepository
     summary?: Record<string, unknown>;
     summaryUpdatedAt?: string;
     summarySourceUpdatedAt?: string;
+    summarySourceEpoch?: number;
     summaryInputBlueId?: string;
     summaryModel?: string;
     summaryError?: string | null;
@@ -666,6 +678,7 @@ export class DynamoPayNoteDeliveryRepository
       summary,
       summaryUpdatedAt,
       summarySourceUpdatedAt,
+      summarySourceEpoch,
       summaryInputBlueId,
       summaryModel,
       summaryError,
@@ -690,6 +703,11 @@ export class DynamoPayNoteDeliveryRepository
       names['#summarySourceUpdatedAt'] = 'summarySourceUpdatedAt';
       values[':summarySourceUpdatedAt'] = summarySourceUpdatedAt;
       setExpressions.push('#summarySourceUpdatedAt = :summarySourceUpdatedAt');
+    }
+    if (summarySourceEpoch !== undefined) {
+      names['#summarySourceEpoch'] = 'summarySourceEpoch';
+      values[':summarySourceEpoch'] = summarySourceEpoch;
+      setExpressions.push('#summarySourceEpoch = :summarySourceEpoch');
     }
     if (summaryInputBlueId !== undefined) {
       names['#summaryInputBlueId'] = 'summaryInputBlueId';
@@ -791,6 +809,12 @@ export class DynamoPayNoteDeliveryRepository
         const summaryPreview = resolveSummaryPreview(
           record.summary as Record<string, unknown> | undefined
         );
+        const proposalDescription =
+          record.summarySourceEpoch === 0 && record.deliveryDocument
+            ? getProposalDescriptionFromDeliveryDocument(
+                record.deliveryDocument
+              )
+            : undefined;
 
         return {
           deliveryId: record.deliveryId,
@@ -798,6 +822,7 @@ export class DynamoPayNoteDeliveryRepository
           payNoteSessionIds: record.payNoteSessionIds,
           payNoteDocumentId: record.payNoteDocumentId,
           name: payNoteSummary.name ?? deliveryName,
+          proposalDescription,
           amountMinor: payNoteSummary.amountMinor,
           currency: payNoteSummary.currency,
           merchantId: record.merchantId,

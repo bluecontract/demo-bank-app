@@ -171,7 +171,7 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     });
 
     const result = await generatePayNoteDeliverySummaryHandler(
-      { params: { sessionId: 'session-1' } } as any,
+      { params: { sessionId: 'session-1' }, body: { force: false } } as any,
       { request: {} as any }
     );
 
@@ -222,6 +222,58 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalled();
     expect(getOpenAiApiKey).toHaveBeenCalled();
     expect(payNoteDeliveryRepository.updateDeliverySummary).toHaveBeenCalled();
+  });
+
+  it('regenerates summary when source epoch changed', async () => {
+    const payNoteDocument = {
+      type: { blueId: payNoteTypeBlueId },
+      name: 'Test PayNote',
+      contracts: {},
+    };
+
+    payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValueOnce({
+      deliveryId: 'delivery-1',
+      deliverySessionId: 'session-1',
+      userId: 'user-1',
+      transactionIdentificationStatus: 'identified',
+      deliveryEpoch: 1,
+      deliveryDocument: {
+        payNoteBootstrapRequest: {
+          document: payNoteDocument,
+        },
+      },
+      deliveryUpdatedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      summary: summaryFixture,
+      summaryUpdatedAt: '2026-01-02T00:00:01.000Z',
+      summarySourceUpdatedAt: '2026-01-02T00:00:00.000Z',
+      summarySourceEpoch: 0,
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generatePayNoteDeliverySummaryForSessionId({
+      sessionId: 'session-1',
+      force: false,
+      payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+      getOpenAiApiKey,
+      logger: logger as any,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.cached).toBe(false);
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalled();
+    expect(
+      payNoteDeliveryRepository.updateDeliverySummary
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryId: 'delivery-1',
+        summarySourceEpoch: 1,
+      })
+    );
   });
 
   it('skips worker summary generation for non-canonical sessions', async () => {

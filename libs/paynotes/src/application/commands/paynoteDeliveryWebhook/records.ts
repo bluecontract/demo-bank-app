@@ -96,7 +96,8 @@ export const buildDeliveryRecord = (input: {
   deliveryId: string;
   cardDetails: CardTransactionDetails;
   documentPayload: Record<string, unknown>;
-  eventObject?: { created?: string };
+  eventType?: string;
+  eventObject?: { created?: string; epoch?: number };
   deliveryDocumentId?: string;
   sessionId?: string;
   now: string;
@@ -106,6 +107,7 @@ export const buildDeliveryRecord = (input: {
     deliveryId,
     cardDetails,
     documentPayload,
+    eventType,
     eventObject,
     deliveryDocumentId,
     sessionId,
@@ -128,6 +130,14 @@ export const buildDeliveryRecord = (input: {
   );
   const resolvedDeliverySessionId =
     existing?.deliverySessionId ?? sessionId ?? deliverySessionIds?.[0];
+  const eventEpoch =
+    typeof eventObject?.epoch === 'number' && Number.isFinite(eventObject.epoch)
+      ? eventObject.epoch
+      : undefined;
+  const deliveryEpoch =
+    eventType === 'DOCUMENT_CREATED'
+      ? 0
+      : eventEpoch ?? existing?.deliveryEpoch;
 
   const deliveryRecord: PayNoteDeliveryRecord = {
     ...(existing ?? {
@@ -139,6 +149,7 @@ export const buildDeliveryRecord = (input: {
     deliveryDocumentId: deliveryDocumentId ?? existing?.deliveryDocumentId,
     deliverySessionId: resolvedDeliverySessionId,
     deliverySessionIds,
+    ...(deliveryEpoch !== undefined ? { deliveryEpoch } : {}),
     synchronySessionId,
     cardTransactionDetails: cardDetails,
     cardTransactionDetailsKey: deliveryId,

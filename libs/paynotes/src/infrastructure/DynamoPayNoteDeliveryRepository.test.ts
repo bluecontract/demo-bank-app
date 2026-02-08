@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DynamoPayNoteDeliveryRepository } from './DynamoPayNoteDeliveryRepository';
 import { buildCardTransactionDetailsKey } from '@demo-bank-app/banking';
+import { PAYNOTE_DELIVERY_BLUE_ID } from '../application/payNoteDelivery/schema';
 
 const mockSend = vi.fn();
 const mockDocumentClient = {
@@ -162,10 +163,18 @@ describe('DynamoPayNoteDeliveryRepository', () => {
             },
           },
           summaryUpdatedAt: '2024-01-02T00:00:00.000Z',
+          summarySourceEpoch: 0,
           transactionId: 'txn-1',
           deliveryDocument: {
+            type: { blueId: PAYNOTE_DELIVERY_BLUE_ID },
             name: 'Delivery for Invoice',
             payNoteBootstrapRequest: {
+              initialMessages: {
+                defaultMessage: 'Default proposal description',
+                perChannel: {
+                  payerChannel: 'Payer-specific proposal description',
+                },
+              },
               document: {
                 name: 'Invoice 42',
                 amount: { total: 1200 },
@@ -189,12 +198,79 @@ describe('DynamoPayNoteDeliveryRepository', () => {
       expect.objectContaining({
         deliveryId: 'delivery-1',
         name: 'Invoice 42',
+        proposalDescription: 'Payer-specific proposal description',
         amountMinor: 1200,
         currency: 'USD',
         transactionId: 'txn-1',
         merchantId: 'merchant-1',
       }),
     ]);
+  });
+
+  it('omits proposalDescription for non-initial summary epochs', async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            PK: 'USER#user-1',
+            SK: 'PAYNOTE_DELIVERY#2024-01-01T00:00:00.000Z#delivery-1',
+            entityType: 'PAYNOTE_DELIVERY_USER',
+            deliveryId: 'delivery-1',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'PAYNOTE_DELIVERY#delivery-1',
+          SK: 'META',
+          entityType: 'PAYNOTE_DELIVERY',
+          deliveryId: 'delivery-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+          summary: {
+            story: {
+              headline: 'Updated proposal',
+              overview: ['Updated details'],
+              bullets: [],
+            },
+            listPreview: 'Updated summary.',
+            nextSteps: {
+              title: 'Next steps',
+              items: ['Review updates'],
+            },
+            lastChange: {
+              short: 'Updated summary.',
+              more: 'Details changed.',
+            },
+          },
+          summaryUpdatedAt: '2024-01-02T00:00:00.000Z',
+          summarySourceEpoch: 1,
+          deliveryDocument: {
+            type: { blueId: PAYNOTE_DELIVERY_BLUE_ID },
+            payNoteBootstrapRequest: {
+              initialMessages: {
+                defaultMessage: 'Initial message',
+                perChannel: {
+                  payerChannel: 'Payer initial message',
+                },
+              },
+              document: {
+                name: 'Invoice 42',
+                amount: { total: 1200 },
+                currency: 'USD',
+              },
+            },
+          },
+        },
+      });
+
+    const repository = createRepository();
+    const result = await repository.listDeliveriesByUserId('user-1');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.proposalDescription).toBeUndefined();
   });
 
   it('uses consistent read for session lookup mapping', async () => {

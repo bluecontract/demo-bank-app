@@ -184,6 +184,7 @@ export const handleDeliveryDocumentUpdate = async (input: {
     deliveryId,
     cardDetails,
     documentPayload,
+    eventType,
     eventObject,
     deliveryDocumentId,
     sessionId,

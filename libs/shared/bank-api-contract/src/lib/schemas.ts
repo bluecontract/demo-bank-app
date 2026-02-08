@@ -430,6 +430,7 @@ export const PayNoteDeliverySummaryDto = z.object({
   payNoteSessionIds: z.array(z.string()).optional(),
   payNoteDocumentId: z.string().optional(),
   name: z.string().optional(),
+  proposalDescription: z.string().optional(),
   amountMinor: MoneyMinor.optional(),
   currency: z.string().optional(),
   from: MerchantFromDto,

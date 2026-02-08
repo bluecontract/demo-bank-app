@@ -46,8 +46,14 @@ const getProposalPreview = (item: ContractOrProposalItem): string => {
   if (!isProposalItem(item)) {
     return '';
   }
-  if (item.summaryPreview) {
-    return item.summaryPreview;
+  const proposalDescription =
+    item.proposalDescription?.trim() || item.summaryPreview?.trim();
+  if (proposalDescription) {
+    const prefix = 'Contract proposal:';
+    if (proposalDescription.toLowerCase().startsWith(prefix.toLowerCase())) {
+      return proposalDescription;
+    }
+    return `${prefix} ${proposalDescription}`;
   }
   if (item.amountMinor != null) {
     const currency = item.currency ? ` ${item.currency}` : '';
