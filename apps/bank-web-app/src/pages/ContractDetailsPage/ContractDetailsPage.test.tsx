@@ -363,6 +363,86 @@ describe('ContractDetailsPage', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('does not show linked proposal items when contract view is active', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-1',
+        contractId: 'contract-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'GE Refrigerator Order',
+        document: { name: 'GE Refrigerator Order' },
+        relatedTransactionIds: ['txn-1'],
+        summary: {
+          story: {
+            headline: 'GE Refrigerator Order',
+            overview: ['Funds will be held until delivery is confirmed.'],
+            bullets: [],
+          },
+          listPreview: 'Funds are held until delivery.',
+          nextSteps: { title: 'Next steps', items: [] },
+          lastChange: {
+            short: 'Proposal received.',
+            more: 'A new proposal is awaiting client approval.',
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseRelatedContracts.mockReturnValue({
+      data: [
+        {
+          sessionId: 'contract-session-2',
+          contractId: 'contract-2',
+          typeBlueId: 'PayNote/Contract',
+          displayName: 'Linked Contract',
+          documentName: 'Linked Contract Visible',
+          status: 'active',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T01:00:00.000Z',
+        },
+        {
+          kind: 'proposal',
+          deliveryId: 'delivery-1',
+          deliverySessionId: 'proposal-session-1',
+          name: 'Hidden Proposal Item',
+          clientDecisionStatus: 'pending',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T01:00:00.000Z',
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    expect(
+      screen.getByRole('heading', { name: 'Linked contracts' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText('Linked Contract Visible').length
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText('Hidden Proposal Item')).not.toBeInTheDocument();
+  });
+
   it('uses proposal view when kind is specified in the query string', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-3' });
     mockUseLocation.mockReturnValue({

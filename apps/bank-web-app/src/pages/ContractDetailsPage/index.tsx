@@ -21,6 +21,7 @@ import {
 } from '../../features/contracts/lib/contractDocumentUtils';
 import { getContractLastChangeAt } from '../../features/contracts/lib/contractTimestamps';
 import {
+  isContractRelatedContract,
   getRelatedContractSessionId,
   getRelatedContractTarget,
   getVisibleRelatedContracts,
@@ -283,13 +284,15 @@ export function ContractDetailsPage() {
   const relatedContracts = relatedContractsQuery.data ?? [];
   const { visibleRelatedContracts } =
     getVisibleRelatedContracts(relatedContracts);
-  const filteredRelatedContracts = useMemo(
-    () =>
-      visibleRelatedContracts.filter(
-        item => getRelatedContractSessionId(item) !== (sessionId ?? undefined)
-      ),
-    [visibleRelatedContracts, sessionId]
-  );
+  const filteredRelatedContracts = useMemo(() => {
+    const relatedItems = visibleRelatedContracts.filter(
+      item => getRelatedContractSessionId(item) !== (sessionId ?? undefined)
+    );
+    if (resolvedKind === 'contract') {
+      return relatedItems.filter(isContractRelatedContract);
+    }
+    return relatedItems;
+  }, [visibleRelatedContracts, sessionId, resolvedKind]);
   const relatedContractsErrorMessage =
     relatedContractsQuery.isError &&
     relatedContractsQuery.error instanceof Error
