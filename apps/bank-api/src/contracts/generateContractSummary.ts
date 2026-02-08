@@ -810,17 +810,10 @@ const generateOrLoadContractSummary = async (input: {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const now = new Date().toISOString();
 
     await input.contractRepository.updateContractSummary({
       contractId: contract.contractId,
       summaryError: message,
-      summaryUpdatedAt: contract.summaryUpdatedAt ?? now,
-      summarySourceUpdatedAt:
-        contract.summarySourceUpdatedAt ?? contract.updatedAt,
-      userId: contract.userId,
-      relatedTransactionIds: contract.relatedTransactionIds,
-      relatedHoldIds: contract.relatedHoldIds,
     });
 
     throw error;
@@ -985,9 +978,7 @@ export const generateContractSummaryForSessionId = async (input: {
   getOpenAiApiKey: () => Promise<string>;
   logger: PowertoolsLogger;
 }): Promise<ContractSummaryGenerationResult | null> => {
-  const { sessionId, force, contractRepository, getOpenAiApiKey, logger } =
-    input;
-
+  const { sessionId, contractRepository, logger } = input;
   const contract = await contractRepository.getContractBySessionId(sessionId);
   if (!contract) {
     logger.warn('Contract summary skipped (missing contract)', {
@@ -996,9 +987,25 @@ export const generateContractSummaryForSessionId = async (input: {
     return null;
   }
 
+  return generateContractSummaryForContract({
+    ...input,
+    contract,
+  });
+};
+
+export const generateContractSummaryForContract = async (input: {
+  contract: ContractRecord;
+  force: boolean;
+  contractRepository: ContractRepository;
+  getOpenAiApiKey: () => Promise<string>;
+  logger: PowertoolsLogger;
+}): Promise<ContractSummaryGenerationResult | null> => {
+  const { contract, force, contractRepository, getOpenAiApiKey, logger } =
+    input;
+
   if (!contract.document) {
     logger.warn('Contract summary skipped (missing document)', {
-      sessionId,
+      sessionId: contract.sessionId,
       contractId: contract.contractId,
     });
     return null;
@@ -1013,7 +1020,7 @@ export const generateContractSummaryForSessionId = async (input: {
       logger,
     });
     logger.info('Contract summary generated', {
-      sessionId,
+      sessionId: contract.sessionId,
       contractId: contract.contractId,
       cached: result.cached,
     });
@@ -1021,7 +1028,7 @@ export const generateContractSummaryForSessionId = async (input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('Failed to generate contract summary', {
-      sessionId,
+      sessionId: contract.sessionId,
       contractId: contract.contractId,
       error: message,
     });

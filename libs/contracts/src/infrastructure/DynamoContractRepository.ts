@@ -878,6 +878,14 @@ export class DynamoContractRepository implements ContractRepository {
       return key;
     };
 
+    const monotonicSummarySourceGuard =
+      typeof update.summarySourceUpdatedAt === 'string' &&
+      update.summarySourceUpdatedAt.length > 0;
+    if (monotonicSummarySourceGuard) {
+      addName('#currentSummarySourceUpdatedAt', 'summarySourceUpdatedAt');
+      addValue(':currentSummarySourceUpdatedAt', update.summarySourceUpdatedAt);
+    }
+
     const setField = (nameKey: string, valueKey: string, value: unknown) => {
       addValue(valueKey, value);
       setters.push(`${nameKey} = ${valueKey}`);
@@ -985,6 +993,10 @@ export class DynamoContractRepository implements ContractRepository {
       expressions.push(`REMOVE ${removals.join(', ')}`);
     }
 
+    const conditionExpression = monotonicSummarySourceGuard
+      ? 'attribute_exists(#pk) AND (attribute_not_exists(#currentSummarySourceUpdatedAt) OR #currentSummarySourceUpdatedAt <= :currentSummarySourceUpdatedAt)'
+      : 'attribute_exists(#pk)';
+
     await this.client.send(
       new UpdateCommand({
         TableName: this.tableName,
@@ -992,7 +1004,7 @@ export class DynamoContractRepository implements ContractRepository {
           PK: this.buildContractPk(update.contractId),
           SK: SORT_KEYS.META,
         },
-        ConditionExpression: 'attribute_exists(#pk)',
+        ConditionExpression: conditionExpression,
         UpdateExpression: expressions.join(' '),
         ExpressionAttributeNames: names,
         ...(Object.keys(values).length
@@ -1022,6 +1034,13 @@ export class DynamoContractRepository implements ContractRepository {
       '#pk': 'PK',
     };
     const summaryMetaValues: Record<string, unknown> = {};
+
+    if (monotonicSummarySourceGuard) {
+      summaryMetaNames['#currentSummarySourceUpdatedAt'] =
+        'summarySourceUpdatedAt';
+      summaryMetaValues[':currentSummarySourceUpdatedAt'] =
+        update.summarySourceUpdatedAt;
+    }
 
     const setSummaryMetaField = (
       nameKey: string,
@@ -1079,9 +1098,12 @@ export class DynamoContractRepository implements ContractRepository {
     }
 
     const updateRequests: Array<Promise<unknown>> = [];
+    const summaryMetaConditionExpression = monotonicSummarySourceGuard
+      ? 'attribute_exists(#pk) AND (attribute_not_exists(#currentSummarySourceUpdatedAt) OR #currentSummarySourceUpdatedAt <= :currentSummarySourceUpdatedAt)'
+      : 'attribute_exists(#pk)';
     const summaryMetaUpdate = {
       TableName: this.tableName,
-      ConditionExpression: 'attribute_exists(#pk)',
+      ConditionExpression: summaryMetaConditionExpression,
       UpdateExpression: summaryMetaExpressions.join(' '),
       ExpressionAttributeNames: summaryMetaNames,
       ...(Object.keys(summaryMetaValues).length

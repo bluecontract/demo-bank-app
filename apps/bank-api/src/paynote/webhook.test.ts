@@ -13,6 +13,7 @@ const hoistedPaynotes = vi.hoisted(() => ({
 
 const hoistedRepositories = vi.hoisted(() => ({
   contractRepository: null as any,
+  summaryInputStore: null as any,
 }));
 
 const hoistedAdapters = vi.hoisted(() => ({
@@ -48,6 +49,9 @@ describe('payNoteWebhookHandler', () => {
   };
 
   beforeEach(() => {
+    delete process.env.SUMMARY_QUEUE_URL;
+    delete process.env.SUMMARY_LAMBDA_NAME;
+
     hoistedDeps.getDependenciesMock.mockReset();
     logger.info.mockReset();
     logger.error.mockReset();
@@ -95,9 +99,13 @@ describe('payNoteWebhookHandler', () => {
       saveContract: vi.fn(),
       updateContractSummary: vi.fn(),
       listContractsByUserId: vi.fn(),
-      markSummaryEventProcessed: vi.fn().mockResolvedValue(true),
+    };
+    const summaryInputStore = {
+      save: vi.fn(),
+      get: vi.fn(),
     };
     hoistedRepositories.contractRepository = contractRepository;
+    hoistedRepositories.summaryInputStore = summaryInputStore;
 
     hoistedDeps.getDependenciesMock.mockResolvedValue({
       logger,
@@ -134,6 +142,7 @@ describe('payNoteWebhookHandler', () => {
         deletePending: vi.fn(),
       },
       contractRepository,
+      summaryInputStore,
       bankingRepository: {
         getAccountIdByNumber: vi.fn(),
         getAccountById: vi.fn(),
@@ -388,9 +397,7 @@ describe('payNoteWebhookHandler', () => {
     expect(
       hoistedRepositories.contractRepository.getContractBySessionId
     ).toHaveBeenCalledWith('session-non-canonical');
-    expect(
-      hoistedRepositories.contractRepository.markSummaryEventProcessed
-    ).not.toHaveBeenCalled();
+    expect(hoistedRepositories.summaryInputStore.save).not.toHaveBeenCalled();
     expect(logger.debug).toHaveBeenCalledWith(
       'Skipping contract-summary enqueue (no contract for session; non-canonical session?)',
       expect.objectContaining({
@@ -422,9 +429,7 @@ describe('payNoteWebhookHandler', () => {
     expect(
       hoistedRepositories.contractRepository.getContractBySessionId
     ).toHaveBeenCalledWith('session-linked');
-    expect(
-      hoistedRepositories.contractRepository.markSummaryEventProcessed
-    ).not.toHaveBeenCalled();
+    expect(hoistedRepositories.summaryInputStore.save).not.toHaveBeenCalled();
     expect(logger.debug).toHaveBeenCalledWith(
       'Skipping contract-summary enqueue (session is not canonical)',
       expect.objectContaining({
@@ -436,12 +441,14 @@ describe('payNoteWebhookHandler', () => {
     );
   });
 
-  it('keeps summary dedupe flow for canonical sessions', async () => {
+  it('stores summary input snapshot for canonical sessions', async () => {
     hoistedRepositories.contractRepository.getContractBySessionId.mockResolvedValue(
-      { contractId: 'contract-1', sessionId: 'session-canonical' }
-    );
-    hoistedRepositories.contractRepository.markSummaryEventProcessed.mockResolvedValue(
-      true
+      {
+        contractId: 'contract-1',
+        sessionId: 'session-canonical',
+        documentId: 'document-1',
+        updatedAt: '2026-02-08T00:00:00.000Z',
+      }
     );
 
     const response = await payNoteWebhookHandler({
@@ -449,6 +456,8 @@ describe('payNoteWebhookHandler', () => {
         id: 'event-canonical',
         object: {
           sessionId: 'session-canonical',
+          created: '2026-02-08T00:00:01.000Z',
+          epoch: 3,
           document: { type: { blueId: PAYNOTE_DELIVERY_BLUE_ID } },
         },
       },
@@ -458,8 +467,12 @@ describe('payNoteWebhookHandler', () => {
     expect(
       hoistedRepositories.contractRepository.getContractBySessionId
     ).toHaveBeenCalledWith('session-canonical');
-    expect(
-      hoistedRepositories.contractRepository.markSummaryEventProcessed
-    ).toHaveBeenCalledWith('event-canonical');
+    expect(hoistedRepositories.summaryInputStore.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'contract-1',
+        sourceUpdatedAt: '2026-02-08T00:00:01.000Z',
+        sourceEpoch: 3,
+      })
+    );
   });
 });

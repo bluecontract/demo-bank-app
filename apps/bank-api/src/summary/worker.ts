@@ -1,12 +1,107 @@
+import { ChangeMessageVisibilityCommand, SQSClient } from '@aws-sdk/client-sqs';
+import type { SQSRecord } from 'aws-lambda';
 import { getDependencies } from '../paynote/dependencies';
-import { generateContractSummaryForSessionId } from '../contracts/generateContractSummary';
+import { generateContractSummaryForContract } from '../contracts/generateContractSummary';
 import { generatePayNoteDeliverySummaryForSessionId } from '../paynote/generatePayNoteDeliverySummary';
 import { isSummaryJob } from './types';
 
-export const handleSummaryJob = async (event: unknown) => {
+const NOT_READY_BACKOFF_SECONDS = [5, 15, 45, 120];
+
+class SummaryNotReadyError extends Error {
+  override name = 'SummaryNotReadyError';
+}
+
+type SummaryJobExecutionContext = {
+  sqsRecord?: Pick<SQSRecord, 'receiptHandle' | 'messageId' | 'attributes'>;
+};
+
+let cachedSqsClient: SQSClient | null = null;
+
+const getSqsClient = () => {
+  if (cachedSqsClient) {
+    return cachedSqsClient;
+  }
+
+  const region = process.env.AWS_REGION || 'eu-west-1';
+  const endpoint = process.env.AWS_ENDPOINT_URL;
+  cachedSqsClient = new SQSClient({
+    region,
+    ...(endpoint ? { endpoint } : {}),
+  });
+  return cachedSqsClient;
+};
+
+const getApproximateReceiveCount = (
+  record?: SummaryJobExecutionContext['sqsRecord']
+) => {
+  const count = record?.attributes?.ApproximateReceiveCount;
+  const parsed = count ? Number.parseInt(count, 10) : 1;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+};
+
+const applyNotReadyBackoff = async (input: {
+  logger: Awaited<ReturnType<typeof getDependencies>>['logger'];
+  sqsRecord?: SummaryJobExecutionContext['sqsRecord'];
+  jobType: string;
+  context: Record<string, unknown>;
+}) => {
+  const { logger, sqsRecord, jobType, context } = input;
+  if (!sqsRecord?.receiptHandle) {
+    return;
+  }
+
+  const queueUrl = process.env.SUMMARY_QUEUE_URL?.trim();
+  if (!queueUrl) {
+    logger.warn('Summary backoff skipped (missing SUMMARY_QUEUE_URL)', {
+      jobType,
+      messageId: sqsRecord.messageId,
+      ...context,
+    });
+    return;
+  }
+
+  const receiveCount = getApproximateReceiveCount(sqsRecord);
+  const backoff =
+    NOT_READY_BACKOFF_SECONDS[
+      Math.min(receiveCount - 1, NOT_READY_BACKOFF_SECONDS.length - 1)
+    ];
+
+  try {
+    await getSqsClient().send(
+      new ChangeMessageVisibilityCommand({
+        QueueUrl: queueUrl,
+        ReceiptHandle: sqsRecord.receiptHandle,
+        VisibilityTimeout: backoff,
+      })
+    );
+    logger.warn('Summary job not ready, applying backoff', {
+      jobType,
+      messageId: sqsRecord.messageId,
+      receiveCount,
+      visibilityTimeoutSeconds: backoff,
+      ...context,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Failed to apply summary backoff', {
+      jobType,
+      messageId: sqsRecord.messageId,
+      receiveCount,
+      visibilityTimeoutSeconds: backoff,
+      error: message,
+      ...context,
+    });
+  }
+};
+
+export const handleSummaryJob = async (
+  event: unknown,
+  executionContext?: SummaryJobExecutionContext
+) => {
   const {
     logger,
     contractRepository,
+    summaryInputStore,
     payNoteDeliveryRepository,
     getOpenAiApiKey,
   } = await getDependencies();
@@ -18,12 +113,24 @@ export const handleSummaryJob = async (event: unknown) => {
     return { status: 'ignored' as const };
   }
 
-  const { type, sessionId, force, reason } = event;
+  const { type, force, reason } = event;
+  const summaryContext =
+    type === 'contract-summary'
+      ? {
+          contractId: event.contractId,
+          documentId: event.documentId,
+          summaryInputKey: event.summaryInputKey,
+          sourceUpdatedAt: event.sourceUpdatedAt,
+          sourceEpoch: event.sourceEpoch,
+        }
+      : {
+          sessionId: event.sessionId,
+        };
   logger.info('Starting summarization', {
     type,
-    sessionId,
     force: Boolean(force),
     reason,
+    ...summaryContext,
   });
   logger.info('Summary AWS environment', {
     region: process.env.AWS_REGION ?? null,
@@ -37,8 +144,42 @@ export const handleSummaryJob = async (event: unknown) => {
 
   try {
     if (type === 'contract-summary') {
-      await generateContractSummaryForSessionId({
-        sessionId,
+      const snapshot = await summaryInputStore.get({
+        contractId: event.contractId,
+        summaryInputKey: event.summaryInputKey,
+      });
+      if (!snapshot) {
+        throw new SummaryNotReadyError('Summary input snapshot not found');
+      }
+
+      const latestContract = await contractRepository.getContract(
+        event.contractId
+      );
+      if (!latestContract) {
+        throw new SummaryNotReadyError('Contract not found for summary job');
+      }
+
+      if (
+        latestContract.summarySourceUpdatedAt &&
+        latestContract.summarySourceUpdatedAt > snapshot.sourceUpdatedAt
+      ) {
+        logger.info('Skipping stale contract summary job', {
+          contractId: event.contractId,
+          summaryInputKey: event.summaryInputKey,
+          sourceUpdatedAt: snapshot.sourceUpdatedAt,
+          latestSummarySourceUpdatedAt: latestContract.summarySourceUpdatedAt,
+        });
+        return { status: 'stale' as const };
+      }
+
+      if (!latestContract.document) {
+        throw new SummaryNotReadyError(
+          'Contract document not available for summary job'
+        );
+      }
+
+      await generateContractSummaryForContract({
+        contract: latestContract,
         force: Boolean(force),
         contractRepository,
         getOpenAiApiKey,
@@ -48,7 +189,7 @@ export const handleSummaryJob = async (event: unknown) => {
     }
 
     await generatePayNoteDeliverySummaryForSessionId({
-      sessionId,
+      sessionId: event.sessionId,
       force: Boolean(force),
       payNoteDeliveryRepository,
       getOpenAiApiKey,
@@ -57,10 +198,23 @@ export const handleSummaryJob = async (event: unknown) => {
     return { status: 'ok' as const };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const isConditionalCheckFailed =
+      error &&
+      typeof error === 'object' &&
+      'name' in error &&
+      (error as { name?: string }).name === 'ConditionalCheckFailedException';
+    if (error instanceof SummaryNotReadyError || isConditionalCheckFailed) {
+      await applyNotReadyBackoff({
+        logger,
+        sqsRecord: executionContext?.sqsRecord,
+        jobType: type,
+        context: summaryContext,
+      });
+    }
     logger.error('Summary job failed', {
       type,
-      sessionId,
       error: message,
+      ...summaryContext,
     });
     throw error;
   }

@@ -12,11 +12,19 @@ import {
   getPayloadSummary,
 } from '@demo-bank-app/paynotes';
 import { InvokeCommand, LambdaClient } from '@aws-sdk/client-lambda';
+import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { Blue } from '@blue-labs/language';
 import { repository } from '@blue-repository/types';
 import { DocumentSessionBootstrapSchema } from '@blue-repository/types/packages/myos/schemas';
 import { getDependencies } from './dependencies';
-import type { SummaryJob } from '../summary/types';
+import type {
+  ContractSummaryJob,
+  PayNoteDeliverySummaryJob,
+} from '../summary/types';
+import {
+  buildContractSummaryInputSnapshot,
+  normalizeSourceUpdatedAt,
+} from '../summary/inputStore';
 import type { PowertoolsLogger } from '@demo-bank-app/shared-observability';
 
 const blue = new Blue({
@@ -24,6 +32,7 @@ const blue = new Blue({
 });
 
 let cachedLambdaClient: LambdaClient | null = null;
+let cachedSqsClient: SQSClient | null = null;
 
 const getLambdaClient = () => {
   if (cachedLambdaClient) {
@@ -39,8 +48,22 @@ const getLambdaClient = () => {
   return cachedLambdaClient;
 };
 
-const enqueueSummaryJob = async (
-  job: SummaryJob,
+const getSqsClient = () => {
+  if (cachedSqsClient) {
+    return cachedSqsClient;
+  }
+
+  const region = process.env.AWS_REGION || 'eu-west-1';
+  const endpoint = process.env.AWS_ENDPOINT_URL;
+  cachedSqsClient = new SQSClient({
+    region,
+    ...(endpoint ? { endpoint } : {}),
+  });
+  return cachedSqsClient;
+};
+
+const invokeSummaryLambdaJob = async (
+  job: PayNoteDeliverySummaryJob,
   logger: PowertoolsLogger
 ): Promise<boolean> => {
   const functionName = process.env.SUMMARY_LAMBDA_NAME?.trim();
@@ -73,6 +96,51 @@ const enqueueSummaryJob = async (
     logger.error('Failed to enqueue summary job', {
       type: job.type,
       sessionId: job.sessionId,
+      error: message,
+    });
+    return false;
+  }
+};
+
+const enqueueContractSummaryJob = async (
+  job: ContractSummaryJob,
+  logger: PowertoolsLogger
+): Promise<boolean> => {
+  const queueUrl = process.env.SUMMARY_QUEUE_URL?.trim();
+  if (!queueUrl) {
+    logger.error('Summary dispatch skipped (missing SUMMARY_QUEUE_URL)', {
+      contractId: job.contractId,
+      documentId: job.documentId,
+    });
+    return false;
+  }
+
+  const deduplicationId = `${job.contractId}:${job.summaryInputKey}`;
+  try {
+    const response = await getSqsClient().send(
+      new SendMessageCommand({
+        QueueUrl: queueUrl,
+        MessageBody: JSON.stringify(job),
+        MessageGroupId: job.documentId || job.contractId,
+        MessageDeduplicationId: deduplicationId,
+      })
+    );
+
+    logger.info('Enqueued summary job', {
+      type: job.type,
+      contractId: job.contractId,
+      documentId: job.documentId,
+      summaryInputKey: job.summaryInputKey,
+      messageId: response.MessageId,
+    });
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Failed to enqueue summary job', {
+      type: job.type,
+      contractId: job.contractId,
+      documentId: job.documentId,
+      summaryInputKey: job.summaryInputKey,
       error: message,
     });
     return false;
@@ -153,6 +221,7 @@ export const payNoteWebhookHandler = async (
     bootstrapContextRepository,
     pendingBootstrapEventRepository,
     contractRepository,
+    summaryInputStore,
     bankingRepository,
     holdRepository,
     clock,
@@ -309,7 +378,7 @@ export const payNoteWebhookHandler = async (
           bootstrapContextRepository,
           clock,
           enqueuePayNoteDeliverySummary: async input => {
-            await enqueueSummaryJob(
+            await invokeSummaryLambdaJob(
               {
                 type: 'paynote-delivery-summary',
                 sessionId: input.sessionId,
@@ -408,21 +477,49 @@ export const payNoteWebhookHandler = async (
         }
       );
     } else {
-      const firstSummaryEvent =
-        await contractRepository.markSummaryEventProcessed(eventId);
-      if (firstSummaryEvent) {
-        void enqueueSummaryJob(
-          {
-            type: 'contract-summary',
-            sessionId,
-            reason: 'webhook',
-          },
-          logger
-        );
-      } else {
-        logger.debug('Skipped duplicate summary job', {
+      const now = new Date().toISOString();
+      const eventObject = (
+        payload as { object?: { created?: unknown; epoch?: unknown } }
+      ).object;
+      const sourceUpdatedAt = normalizeSourceUpdatedAt(
+        eventObject?.created,
+        contract.updatedAt ?? now
+      );
+      const sourceEpoch =
+        typeof eventObject?.epoch === 'number' &&
+        Number.isFinite(eventObject.epoch)
+          ? eventObject.epoch
+          : undefined;
+      const snapshot = buildContractSummaryInputSnapshot({
+        contractId: contract.contractId,
+        sourceUpdatedAt,
+        sourceEpoch,
+        eventId,
+        createdAt: now,
+      });
+
+      await summaryInputStore.save(snapshot);
+
+      const enqueued = await enqueueContractSummaryJob(
+        {
+          type: 'contract-summary',
+          messageVersion: 1,
+          contractId: contract.contractId,
+          documentId: contract.documentId ?? contract.contractId,
+          summaryInputKey: snapshot.summaryInputKey,
+          sourceUpdatedAt,
+          ...(sourceEpoch !== undefined ? { sourceEpoch } : {}),
+          reason: 'webhook',
+        },
+        logger
+      );
+      if (!enqueued) {
+        logger.error('Contract summary enqueue failed', {
           eventId,
           sessionId,
+          contractId: contract.contractId,
+          documentId: contract.documentId ?? contract.contractId,
+          summaryInputKey: snapshot.summaryInputKey,
         });
       }
     }

@@ -44,6 +44,7 @@ import {
   DynamoContractRepository,
   type ContractRepository,
 } from '@demo-bank-app/contracts';
+import { DynamoContractSummaryInputStore } from '../summary/inputStore';
 import {
   AuthEnvironmentConfiguration,
   DynamoMerchantDirectoryRepository,
@@ -64,6 +65,7 @@ export type PaynoteDependencies = {
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
   merchantDirectoryRepository: MerchantDirectoryRepository;
+  summaryInputStore: DynamoContractSummaryInputStore;
   myOsClient: MyOsClient;
   bankingFacade: BankingFacade;
   blueIdCalculator: BlueIdCalculator;
@@ -158,6 +160,12 @@ const initializeDependencies = async (): Promise<PaynoteDependencies> => {
     endpoint: awsEndpoint,
   });
 
+  const summaryInputStore = new DynamoContractSummaryInputStore({
+    tableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
   const bankingRepository = new DynamoBankingRepository({
     tableName,
     region: awsRegion,
@@ -216,6 +224,7 @@ const initializeDependencies = async (): Promise<PaynoteDependencies> => {
     bankingRepository,
     holdRepository,
     merchantDirectoryRepository,
+    summaryInputStore,
     myOsClient,
     bankingFacade,
     blueIdCalculator,
