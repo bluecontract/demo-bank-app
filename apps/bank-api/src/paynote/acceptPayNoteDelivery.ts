@@ -33,8 +33,35 @@ export const acceptPayNoteDeliveryHandler = async (
   const delivery = await payNoteDeliveryRepository.getDeliveryBySessionId(
     sessionId
   );
-
   if (!delivery || delivery.userId !== userId) {
+    return problemResponse({
+      status: 404,
+      code: ERROR_CODES.PAYNOTE_DELIVERY_NOT_FOUND,
+      message: 'PayNote delivery not found',
+    });
+  }
+
+  const deliveryDocumentId = delivery.deliveryDocumentId;
+  if (!deliveryDocumentId) {
+    return problemResponse({
+      status: 409,
+      code: ERROR_CODES.CONTRACT_NOT_FOUND,
+      message: 'PayNote delivery contract is not ready yet',
+    });
+  }
+
+  const contract = await contractRepository.getContractByDocumentId(
+    deliveryDocumentId
+  );
+  if (!contract?.sessionId) {
+    return problemResponse({
+      status: 409,
+      code: ERROR_CODES.CONTRACT_NOT_FOUND,
+      message: 'PayNote delivery contract is not ready yet',
+    });
+  }
+
+  if (contract.sessionId !== sessionId) {
     return problemResponse({
       status: 404,
       code: ERROR_CODES.PAYNOTE_DELIVERY_NOT_FOUND,
@@ -56,6 +83,6 @@ export const acceptPayNoteDeliveryHandler = async (
       logger,
       getOpenAiApiKey,
     },
-    contract: null,
+    contract,
   });
 };

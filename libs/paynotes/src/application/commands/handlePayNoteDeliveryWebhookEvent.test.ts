@@ -869,6 +869,118 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     });
   });
 
+  it('does not enqueue delivery summary for non-canonical session updates', async () => {
+    const deliveryDocument = buildDeliveryDocument();
+    const deliveryId = buildCardTransactionDetailsKey(cardDetails);
+    const now = '2024-01-03T10:00:00.000Z';
+    const enqueuePayNoteDeliverySummary = vi.fn().mockResolvedValue(undefined);
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: 'api-key',
+        accountId: 'bank-account',
+        baseUrl: 'https://myos.example.com',
+      }),
+      bootstrapDocument: vi.fn(),
+      runDocumentOperation: vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200 }),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn().mockResolvedValue({
+        kind: 'success',
+        document: {
+          documentId: 'delivery-doc-1',
+          sessionId: 'delivery-session-2',
+          document: deliveryDocument,
+        },
+      } satisfies MyOsFetchDocumentResult),
+    };
+
+    const existingRecord = {
+      deliveryId,
+      deliveryDocumentId: 'delivery-doc-1',
+      deliverySessionId: 'delivery-session-legacy',
+      deliverySessionIds: ['delivery-session-legacy'],
+      synchronySessionId: 'sync-session',
+      cardTransactionDetails: cardDetails,
+      cardTransactionDetailsKey: deliveryId,
+      accountNumber: '1234567890',
+      userId: 'user-1',
+      holdId: 'hold-1',
+      transactionId: 'txn-1',
+      transactionIdentificationStatus: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const payNoteDeliveryRepository = {
+      markEventProcessed: vi.fn().mockResolvedValue(true),
+      getDeliveryByDocumentId: vi.fn().mockResolvedValue(existingRecord),
+      getDeliveryBySessionId: vi.fn().mockResolvedValue(null),
+      getDeliveryByCardTransactionDetails: vi.fn().mockResolvedValue(null),
+      saveDelivery: vi.fn(),
+    };
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue({
+        contractId: 'contract-1',
+        sessionId: 'delivery-session-1',
+        documentId: 'delivery-doc-1',
+        createdAt: now,
+        updatedAt: now,
+      }),
+      saveContract: vi.fn(),
+    };
+
+    const holdRepository = {
+      getHoldByCardTransactionDetails: vi.fn(),
+      getHold: vi.fn().mockResolvedValue({
+        holdId: 'hold-1',
+        payerAccountNumber: '1234567890',
+      }),
+      putHoldMeta: vi.fn(),
+    };
+
+    const result = await handlePayNoteDeliveryWebhookEvent(
+      {
+        payload: {
+          id: 'event-3-non-canonical',
+          type: 'DOCUMENT_EPOCH_ADVANCED',
+          object: {
+            sessionId: 'delivery-session-2',
+            created: now,
+            document: deliveryDocument,
+          },
+        },
+      },
+      {
+        myOsClient: myOsClient as any,
+        payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+        contractRepository: contractRepository as any,
+        bankingRepository: {} as any,
+        holdRepository: holdRepository as any,
+        bootstrapContextRepository,
+        enqueuePayNoteDeliverySummary,
+        clock: { now: () => new Date(now) },
+      }
+    );
+
+    expect(result.handled).toBe(true);
+    expect(payNoteDeliveryRepository.saveDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryId,
+        deliverySessionId: 'delivery-session-1',
+        deliverySessionIds: expect.arrayContaining([
+          'delivery-session-legacy',
+          'delivery-session-2',
+          'delivery-session-1',
+        ]),
+        transactionIdentificationStatus: 'identified',
+      })
+    );
+    expect(enqueuePayNoteDeliverySummary).not.toHaveBeenCalled();
+  });
+
   it('skips processing when event is already processed', async () => {
     const deliveryDocument = buildDeliveryDocument();
 

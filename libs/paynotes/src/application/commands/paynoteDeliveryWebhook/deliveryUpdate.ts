@@ -8,6 +8,7 @@ import {
 import { upsertContractRecord } from '../../contracts';
 import { log, trace } from '../paynoteWebhook/logging';
 import { getString, toSimpleRecord } from '../paynoteWebhook/utils';
+import { mergeSessionIds } from '../payNoteSessionUtils';
 import type {
   HandlePayNoteDeliveryWebhookDependencies,
   WebhookEventObject,
@@ -29,7 +30,7 @@ const persistDeliveryRecord = async (input: {
   emitted: unknown[];
   now: string;
   deps: HandlePayNoteDeliveryWebhookDependencies;
-}): Promise<void> => {
+}): Promise<PayNoteDeliveryRecord> => {
   const {
     deliveryRecord,
     sessionId,
@@ -41,7 +42,6 @@ const persistDeliveryRecord = async (input: {
     deps,
   } = input;
 
-  await deps.payNoteDeliveryRepository.saveDelivery(deliveryRecord);
   await upsertContractRecord({
     contractRepository: deps.contractRepository,
     document: deliveryRecord.deliveryDocument,
@@ -78,6 +78,32 @@ const persistDeliveryRecord = async (input: {
     },
     now,
   });
+
+  const resolvedDeliveryDocumentId =
+    deliveryRecord.deliveryDocumentId ?? deliveryDocumentId;
+  const contract = resolvedDeliveryDocumentId
+    ? await deps.contractRepository.getContractByDocumentId(
+        resolvedDeliveryDocumentId
+      )
+    : null;
+  const canonicalSessionId = contract?.sessionId;
+  const deliverySessionIds = mergeSessionIds(
+    deliveryRecord.deliverySessionIds ??
+      (deliveryRecord.deliverySessionId
+        ? [deliveryRecord.deliverySessionId]
+        : undefined),
+    canonicalSessionId
+  );
+  const nextDeliveryRecord = canonicalSessionId
+    ? {
+        ...deliveryRecord,
+        deliverySessionId: canonicalSessionId,
+        deliverySessionIds,
+      }
+    : deliveryRecord;
+
+  await deps.payNoteDeliveryRepository.saveDelivery(nextDeliveryRecord);
+  return nextDeliveryRecord;
 };
 
 const getPayNoteBootstrapDocument = (
@@ -202,7 +228,7 @@ export const handleDeliveryDocumentUpdate = async (input: {
     logs,
   });
 
-  await persistDeliveryRecord({
+  const persistedDeliveryRecord = await persistDeliveryRecord({
     deliveryRecord,
     sessionId,
     deliveryDocumentId,
@@ -214,23 +240,25 @@ export const handleDeliveryDocumentUpdate = async (input: {
   });
 
   const enqueuePayNoteDeliverySummary = deps.enqueuePayNoteDeliverySummary;
+  const canonicalDeliverySessionId = persistedDeliveryRecord.deliverySessionId;
   const shouldEnqueuePayNoteDeliverySummary =
     enqueuePayNoteDeliverySummary &&
-    sessionId &&
+    canonicalDeliverySessionId &&
+    sessionId === canonicalDeliverySessionId &&
     (eventType === 'DOCUMENT_CREATED' ||
       eventType === 'DOCUMENT_EPOCH_ADVANCED') &&
-    deliveryRecord.transactionIdentificationStatus === 'identified' &&
-    Boolean(resolvePayNoteProposalDocument(deliveryRecord));
+    persistedDeliveryRecord.transactionIdentificationStatus === 'identified' &&
+    Boolean(resolvePayNoteProposalDocument(persistedDeliveryRecord));
 
   if (shouldEnqueuePayNoteDeliverySummary) {
     await enqueuePayNoteDeliverySummary({
-      sessionId,
+      sessionId: canonicalDeliverySessionId,
       reason: 'delivery-update',
     });
     trace(logs, 'Enqueued PayNote Delivery summary', {
       eventId,
       deliveryId,
-      sessionId,
+      sessionId: canonicalDeliverySessionId,
     });
   }
 
@@ -240,10 +268,10 @@ export const handleDeliveryDocumentUpdate = async (input: {
     eventId,
     deliveryId,
     deliveryDocumentId,
-    deliveryStatus: deliveryRecord.deliveryStatus,
+    deliveryStatus: persistedDeliveryRecord.deliveryStatus,
     transactionIdentificationStatus:
-      deliveryRecord.transactionIdentificationStatus,
-    clientDecisionStatus: deliveryRecord.clientDecisionStatus,
+      persistedDeliveryRecord.transactionIdentificationStatus,
+    clientDecisionStatus: persistedDeliveryRecord.clientDecisionStatus,
     deliveryName: getDeliveryNameFromDocument(documentPayload),
     payNoteName: payNoteSummary.name,
   });

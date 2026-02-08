@@ -400,9 +400,45 @@ describe('payNoteWebhookHandler', () => {
     );
   });
 
+  it('skips contract summary enqueue when mapped session is not canonical', async () => {
+    hoistedRepositories.contractRepository.getContractBySessionId.mockResolvedValue(
+      {
+        contractId: 'contract-1',
+        sessionId: 'session-canonical',
+      }
+    );
+
+    const response = await payNoteWebhookHandler({
+      body: {
+        id: 'event-linked-session',
+        object: {
+          sessionId: 'session-linked',
+          document: { type: { blueId: PAYNOTE_DELIVERY_BLUE_ID } },
+        },
+      },
+    } as any);
+
+    expect(response.status).toBe(200);
+    expect(
+      hoistedRepositories.contractRepository.getContractBySessionId
+    ).toHaveBeenCalledWith('session-linked');
+    expect(
+      hoistedRepositories.contractRepository.markSummaryEventProcessed
+    ).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Skipping contract-summary enqueue (session is not canonical)',
+      expect.objectContaining({
+        eventId: 'event-linked-session',
+        sessionId: 'session-linked',
+        canonicalSessionId: 'session-canonical',
+        contractId: 'contract-1',
+      })
+    );
+  });
+
   it('keeps summary dedupe flow for canonical sessions', async () => {
     hoistedRepositories.contractRepository.getContractBySessionId.mockResolvedValue(
-      { contractId: 'contract-1' }
+      { contractId: 'contract-1', sessionId: 'session-canonical' }
     );
     hoistedRepositories.contractRepository.markSummaryEventProcessed.mockResolvedValue(
       true

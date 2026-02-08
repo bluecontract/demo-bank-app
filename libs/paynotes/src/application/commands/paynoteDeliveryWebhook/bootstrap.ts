@@ -593,9 +593,14 @@ const handleDeliveryBootstrapRequest = async (input: {
       updatedAt: now,
     });
 
-    if (deps.enqueuePayNoteDeliverySummary) {
+    const canonicalDeliverySessionId =
+      deliveryRecord.deliverySessionId ?? bootstrapSessionId;
+    if (
+      deps.enqueuePayNoteDeliverySummary &&
+      canonicalDeliverySessionId === bootstrapSessionId
+    ) {
       void deps.enqueuePayNoteDeliverySummary({
-        sessionId: bootstrapSessionId,
+        sessionId: canonicalDeliverySessionId,
         reason: 'delivery-bootstrap',
       });
     }

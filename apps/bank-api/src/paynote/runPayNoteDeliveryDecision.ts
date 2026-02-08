@@ -37,7 +37,16 @@ export const runPayNoteDeliveryDecision = async (input: {
 }) => {
   const { delivery, sessionId, operation, requestBody, now, deps, contract } =
     input;
+  if (contract && !contract.sessionId) {
+    return problemResponse({
+      status: 409,
+      code: ERROR_CODES.CONTRACT_NOT_FOUND,
+      message: 'PayNote delivery contract is not ready yet',
+    });
+  }
+
   const operationSessionId =
+    contract?.sessionId ??
     delivery.deliverySessionId ??
     (delivery.deliverySessionIds?.length
       ? delivery.deliverySessionIds[0]

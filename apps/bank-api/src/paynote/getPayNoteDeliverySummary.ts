@@ -21,8 +21,10 @@ export const getPayNoteDeliverySummaryHandler = async (
   const record = await payNoteDeliveryRepository.getDeliveryBySessionId(
     sessionId
   );
+  const canonicalSessionId =
+    record?.deliverySessionId ?? record?.deliverySessionIds?.[0] ?? null;
 
-  if (!record || record.userId !== userId) {
+  if (!record || canonicalSessionId !== sessionId || record.userId !== userId) {
     return problemResponse({
       status: 404,
       code: ERROR_CODES.PAYNOTE_DELIVERY_NOT_FOUND,

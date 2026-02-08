@@ -94,6 +94,7 @@ describe('DynamoContractRepository', () => {
           SK: 'META',
           entityType: 'CONTRACT',
           contractId: 'contract-1',
+          sessionId: 'session-1',
           typeBlueId: 'type-1',
           displayName: 'Contract',
           createdAt: '2024-01-01T00:00:00.000Z',
@@ -115,6 +116,39 @@ describe('DynamoContractRepository', () => {
         ConsistentRead: true,
       })
     );
+  });
+
+  it('returns null for non-canonical mapped session lookups', async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'CONTRACT_SESSION#session-2',
+          SK: 'META',
+          entityType: 'CONTRACT_SESSION',
+          sessionId: 'session-2',
+          contractId: 'contract-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'CONTRACT#contract-1',
+          SK: 'META',
+          entityType: 'CONTRACT',
+          contractId: 'contract-1',
+          sessionId: 'session-1',
+          typeBlueId: 'type-1',
+          displayName: 'Contract',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({});
+    const repository = createRepository();
+
+    const contract = await repository.getContractBySessionId('session-2');
+
+    expect(contract).toBeNull();
   });
 
   it('uses consistent read for document lookup mapping', async () => {

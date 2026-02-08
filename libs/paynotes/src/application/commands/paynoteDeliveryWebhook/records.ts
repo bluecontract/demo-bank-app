@@ -127,7 +127,7 @@ export const buildDeliveryRecord = (input: {
     sessionId
   );
   const resolvedDeliverySessionId =
-    sessionId ?? existing?.deliverySessionId ?? deliverySessionIds?.[0];
+    existing?.deliverySessionId ?? sessionId ?? deliverySessionIds?.[0];
 
   const deliveryRecord: PayNoteDeliveryRecord = {
     ...(existing ?? {

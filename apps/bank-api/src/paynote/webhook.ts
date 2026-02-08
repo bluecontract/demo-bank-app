@@ -397,6 +397,16 @@ export const payNoteWebhookHandler = async (
           sessionId,
         }
       );
+    } else if (contract.sessionId !== sessionId) {
+      logger.debug(
+        'Skipping contract-summary enqueue (session is not canonical)',
+        {
+          eventId,
+          sessionId,
+          canonicalSessionId: contract.sessionId ?? null,
+          contractId: contract.contractId,
+        }
+      );
     } else {
       const firstSummaryEvent =
         await contractRepository.markSummaryEventProcessed(eventId);

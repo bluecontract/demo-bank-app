@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { generatePayNoteDeliverySummaryHandler } from './generatePayNoteDeliverySummary';
+import {
+  generatePayNoteDeliverySummaryForSessionId,
+  generatePayNoteDeliverySummaryHandler,
+} from './generatePayNoteDeliverySummary';
 import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 import { ERROR_CODES } from '../shared/errors';
 
@@ -54,6 +57,7 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
   };
   const logger = {
     info: vi.fn(),
+    warn: vi.fn(),
     error: vi.fn(),
   };
   const getOpenAiApiKey = vi.fn().mockResolvedValue('api-key');
@@ -69,6 +73,7 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     payNoteDeliveryRepository.getDeliveryBySessionId.mockReset();
     payNoteDeliveryRepository.updateDeliverySummary.mockReset();
     logger.info.mockReset();
+    logger.warn.mockReset();
     logger.error.mockReset();
     getOpenAiApiKey.mockClear();
 
@@ -88,6 +93,36 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
 
     const result = await generatePayNoteDeliverySummaryHandler(
       { params: { sessionId: 'session-1' } } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(404);
+    expect(result.body.error).toBe(ERROR_CODES.PAYNOTE_DELIVERY_NOT_FOUND);
+  });
+
+  it('returns 404 when summary is requested for a non-canonical session', async () => {
+    payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValue({
+      deliveryId: 'delivery-1',
+      deliverySessionId: 'session-canonical',
+      deliverySessionIds: ['session-canonical', 'session-linked'],
+      userId: 'user-1',
+      transactionIdentificationStatus: 'identified',
+      deliveryDocument: {
+        payNoteBootstrapRequest: {
+          document: {
+            type: { blueId: payNoteTypeBlueId },
+            name: 'Test PayNote',
+            contracts: {},
+          },
+        },
+      },
+      deliveryUpdatedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const result = await generatePayNoteDeliverySummaryHandler(
+      { params: { sessionId: 'session-linked' }, body: { force: true } } as any,
       { request: {} as any }
     );
 
@@ -187,5 +222,47 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalled();
     expect(getOpenAiApiKey).toHaveBeenCalled();
     expect(payNoteDeliveryRepository.updateDeliverySummary).toHaveBeenCalled();
+  });
+
+  it('skips worker summary generation for non-canonical sessions', async () => {
+    payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValueOnce({
+      deliveryId: 'delivery-1',
+      deliverySessionId: 'session-canonical',
+      deliverySessionIds: ['session-canonical', 'session-linked'],
+      userId: 'user-1',
+      transactionIdentificationStatus: 'identified',
+      deliveryDocument: {
+        payNoteBootstrapRequest: {
+          document: {
+            type: { blueId: payNoteTypeBlueId },
+            name: 'Test PayNote',
+            contracts: {},
+          },
+        },
+      },
+      deliveryUpdatedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const result = await generatePayNoteDeliverySummaryForSessionId({
+      sessionId: 'session-linked',
+      force: true,
+      payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+      getOpenAiApiKey,
+      logger: logger as any,
+    });
+
+    expect(result).toBeNull();
+    expect(logger.info).toHaveBeenCalledWith(
+      'PayNote proposal summary skipped (non-canonical session)',
+      expect.objectContaining({
+        sessionId: 'session-linked',
+        canonicalSessionId: 'session-canonical',
+        deliveryId: 'delivery-1',
+      })
+    );
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(getOpenAiApiKey).not.toHaveBeenCalled();
   });
 });

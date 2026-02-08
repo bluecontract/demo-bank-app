@@ -365,7 +365,12 @@ export class DynamoContractRepository implements ContractRepository {
       return null;
     }
 
-    return this.getContract(contractId);
+    const contract = await this.getContract(contractId);
+    if (!contract || contract.sessionId !== sessionId) {
+      return null;
+    }
+
+    return contract;
   }
 
   async getContractByDocumentId(

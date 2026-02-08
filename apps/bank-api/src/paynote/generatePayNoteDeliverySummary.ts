@@ -396,9 +396,12 @@ export const generatePayNoteDeliverySummaryHandler = async (
   const record = await payNoteDeliveryRepository.getDeliveryBySessionId(
     sessionId
   );
+  const canonicalSessionId =
+    record?.deliverySessionId ?? record?.deliverySessionIds?.[0] ?? null;
 
   if (
     !record ||
+    canonicalSessionId !== sessionId ||
     record.userId !== userId ||
     record.transactionIdentificationStatus !== 'identified'
   ) {
@@ -539,6 +542,16 @@ export const generatePayNoteDeliverySummaryForSessionId = async (input: {
   if (!record) {
     logger.warn('PayNote proposal summary skipped (missing delivery)', {
       sessionId,
+    });
+    return null;
+  }
+  const canonicalSessionId =
+    record.deliverySessionId ?? record.deliverySessionIds?.[0] ?? null;
+  if (canonicalSessionId && canonicalSessionId !== sessionId) {
+    logger.info('PayNote proposal summary skipped (non-canonical session)', {
+      sessionId,
+      canonicalSessionId,
+      deliveryId: record.deliveryId,
     });
     return null;
   }

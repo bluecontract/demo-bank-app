@@ -28,8 +28,11 @@ export const getPayNoteDeliveryBySessionIdHandler = async (
   const record = await payNoteDeliveryRepository.getDeliveryBySessionId(
     sessionId
   );
+  const canonicalSessionId =
+    record?.deliverySessionId ?? record?.deliverySessionIds?.[0] ?? null;
   if (
     !record ||
+    canonicalSessionId !== sessionId ||
     record.userId !== userId ||
     record.transactionIdentificationStatus !== 'identified'
   ) {
