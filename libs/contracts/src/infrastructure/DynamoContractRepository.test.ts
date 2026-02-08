@@ -218,4 +218,48 @@ describe('DynamoContractRepository', () => {
       })
     );
   });
+
+  it('prefers summary headline when persisting summaryPreview', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+
+    await repository.saveContract({
+      contractId: 'contract-1',
+      typeBlueId: 'type-1',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      status: 'active',
+      userId: 'user-1',
+      summary: {
+        story: {
+          headline: 'Bank confirmed lock',
+          overview: ['Overview'],
+          bullets: [],
+        },
+        listPreview: 'Setup started',
+        nextSteps: { title: 'Next steps', items: [] },
+        lastChange: {
+          short: 'Bank confirmed lock',
+          more: 'More context',
+        },
+      },
+      summaryPreview: 'Setup started',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const savedItems = mockPutCommand.mock.calls
+      .map(call => call[0].Item)
+      .filter((item): item is { PK: string; summaryPreview?: string } =>
+        Boolean(item)
+      );
+
+    const contractItem = savedItems.find(
+      item => item.PK === 'CONTRACT#contract-1'
+    );
+    expect(contractItem?.summaryPreview).toBe('Bank confirmed lock');
+
+    const userItem = savedItems.find(item => item.PK === 'USER#user-1');
+    expect(userItem?.summaryPreview).toBe('Bank confirmed lock');
+  });
 });

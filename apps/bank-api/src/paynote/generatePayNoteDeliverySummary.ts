@@ -41,7 +41,11 @@ const formatMinorAmount = (amountMinor?: number, currency?: string) => {
     return undefined;
   }
   const major = (amountMinor / 100).toFixed(2);
-  return currency ? `${major} ${currency}` : `$${major}`;
+  const normalizedCurrency = currency?.trim().toUpperCase();
+  if (!normalizedCurrency || normalizedCurrency === 'USD') {
+    return `$${major}`;
+  }
+  return `${normalizedCurrency} ${major}`;
 };
 
 const buildProposalFacts = (input: {

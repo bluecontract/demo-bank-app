@@ -49,14 +49,15 @@ const CONTRACT_TASK = `Your task:
   - If \`previousSummary\` contradicts the current facts, correct it (facts win).`;
 
 const PROPOSAL_TASK = `Your task:
-- Explain what this proposed PayNote is about and the real-world commitment it represents.
-- Make it clear this is a proposal that is not active yet, and that it is waiting for approval if that is true.
+- Explain the target PayNote itself: what agreement it creates, what rules apply, and what the customer is agreeing to by accepting.
+- Keep proposal-status wording minimal. Mention pending approval only briefly if needed; focus on post-acceptance behavior.
 - If acceptance would create/start the PayNote, say so in plain language.
 - If \`transition.triggerEvent\` is provided, anchor the "last change" to it and describe its effect using the current document.
 - Provide a short list-preview sentence and a short "last change" sentence (with a longer "more" version).
 - Describe participants only if they are clearly identifiable from the document.
 - Do not describe lifecycle progress, transitions, or next steps beyond the acceptance context.
 - Keep the overview brief (1-2 sentences).
+- Do not start text fields with labels like "Proposal", "Contract proposal", or similar prefixes.
 - Be conservative: if something cannot be determined from the provided data, state that it is unknown.`;
 
 const STYLE = `Writing style (for non-technical end users):
@@ -69,6 +70,8 @@ const STYLE = `Writing style (for non-technical end users):
 - Prefer describing real-world effects over mechanics (e.g. "funds are held", "payment is released", "the bank is asked to ...", "a voucher is issued").
 - When describing who can act, infer human role labels from participant keys/names when clear (e.g. payer/payee/guarantor); otherwise use "another participant".
 - Use "You" only when \`transition.actorIsViewer\` is true. Otherwise use third-person (e.g., "the bank", "the delivery company", "another participant") based on actor info if available.
+- If \`transition.actorIsViewer\` is false or missing, do not phrase the last change as "You ...". Use neutral or third-person wording.
+- For USD amounts, always format as \`$5.00\` (symbol first, 2 decimals). Do not output \`5.00 USD\`.
 - Keep sentences short and concrete. Avoid jargon. If a technical concept is unavoidable, define it briefly in plain words.
 - Avoid enumerating "Current state" and "What's next" inside the text; use the structured fields instead.`;
 

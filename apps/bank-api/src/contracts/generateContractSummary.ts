@@ -51,8 +51,29 @@ const formatMinorAmount = (amountMinor?: number, currency?: string) => {
     return undefined;
   }
   const major = (amountMinor / 100).toFixed(2);
-  return currency ? `${major} ${currency}` : `$${major}`;
+  const normalizedCurrency = currency?.trim().toUpperCase();
+  if (!normalizedCurrency || normalizedCurrency === 'USD') {
+    return `$${major}`;
+  }
+  return `${normalizedCurrency} ${major}`;
 };
+
+const normalizeSummaryText = (value?: string | null): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+};
+
+const resolveSummaryPreview = (input: {
+  summary?: z.infer<typeof ContractDocumentSummaryDto> | null;
+  fallbackPreview?: string | null;
+}): string | undefined =>
+  normalizeSummaryText(input.summary?.story?.headline) ??
+  normalizeSummaryText(input.summary?.lastChange?.short) ??
+  normalizeSummaryText(input.summary?.listPreview) ??
+  normalizeSummaryText(input.fallbackPreview);
 
 const getJsonSizeBytes = (value: unknown): number => {
   if (value === undefined) {
@@ -430,6 +451,8 @@ const buildFactsV2 = (input: {
   const actorIsViewer =
     viewerAccountId && triggerEventMeta?.actorAccountId
       ? viewerAccountId === triggerEventMeta.actorAccountId
+      : viewerChannelKey
+      ? false
       : undefined;
 
   let summaryInputBlueId: string;
@@ -472,11 +495,12 @@ const buildFactsV2 = (input: {
 
   const typesPack = buildTypeDefinitionPack(referencedTypeIds);
 
-  const payNoteSummary = getPayNoteSummaryFromDocument(
+  const payNoteSummarySource =
     (document as { payNoteBootstrapRequest?: { document?: unknown } })
       .payNoteBootstrapRequest?.document ??
-      (document as { payNote?: unknown }).payNote
-  );
+    (document as { payNote?: unknown }).payNote ??
+    document;
+  const payNoteSummary = getPayNoteSummaryFromDocument(payNoteSummarySource);
   const payNoteAmountDisplay = formatMinorAmount(
     payNoteSummary.amountMinor,
     payNoteSummary.currency
@@ -500,7 +524,7 @@ const buildFactsV2 = (input: {
     payNoteSummary.currency
   ) {
     integrationNotes.push(
-      'This document appears to include a PayNote proposal; the summary should explain the proposed PayNote and how the contract progresses.'
+      'This document appears to include PayNote details; the summary should explain the PayNote in plain language and describe current progress.'
     );
   }
 
@@ -599,12 +623,10 @@ const generateOrLoadContractSummary = async (input: {
 
   const parsedSummary = ContractDocumentSummaryDto.safeParse(contract.summary);
   const cachedSummary = parsedSummary.success ? parsedSummary.data : null;
-  const cachedSummaryHeadline = cachedSummary?.story.headline?.trim();
-  const cachedSummaryPreview =
-    contract.summaryPreview ??
-    (cachedSummaryHeadline
-      ? cachedSummaryHeadline
-      : cachedSummary?.listPreview);
+  const cachedSummaryPreview = resolveSummaryPreview({
+    summary: cachedSummary,
+    fallbackPreview: contract.summaryPreview,
+  });
   const previousSummary = cachedSummary ?? undefined;
   const model = process.env.CONTRACT_SUMMARY_MODEL || DEFAULT_MODEL;
 
@@ -716,8 +738,7 @@ const generateOrLoadContractSummary = async (input: {
     const summary = parseSummary(response);
     const now = new Date().toISOString();
 
-    const summaryPreview =
-      summary.story?.headline?.trim() || summary.listPreview;
+    const summaryPreview = resolveSummaryPreview({ summary });
 
     const summarySnapshotPayload = {
       summaryStatus: contract.status,

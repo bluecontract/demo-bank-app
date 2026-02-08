@@ -52,6 +52,23 @@ const USER_SORT_KEY_PREFIX = 'CONTRACT#';
 const RELATIONSHIP_SORT_KEY_PREFIX = 'CONTRACT#';
 const HISTORY_SORT_KEY_PREFIX = 'HISTORY#';
 
+const normalizeSummaryText = (value?: string | null): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length ? trimmed : undefined;
+};
+
+const resolveSummaryPreview = (
+  summary?: ContractDocumentSummary | null,
+  fallbackPreview?: string | null
+): string | undefined =>
+  normalizeSummaryText(summary?.story?.headline) ??
+  normalizeSummaryText(summary?.lastChange?.short) ??
+  normalizeSummaryText(summary?.listPreview) ??
+  normalizeSummaryText(fallbackPreview);
+
 type DynamoContractRepositoryConfig = {
   tableName: string;
   region: string;
@@ -292,7 +309,7 @@ export class DynamoContractRepository implements ContractRepository {
       userId: item.userId,
       merchantId: item.merchantId,
       summary: item.summary,
-      summaryPreview: item.summaryPreview,
+      summaryPreview: resolveSummaryPreview(item.summary, item.summaryPreview),
       summaryUpdatedAt: item.summaryUpdatedAt,
       summarySourceUpdatedAt: item.summarySourceUpdatedAt,
       summaryInputBlueId: item.summaryInputBlueId,
@@ -479,7 +496,10 @@ export class DynamoContractRepository implements ContractRepository {
       userId: record.userId,
       merchantId: record.merchantId,
       summary: record.summary,
-      summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
+      summaryPreview: resolveSummaryPreview(
+        record.summary,
+        record.summaryPreview
+      ),
       summaryUpdatedAt: record.summaryUpdatedAt,
       summarySourceUpdatedAt: record.summarySourceUpdatedAt,
       summaryInputBlueId: record.summaryInputBlueId,
@@ -568,7 +588,10 @@ export class DynamoContractRepository implements ContractRepository {
         status: record.status,
         archivedAt: record.archivedAt,
         merchantId: record.merchantId,
-        summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
+        summaryPreview: resolveSummaryPreview(
+          record.summary,
+          record.summaryPreview
+        ),
         summaryUpdatedAt: record.summaryUpdatedAt,
         summarySourceUpdatedAt: record.summarySourceUpdatedAt,
         summaryDocumentName: record.summaryDocumentName,
@@ -597,7 +620,10 @@ export class DynamoContractRepository implements ContractRepository {
       userId: record.userId,
       archivedAt: record.archivedAt,
       merchantId: record.merchantId,
-      summaryPreview: record.summaryPreview ?? record.summary?.listPreview,
+      summaryPreview: resolveSummaryPreview(
+        record.summary,
+        record.summaryPreview
+      ),
       summaryUpdatedAt: record.summaryUpdatedAt,
       summarySourceUpdatedAt: record.summarySourceUpdatedAt,
       summaryDocumentName: record.summaryDocumentName,
@@ -891,7 +917,10 @@ export class DynamoContractRepository implements ContractRepository {
       setters.push(`${nameKey} = ${valueKey}`);
     };
 
-    const summaryPreview = update.summary?.listPreview ?? update.summaryPreview;
+    const summaryPreview = resolveSummaryPreview(
+      update.summary,
+      update.summaryPreview
+    );
     const shouldRemoveSummaryPreview =
       update.summary === null || update.summaryPreview === null;
 

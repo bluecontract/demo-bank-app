@@ -37,6 +37,21 @@ vi.mock('../auth/middleware', () => ({
   extractAuthInfo: hoistedDeps.extractAuthInfoMock,
 }));
 
+const extractFactsFromFirstParseCall = (): Record<string, unknown> => {
+  const parseCall = hoistedOpenAI.responsesParseMock.mock.calls[0];
+  expect(parseCall).toBeDefined();
+  const request = parseCall[0] as {
+    input?: Array<{
+      content?: Array<{ text?: string }>;
+    }>;
+  };
+  const payload = request.input?.[1]?.content?.[0]?.text;
+  expect(typeof payload).toBe('string');
+  const match = (payload as string).match(/^<facts>\n?(.*)\n?<\/facts>$/s);
+  expect(match?.[1]).toBeDefined();
+  return JSON.parse(match![1]) as Record<string, unknown>;
+};
+
 describe('generatePayNoteDeliverySummaryHandler', () => {
   const payNoteTypeBlueId = paynoteBlueIds['PayNote/PayNote'];
   const summaryFixture = {
@@ -222,6 +237,47 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalled();
     expect(getOpenAiApiKey).toHaveBeenCalled();
     expect(payNoteDeliveryRepository.updateDeliverySummary).toHaveBeenCalled();
+  });
+
+  it('passes USD paynote amountDisplay as $x.xx', async () => {
+    const payNoteDocument = {
+      type: { blueId: payNoteTypeBlueId },
+      name: 'Test PayNote',
+      amount: { total: 500 },
+      currency: 'USD',
+      contracts: {},
+    };
+
+    payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValueOnce({
+      deliveryId: 'delivery-1',
+      deliverySessionId: 'session-1',
+      userId: 'user-1',
+      transactionIdentificationStatus: 'identified',
+      deliveryDocument: {
+        payNoteBootstrapRequest: {
+          document: payNoteDocument,
+        },
+      },
+      deliveryUpdatedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generatePayNoteDeliverySummaryHandler(
+      { params: { sessionId: 'session-1' }, body: { force: true } } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    const facts = extractFactsFromFirstParseCall();
+    const payNoteSummary = facts.payNoteSummary as
+      | Record<string, unknown>
+      | undefined;
+    expect(payNoteSummary?.amountDisplay).toBe('$5.00');
   });
 
   it('regenerates summary when source epoch changed', async () => {
