@@ -28,7 +28,9 @@ export {
   getSupportedContractByTypeBlueId,
   getSupportedContractByNode,
   getSupportedContractForDocument,
+  resolveContractChannelKeys,
   type SupportedContract,
+  type ResolvedContractChannelKeys,
 } from './lib/supportedContracts';
 export {
   collectContractOperations,

@@ -73,6 +73,7 @@ export const getContractDetailsHandler = async (
       contractId: contract.contractId,
       typeBlueId: contract.typeBlueId,
       displayName: contract.displayName,
+      customerChannelKey: contract.customerChannelKey,
       sessionId: contract.sessionId,
       documentId: contract.documentId,
       status: shouldUseSnapshotPayload

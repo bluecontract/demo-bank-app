@@ -47,6 +47,7 @@ const persistDeliveryRecord = async (input: {
     document: deliveryRecord.deliveryDocument,
     sessionId,
     documentId: deliveryRecord.deliveryDocumentId ?? deliveryDocumentId,
+    customerChannelKey: 'payNoteDeliverer',
     eventType,
     eventEpoch: eventObject?.epoch,
     userId: deliveryRecord.userId,

@@ -140,6 +140,7 @@ export const bootstrapPayNoteHandler = async (
         contractId: result.bootstrapSessionId,
         typeBlueId: supportedContract.typeBlueId,
         displayName: supportedContract.displayName,
+        customerChannelKey: 'payerChannel',
         sessionId: result.bootstrapSessionId,
         document: payNote,
         status: 'bootstrapped',

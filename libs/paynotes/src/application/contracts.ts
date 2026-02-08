@@ -90,6 +90,7 @@ export const upsertContractRecord = async (input: {
   document: Record<string, unknown> | undefined;
   sessionId?: string;
   documentId?: string;
+  customerChannelKey?: string;
   eventType?: string;
   eventEpoch?: number;
   userId?: string;
@@ -178,6 +179,8 @@ export const upsertContractRecord = async (input: {
   const nextAccountNumber = input.accountNumber ?? existing?.accountNumber;
   const nextUserId = input.userId ?? existing?.userId;
   const nextMerchantId = input.merchantId ?? existing?.merchantId;
+  const nextCustomerChannelKey =
+    input.customerChannelKey ?? existing?.customerChannelKey;
 
   const summaryInputsChanged =
     !areJsonValuesEqual(nextDocument, existing?.document) ||
@@ -198,6 +201,7 @@ export const upsertContractRecord = async (input: {
     typeBlueId: supported.typeBlueId,
     displayName: supported.displayName,
     documentName,
+    customerChannelKey: nextCustomerChannelKey,
     sessionId: nextSessionId,
     documentId: nextDocumentId,
     document: nextDocument,

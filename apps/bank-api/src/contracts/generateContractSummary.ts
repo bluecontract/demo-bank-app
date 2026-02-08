@@ -6,6 +6,7 @@ import {
   bankApiContract,
   ContractDocumentSummaryDto,
   getSupportedContractByTypeBlueId,
+  resolveContractChannelKeys,
 } from '@demo-bank-app/shared-bank-api-contract';
 import type {
   ContractRecord,
@@ -289,12 +290,14 @@ const buildFactsV2 = (input: {
     contractId: string;
     typeBlueId: string;
     displayName: string;
+    customerChannelKey?: string;
     sessionId?: string;
     documentId?: string;
     status?: string;
     statusUpdatedAt?: string;
     statusTimestamps?: Record<string, string>;
     updatedAt: string;
+    accountNumber?: string;
     document?: Record<string, unknown>;
     triggerEvent?: unknown;
     emittedEvents?: unknown[];
@@ -304,7 +307,14 @@ const buildFactsV2 = (input: {
   const supportedContract = getSupportedContractByTypeBlueId(
     input.contract.typeBlueId
   );
-  const viewerChannelKey = supportedContract?.userChannelKey;
+  const viewerChannelKey = supportedContract
+    ? resolveContractChannelKeys({
+        supportedContract,
+        customerChannelKey: input.contract.customerChannelKey,
+        accountNumber: input.contract.accountNumber,
+        document: input.contract.document,
+      }).userChannelKey
+    : undefined;
 
   const document = input.contract.document ?? {};
   const documentNode = toBlueNode(document);

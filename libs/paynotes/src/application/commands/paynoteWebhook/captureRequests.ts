@@ -317,6 +317,7 @@ const linkPayNoteHold = async (input: {
 
   await upsertPayNoteContract({
     updatedRecord,
+    deliveryRecord: null,
     sessionId,
     payNoteDocumentId,
     eventType,

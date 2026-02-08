@@ -9,6 +9,7 @@ import {
   collectContractOperations,
   buildRequestModel,
   getSupportedContractByTypeBlueId,
+  resolveContractChannelKeys,
 } from '@demo-bank-app/shared-bank-api-contract';
 import {
   extractAuthInfo,
@@ -139,7 +140,13 @@ export const contractAiChatHandler = async (
     });
   }
 
-  const operationsChannelKey = supportedContract.operationsChannelKey;
+  const channels = resolveContractChannelKeys({
+    supportedContract,
+    customerChannelKey: contract.customerChannelKey,
+    accountNumber: contract.accountNumber,
+    document: contract.document,
+  });
+  const operationsChannelKey = channels.operationsChannelKey;
   const operations = collectContractOperations({
     document: contract.document,
     operationsChannelKey,

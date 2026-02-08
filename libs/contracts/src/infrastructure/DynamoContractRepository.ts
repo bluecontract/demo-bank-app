@@ -83,6 +83,7 @@ interface ContractItem {
   typeBlueId: string;
   displayName: string;
   documentName?: string;
+  customerChannelKey?: string;
   sessionId?: string;
   documentId?: string;
   document?: Record<string, unknown>;
@@ -151,6 +152,7 @@ interface ContractUserItem {
   typeBlueId: string;
   displayName: string;
   documentName?: string;
+  customerChannelKey?: string;
   sessionId?: string;
   documentId?: string;
   status?: string;
@@ -172,6 +174,7 @@ interface ContractRelationshipItem {
   typeBlueId: string;
   displayName: string;
   documentName?: string;
+  customerChannelKey?: string;
   sessionId?: string;
   documentId?: string;
   status?: string;
@@ -294,6 +297,7 @@ export class DynamoContractRepository implements ContractRepository {
       typeBlueId: item.typeBlueId,
       displayName: item.displayName,
       documentName: item.summaryDocumentName ?? item.documentName,
+      customerChannelKey: item.customerChannelKey,
       sessionId: item.sessionId,
       documentId: item.documentId,
       document: item.document,
@@ -481,6 +485,7 @@ export class DynamoContractRepository implements ContractRepository {
       typeBlueId: record.typeBlueId,
       displayName: record.displayName,
       documentName: record.documentName,
+      customerChannelKey: record.customerChannelKey,
       sessionId: record.sessionId,
       documentId: record.documentId,
       document: undefined,
@@ -583,6 +588,7 @@ export class DynamoContractRepository implements ContractRepository {
         typeBlueId: record.typeBlueId,
         displayName: record.displayName,
         documentName: record.documentName,
+        customerChannelKey: record.customerChannelKey,
         sessionId: record.sessionId,
         documentId: record.documentId,
         status: record.status,
@@ -614,6 +620,7 @@ export class DynamoContractRepository implements ContractRepository {
       typeBlueId: record.typeBlueId,
       displayName: record.displayName,
       documentName: record.documentName,
+      customerChannelKey: record.customerChannelKey,
       sessionId: record.sessionId,
       documentId: record.documentId,
       status: record.status,
@@ -1226,6 +1233,7 @@ export class DynamoContractRepository implements ContractRepository {
         typeBlueId: item.typeBlueId,
         displayName: item.displayName,
         documentName: item.summaryDocumentName ?? item.documentName,
+        customerChannelKey: item.customerChannelKey,
         sessionId: item.sessionId,
         documentId: item.documentId,
         status: item.status,
@@ -1276,6 +1284,7 @@ export class DynamoContractRepository implements ContractRepository {
         typeBlueId: item.typeBlueId,
         displayName: item.displayName,
         documentName: item.summaryDocumentName ?? item.documentName,
+        customerChannelKey: item.customerChannelKey,
         sessionId: item.sessionId,
         documentId: item.documentId,
         status: item.status,
@@ -1326,6 +1335,7 @@ export class DynamoContractRepository implements ContractRepository {
         typeBlueId: item.typeBlueId,
         displayName: item.displayName,
         documentName: item.summaryDocumentName ?? item.documentName,
+        customerChannelKey: item.customerChannelKey,
         sessionId: item.sessionId,
         documentId: item.documentId,
         status: item.status,

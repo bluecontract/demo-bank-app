@@ -143,6 +143,7 @@ export const handleWebhookEvent = async (
 
   await persistPayNoteRecord({
     updatedRecord,
+    deliveryRecord,
     documentForStorage:
       asRecord(toCompactBlueJsonValue(eventObject?.document)) ??
       asRecord(toCompactBlueJsonValue(resolvedDocumentRaw)) ??

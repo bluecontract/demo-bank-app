@@ -93,6 +93,7 @@ export interface ContractRecord {
   typeBlueId: string;
   displayName: string;
   documentName?: string;
+  customerChannelKey?: string;
   sessionId?: string;
   documentId?: string;
   document?: Record<string, unknown>;
@@ -130,6 +131,7 @@ export interface ContractSummary {
   typeBlueId: string;
   displayName: string;
   documentName?: string;
+  customerChannelKey?: string;
   sessionId?: string;
   documentId?: string;
   status?: string;

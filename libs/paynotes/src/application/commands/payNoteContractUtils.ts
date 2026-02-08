@@ -7,6 +7,7 @@ export const upsertPayNoteContractRecord = async (input: {
   updatedRecord: PayNoteRecord;
   sessionId: string;
   documentId: string;
+  customerChannelKey?: string;
   document?: Record<string, unknown>;
   eventType?: string;
   eventEpoch?: number;
@@ -36,6 +37,7 @@ export const upsertPayNoteContractRecord = async (input: {
     document: document ?? updatedRecord.document,
     sessionId,
     documentId,
+    customerChannelKey: input.customerChannelKey,
     eventType,
     eventEpoch,
     userId: updatedRecord.userId,

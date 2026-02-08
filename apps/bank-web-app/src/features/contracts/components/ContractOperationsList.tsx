@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getSupportedContractByTypeBlueId } from '@demo-bank-app/shared-bank-api-contract';
+import {
+  getSupportedContractByTypeBlueId,
+  resolveContractChannelKeys,
+} from '@demo-bank-app/shared-bank-api-contract';
 import { blue } from '../../../lib/blue';
 import type { ContractDetails } from '../../../types/api';
 import { collectContractOperations } from '../lib/operations';
@@ -26,10 +29,16 @@ export function ContractOperationsList({
     if (!contract.document || !supportedContract) {
       return [];
     }
+    const channels = resolveContractChannelKeys({
+      supportedContract,
+      customerChannelKey: contract.customerChannelKey,
+      accountNumber: contract.accountNumber,
+      document: contract.document,
+    });
 
     const collected = collectContractOperations({
       document: contract.document,
-      operationsChannelKey: supportedContract.operationsChannelKey,
+      operationsChannelKey: channels.operationsChannelKey,
       blue,
     });
     if (supportedContract.typeName === 'PayNote/PayNote Delivery') {
@@ -38,7 +47,12 @@ export function ContractOperationsList({
       );
     }
     return collected;
-  }, [contract.document, supportedContract]);
+  }, [
+    contract.document,
+    contract.accountNumber,
+    contract.customerChannelKey,
+    supportedContract,
+  ]);
 
   const activeOperationDetails = operations.find(
     operation => operation.name === activeOperation

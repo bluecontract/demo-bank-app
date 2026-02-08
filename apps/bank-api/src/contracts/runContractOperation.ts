@@ -1,7 +1,10 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import {
   bankApiContract,
+  blue,
+  collectContractOperations,
   getSupportedContractByTypeBlueId,
+  resolveContractChannelKeys,
 } from '@demo-bank-app/shared-bank-api-contract';
 import {
   extractAuthInfo,
@@ -71,6 +74,33 @@ export const runContractOperationHandler = async (
   }
 
   const now = new Date().toISOString();
+  const channels = resolveContractChannelKeys({
+    supportedContract,
+    customerChannelKey: contract.customerChannelKey,
+    accountNumber: contract.accountNumber,
+    document: contract.document,
+  });
+
+  if (contract.document) {
+    const eligibleOperations = new Set(
+      collectContractOperations({
+        document: contract.document,
+        operationsChannelKey: channels.operationsChannelKey,
+        blue,
+      }).map(item => item.name)
+    );
+
+    if (
+      supportedContract.typeName !== 'PayNote/PayNote Delivery' &&
+      !eligibleOperations.has(operation)
+    ) {
+      return problemResponse({
+        status: 409,
+        code: ERROR_CODES.VALIDATION_ERROR,
+        message: 'Operation not allowed for this contract role',
+      });
+    }
+  }
 
   if (supportedContract.typeName !== 'PayNote/PayNote Delivery') {
     const credentials = await myOsClient.getCredentials();

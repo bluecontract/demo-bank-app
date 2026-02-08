@@ -219,6 +219,7 @@ const handleCaptureFunds = async (
 
   await upsertPayNoteContract({
     updatedRecord,
+    deliveryRecord,
     sessionId,
     payNoteDocumentId,
     eventType: CAPTURE_FUNDS_EVENT_NAME,

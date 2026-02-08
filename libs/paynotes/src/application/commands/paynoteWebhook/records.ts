@@ -198,8 +198,54 @@ export const buildPayNoteRecord = (input: {
   return { updatedRecord, payerAccountNumber, payeeAccountNumber };
 };
 
+const normalizeAccountNumber = (value?: string | null): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const resolvePayNoteCustomerChannelKey = (input: {
+  updatedRecord: PayNoteRecord;
+  deliveryRecord: PayNoteDeliveryRecord | null;
+}): string | undefined => {
+  const accountNumber = normalizeAccountNumber(
+    input.updatedRecord.accountNumber
+  );
+  const payerAccountNumber = normalizeAccountNumber(
+    input.updatedRecord.payerAccountNumber
+  );
+  const payeeAccountNumber = normalizeAccountNumber(
+    input.updatedRecord.payeeAccountNumber
+  );
+
+  if (
+    accountNumber &&
+    payerAccountNumber &&
+    accountNumber === payerAccountNumber
+  ) {
+    return 'payerChannel';
+  }
+
+  if (
+    accountNumber &&
+    payeeAccountNumber &&
+    accountNumber === payeeAccountNumber
+  ) {
+    return 'payeeChannel';
+  }
+
+  if (input.deliveryRecord) {
+    return 'payerChannel';
+  }
+
+  return undefined;
+};
+
 export const upsertPayNoteContract = async (input: {
   updatedRecord: PayNoteRecord;
+  deliveryRecord: PayNoteDeliveryRecord | null;
   sessionId: string;
   payNoteDocumentId: string;
   eventType?: string;
@@ -213,6 +259,7 @@ export const upsertPayNoteContract = async (input: {
 }): Promise<void> => {
   const {
     updatedRecord,
+    deliveryRecord,
     sessionId,
     payNoteDocumentId,
     eventType,
@@ -230,6 +277,10 @@ export const upsertPayNoteContract = async (input: {
     updatedRecord,
     sessionId,
     documentId: payNoteDocumentId,
+    customerChannelKey: resolvePayNoteCustomerChannelKey({
+      updatedRecord,
+      deliveryRecord,
+    }),
     document: updatedRecord.document,
     eventType,
     eventEpoch,
@@ -243,6 +294,7 @@ export const upsertPayNoteContract = async (input: {
 
 export const persistPayNoteRecord = async (input: {
   updatedRecord: PayNoteRecord;
+  deliveryRecord: PayNoteDeliveryRecord | null;
   documentForStorage?: Record<string, unknown>;
   sessionId: string;
   payNoteDocumentId: string;
@@ -254,6 +306,7 @@ export const persistPayNoteRecord = async (input: {
 }): Promise<void> => {
   const {
     updatedRecord,
+    deliveryRecord,
     documentForStorage,
     sessionId,
     payNoteDocumentId,
@@ -271,6 +324,7 @@ export const persistPayNoteRecord = async (input: {
   await deps.payNoteRepository.savePayNote(persistedRecord);
   await upsertPayNoteContract({
     updatedRecord: persistedRecord,
+    deliveryRecord,
     sessionId,
     payNoteDocumentId,
     eventType,
