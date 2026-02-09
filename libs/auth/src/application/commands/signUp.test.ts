@@ -4,6 +4,7 @@ import type { SignUpCommand, SignUpDependencies } from './signUp';
 import { User } from '../../domain/entities/User';
 import {
   TokenGenerationError,
+  MerchantDirectoryOwnershipError,
   UserAlreadyExistsError,
 } from '../../infrastructure/errors';
 import type { UserRepository, JwtService, Logger, Metrics } from '../ports';
@@ -289,6 +290,27 @@ describe('signUp', () => {
       'UserSignUpUnknownError',
       'Count',
       1
+    );
+  });
+
+  it('should rethrow MerchantDirectoryOwnershipError', async () => {
+    const command: SignUpCommand = {
+      email: 'merchant.user@example.com',
+      marketingEmailsOptIn: true,
+      merchantId: 'merchant-123',
+      merchantName: 'Merchant Demo',
+    };
+
+    const ownershipError = new MerchantDirectoryOwnershipError('merchant-123');
+    vi.mocked(mockUserRepository.save).mockRejectedValue(ownershipError);
+
+    await expect(signUp(command, dependencies)).rejects.toThrow(ownershipError);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Merchant ownership conflict during sign-up',
+      expect.objectContaining({
+        userEmail: 'merchant.user@example.com',
+        merchantId: 'merchant-123',
+      })
     );
   });
 });

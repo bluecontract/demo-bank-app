@@ -8,7 +8,11 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import type { UserRepository } from '../application/ports';
 import { User } from '../domain/entities/User';
-import { UserAlreadyExistsError, AuthRepositoryError } from './errors';
+import {
+  UserAlreadyExistsError,
+  AuthRepositoryError,
+  MerchantDirectoryOwnershipError,
+} from './errors';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 import type { Logger, Metrics } from '@demo-bank-app/shared-observability';
 import {
@@ -50,6 +54,17 @@ interface UserProfileDbItem {
   merchantName?: User['merchantName'];
   avatarDataUrl?: User['avatarDataUrl'];
   ttl?: number; // Optional TTL for test users
+}
+
+interface MerchantProfileDbItem {
+  PK: string; // MERCHANT#{merchantId}
+  SK: 'PROFILE';
+  entityType: 'MERCHANT_PROFILE';
+  merchantId: string;
+  name: string;
+  logoUrl?: string;
+  ownerUserId: string;
+  updatedAt: string;
 }
 
 // Type for unknown DynamoDB items (when reading from DB)
@@ -107,26 +122,38 @@ export class DynamoUserRepository implements UserRepository {
 
     const userProfileItem = this.buildUserProfileItem(user);
     const emailReservationItem = this.buildEmailReservationItem(user);
+    const merchantProfileItem = this.buildMerchantProfileItem(user);
+    const transactItems: Array<Record<string, unknown>> = [
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: emailReservationItem,
+          ConditionExpression: 'attribute_not_exists(PK)',
+        },
+      },
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: userProfileItem,
+          ConditionExpression: 'attribute_not_exists(PK)',
+        },
+      },
+    ];
+
+    if (merchantProfileItem) {
+      transactItems.push({
+        Put: {
+          TableName: this.tableName,
+          Item: merchantProfileItem,
+          ConditionExpression: 'attribute_not_exists(PK)',
+        },
+      });
+    }
 
     try {
       await this.client.send(
         new TransactWriteCommand({
-          TransactItems: [
-            {
-              Put: {
-                TableName: this.tableName,
-                Item: emailReservationItem,
-                ConditionExpression: 'attribute_not_exists(PK)',
-              },
-            },
-            {
-              Put: {
-                TableName: this.tableName,
-                Item: userProfileItem,
-                ConditionExpression: 'attribute_not_exists(PK)',
-              },
-            },
-          ],
+          TransactItems: transactItems,
         })
       );
 
@@ -165,8 +192,21 @@ export class DynamoUserRepository implements UserRepository {
 
       if (
         this.isConditionalCheckFailedException(error) ||
-        this.isTransactionCanceledException(error)
+        (this.isTransactionCanceledException(error) &&
+          (await this.hasUserWithEmail(user.email)))
       ) {
+        throw new UserAlreadyExistsError(user.email);
+      }
+
+      if (this.isTransactionCanceledException(error) && merchantProfileItem) {
+        const ownerUserId = await this.getMerchantOwnerUserId(
+          merchantProfileItem.merchantId
+        );
+        if (ownerUserId && ownerUserId !== user.id) {
+          throw new MerchantDirectoryOwnershipError(
+            merchantProfileItem.merchantId
+          );
+        }
         throw new UserAlreadyExistsError(user.email);
       }
 
@@ -479,6 +519,76 @@ export class DynamoUserRepository implements UserRepository {
     }
 
     return item;
+  }
+
+  private buildMerchantProfileItem(user: User): MerchantProfileDbItem | null {
+    if (!user.merchantId || !user.merchantName) {
+      return null;
+    }
+
+    return {
+      PK: `MERCHANT#${user.merchantId}`,
+      SK: 'PROFILE',
+      entityType: 'MERCHANT_PROFILE',
+      merchantId: user.merchantId,
+      name: user.merchantName,
+      ...(user.avatarDataUrl ? { logoUrl: user.avatarDataUrl } : {}),
+      ownerUserId: user.id,
+      updatedAt: user.createdAt.toISOString(),
+    };
+  }
+
+  private async hasUserWithEmail(email: string): Promise<boolean> {
+    try {
+      const result = await this.client.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          IndexName: 'AUTH_GSI1',
+          KeyConditionExpression:
+            'AUTH_GSI1PK = :gsi1pk AND AUTH_GSI1SK = :gsi1sk',
+          ExpressionAttributeValues: {
+            ':gsi1pk': `EMAIL#${email}`,
+            ':gsi1sk': 'PROFILE',
+          },
+          Limit: 1,
+        })
+      );
+      return Boolean(result.Items?.length);
+    } catch (error: unknown) {
+      throw new AuthRepositoryError(
+        'detect user email conflict',
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  private async getMerchantOwnerUserId(
+    merchantId: string
+  ): Promise<string | null> {
+    try {
+      const result = await this.client.send(
+        new GetCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: `MERCHANT#${merchantId}`,
+            SK: 'PROFILE',
+          },
+          ProjectionExpression: 'ownerUserId',
+        })
+      );
+
+      const ownerUserId = result.Item?.ownerUserId;
+      if (typeof ownerUserId !== 'string' || ownerUserId.trim() === '') {
+        return null;
+      }
+
+      return ownerUserId;
+    } catch (error: unknown) {
+      throw new AuthRepositoryError(
+        'detect merchant ownership conflict',
+        error instanceof Error ? error : undefined
+      );
+    }
   }
 
   private mapToUser(item: UnknownDbItem): User {

@@ -25,6 +25,7 @@ export function DashboardHeader({
   const MAX_AVATAR_BYTES = 150 * 1024;
   const displayName = user?.merchantName?.trim() || userEmail;
   const avatarSrc = user?.avatarDataUrl;
+  const merchantId = user?.merchantId?.trim();
   const resolvedDescription =
     description === undefined
       ? 'Your personal overview for accounts, cards, and activity.'
@@ -120,6 +121,16 @@ export function DashboardHeader({
           <DropdownItem onClick={handleAvatarClick}>
             {isUpdatingAvatar ? 'Updating logo…' : 'Change logo'}
           </DropdownItem>
+          {merchantId && (
+            <div className="px-4 py-2" role="none">
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">
+                Merchant ID
+              </p>
+              <p className="mt-0.5 text-sm font-medium text-slate-700 break-all">
+                {merchantId}
+              </p>
+            </div>
+          )}
           <DropdownItem
             onClick={handleSignOut}
             icon={

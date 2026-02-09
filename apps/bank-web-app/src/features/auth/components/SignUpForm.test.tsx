@@ -270,6 +270,44 @@ describe('SignUpForm', () => {
     });
   });
 
+  it('displays merchant id conflict error when merchant id is already registered', async () => {
+    const Wrapper = createTestWrapper();
+
+    mockSignUp.mockResolvedValue({
+      status: 409,
+      body: {
+        error: 'MERCHANT_ALREADY_REGISTERED',
+        message: 'Merchant ID is already registered by another account.',
+      },
+    });
+
+    render(
+      <Wrapper>
+        <SignUpForm />
+      </Wrapper>
+    );
+
+    fireEvent.click(screen.getByLabelText('I am a merchant'));
+    fireEvent.change(screen.getByLabelText('Email'), {
+      target: { value: validEmail },
+    });
+    fireEvent.change(screen.getByLabelText('Merchant name'), {
+      target: { value: validMerchantName },
+    });
+    fireEvent.change(screen.getByLabelText('Merchant ID'), {
+      target: { value: 'merchant-123' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Account' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Merchant ID is already registered by another account.'
+        )
+      ).toBeInTheDocument();
+    });
+  });
+
   it('clears errors when typing after validation message', async () => {
     const Wrapper = createTestWrapper();
 

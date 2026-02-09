@@ -101,7 +101,6 @@ const finalizeMerchantSignUp = async (
   deps: Awaited<ReturnType<typeof getDependencies>>
 ) => {
   if (isMerchantSignup) {
-    await ensureMerchantCreditLineAccount(result.user);
     if (result.user.merchantId && result.user.merchantName) {
       await deps.merchantDirectoryRepository.upsertMerchantProfile({
         merchantId: result.user.merchantId,
@@ -111,6 +110,7 @@ const finalizeMerchantSignUp = async (
         updatedAt: new Date().toISOString(),
       });
     }
+    await ensureMerchantCreditLineAccount(result.user);
   }
   return toAuthResponse(201, result, config, responseHeaders);
 };

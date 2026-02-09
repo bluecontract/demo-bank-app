@@ -7,10 +7,15 @@ import { routerFutureConfig } from '../../../app/routerFutureConfig';
 const mockSignOut = vi.fn();
 const mockSignIn = vi.fn();
 const mockUpdateProfile = vi.fn();
+let mockUser: {
+  merchantName?: string;
+  merchantId?: string;
+  avatarDataUrl?: string;
+} | null = null;
 
 vi.mock('../../../app/providers/AuthProvider', () => ({
   useAuth: () => ({
-    user: null,
+    user: mockUser,
     signOut: mockSignOut,
     signIn: mockSignIn,
   }),
@@ -31,6 +36,7 @@ const renderWithRouter = (component: React.ReactElement) => {
 describe('DashboardHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUser = null;
   });
 
   it('should render app name correctly', () => {
@@ -111,6 +117,20 @@ describe('DashboardHeader', () => {
     expect(
       screen.getByRole('menuitem', { name: 'Sign Out' })
     ).toBeInTheDocument();
+  });
+
+  it('shows merchant id in dropdown when user has merchant profile', () => {
+    mockUser = {
+      merchantName: 'Merchant Demo',
+      merchantId: 'merchant-123',
+    };
+
+    renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
+
+    fireEvent.click(screen.getByRole('button'));
+
+    expect(screen.getByText('Merchant ID')).toBeInTheDocument();
+    expect(screen.getByText('merchant-123')).toBeInTheDocument();
   });
 
   it('should call signOut when Sign Out is clicked', () => {

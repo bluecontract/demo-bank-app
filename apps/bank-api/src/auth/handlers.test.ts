@@ -3,6 +3,7 @@ import { signUpHandler, signInHandler } from './handlers';
 import { getDependencies, resetDependencies } from './dependencies';
 import {
   UserAlreadyExistsError,
+  MerchantDirectoryOwnershipError,
   UserNotFoundError,
   UserValidationError,
   signUp,
@@ -389,6 +390,39 @@ describe('Auth Handlers', () => {
         error: 'VALIDATION_ERROR',
         message: 'Merchant name is required when signing up as a merchant',
       });
+    });
+
+    it('should return 409 when merchant id is already owned by another user', async () => {
+      const mockDeps = {
+        logger: mockLogger,
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
+      };
+      mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
+      mockSignUp.mockRejectedValue(
+        new MerchantDirectoryOwnershipError('merchant-123')
+      );
+
+      const responseHeaders = createMockHeaders();
+      const result = await signUpHandler(
+        {
+          body: {
+            email: 'new-merchant@example.com',
+            marketingEmailsOptIn: true,
+            merchantId: 'merchant-123',
+            merchantName: 'New Merchant',
+          },
+          query: {},
+        },
+        { responseHeaders } as any
+      );
+
+      expect(result.status).toBe(409);
+      expect(result.body).toEqual({
+        error: 'MERCHANT_ALREADY_REGISTERED',
+        message: 'Merchant ID is already registered by another account.',
+      });
+      expect(mockCreateAccount).not.toHaveBeenCalled();
     });
   });
 

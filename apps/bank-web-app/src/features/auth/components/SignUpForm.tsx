@@ -54,15 +54,21 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
       if (response.status === 201) {
         return response.body;
       } else {
+        const errorBody = response.body as
+          | { error?: string; message?: string }
+          | undefined;
         if (response.status === 409) {
+          if (errorBody?.error === 'MERCHANT_ALREADY_REGISTERED') {
+            throw new Error(
+              errorBody.message ||
+                'Merchant ID is already registered by another account.'
+            );
+          }
           throw new Error(
             'A user with this email already exists. Please use a different email.'
           );
         }
 
-        const errorBody = response.body as
-          | { error?: string; message?: string }
-          | undefined;
         throw new Error(errorBody?.message || 'Sign up failed');
       }
     },
@@ -83,6 +89,13 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({ onSuccess }) => {
         setErrors({
           email:
             'A user with this email already exists. Please use a different email.',
+        });
+      } else if (
+        error instanceof Error &&
+        error.message?.includes('Merchant ID is already registered')
+      ) {
+        setErrors({
+          merchantId: 'Merchant ID is already registered by another account.',
         });
       } else {
         setErrors({ email: 'Sign up failed. Please try again.' });

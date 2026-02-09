@@ -7,7 +7,10 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { DynamoUserRepository } from './DynamoUserRepository';
 import { User } from '../domain/entities/User';
-import { UserAlreadyExistsError } from './errors';
+import {
+  UserAlreadyExistsError,
+  MerchantDirectoryOwnershipError,
+} from './errors';
 import { randomUUID } from 'crypto';
 
 const resolveLocalstackEndpoint = () => {
@@ -144,6 +147,7 @@ describe('DynamoUserRepository Integration', () => {
         createdAt: new Date('2024-01-01T00:00:00Z'),
         marketingEmailsOptIn: true,
         merchantId: 'merchant-integration',
+        merchantName: 'Merchant Integration',
       });
 
       const savedUser = await repository.save(user);
@@ -152,6 +156,38 @@ describe('DynamoUserRepository Integration', () => {
 
       const retrievedUser = await repository.findById(user.id);
       expect(retrievedUser?.merchantId).toBe('merchant-integration');
+    });
+
+    it('should reject merchant signup when merchant id is already owned', async () => {
+      const originalOwner = new User({
+        id: randomUUID(),
+        email: 'merchant-owner@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-shared',
+        merchantName: 'Owner Merchant',
+      });
+      const conflictingUser = new User({
+        id: randomUUID(),
+        email: 'merchant-conflict@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-shared',
+        merchantName: 'Conflict Merchant',
+      });
+
+      await repository.save(originalOwner);
+
+      await expect(repository.save(conflictingUser)).rejects.toThrow(
+        MerchantDirectoryOwnershipError
+      );
+
+      const conflictingUserByEmail = await repository.findByEmail(
+        conflictingUser.email
+      );
+      expect(conflictingUserByEmail).toBeNull();
     });
 
     it('should save and retrieve a test user with TTL', async () => {

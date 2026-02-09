@@ -1,6 +1,7 @@
 import {
   UserAlreadyExistsError,
   TokenGenerationError,
+  MerchantDirectoryOwnershipError,
 } from '../../infrastructure/errors';
 import { AuthError } from '../errors';
 import type { UserRepository, JwtService, Logger, Metrics } from '../ports';
@@ -141,6 +142,21 @@ export async function signUp(
       });
       metrics.addMetric(
         METRIC_NAMES.AUTH.USER_SIGN_UP_JWT_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
+      throw error;
+    }
+
+    if (error instanceof MerchantDirectoryOwnershipError) {
+      logger.error('Merchant ownership conflict during sign-up', {
+        userEmail: email,
+        merchantId,
+        error: error.message,
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+      metrics.addMetric(
+        METRIC_NAMES.AUTH.USER_SIGN_UP_ERROR,
         METRIC_UNITS.COUNT,
         1
       );
