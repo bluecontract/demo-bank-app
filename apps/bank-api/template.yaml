@@ -10,6 +10,24 @@ Parameters:
   AwsEndpointUrl:
     Type: String
     Default: ''
+  LambdaAliasName:
+    Type: String
+    Default: live
+  EnableProvisionedConcurrency:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+  ProvisionedConcurrencyCount:
+    Type: Number
+    Default: 3
+    MinValue: 1
+
+Conditions:
+  IsLocalStackDeployment: !Not [!Equals [!Ref AwsEndpointUrl, '']]
+  UseLambdaAlias: !Not [!Condition IsLocalStackDeployment]
+  UseProvisionedConcurrency: !And
+    - !Condition UseLambdaAlias
+    - !Equals [!Ref EnableProvisionedConcurrency, 'true']
 
 Globals:
   Function:
@@ -219,6 +237,11 @@ Resources:
       Handler: main.handler
       CodeUri: ../../dist/apps/bank-api/lambda/
       Description: Banking API Lambda function
+      AutoPublishAlias: !Ref LambdaAliasName
+      ProvisionedConcurrencyConfig: !If
+        - UseProvisionedConcurrency
+        - ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrencyCount
+        - !Ref AWS::NoValue
       Environment:
         Variables:
           AUTH_DYNAMO_TABLE_NAME: !Ref BankTable
@@ -232,7 +255,13 @@ Resources:
           JWT_TTL_SECONDS: 604800
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
           SERVICE_NAME: !Sub 'bank-api-${Environment}'
-          SUMMARY_LAMBDA_NAME: !Ref SummaryLambdaFunction
+          SUMMARY_LAMBDA_NAME: !If
+            - UseLambdaAlias
+            - !Join [
+                ':',
+                [!GetAtt SummaryLambdaFunction.Arn, !Ref LambdaAliasName],
+              ]
+            - !Ref SummaryLambdaFunction
           SUMMARY_QUEUE_URL: !Ref SummaryJobsQueue
           LOG_LEVEL: INFO
           METRICS_NAMESPACE: !Sub 'DemoBlue/${Environment}'
@@ -251,7 +280,15 @@ Resources:
             - Effect: Allow
               Action:
                 - lambda:InvokeFunction
-              Resource: !GetAtt SummaryLambdaFunction.Arn
+              Resource:
+                - !GetAtt SummaryLambdaFunction.Arn
+                - !If
+                  - UseLambdaAlias
+                  - !Join [
+                      ':',
+                      [!GetAtt SummaryLambdaFunction.Arn, !Ref LambdaAliasName],
+                    ]
+                  - !Ref AWS::NoValue
             - Effect: Allow
               Action:
                 - sqs:SendMessage
@@ -293,6 +330,11 @@ Resources:
       Handler: summary.handler
       CodeUri: ../../dist/apps/bank-api/lambda/
       Description: Banking summary Lambda function
+      AutoPublishAlias: !Ref LambdaAliasName
+      ProvisionedConcurrencyConfig: !If
+        - UseProvisionedConcurrency
+        - ProvisionedConcurrentExecutions: !Ref ProvisionedConcurrencyCount
+        - !Ref AWS::NoValue
       Environment:
         Variables:
           AUTH_DYNAMO_TABLE_NAME: !Ref BankTable

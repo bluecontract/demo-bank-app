@@ -20,6 +20,89 @@ fi
 AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-http://localhost:${LOCALSTACK_EDGE_PORT:-4566}}"
 export AWS_ENDPOINT_URL
 AWS_ARGS=(--endpoint-url "${AWS_ENDPOINT_URL}")
+deploy_log=""
+local_template_file=""
+
+cleanup_temp_files() {
+  if [[ -n "${deploy_log}" ]]; then
+    rm -f "${deploy_log}"
+  fi
+  if [[ -n "${local_template_file}" ]]; then
+    rm -f "${local_template_file}"
+  fi
+}
+
+trap cleanup_temp_files EXIT
+
+has_template_file_arg() {
+  local arg
+  for arg in "${deploy_args[@]}"; do
+    case "${arg}" in
+      --template-file|--template-file=*)
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
+has_aws_endpoint_override_arg() {
+  local arg
+  for arg in "${deploy_args[@]}"; do
+    if [[ "${arg}" == *"AwsEndpointUrl="* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+ensure_aws_endpoint_override_arg() {
+  local index next
+
+  if has_aws_endpoint_override_arg; then
+    return 0
+  fi
+
+  for ((index = 0; index < ${#deploy_args[@]}; index++)); do
+    if [[ "${deploy_args[${index}]}" == --parameter-overrides=* ]]; then
+      deploy_args[${index}]="${deploy_args[${index}]} AwsEndpointUrl=${AWS_ENDPOINT_URL}"
+      return 0
+    fi
+
+    if [[ "${deploy_args[${index}]}" == "--parameter-overrides" ]]; then
+      next=$((index + 1))
+      if ((next < ${#deploy_args[@]})); then
+        deploy_args[${next}]="${deploy_args[${next}]} AwsEndpointUrl=${AWS_ENDPOINT_URL}"
+      else
+        deploy_args+=("AwsEndpointUrl=${AWS_ENDPOINT_URL}")
+      fi
+      return 0
+    fi
+  done
+
+  deploy_args+=(--parameter-overrides "AwsEndpointUrl=${AWS_ENDPOINT_URL}")
+}
+
+prepare_local_template_file() {
+  if has_template_file_arg; then
+    return 0
+  fi
+
+  if [[ ! -f "template.yaml" ]]; then
+    return 0
+  fi
+
+  local_template_file="$(mktemp /tmp/demo-bank-localstack-template.XXXXXX.yaml)"
+  awk '
+    # SAM does not allow conditional AutoPublishAlias, so LocalStack uses a
+    # generated template without AutoPublishAlias.
+    /AutoPublishAlias:/ { next }
+    { print }
+  ' template.yaml > "${local_template_file}"
+
+  deploy_args+=(--template-file "${local_template_file}")
+  echo "Using local SAM template without AutoPublishAlias (provisioned concurrency remains condition-driven)."
+}
 
 is_stack_rollback_complete_error() {
   local log_file="$1"
@@ -308,10 +391,11 @@ recover_from_existing_infra_without_stack() {
 
 echo "Running samlocal deploy..."
 deploy_args=("$@")
+ensure_aws_endpoint_override_arg
+prepare_local_template_file
 preflight_recover_rollback_complete_stack
 
 deploy_log="$(mktemp)"
-trap 'rm -f "${deploy_log}"' EXIT
 
 set +e
 samlocal deploy "${deploy_args[@]}" 2>&1 | tee "${deploy_log}"
