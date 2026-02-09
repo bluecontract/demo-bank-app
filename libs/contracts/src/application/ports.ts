@@ -47,10 +47,11 @@ export type ContractHistoryEntryInput = Omit<
 
 export type ContractSummaryUpdate = {
   contractId: string;
+  summarySourceUpdatedAt: string;
+  summarySourceEpoch: number;
   summary?: ContractDocumentSummary | null;
   summaryPreview?: string | null;
   summaryUpdatedAt?: string | null;
-  summarySourceUpdatedAt?: string | null;
   summaryInputBlueId?: string | null;
   summaryModel?: string | null;
   summaryError?: string | null;
@@ -75,6 +76,7 @@ export type ContractSummarySnapshot = {
   summaryTriggerEvent?: unknown | null;
   summaryEmittedEvents?: unknown[] | null;
   summarySourceUpdatedAt?: string | null;
+  summarySourceEpoch?: number | null;
   summaryUpdatedAt?: string | null;
   summaryInputBlueId?: string | null;
 };
@@ -111,6 +113,7 @@ export interface ContractRecord {
   summary?: ContractDocumentSummary;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summarySourceEpoch?: number;
   summaryInputBlueId?: string;
   summaryModel?: string;
   summaryError?: string;
@@ -140,6 +143,7 @@ export interface ContractSummary {
   summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summarySourceEpoch?: number;
   updatedAt: string;
   createdAt: string;
 }

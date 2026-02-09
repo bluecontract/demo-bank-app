@@ -137,6 +137,52 @@ describe('handleSummaryJob (contract-summary)', () => {
     expect(summaryCallInput.contract.relatedHoldIds).toEqual(['hold-1']);
   });
 
+  it('forwards source epoch from snapshot for monotonic summary updates', async () => {
+    summaryInputStore.get.mockResolvedValue({
+      contractId: 'contract-1',
+      summaryInputKey: 'SUMMARY_INPUT#2026-02-08T10:00:00.000Z#7',
+      sourceUpdatedAt: '2026-02-08T10:00:00.000Z',
+      sourceEpoch: 7,
+      contractSnapshot: {
+        contractId: 'contract-1',
+        typeBlueId: 'PayNote/PayNote',
+        displayName: 'PayNote',
+        document: { name: 'Snapshot state' },
+        status: 'reserved',
+        updatedAt: '2026-02-08T10:00:00.000Z',
+        createdAt: '2026-02-08T09:00:00.000Z',
+      },
+      createdAt: '2026-02-08T10:00:00.000Z',
+    });
+
+    contractRepository.getContract.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'PayNote/PayNote',
+      displayName: 'PayNote',
+      document: { name: 'Latest state' },
+      userId: 'user-1',
+      status: 'reserved',
+      updatedAt: '2026-02-08T10:00:05.000Z',
+      createdAt: '2026-02-08T09:00:00.000Z',
+    });
+
+    const result = await handleSummaryJob({
+      type: 'contract-summary',
+      messageVersion: 1,
+      contractId: 'contract-1',
+      documentId: 'document-1',
+      summaryInputKey: 'SUMMARY_INPUT#2026-02-08T10:00:00.000Z#7',
+      sourceUpdatedAt: '2026-02-08T10:00:00.000Z',
+      sourceEpoch: 7,
+      reason: 'webhook',
+    });
+
+    expect(result).toEqual({ status: 'ok' });
+    const summaryCallInput =
+      hoistedSummary.generateContractSummaryForContractMock.mock.calls[0]?.[0];
+    expect(summaryCallInput.contract.summarySourceEpoch).toBe(7);
+  });
+
   it('fails with not-ready error when userId is missing for projection updates', async () => {
     summaryInputStore.get.mockResolvedValue({
       contractId: 'contract-1',

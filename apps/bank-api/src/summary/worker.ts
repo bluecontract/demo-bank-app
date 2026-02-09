@@ -15,10 +15,14 @@ class SummaryNotReadyError extends Error {
 const buildContractForSummary = (input: {
   latest: ContractRecord;
   snapshot?: ContractRecord;
+  sourceEpoch?: number;
 }): ContractRecord => {
-  const { latest, snapshot } = input;
+  const { latest, snapshot, sourceEpoch } = input;
   if (!snapshot) {
-    return latest;
+    return {
+      ...latest,
+      ...(sourceEpoch !== undefined ? { summarySourceEpoch: sourceEpoch } : {}),
+    };
   }
 
   return {
@@ -30,6 +34,7 @@ const buildContractForSummary = (input: {
     relatedHoldIds: latest.relatedHoldIds,
     accountNumber: latest.accountNumber,
     merchantId: latest.merchantId,
+    ...(sourceEpoch !== undefined ? { summarySourceEpoch: sourceEpoch } : {}),
     summary: latest.summary ?? snapshot.summary,
     summaryPreview: latest.summaryPreview ?? snapshot.summaryPreview,
     summaryUpdatedAt: latest.summaryUpdatedAt ?? snapshot.summaryUpdatedAt,
@@ -70,6 +75,34 @@ const getApproximateReceiveCount = (
   const count = record?.attributes?.ApproximateReceiveCount;
   const parsed = count ? Number.parseInt(count, 10) : 1;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+};
+
+const isLatestSummarySourceAhead = (input: {
+  latestEpoch?: number;
+  latestUpdatedAt?: string;
+  snapshotEpoch?: number;
+  snapshotUpdatedAt: string;
+}) => {
+  const latestEpoch = input.latestEpoch;
+  const snapshotEpoch = input.snapshotEpoch;
+
+  if (
+    typeof latestEpoch === 'number' &&
+    Number.isFinite(latestEpoch) &&
+    typeof snapshotEpoch === 'number' &&
+    Number.isFinite(snapshotEpoch)
+  ) {
+    if (latestEpoch > snapshotEpoch) {
+      return true;
+    }
+    if (latestEpoch < snapshotEpoch) {
+      return false;
+    }
+  }
+
+  return Boolean(
+    input.latestUpdatedAt && input.latestUpdatedAt > input.snapshotUpdatedAt
+  );
 };
 
 const applyNotReadyBackoff = async (input: {
@@ -198,6 +231,7 @@ export const handleSummaryJob = async (
       const contractForSummary = buildContractForSummary({
         latest: latestContract,
         snapshot: contractSummarySnapshot.contractSnapshot,
+        sourceEpoch: contractSummarySnapshot.sourceEpoch ?? event.sourceEpoch,
       });
 
       if (!contractForSummary.document) {
@@ -245,14 +279,23 @@ export const handleSummaryJob = async (
         contractSummarySnapshot?.contractSnapshot?.updatedAt ??
         contractSummarySnapshot?.sourceUpdatedAt ??
         event.sourceUpdatedAt;
+      const snapshotSourceEpoch =
+        contractSummarySnapshot?.sourceEpoch ?? event.sourceEpoch;
       if (
-        latestContract?.summarySourceUpdatedAt &&
-        latestContract.summarySourceUpdatedAt > snapshotSourceUpdatedAt
+        latestContract &&
+        isLatestSummarySourceAhead({
+          latestEpoch: latestContract.summarySourceEpoch,
+          latestUpdatedAt: latestContract.summarySourceUpdatedAt,
+          snapshotEpoch: snapshotSourceEpoch,
+          snapshotUpdatedAt: snapshotSourceUpdatedAt,
+        })
       ) {
         logger.info('Skipping stale contract summary job', {
           contractId: event.contractId,
           summaryInputKey: event.summaryInputKey,
           sourceUpdatedAt: snapshotSourceUpdatedAt,
+          sourceEpoch: snapshotSourceEpoch,
+          latestSummarySourceEpoch: latestContract.summarySourceEpoch,
           latestSummarySourceUpdatedAt: latestContract.summarySourceUpdatedAt,
         });
         return { status: 'stale' as const };

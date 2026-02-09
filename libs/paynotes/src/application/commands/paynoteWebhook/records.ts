@@ -12,6 +12,7 @@ import type {
   WebhookEventObject,
 } from './types';
 import { getRecordString, parsePayNoteDocument, toSimpleRecord } from './utils';
+import { resolvePayNoteCustomerChannelKey } from './customerChannel';
 
 const fetchDocumentMessages = {
   notFound: 'Failed to resolve PayNote document from MyOS',
@@ -196,51 +197,6 @@ export const buildPayNoteRecord = (input: {
   };
 
   return { updatedRecord, payerAccountNumber, payeeAccountNumber };
-};
-
-const normalizeAccountNumber = (value?: string | null): string | undefined => {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-};
-
-const resolvePayNoteCustomerChannelKey = (input: {
-  updatedRecord: PayNoteRecord;
-  deliveryRecord: PayNoteDeliveryRecord | null;
-}): string | undefined => {
-  const accountNumber = normalizeAccountNumber(
-    input.updatedRecord.accountNumber
-  );
-  const payerAccountNumber = normalizeAccountNumber(
-    input.updatedRecord.payerAccountNumber
-  );
-  const payeeAccountNumber = normalizeAccountNumber(
-    input.updatedRecord.payeeAccountNumber
-  );
-
-  if (
-    accountNumber &&
-    payerAccountNumber &&
-    accountNumber === payerAccountNumber
-  ) {
-    return 'payerChannel';
-  }
-
-  if (
-    accountNumber &&
-    payeeAccountNumber &&
-    accountNumber === payeeAccountNumber
-  ) {
-    return 'payeeChannel';
-  }
-
-  if (input.deliveryRecord) {
-    return 'payerChannel';
-  }
-
-  return undefined;
 };
 
 export const upsertPayNoteContract = async (input: {

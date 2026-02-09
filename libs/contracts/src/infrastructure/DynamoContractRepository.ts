@@ -19,6 +19,10 @@ import type {
   ContractSummaryUpdate,
   ContractArchiveUpdate,
 } from '../application/ports';
+import {
+  buildContractSummarySnapshot,
+  buildContractSummaryUpdateExpressions,
+} from './contractSummaryUpdateBuilder';
 
 const ENTITY_TYPES = {
   CONTRACT: 'CONTRACT',
@@ -102,6 +106,7 @@ interface ContractItem {
   summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summarySourceEpoch?: number;
   summaryInputBlueId?: string;
   summaryModel?: string;
   summaryError?: string;
@@ -161,6 +166,7 @@ interface ContractUserItem {
   summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summarySourceEpoch?: number;
   summaryDocumentName?: string;
   createdAt: string;
   updatedAt: string;
@@ -184,6 +190,7 @@ interface ContractRelationshipItem {
   summaryPreview?: string;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
+  summarySourceEpoch?: number;
   summaryDocumentName?: string;
   createdAt: string;
   updatedAt: string;
@@ -222,6 +229,7 @@ interface ContractSummarySnapshotItem {
   summaryTriggerEvent?: unknown;
   summaryEmittedEvents?: unknown[];
   summarySourceUpdatedAt?: string;
+  summarySourceEpoch?: number;
   summaryUpdatedAt?: string;
   summaryInputBlueId?: string;
   createdAt: string;
@@ -316,6 +324,7 @@ export class DynamoContractRepository implements ContractRepository {
       summaryPreview: resolveSummaryPreview(item.summary, item.summaryPreview),
       summaryUpdatedAt: item.summaryUpdatedAt,
       summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+      summarySourceEpoch: item.summarySourceEpoch,
       summaryInputBlueId: item.summaryInputBlueId,
       summaryModel: item.summaryModel,
       summaryError: item.summaryError,
@@ -471,6 +480,7 @@ export class DynamoContractRepository implements ContractRepository {
       summaryTriggerEvent: item.summaryTriggerEvent,
       summaryEmittedEvents: item.summaryEmittedEvents,
       summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+      summarySourceEpoch: item.summarySourceEpoch,
       summaryUpdatedAt: item.summaryUpdatedAt,
       summaryInputBlueId: item.summaryInputBlueId,
     };
@@ -507,6 +517,7 @@ export class DynamoContractRepository implements ContractRepository {
       ),
       summaryUpdatedAt: record.summaryUpdatedAt,
       summarySourceUpdatedAt: record.summarySourceUpdatedAt,
+      summarySourceEpoch: record.summarySourceEpoch,
       summaryInputBlueId: record.summaryInputBlueId,
       summaryModel: record.summaryModel,
       summaryError: record.summaryError,
@@ -600,6 +611,7 @@ export class DynamoContractRepository implements ContractRepository {
         ),
         summaryUpdatedAt: record.summaryUpdatedAt,
         summarySourceUpdatedAt: record.summarySourceUpdatedAt,
+        summarySourceEpoch: record.summarySourceEpoch,
         summaryDocumentName: record.summaryDocumentName,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
@@ -633,6 +645,7 @@ export class DynamoContractRepository implements ContractRepository {
       ),
       summaryUpdatedAt: record.summaryUpdatedAt,
       summarySourceUpdatedAt: record.summarySourceUpdatedAt,
+      summarySourceEpoch: record.summarySourceEpoch,
       summaryDocumentName: record.summaryDocumentName,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
@@ -681,6 +694,7 @@ export class DynamoContractRepository implements ContractRepository {
       summaryTriggerEvent: undefined,
       summaryEmittedEvents: undefined,
       summarySourceUpdatedAt: snapshot.summarySourceUpdatedAt ?? undefined,
+      summarySourceEpoch: snapshot.summarySourceEpoch ?? undefined,
       summaryUpdatedAt: snapshot.summaryUpdatedAt ?? undefined,
       summaryInputBlueId: snapshot.summaryInputBlueId ?? undefined,
       createdAt: now,
@@ -894,144 +908,10 @@ export class DynamoContractRepository implements ContractRepository {
   }
 
   async updateContractSummary(update: ContractSummaryUpdate): Promise<void> {
-    const setters: string[] = [];
-    const removals: string[] = [];
-    const names: Record<string, string> = {
-      '#pk': 'PK',
-    };
-    const values: Record<string, unknown> = {};
-
-    const addValue = (key: string, value: unknown) => {
-      values[key] = value;
-      return key;
-    };
-
-    const addName = (key: string, value: string) => {
-      names[key] = value;
-      return key;
-    };
-
-    const monotonicSummarySourceGuard =
-      typeof update.summarySourceUpdatedAt === 'string' &&
-      update.summarySourceUpdatedAt.length > 0;
-    if (monotonicSummarySourceGuard) {
-      addName('#currentSummarySourceUpdatedAt', 'summarySourceUpdatedAt');
-      addValue(':currentSummarySourceUpdatedAt', update.summarySourceUpdatedAt);
-    }
-
-    const setField = (nameKey: string, valueKey: string, value: unknown) => {
-      addValue(valueKey, value);
-      setters.push(`${nameKey} = ${valueKey}`);
-    };
-
-    const summaryPreview = resolveSummaryPreview(
-      update.summary,
-      update.summaryPreview
-    );
-    const shouldRemoveSummaryPreview =
-      update.summary === null || update.summaryPreview === null;
-
-    const handleField = (
-      nameKey: string,
-      attributeName: string,
-      valueKey: string,
-      value: unknown | null | undefined
-    ) => {
-      if (value === undefined) {
-        return;
-      }
-      addName(nameKey, attributeName);
-      if (value === null) {
-        removals.push(nameKey);
-        return;
-      }
-      setField(nameKey, valueKey, value);
-    };
-
-    handleField('#summary', 'summary', ':summary', update.summary);
-    handleField(
-      '#summaryPreview',
-      'summaryPreview',
-      ':summaryPreview',
-      shouldRemoveSummaryPreview ? null : summaryPreview
-    );
-    handleField(
-      '#summaryUpdatedAt',
-      'summaryUpdatedAt',
-      ':summaryUpdatedAt',
-      update.summaryUpdatedAt
-    );
-    handleField(
-      '#summarySourceUpdatedAt',
-      'summarySourceUpdatedAt',
-      ':summarySourceUpdatedAt',
-      update.summarySourceUpdatedAt
-    );
-    handleField(
-      '#summaryInputBlueId',
-      'summaryInputBlueId',
-      ':summaryInputBlueId',
-      update.summaryInputBlueId
-    );
-    handleField(
-      '#summaryModel',
-      'summaryModel',
-      ':summaryModel',
-      update.summaryModel
-    );
-    handleField(
-      '#summaryError',
-      'summaryError',
-      ':summaryError',
-      update.summaryError
-    );
-    handleField(
-      '#summaryDocumentName',
-      'summaryDocumentName',
-      ':summaryDocumentName',
-      update.summaryDocumentName
-    );
-    handleField(
-      '#summaryStatus',
-      'summaryStatus',
-      ':summaryStatus',
-      update.summaryStatus
-    );
-    handleField(
-      '#summaryStatusUpdatedAt',
-      'summaryStatusUpdatedAt',
-      ':summaryStatusUpdatedAt',
-      update.summaryStatusUpdatedAt
-    );
-    handleField(
-      '#summaryStatusTimestamps',
-      'summaryStatusTimestamps',
-      ':summaryStatusTimestamps',
-      update.summaryStatusTimestamps
-    );
-    const shouldWriteSnapshot =
-      update.summaryDocument !== undefined ||
-      update.summaryTriggerEvent !== undefined ||
-      update.summaryEmittedEvents !== undefined ||
-      update.summaryStatus !== undefined ||
-      update.summaryStatusUpdatedAt !== undefined ||
-      update.summaryStatusTimestamps !== undefined;
-
-    if (!setters.length && !removals.length) {
+    const prepared = buildContractSummaryUpdateExpressions(update);
+    if (!prepared.primaryUpdate) {
       return;
     }
-
-    const expressions: string[] = [];
-    if (setters.length) {
-      expressions.push(`SET ${setters.join(', ')}`);
-    }
-    if (removals.length) {
-      expressions.push(`REMOVE ${removals.join(', ')}`);
-    }
-
-    const conditionExpression = monotonicSummarySourceGuard
-      ? 'attribute_exists(#pk) AND (attribute_not_exists(#currentSummarySourceUpdatedAt) OR #currentSummarySourceUpdatedAt <= :currentSummarySourceUpdatedAt)'
-      : 'attribute_exists(#pk)';
 
     await this.client.send(
       new UpdateCommand({
@@ -1040,111 +920,24 @@ export class DynamoContractRepository implements ContractRepository {
           PK: this.buildContractPk(update.contractId),
           SK: SORT_KEYS.META,
         },
-        ConditionExpression: conditionExpression,
-        UpdateExpression: expressions.join(' '),
-        ExpressionAttributeNames: names,
-        ...(Object.keys(values).length
-          ? { ExpressionAttributeValues: values }
-          : {}),
+        ...prepared.primaryUpdate,
       })
     );
 
-    if (shouldWriteSnapshot) {
-      await this.saveContractSummarySnapshot({
-        contractId: update.contractId,
-        summaryDocument: update.summaryDocument,
-        summaryStatus: update.summaryStatus,
-        summaryStatusUpdatedAt: update.summaryStatusUpdatedAt,
-        summaryStatusTimestamps: update.summaryStatusTimestamps,
-        summaryTriggerEvent: update.summaryTriggerEvent,
-        summaryEmittedEvents: update.summaryEmittedEvents,
-        summarySourceUpdatedAt: update.summarySourceUpdatedAt,
-        summaryUpdatedAt: update.summaryUpdatedAt,
-        summaryInputBlueId: update.summaryInputBlueId,
-      });
+    if (prepared.shouldWriteSnapshot) {
+      await this.saveContractSummarySnapshot(
+        buildContractSummarySnapshot(update)
+      );
     }
 
-    const summaryMetaSetters: string[] = [];
-    const summaryMetaRemovals: string[] = [];
-    const summaryMetaNames: Record<string, string> = {
-      '#pk': 'PK',
-    };
-    const summaryMetaValues: Record<string, unknown> = {};
-
-    if (monotonicSummarySourceGuard) {
-      summaryMetaNames['#currentSummarySourceUpdatedAt'] =
-        'summarySourceUpdatedAt';
-      summaryMetaValues[':currentSummarySourceUpdatedAt'] =
-        update.summarySourceUpdatedAt;
-    }
-
-    const setSummaryMetaField = (
-      nameKey: string,
-      attributeName: string,
-      valueKey: string,
-      value: unknown | null | undefined
-    ) => {
-      if (value === undefined) {
-        return;
-      }
-      summaryMetaNames[nameKey] = attributeName;
-      if (value === null) {
-        summaryMetaRemovals.push(nameKey);
-        return;
-      }
-      summaryMetaValues[valueKey] = value;
-      summaryMetaSetters.push(`${nameKey} = ${valueKey}`);
-    };
-
-    setSummaryMetaField(
-      '#summaryPreview',
-      'summaryPreview',
-      ':summaryPreview',
-      shouldRemoveSummaryPreview ? null : summaryPreview
-    );
-    setSummaryMetaField(
-      '#summaryUpdatedAt',
-      'summaryUpdatedAt',
-      ':summaryUpdatedAt',
-      update.summaryUpdatedAt
-    );
-    setSummaryMetaField(
-      '#summarySourceUpdatedAt',
-      'summarySourceUpdatedAt',
-      ':summarySourceUpdatedAt',
-      update.summarySourceUpdatedAt
-    );
-    setSummaryMetaField(
-      '#summaryDocumentName',
-      'summaryDocumentName',
-      ':summaryDocumentName',
-      update.summaryDocumentName
-    );
-
-    if (!summaryMetaSetters.length && !summaryMetaRemovals.length) {
+    if (!prepared.metadataUpdate) {
       return;
     }
 
-    const summaryMetaExpressions: string[] = [];
-    if (summaryMetaSetters.length) {
-      summaryMetaExpressions.push(`SET ${summaryMetaSetters.join(', ')}`);
-    }
-    if (summaryMetaRemovals.length) {
-      summaryMetaExpressions.push(`REMOVE ${summaryMetaRemovals.join(', ')}`);
-    }
-
     const updateRequests: Array<Promise<unknown>> = [];
-    const summaryMetaConditionExpression = monotonicSummarySourceGuard
-      ? 'attribute_exists(#pk) AND (attribute_not_exists(#currentSummarySourceUpdatedAt) OR #currentSummarySourceUpdatedAt <= :currentSummarySourceUpdatedAt)'
-      : 'attribute_exists(#pk)';
     const summaryMetaUpdate = {
       TableName: this.tableName,
-      ConditionExpression: summaryMetaConditionExpression,
-      UpdateExpression: summaryMetaExpressions.join(' '),
-      ExpressionAttributeNames: summaryMetaNames,
-      ...(Object.keys(summaryMetaValues).length
-        ? { ExpressionAttributeValues: summaryMetaValues }
-        : {}),
+      ...prepared.metadataUpdate,
     };
 
     if (update.userId) {
@@ -1242,6 +1035,7 @@ export class DynamoContractRepository implements ContractRepository {
         summaryPreview: item.summaryPreview,
         summaryUpdatedAt: item.summaryUpdatedAt,
         summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+        summarySourceEpoch: item.summarySourceEpoch,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       }));
@@ -1293,6 +1087,7 @@ export class DynamoContractRepository implements ContractRepository {
         summaryPreview: item.summaryPreview,
         summaryUpdatedAt: item.summaryUpdatedAt,
         summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+        summarySourceEpoch: item.summarySourceEpoch,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       }));
@@ -1344,6 +1139,7 @@ export class DynamoContractRepository implements ContractRepository {
         summaryPreview: item.summaryPreview,
         summaryUpdatedAt: item.summaryUpdatedAt,
         summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+        summarySourceEpoch: item.summarySourceEpoch,
         createdAt: item.createdAt,
         updatedAt: item.updatedAt,
       }));

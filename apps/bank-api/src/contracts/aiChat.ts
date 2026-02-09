@@ -55,50 +55,6 @@ const extractDocumentName = (value: unknown): string | null => {
   return trimmed ? trimmed : null;
 };
 
-const shouldAllowOperationAvailabilityMention = (input: {
-  lastUserMessage: string;
-  operations: Array<{ name: string; label: string }>;
-}): boolean => {
-  const text = input.lastUserMessage.toLowerCase();
-
-  const asksAboutOps =
-    /\bops\b/.test(text) ||
-    /\boperations?\b/.test(text) ||
-    /\bactions?\b/.test(text) ||
-    /\bwhat can i do\b/.test(text) ||
-    /\bwhat do i\b.*\bdo\b/.test(text);
-
-  const asksToDoSomething =
-    /\b(run|execute|perform)\b/.test(text) || /\b(do it|go ahead)\b/.test(text);
-
-  const mentionsKnownOperation = input.operations.some(op => {
-    const name = op.name.toLowerCase();
-    const label = op.label.toLowerCase();
-    return (name && text.includes(name)) || (label && text.includes(label));
-  });
-
-  return asksAboutOps || asksToDoSomething || mentionsKnownOperation;
-};
-
-const stripOperationAvailabilityNoise = (message: string): string => {
-  let next = message;
-  const patterns: RegExp[] = [
-    /\s*No\s+(?:eligible\s+)?(?:actions?|operations?|ops?)\s+(?:are|is)\s+available[^.!?]*[.!?]?\s*/gi,
-    /\s*There\s+(?:are|is)\s+no\s+(?:eligible\s+)?(?:actions?|operations?|ops?)[^.!?]*[.!?]?\s*/gi,
-    /\s*You\s+(?:have|don'?t have|do not have|can'?t|cannot)\s+(?:any\s+)?(?:actions?|operations?|ops?)[^.!?]*[.!?]?\s*/gi,
-    /\s*Buttons?\s+(?:you\s+)?can\s+(?:press|click)[^.!?]*[.!?]?\s*/gi,
-    /\s*Nothing\s+you\s+can\s+do[^.!?]*[.!?]?\s*/gi,
-    /\s*You\s+can'?t\s+do\s+anything[^.!?]*[.!?]?\s*/gi,
-    /\s*Your\s+channel[^.!?]*[.!?]?\s*/gi,
-  ];
-
-  for (const pattern of patterns) {
-    next = next.replace(pattern, ' ');
-  }
-
-  return next.replace(/\s{2,}/g, ' ').trim();
-};
-
 export const contractAiChatHandler = async (
   request: ServerInferRequest<
     (typeof bankApiContract)['banking']['contractAiChat']
@@ -169,20 +125,6 @@ export const contractAiChatHandler = async (
       ? buildRequestModel(operation.request, blue, 'Request')
       : null,
   }));
-
-  const lastUserMessage =
-    [...request.body.messages]
-      .reverse()
-      .find(message => message.role === 'user')?.content ?? '';
-
-  const allowOperationAvailabilityMention =
-    shouldAllowOperationAvailabilityMention({
-      lastUserMessage,
-      operations: filteredOperations.map(operation => ({
-        name: operation.name,
-        label: operation.label,
-      })),
-    });
 
   const documentName =
     extractDocumentName(contract.document) ??
@@ -298,18 +240,6 @@ export const contractAiChatHandler = async (
           nextProcessingState: 'none',
           focus: null,
           operationRequest: null,
-        };
-      }
-    }
-
-    if (!allowOperationAvailabilityMention) {
-      const stripped = stripOperationAvailabilityNoise(
-        safeOutput.assistantMessage
-      );
-      if (stripped.length > 0) {
-        safeOutput = {
-          ...safeOutput,
-          assistantMessage: stripped,
         };
       }
     }
