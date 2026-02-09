@@ -123,6 +123,10 @@ jobs:
           BANK_API_URL: ${{ inputs.backend-url }}
           INTRO_VIDEO_URL: ${{ inputs.intro-video-url }}
           PAYNOTE_DEMO_VIDEO_URL: ${{ inputs.paynote-demo-video-url }}
+          BANK_API_ENABLE_DATADOG: ${{ vars.BANK_API_ENABLE_DATADOG }}
+          BANK_API_DATADOG_API_KEY_SECRET_ARN: ${{ secrets.BANK_API_DATADOG_API_KEY_SECRET_ARN }}
+          BANK_API_DD_VERSION: ${{ github.sha }}
+          BANK_API_DATADOG_SITE: ${{ vars.BANK_API_DATADOG_SITE }}
 
       - name: Set deployment status
         id: deploy-status

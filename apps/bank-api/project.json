@@ -124,9 +124,7 @@
     "deploy": {
       "executor": "nx:run-commands",
       "options": {
-        "commands": [
-          "sam deploy --config-env {args.environment} --no-confirm-changeset --no-fail-on-empty-changeset"
-        ],
+        "commands": ["./scripts/deploy-aws.sh {args.environment}"],
         "cwd": "apps/bank-api",
         "parallel": false
       },

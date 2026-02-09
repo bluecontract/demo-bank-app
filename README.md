@@ -376,6 +376,27 @@ npm run clean  # Reset Nx cache
 npm run graph  # View dependency graph
 ```
 
+#### Datadog Toggle For `bank-api` (AWS deploy)
+
+- Default behavior: Datadog is disabled.
+- Enable Datadog by setting environment variable `BANK_API_ENABLE_DATADOG=true`.
+- When enabled, `apps/bank-api/scripts/deploy-aws.sh` renders a Datadog-enabled
+  template from `apps/bank-api/template.yaml` (single source of truth) and
+  deploys with the same `samconfig` environment (`dev` / `prod`) plus Datadog
+  parameter overrides.
+- Datadog layer versions default to latest for the AWS region at deploy time
+  (`Datadog-Node22-x` and `Datadog-Extension`), with optional overrides.
+
+GitHub Actions environment configuration (per `dev` / `prod`):
+
+- Variable: `BANK_API_ENABLE_DATADOG` (`true`/`false`)
+- Variable: `BANK_API_DATADOG_SITE` (for example `datadoghq.eu`)
+- Secret: `BANK_API_DATADOG_API_KEY_SECRET_ARN`
+- Optional variable: `BANK_API_DATADOG_NODE_LAYER_VERSION`
+- Optional variable: `BANK_API_DATADOG_EXTENSION_LAYER_VERSION`
+
+`DDVersion` is set from commit SHA automatically in CI.
+
 ## 📚 Project Documentation
 
 - **[docs/problem-exploration](./docs/problem-exploration/)**: Project context and problem exploration

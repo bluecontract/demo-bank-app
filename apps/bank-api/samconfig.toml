@@ -30,9 +30,9 @@ resolve_s3 = true
 stack_name = "demo-bank-app-backend-dev"
 s3_bucket = "demo-bank-app-deployments-dev"
 region = "eu-west-1"
-parameter_overrides = "Environment=dev DomainName=dev.demo-bank-app.labs.blue CertificateArn=arn:aws:acm:eu-west-1:118811228407:certificate/84f50ff6-bf00-44e8-a223-525e80ab83f9"
+parameter_overrides = "Environment=dev DomainName=dev.demo-bank-app.labs.blue CertificateArn=arn:aws:acm:eu-west-1:118811228407:certificate/84f50ff6-bf00-44e8-a223-525e80ab83f9 {{DATADOG_PARAMETER_OVERRIDES}}"
 tags = "Environment=dev Project=demo-bank-app"
-capabilities = "CAPABILITY_IAM"
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
 confirm_changeset = false
 fail_on_empty_changeset = false
 
@@ -41,8 +41,8 @@ fail_on_empty_changeset = false
 stack_name = "demo-bank-app-backend-prod"
 s3_bucket = "demo-bank-app-deployments-prod"
 region = "eu-west-1"
-parameter_overrides = "Environment=prod DomainName=demo-bank-app.labs.blue CertificateArn=arn:aws:acm:eu-west-1:118811228407:certificate/84f50ff6-bf00-44e8-a223-525e80ab83f9"
+parameter_overrides = "Environment=prod DomainName=demo-bank-app.labs.blue CertificateArn=arn:aws:acm:eu-west-1:118811228407:certificate/84f50ff6-bf00-44e8-a223-525e80ab83f9 {{DATADOG_PARAMETER_OVERRIDES}}"
 tags = "Environment=prod Project=demo-bank-app"
-capabilities = "CAPABILITY_IAM"
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
 confirm_changeset = false
 fail_on_empty_changeset = false
