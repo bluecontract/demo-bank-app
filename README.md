@@ -161,6 +161,15 @@ docker ps --filter "name=${LOCALSTACK_CONTAINER_NAME:-localstack-demo-bank-app}"
 docker stop "${LOCALSTACK_CONTAINER_NAME:-localstack-demo-bank-app}"
 ```
 
+If `.localstack.env` exists (worktree setup), load it before `serve` commands:
+
+```bash
+source .localstack.env
+npm run serve:all
+```
+
+`apps/bank-api/scripts/deploy-localstack.sh` auto-loads `.localstack.env` as a fallback when key LocalStack variables are missing and fails fast with a clear error when the configured endpoint is unreachable.
+
 #### Troubleshooting LocalStack deploy
 
 - If you see `ResourceConflictException` / `Alias already exists` during local deploy, the LocalStack deploy wrapper auto-deletes the conflicting Lambda alias and retries.

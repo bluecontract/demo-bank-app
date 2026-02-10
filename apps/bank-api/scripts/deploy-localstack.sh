@@ -5,6 +5,30 @@ set -euo pipefail
 # It recovers from stacks stuck in ROLLBACK_COMPLETE by deleting the failed
 # stack and retrying deploy once.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+LOCALSTACK_ENV_FILE="${LOCALSTACK_ENV_FILE:-${REPO_ROOT}/.localstack.env}"
+LOCALSTACK_ENV_AUTO_LOADED=false
+
+maybe_load_localstack_env() {
+  local should_load="false"
+
+  if [[ -z "${AWS_ENDPOINT_URL:-}" ]]; then
+    should_load="true"
+  fi
+
+  if [[ "${should_load}" == "true" && -f "${LOCALSTACK_ENV_FILE}" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "${LOCALSTACK_ENV_FILE}"
+    set +a
+    LOCALSTACK_ENV_AUTO_LOADED=true
+    echo "Loaded LocalStack environment from ${LOCALSTACK_ENV_FILE}."
+  fi
+}
+
+maybe_load_localstack_env
+
 AWS_CLI_AVAILABLE=false
 if command -v aws >/dev/null 2>&1; then
   AWS_CLI_AVAILABLE=true
@@ -18,6 +42,7 @@ fi
 
 # Host-side tools should talk to LocalStack via localhost.
 AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-http://localhost:${LOCALSTACK_EDGE_PORT:-4566}}"
+LAMBDA_AWS_ENDPOINT_URL="${LOCALSTACK_DOCKER_ENDPOINT_URL:-http://host.docker.internal:${LOCALSTACK_EDGE_PORT:-4566}}"
 export AWS_ENDPOINT_URL
 AWS_ARGS=(--endpoint-url "${AWS_ENDPOINT_URL}")
 deploy_log=""
@@ -56,31 +81,91 @@ has_aws_endpoint_override_arg() {
   return 1
 }
 
+extract_aws_endpoint_override_value() {
+  local value
+  value="$(
+    printf '%s\n' "${deploy_args[@]}" \
+      | sed -nE 's/.*AwsEndpointUrl=([^[:space:]]+).*/\1/p' \
+      | head -n 1
+  )"
+  echo "${value}"
+}
+
+replace_aws_endpoint_override_value() {
+  local new_value="$1"
+  local index next arg updated
+
+  for ((index = 0; index < ${#deploy_args[@]}; index++)); do
+    arg="${deploy_args[${index}]}"
+    if [[ "${arg}" == --parameter-overrides=* ]]; then
+      updated="$(printf '%s' "${arg}" | sed -E "s#AwsEndpointUrl=[^[:space:]]+#AwsEndpointUrl=${new_value}#g")"
+      deploy_args[${index}]="${updated}"
+      return 0
+    fi
+
+    if [[ "${arg}" == "--parameter-overrides" ]]; then
+      next=$((index + 1))
+      if ((next < ${#deploy_args[@]})); then
+        updated="$(printf '%s' "${deploy_args[${next}]}" | sed -E "s#AwsEndpointUrl=[^[:space:]]+#AwsEndpointUrl=${new_value}#g")"
+        deploy_args[${next}]="${updated}"
+      fi
+      return 0
+    fi
+  done
+}
+
 ensure_aws_endpoint_override_arg() {
-  local index next
+  local index next current_override
 
   if has_aws_endpoint_override_arg; then
+    current_override="$(extract_aws_endpoint_override_value)"
+    if [[ -n "${current_override}" && "${current_override}" != "${LAMBDA_AWS_ENDPOINT_URL}" ]]; then
+      if [[ "${LOCALSTACK_ENV_AUTO_LOADED}" == "true" ]]; then
+        echo "Normalizing AwsEndpointUrl from '${current_override}' to '${LAMBDA_AWS_ENDPOINT_URL}' based on ${LOCALSTACK_ENV_FILE}."
+        replace_aws_endpoint_override_value "${LAMBDA_AWS_ENDPOINT_URL}"
+      else
+        echo "Warning: AwsEndpointUrl override ('${current_override}') differs from LOCALSTACK_DOCKER_ENDPOINT_URL ('${LAMBDA_AWS_ENDPOINT_URL}')." >&2
+      fi
+    fi
     return 0
   fi
 
   for ((index = 0; index < ${#deploy_args[@]}; index++)); do
     if [[ "${deploy_args[${index}]}" == --parameter-overrides=* ]]; then
-      deploy_args[${index}]="${deploy_args[${index}]} AwsEndpointUrl=${AWS_ENDPOINT_URL}"
+      deploy_args[${index}]="${deploy_args[${index}]} AwsEndpointUrl=${LAMBDA_AWS_ENDPOINT_URL}"
       return 0
     fi
 
     if [[ "${deploy_args[${index}]}" == "--parameter-overrides" ]]; then
       next=$((index + 1))
       if ((next < ${#deploy_args[@]})); then
-        deploy_args[${next}]="${deploy_args[${next}]} AwsEndpointUrl=${AWS_ENDPOINT_URL}"
+        deploy_args[${next}]="${deploy_args[${next}]} AwsEndpointUrl=${LAMBDA_AWS_ENDPOINT_URL}"
       else
-        deploy_args+=("AwsEndpointUrl=${AWS_ENDPOINT_URL}")
+        deploy_args+=("AwsEndpointUrl=${LAMBDA_AWS_ENDPOINT_URL}")
       fi
       return 0
     fi
   done
 
-  deploy_args+=(--parameter-overrides "AwsEndpointUrl=${AWS_ENDPOINT_URL}")
+  deploy_args+=(--parameter-overrides "AwsEndpointUrl=${LAMBDA_AWS_ENDPOINT_URL}")
+}
+
+ensure_localstack_endpoint_reachable() {
+  local health_url="${AWS_ENDPOINT_URL%/}/_localstack/health"
+
+  if ! command -v curl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if curl -fsS --max-time 5 "${health_url}" >/dev/null; then
+    return 0
+  fi
+
+  echo "Error: Could not connect to LocalStack endpoint '${AWS_ENDPOINT_URL}'." >&2
+  if [[ -f "${LOCALSTACK_ENV_FILE}" ]]; then
+    echo "Tip: run 'source ${LOCALSTACK_ENV_FILE}' before 'npm run serve:all'." >&2
+  fi
+  return 1
 }
 
 prepare_local_template_file() {
@@ -92,11 +177,15 @@ prepare_local_template_file() {
     return 0
   fi
 
-  local_template_file="$(mktemp /tmp/demo-bank-localstack-template.XXXXXX.yaml)"
+  local_template_file="$(mktemp "${PWD}/.demo-bank-localstack-template.XXXXXX")"
+  mv "${local_template_file}" "${local_template_file}.yaml"
+  local_template_file="${local_template_file}.yaml"
   awk '
     # SAM does not allow conditional AutoPublishAlias, so LocalStack uses a
     # generated template without AutoPublishAlias.
     /AutoPublishAlias:/ { next }
+    /ProvisionedConcurrencyConfig:/ { skip_lines = 3; next }
+    skip_lines > 0 { skip_lines--; next }
     { print }
   ' template.yaml > "${local_template_file}"
 
@@ -111,9 +200,8 @@ is_stack_rollback_complete_error() {
 
 is_table_already_exists_error() {
   local log_file="$1"
-  grep -q "ResourceInUseException" "${log_file}" \
-    && grep -q "CreateTable operation" "${log_file}" \
-    && grep -q "Table already exists:" "${log_file}"
+  grep -qi "CreateTable operation" "${log_file}" \
+    && grep -qi "Table already exists:" "${log_file}"
 }
 
 is_summary_queue_already_exists_error() {
@@ -131,15 +219,18 @@ is_lambda_function_already_exists_error() {
 
 is_event_source_mapping_already_exists_error() {
   local log_file="$1"
-  grep -qi "ResourceConflictException" "${log_file}" \
-    && grep -qi "event source mapping" "${log_file}" \
-    && grep -qi "already exists" "${log_file}"
+  (
+    grep -qi "event source mapping" "${log_file}" \
+      && grep -qi "already exists" "${log_file}"
+  ) || (
+    grep -qi "AWS::Lambda::EventSourceMapping" "${log_file}" \
+      && grep -qi "already exists" "${log_file}"
+  )
 }
 
 is_existing_infra_conflict_error() {
   local log_file="$1"
-  grep -Eqi "already exists|already exist:" "${log_file}" \
-    || is_table_already_exists_error "${log_file}" \
+  is_table_already_exists_error "${log_file}" \
     || is_summary_queue_already_exists_error "${log_file}" \
     || is_lambda_function_already_exists_error "${log_file}" \
     || is_event_source_mapping_already_exists_error "${log_file}"
@@ -237,6 +328,22 @@ resolve_stack_name_for_preflight() {
   return 1
 }
 
+ensure_stack_name_arg() {
+  local stack_name
+
+  if resolve_stack_name_from_args >/dev/null; then
+    return 0
+  fi
+
+  if ! stack_name="$(resolve_stack_name_from_samconfig)"; then
+    echo "Error: Missing CloudFormation stack name for LocalStack deploy." >&2
+    echo "Provide --stack-name explicitly or set stack_name under [default.global.parameters] in apps/bank-api/samconfig.toml." >&2
+    return 1
+  fi
+
+  deploy_args+=(--stack-name "${stack_name}")
+}
+
 delete_stack_and_wait() {
   local stack_name="$1"
   local max_attempts=30
@@ -301,6 +408,44 @@ preflight_recover_rollback_complete_stack() {
     echo "Preflight: stack '${stack_name}' is ROLLBACK_COMPLETE; deleting it before deploy..."
     delete_stack_and_wait "${stack_name}"
   fi
+}
+
+preflight_recover_sam_managed_stack() {
+  local managed_stack_name="aws-sam-cli-managed-default"
+  local managed_stack_status
+
+  if [[ "${AWS_CLI_AVAILABLE}" != "true" ]]; then
+    return 0
+  fi
+
+  managed_stack_status="$(
+    aws "${AWS_ARGS[@]}" cloudformation describe-stacks --stack-name "${managed_stack_name}" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || true
+  )"
+
+  if [[ -z "${managed_stack_status}" || "${managed_stack_status}" == "None" ]]; then
+    return 0
+  fi
+
+  case "${managed_stack_status}" in
+    CREATE_COMPLETE|UPDATE_COMPLETE)
+      return 0
+      ;;
+    REVIEW_IN_PROGRESS|ROLLBACK_COMPLETE|CREATE_FAILED|DELETE_FAILED|UPDATE_ROLLBACK_COMPLETE|UPDATE_ROLLBACK_FAILED|ROLLBACK_FAILED)
+      echo "Preflight: SAM managed stack '${managed_stack_name}' is ${managed_stack_status}; deleting it before deploy..."
+      delete_stack_and_wait "${managed_stack_name}"
+      return 0
+      ;;
+    *_IN_PROGRESS)
+      echo "Error: SAM managed stack '${managed_stack_name}' is currently ${managed_stack_status}." >&2
+      echo "Another SAM deploy may still be running. Wait and retry." >&2
+      return 1
+      ;;
+    *)
+      echo "Preflight: SAM managed stack '${managed_stack_name}' is ${managed_stack_status}; deleting it before deploy..."
+      delete_stack_and_wait "${managed_stack_name}"
+      return 0
+      ;;
+  esac
 }
 
 ensure_summary_event_source_mapping() {
@@ -383,16 +528,33 @@ recover_from_existing_infra_without_stack() {
     environment="${ENVIRONMENT}"
   fi
 
+  table_name="${BANKING_DYNAMO_TABLE_NAME:-demo-bank-${environment}}"
+  if ! aws "${AWS_ARGS[@]}" dynamodb describe-table --table-name "${table_name}" >/dev/null 2>&1; then
+    echo "Error: Cannot apply code-only recovery because DynamoDB table '${table_name}' does not exist." >&2
+    echo "CloudFormation deploy must succeed first to create base infrastructure." >&2
+    return 1
+  fi
+
   echo "Detected existing LocalStack infrastructure conflict; applying code-only recovery for environment '${environment}'..."
 
-  update_lambda_code_artifacts "${environment}"
-  ensure_summary_event_source_mapping "${environment}"
+  if ! update_lambda_code_artifacts "${environment}"; then
+    echo "Error: Failed to refresh Lambda code during LocalStack recovery." >&2
+    return 1
+  fi
+
+  if ! ensure_summary_event_source_mapping "${environment}"; then
+    echo "Error: Failed to ensure summary event source mapping during LocalStack recovery." >&2
+    return 1
+  fi
 }
 
 echo "Running samlocal deploy..."
 deploy_args=("$@")
+ensure_localstack_endpoint_reachable
 ensure_aws_endpoint_override_arg
+ensure_stack_name_arg
 prepare_local_template_file
+preflight_recover_sam_managed_stack
 preflight_recover_rollback_complete_stack
 
 deploy_log="$(mktemp)"

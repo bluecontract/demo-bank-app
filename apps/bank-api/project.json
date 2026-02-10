@@ -9,10 +9,10 @@
       "options": {
         "commands": [
           "nx build bank-api --configuration=development",
-          "cd apps/bank-api && ./scripts/deploy-localstack.sh --no-confirm-changeset --resolve-s3 --parameter-overrides AwsEndpointUrl=${LOCALSTACK_DOCKER_ENDPOINT_URL:-http://host.docker.internal:${LOCALSTACK_EDGE_PORT:-4566}}",
-          "cd apps/bank-api && npm run seed-secrets",
-          "cd apps/bank-api && npm run seed-funding-source",
-          "cd apps/bank-api && sam local start-api --port ${BANK_API_PORT:-3000} --no-memory-limit --docker-volume-basedir . --env-vars ${ENV_VARS_FILE:-env.local.json}"
+          "cd apps/bank-api && if [ -f ../../.localstack.env ]; then set -a; . ../../.localstack.env; set +a; fi; ./scripts/deploy-localstack.sh --no-confirm-changeset --resolve-s3 --parameter-overrides AwsEndpointUrl=${LOCALSTACK_DOCKER_ENDPOINT_URL:-http://host.docker.internal:${LOCALSTACK_EDGE_PORT:-4566}}",
+          "cd apps/bank-api && if [ -f ../../.localstack.env ]; then set -a; . ../../.localstack.env; set +a; fi; npm run seed-secrets",
+          "cd apps/bank-api && if [ -f ../../.localstack.env ]; then set -a; . ../../.localstack.env; set +a; fi; npm run seed-funding-source",
+          "cd apps/bank-api && if [ -f ../../.localstack.env ]; then set -a; . ../../.localstack.env; set +a; fi; sam local start-api --port ${BANK_API_PORT:-3000} --no-memory-limit --docker-volume-basedir . --env-vars ${ENV_VARS_FILE:-env.local.json}"
         ],
         "parallel": false,
         "env": {
