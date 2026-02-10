@@ -69,10 +69,10 @@ describe('App', () => {
       </TestWrapper>
     );
 
-    expect(screen.getByText('Demo Bank App')).toBeInTheDocument();
+    expect(screen.getByText('My Synchrony')).toBeInTheDocument();
   });
 
-  it('should show the Demo Bank App title and tagline', () => {
+  it('should show the My Synchrony title and tagline', () => {
     const TestWrapper = createTestWrapper();
 
     render(
@@ -81,7 +81,7 @@ describe('App', () => {
       </TestWrapper>
     );
 
-    expect(screen.getByText('Demo Bank App')).toBeInTheDocument();
+    expect(screen.getByText('My Synchrony')).toBeInTheDocument();
     expect(
       screen.getByText(
         /The end-to-end reference for modelling banking workflows using/i

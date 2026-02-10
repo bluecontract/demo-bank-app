@@ -30,7 +30,7 @@ describe('SidebarNav', () => {
 
     renderSidebar('/dashboard');
 
-    expect(screen.getByText('Demo Bank')).toBeInTheDocument();
+    expect(screen.getByText('My Synchrony')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Overview' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Cards' })).toBeInTheDocument();
     expect(

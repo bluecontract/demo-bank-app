@@ -57,11 +57,15 @@ export function MobileNav() {
     <>
       <div className="lg:hidden flex items-center justify-between gap-4 px-4 pt-4 pb-2">
         <div className="flex items-center gap-2">
-          <div className="grid size-14 place-items-center rounded-full bg-[var(--color-primary)] text-base font-semibold text-white">
-            DB
+          <div className="grid size-10 place-items-center overflow-hidden rounded-full border border-slate-200 bg-white">
+            <img
+              src="/assets/synchrony-logo.png"
+              alt="My Synchrony logo"
+              className="h-full w-full object-cover"
+            />
           </div>
           <p className="text-base font-semibold uppercase tracking-wide text-slate-500">
-            Demo Bank
+            My Synchrony
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -96,11 +100,15 @@ export function MobileNav() {
           <div className="flex h-full flex-col gap-8 px-4 pt-6 pb-8">
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
-                <div className="grid size-14 place-items-center rounded-full bg-[var(--color-primary)] text-base font-semibold text-white">
-                  DB
+                <div className="grid size-10 place-items-center overflow-hidden rounded-full border border-slate-200 bg-white">
+                  <img
+                    src="/assets/synchrony-logo.png"
+                    alt="My Synchrony logo"
+                    className="h-full w-full object-cover"
+                  />
                 </div>
                 <p className="text-base font-semibold uppercase tracking-wide text-slate-500">
-                  Demo Bank
+                  My Synchrony
                 </p>
               </div>
               <button

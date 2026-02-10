@@ -19,7 +19,7 @@ test.describe('Sign Up Flow', () => {
     // Should be on signup page
     await expect(page).toHaveURL(URLS.SIGNUP);
     await expect(
-      page.getByRole('heading', { name: 'Join Demo Bank' })
+      page.getByRole('heading', { name: 'Join My Synchrony' })
     ).toBeVisible();
     await expect(
       page.getByRole('heading', { name: 'Create Account' })

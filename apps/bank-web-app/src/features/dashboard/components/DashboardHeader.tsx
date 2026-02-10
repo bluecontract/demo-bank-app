@@ -96,10 +96,7 @@ export function DashboardHeader({
       data-testid={testId}
     >
       <div>
-        <p className="hidden sm:block text-xs uppercase tracking-[0.35em] text-[color:var(--color-muted)]">
-          Demo Bank
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
+        <h1 className="text-3xl font-semibold text-slate-900">
           {title ?? 'Welcome back'}
         </h1>
         {shouldRenderDescription && (

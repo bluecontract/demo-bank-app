@@ -81,7 +81,7 @@ export function CardDetailsModal({
             <>
               <Card className={`${BRAND_GRADIENT_CLASS} text-slate-900`}>
                 <div className="text-sm uppercase tracking-widest text-slate-900/70">
-                  Demo Bank
+                  My Synchrony
                 </div>
                 <div className="mt-4 text-lg font-semibold">
                   {card.cardholderName || 'Cardholder'}

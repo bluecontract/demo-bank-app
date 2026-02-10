@@ -46,11 +46,15 @@ export function SidebarNav() {
   return (
     <aside className="hidden lg:flex w-[240px] shrink-0 flex-col gap-8 border-r border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4">
       <div className="flex items-center gap-2">
-        <div className="grid size-14 place-items-center rounded-full bg-[var(--color-primary)] text-base font-semibold text-white">
-          DB
+        <div className="grid size-10 place-items-center overflow-hidden rounded-full border border-[color:var(--color-border)] bg-white">
+          <img
+            src="/assets/synchrony-logo.png"
+            alt="My Synchrony logo"
+            className="h-full w-full object-cover"
+          />
         </div>
         <p className="text-base font-semibold uppercase tracking-wide text-[color:var(--color-muted)]">
-          Demo Bank
+          My Synchrony
         </p>
       </div>
 

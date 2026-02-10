@@ -39,10 +39,10 @@ describe('DashboardHeader', () => {
     mockUser = null;
   });
 
-  it('should render app name correctly', () => {
+  it('does not render redundant bank label in header', () => {
     renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
 
-    expect(screen.getByText('Demo Bank')).toBeInTheDocument();
+    expect(screen.queryByText('My Synchrony')).not.toBeInTheDocument();
   });
 
   it('should render user name correctly', () => {

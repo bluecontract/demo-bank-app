@@ -159,7 +159,7 @@ export function IssueCardModal({
                 className={`rounded-2xl ${BRAND_GRADIENT_CLASS} text-slate-900 p-5`}
               >
                 <div className="text-sm uppercase tracking-widest text-slate-900/70">
-                  Demo Bank
+                  My Synchrony
                 </div>
                 <div className="mt-4 text-lg font-semibold">
                   {issuedCard.cardholderName || 'Cardholder'}

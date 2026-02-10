@@ -25,7 +25,7 @@ export function HomePage() {
       <div className="container mx-auto max-w-4xl px-4 py-16">
         <header className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Demo Bank App
+            My Synchrony
           </h1>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
             The end-to-end reference for modelling banking workflows using
