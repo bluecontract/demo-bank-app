@@ -80,7 +80,7 @@ echo "0"
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH ?? ''}`,
         SAM_ARGS_CAPTURE_FILE: captureArgsFile,
-        BANK_API_ENABLE_DATADOG: 'false',
+        ENABLE_DATADOG: 'false',
       },
       encoding: 'utf8',
     });
@@ -107,7 +107,7 @@ echo "0"
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH ?? ''}`,
         SAM_ARGS_CAPTURE_FILE: captureArgsFile,
-        BANK_API_ENABLE_DATADOG: 'true',
+        ENABLE_DATADOG: 'true',
         BANK_API_DATADOG_API_KEY_SECRET_ARN:
           'arn:aws:secretsmanager:eu-west-1:123456789012:secret:datadog-key-abc',
         BANK_API_DD_VERSION: 'abc123',
@@ -141,7 +141,7 @@ echo "0"
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH ?? ''}`,
         SAM_ARGS_CAPTURE_FILE: captureArgsFile,
-        BANK_API_ENABLE_DATADOG: 'true',
+        ENABLE_DATADOG: 'true',
       },
       encoding: 'utf8',
     });
@@ -159,7 +159,7 @@ echo "0"
         ...process.env,
         PATH: `${fakeBinDir}:${process.env.PATH ?? ''}`,
         SAM_ARGS_CAPTURE_FILE: captureArgsFile,
-        BANK_API_ENABLE_DATADOG: 'true',
+        ENABLE_DATADOG: 'true',
         BANK_API_DATADOG_API_KEY_SECRET_ARN:
           'arn:aws:secretsmanager:eu-west-1:123456789012:secret:datadog-key-abc',
         BANK_API_DATADOG_NODE_LAYER_VERSION: '999',

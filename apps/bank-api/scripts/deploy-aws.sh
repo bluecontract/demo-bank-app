@@ -6,7 +6,7 @@ usage() {
 Usage: ./scripts/deploy-aws.sh <environment>
 
 Environment variables:
-  BANK_API_ENABLE_DATADOG                 true|false (default: false)
+  ENABLE_DATADOG                          true|false (default: false)
   BANK_API_DATADOG_API_KEY_SECRET_ARN     Required when Datadog is enabled
   BANK_API_DD_VERSION                      Optional (default: git sha or unknown)
   BANK_API_DATADOG_SITE                    Optional (default: datadoghq.eu)
@@ -28,11 +28,11 @@ if [[ -z "${ENVIRONMENT}" ]]; then
   exit 1
 fi
 
-ENABLE_DATADOG="${BANK_API_ENABLE_DATADOG:-false}"
+ENABLE_DATADOG="${ENABLE_DATADOG:-false}"
 ENABLE_DATADOG="$(echo "${ENABLE_DATADOG}" | tr '[:upper:]' '[:lower:]')"
 
 if [[ "${ENABLE_DATADOG}" != "true" && "${ENABLE_DATADOG}" != "false" ]]; then
-  echo "Error: BANK_API_ENABLE_DATADOG must be 'true' or 'false'" >&2
+  echo "Error: ENABLE_DATADOG must be 'true' or 'false'" >&2
   exit 1
 fi
 
@@ -52,6 +52,18 @@ require_command() {
     echo "Error: required command '${command_name}' was not found in PATH." >&2
     exit 1
   fi
+}
+
+make_temp_file_with_extension() {
+  local prefix="$1"
+  local extension="$2"
+  local tmp_base
+  local tmp_with_extension
+
+  tmp_base="$(mktemp "${prefix}.XXXXXX")"
+  tmp_with_extension="${tmp_base}${extension}"
+  mv "${tmp_base}" "${tmp_with_extension}"
+  printf '%s' "${tmp_with_extension}"
 }
 
 resolve_latest_layer_version() {
@@ -119,7 +131,7 @@ if [[ "${ENABLE_DATADOG}" == "true" ]]; then
 fi
 
 assert_datadog_placeholder_present
-TMP_SAMCONFIG="$(mktemp /tmp/demo-bank-app-samconfig.XXXXXX)"
+TMP_SAMCONFIG="$(make_temp_file_with_extension "/tmp/demo-bank-app-samconfig" ".toml")"
 cleanup_files+=("${TMP_SAMCONFIG}")
 DATADOG_PARAMETER_OVERRIDES_ESCAPED="$(escape_for_sed "${DATADOG_PARAMETER_OVERRIDES}")"
 sed \
@@ -149,7 +161,7 @@ deploy_args=(
 )
 
 if [[ "${ENABLE_DATADOG}" == "true" ]]; then
-  TMP_TEMPLATE="$(mktemp /tmp/demo-bank-app-template.datadog.XXXXXX)"
+  TMP_TEMPLATE="$(make_temp_file_with_extension "/tmp/demo-bank-app-template.datadog" ".yaml")"
   cleanup_files+=("${TMP_TEMPLATE}")
   node ./scripts/render-datadog-template.mjs --input ./template.yaml --output "${TMP_TEMPLATE}"
   deploy_args+=(--template-file "${TMP_TEMPLATE}")
