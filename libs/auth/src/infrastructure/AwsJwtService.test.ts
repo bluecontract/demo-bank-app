@@ -61,6 +61,31 @@ describe('AwsJwtService', () => {
   });
 
   describe('generateToken', () => {
+    it('should respect custom TTL values from configuration', async () => {
+      const configuredService = new AwsJwtService({
+        region: 'us-east-1',
+        jwtSecretArn:
+          'arn:aws:secretsmanager:us-east-1:123456789012:secret:jwt-secret-abc123',
+        jwtTtlSeconds: 259200,
+        testUserTtlSeconds: 600,
+      });
+      const expectedToken = 'configured-ttl-token';
+
+      mockSend.mockResolvedValueOnce({
+        SecretString: mockSecretJson,
+      });
+      (jwt.sign as any).mockReturnValue(expectedToken);
+
+      const result = await configuredService.generateToken({
+        userId: 'user-ttl',
+      });
+
+      expect(result).toBe(expectedToken);
+      const payload = (jwt.sign as any).mock.calls[0][0];
+      expect(payload.iat).toBe(fixedTimestamp);
+      expect(payload.exp).toBe(fixedTimestamp + 259200);
+    });
+
     it('should generate token for regular user with 1 hour TTL', async () => {
       // Given
       const userId = 'user-123';

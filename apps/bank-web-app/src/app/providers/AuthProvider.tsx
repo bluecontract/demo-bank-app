@@ -8,6 +8,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { User } from '../../types/api';
+import { AUTH_SESSION_EXPIRED_KEY, AUTH_STORAGE_KEY } from '../auth/constants';
 
 interface AuthContextType {
   user: User | null;
@@ -30,8 +31,6 @@ export const useAuth = () => {
 interface AuthProviderProps {
   children: ReactNode;
 }
-
-const AUTH_STORAGE_KEY = 'demo-bank-app-auth-user';
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const navigate = useNavigate();
@@ -68,6 +67,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUser(sanitizedUser);
     try {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sanitizedUser));
+      sessionStorage.removeItem(AUTH_SESSION_EXPIRED_KEY);
     } catch (error) {
       console.error('Failed to persist auth state:', error);
     }
@@ -77,6 +77,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUser(null);
     try {
       localStorage.removeItem(AUTH_STORAGE_KEY);
+      sessionStorage.removeItem(AUTH_SESSION_EXPIRED_KEY);
     } catch (error) {
       console.error('Failed to clear auth state:', error);
     }

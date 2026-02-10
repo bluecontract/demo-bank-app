@@ -252,7 +252,7 @@ Resources:
           MYOS_API_KEY: ''
           MYOS_ACCOUNT_ID: ''
           MYOS_BASE_URL: ''
-          JWT_TTL_SECONDS: 604800
+          JWT_TTL_SECONDS: 259200 # 3 days
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
           SERVICE_NAME: !Sub 'bank-api-${Environment}'
           SUMMARY_LAMBDA_NAME: !If
@@ -345,7 +345,7 @@ Resources:
           MYOS_API_KEY: ''
           MYOS_ACCOUNT_ID: ''
           MYOS_BASE_URL: ''
-          JWT_TTL_SECONDS: 604800
+          JWT_TTL_SECONDS: 259200 # 3 days
           TEST_USER_TTL_SECONDS: 600 # 10 minutes
           SERVICE_NAME: !Sub 'bank-api-summary-${Environment}'
           SUMMARY_QUEUE_URL: !Ref SummaryJobsQueue

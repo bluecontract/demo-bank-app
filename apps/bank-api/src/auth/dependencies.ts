@@ -42,6 +42,8 @@ const initializeDependencies = async (
   const jwtService = new AwsJwtService({
     region: awsRegion,
     jwtSecretArn: authConfig.jwtSecretArn,
+    jwtTtlSeconds: authConfig.jwtTtlSeconds,
+    testUserTtlSeconds: authConfig.testUserTtlSeconds,
     ...(awsEndpoint && { endpoint: awsEndpoint }),
   });
 

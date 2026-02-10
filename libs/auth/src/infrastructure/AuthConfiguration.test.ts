@@ -53,7 +53,7 @@ describe('AuthEnvironmentConfiguration', () => {
       expect(authConfig).toEqual({
         dynamoTableName: 'auth-table',
         jwtSecretArn: 'arn:aws:secretsmanager:region:account:secret:jwt-secret',
-        jwtTtlSeconds: 604800,
+        jwtTtlSeconds: 259200,
         testUserTtlSeconds: 86400,
         environment: 'development',
         serviceName: 'auth',
