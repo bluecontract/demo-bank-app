@@ -99,7 +99,7 @@ const DATADOG_GLOBAL_ENV = {
 
 function getArg(name, fallback = '') {
   const args = process.argv.slice(2);
-  const index = args.findIndex((value) => value === name);
+  const index = args.findIndex(value => value === name);
   if (index === -1) {
     return fallback;
   }
@@ -132,9 +132,12 @@ function setMapValues(targetMap, values) {
 }
 
 function hasDatadogSecretStatement(statementSequence) {
-  const toScalarValue = (value) => (value && typeof value === 'object' && 'value' in value ? value.value : value);
+  const toScalarValue = value =>
+    value && typeof value === 'object' && 'value' in value
+      ? value.value
+      : value;
 
-  return statementSequence.items.some((item) => {
+  return statementSequence.items.some(item => {
     if (!isMap(item)) {
       return false;
     }
@@ -147,7 +150,8 @@ function hasDatadogSecretStatement(statementSequence) {
     const action = item.get('Action', true);
     if (isSeq(action)) {
       return action.items.some(
-        (actionItem) => toScalarValue(actionItem) === 'secretsmanager:GetSecretValue',
+        actionItem =>
+          toScalarValue(actionItem) === 'secretsmanager:GetSecretValue'
       );
     }
 
@@ -159,18 +163,24 @@ function ensureDatadogSecretStatement(doc, functionResourceName) {
   const policies = ensureYamlSeq(
     doc,
     ['Resources', functionResourceName, 'Properties', 'Policies'],
-    `${functionResourceName} policies`,
+    `${functionResourceName} policies`
   );
 
-  const inlinePolicy = policies.items.find((policyItem) => isMap(policyItem) && policyItem.has('Statement'));
+  const inlinePolicy = policies.items.find(
+    policyItem => isMap(policyItem) && policyItem.has('Statement')
+  );
 
   if (!inlinePolicy || !isMap(inlinePolicy)) {
-    throw new Error(`Missing inline policy Statement in ${functionResourceName}`);
+    throw new Error(
+      `Missing inline policy Statement in ${functionResourceName}`
+    );
   }
 
   const statements = inlinePolicy.get('Statement', true);
   if (!isSeq(statements)) {
-    throw new Error(`Missing Statement sequence in ${functionResourceName} inline policy`);
+    throw new Error(
+      `Missing Statement sequence in ${functionResourceName} inline policy`
+    );
   }
 
   if (hasDatadogSecretStatement(statements)) {
@@ -200,21 +210,33 @@ export function renderDatadogTemplate(templateSource) {
   const globalVariables = ensureYamlMap(
     doc,
     ['Globals', 'Function', 'Environment', 'Variables'],
-    'Globals.Function.Environment.Variables',
+    'Globals.Function.Environment.Variables'
   );
   setMapValues(globalVariables, DATADOG_GLOBAL_ENV);
 
   const bankFunctionVariables = ensureYamlMap(
     doc,
-    ['Resources', 'BankLambdaFunction', 'Properties', 'Environment', 'Variables'],
-    'BankLambdaFunction environment variables',
+    [
+      'Resources',
+      'BankLambdaFunction',
+      'Properties',
+      'Environment',
+      'Variables',
+    ],
+    'BankLambdaFunction environment variables'
   );
   bankFunctionVariables.set('DD_SERVICE', 'bank-api');
 
   const summaryFunctionVariables = ensureYamlMap(
     doc,
-    ['Resources', 'SummaryLambdaFunction', 'Properties', 'Environment', 'Variables'],
-    'SummaryLambdaFunction environment variables',
+    [
+      'Resources',
+      'SummaryLambdaFunction',
+      'Properties',
+      'Environment',
+      'Variables',
+    ],
+    'SummaryLambdaFunction environment variables'
   );
   summaryFunctionVariables.set('DD_SERVICE', 'bank-api-summary');
 
@@ -235,7 +257,9 @@ function runCli() {
   console.log(`Rendered Datadog template: ${outputPath}`);
 }
 
-const entrypointPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
+const entrypointPath = process.argv[1]
+  ? pathToFileURL(process.argv[1]).href
+  : '';
 if (import.meta.url === entrypointPath) {
   runCli();
 }
