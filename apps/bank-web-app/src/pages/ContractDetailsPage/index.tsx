@@ -17,6 +17,7 @@ import {
 import {
   getDocumentDescription,
   getDocumentName,
+  getPayNoteInitialStateMeta,
   restoreInlineTypes,
 } from '../../features/contracts/lib/contractDocumentUtils';
 import { getContractLastChangeAt } from '../../features/contracts/lib/contractTimestamps';
@@ -33,6 +34,7 @@ import { ContractAiChatDrawer } from '../../features/contracts/components/Contra
 import { Avatar } from '../../ui/Avatar';
 import { Button } from '../../ui/Button';
 import { Dropdown, DropdownItem } from '../../ui/Dropdown';
+import { Markdown } from '../../ui/Markdown';
 import { Spinner, SpinnerWithText } from '../../ui/Spinner';
 import { formatShortDateTime } from '../../lib/formatDate';
 import { formatStatusLabel } from '../../lib/formatStatusLabel';
@@ -177,6 +179,44 @@ function ProposalActionCard({
           disabled={isDecisionLocked || isDecisionPending}
         >
           Accept
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+interface MockPendingActionCardProps {
+  title?: string | null;
+  summary?: string | null;
+  left?: string | null;
+  right?: string | null;
+}
+
+function MockPendingActionCard({
+  title,
+  summary,
+  left,
+  right,
+}: MockPendingActionCardProps) {
+  const resolvedTitle = title?.trim() || 'Pending action';
+  const resolvedSummary = summary?.trim() || null;
+  const leftLabel = left?.trim() || 'Reject';
+  const rightLabel = right?.trim() || 'Accept';
+
+  return (
+    <div className="rounded-xl sm:rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
+      <h3 className="text-2xl font-semibold leading-8 text-slate-900">
+        {resolvedTitle}
+      </h3>
+      {resolvedSummary && (
+        <p className="mt-3 text-base text-slate-600">{resolvedSummary}</p>
+      )}
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <Button variant="outline" size="sm">
+          {leftLabel}
+        </Button>
+        <Button variant="primary" size="sm">
+          {rightLabel}
         </Button>
       </div>
     </div>
@@ -396,6 +436,10 @@ export function ContractDetailsPage() {
     () => (contract ? restoreInlineTypes(contract.document) : null),
     [contract]
   );
+  const payNoteInitialStateMeta = useMemo(
+    () => getPayNoteInitialStateMeta(resolvedDocument),
+    [resolvedDocument]
+  );
 
   const contractTitle =
     (contract ? getDocumentName(resolvedDocument) : null) ??
@@ -438,6 +482,8 @@ export function ContractDetailsPage() {
     resolvedSummary?.nextSteps?.title ?? 'Next steps';
   const summaryLastChangeShort =
     resolvedSummary?.lastChange?.short?.trim() || null;
+  const isMockSummaryEnabled =
+    Boolean(contract) && payNoteInitialStateMeta.llmSummaryDisabled;
   const isSummaryLoading =
     proposalSummaryQuery.isLoading && !resolvedSummary && !!proposal;
   const isSummaryFetching =
@@ -502,6 +548,18 @@ export function ContractDetailsPage() {
 
   const historyItems = historyQuery.data?.items ?? [];
   const hasHistory = resolvedKind === 'contract' && historyItems.length > 0;
+  const mockPendingAction = payNoteInitialStateMeta.action;
+  const shouldShowMockPendingAction =
+    resolvedKind !== 'proposal' &&
+    Boolean(contract) &&
+    payNoteInitialStateMeta.llmSummaryDisabled &&
+    Boolean(
+      mockPendingAction &&
+        (mockPendingAction.title ||
+          mockPendingAction.summary ||
+          mockPendingAction.left ||
+          mockPendingAction.right)
+    );
   const isArchivePending =
     archiveMutation.isPending || unarchiveMutation.isPending;
 
@@ -736,14 +794,20 @@ export function ContractDetailsPage() {
                     <h3 className="text-[32px] leading-[40px] font-semibold text-slate-900">
                       {summaryHeadline}
                     </h3>
-                    {summaryOverview.map((paragraph, index) => (
-                      <p
-                        key={`${summaryHeadline}-${index}`}
-                        className="mt-2 whitespace-pre-line break-words text-base text-slate-600 leading-6"
-                      >
-                        {paragraph}
-                      </p>
-                    ))}
+                    {isMockSummaryEnabled && summaryOverview.length > 0 ? (
+                      <Markdown className="prose prose-sm mt-2 max-w-none break-words text-base leading-6 text-slate-600">
+                        {summaryOverview.join('\n\n')}
+                      </Markdown>
+                    ) : (
+                      summaryOverview.map((paragraph, index) => (
+                        <p
+                          key={`${summaryHeadline}-${index}`}
+                          className="mt-2 whitespace-pre-line break-words text-base text-slate-600 leading-6"
+                        >
+                          {paragraph}
+                        </p>
+                      ))
+                    )}
                   </div>
                 ) : !isSummaryLoading ? (
                   <p className="text-sm text-slate-600">
@@ -1017,11 +1081,20 @@ export function ContractDetailsPage() {
           </div>
 
           <div className="flex flex-col gap-4">
-            <ProposalActionCard
-              proposal={proposal}
-              sessionId={sessionId ?? null}
-              onDecisionRecorded={handleProposalDecisionRecorded}
-            />
+            {shouldShowMockPendingAction ? (
+              <MockPendingActionCard
+                title={mockPendingAction?.title}
+                summary={mockPendingAction?.summary}
+                left={mockPendingAction?.left}
+                right={mockPendingAction?.right}
+              />
+            ) : (
+              <ProposalActionCard
+                proposal={proposal}
+                sessionId={sessionId ?? null}
+                onDecisionRecorded={handleProposalDecisionRecorded}
+              />
+            )}
           </div>
         </div>
       </section>

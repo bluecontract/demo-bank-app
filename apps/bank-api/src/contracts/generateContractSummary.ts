@@ -23,6 +23,10 @@ import {
   isOpenAiContextLimitError,
 } from './summaryUtils';
 import { buildContractSummaryFacts } from './summary/buildFacts';
+import {
+  buildMockContractSummary,
+  getPayNoteSummaryMockConfig,
+} from './payNoteSummaryMock';
 
 const DEFAULT_MODEL = 'gpt-5';
 const SUMMARY_TIMEOUT_MS = Number(
@@ -164,6 +168,61 @@ const generateOrLoadContractSummary = async (input: {
   const previousSummary = cachedSummary ?? undefined;
   const model = process.env.CONTRACT_SUMMARY_MODEL || DEFAULT_MODEL;
   const summarySourceEpoch = resolveSummarySourceEpoch(contract);
+  const mockConfig = getPayNoteSummaryMockConfig(contract.document);
+
+  if (mockConfig.enabled) {
+    const mockSummary = buildMockContractSummary({
+      config: mockConfig,
+      fallbackHeadline: contract.displayName || 'Contract',
+    });
+    const now = new Date().toISOString();
+    const summarySourceUpdatedAt = contract.updatedAt;
+
+    await input.contractRepository.updateContractSummary({
+      contractId: contract.contractId,
+      summary: mockSummary,
+      summaryPreview: resolveSummaryPreview({ summary: mockSummary }),
+      summaryUpdatedAt: now,
+      summarySourceUpdatedAt,
+      summarySourceEpoch,
+      summaryInputBlueId: null,
+      summaryModel: null,
+      summaryError: null,
+      summaryDocumentName: contract.documentName,
+      summaryStatus: contract.status,
+      summaryStatusUpdatedAt: contract.statusUpdatedAt,
+      summaryStatusTimestamps: contract.statusTimestamps,
+      userId: contract.userId,
+      relatedTransactionIds: contract.relatedTransactionIds,
+      relatedHoldIds: contract.relatedHoldIds,
+    });
+
+    const historyShort = mockConfig.summary ?? mockSummary.listPreview;
+    const historyMore = mockConfig.summary ?? mockSummary.listPreview;
+    const historyId = `mock:${contract.updatedAt}`;
+    const historyEntries = await input.contractRepository.listContractHistory(
+      contract.contractId
+    );
+    const hasExistingId = historyEntries.some(entry => entry.id === historyId);
+
+    if (!hasExistingId) {
+      await input.contractRepository.addContractHistoryEntry({
+        contractId: contract.contractId,
+        kind: 'contractUpdated',
+        short: historyShort,
+        more: historyMore,
+        createdAt: contract.updatedAt,
+        id: historyId,
+      });
+    }
+
+    return {
+      summary: mockSummary,
+      summaryUpdatedAt: now,
+      summarySourceUpdatedAt,
+      cached: false,
+    };
+  }
 
   try {
     const { facts, summaryInputBlueId, triggerEventMeta } =

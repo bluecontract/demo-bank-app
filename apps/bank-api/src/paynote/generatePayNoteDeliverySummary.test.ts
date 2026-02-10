@@ -239,6 +239,57 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     expect(payNoteDeliveryRepository.updateDeliverySummary).toHaveBeenCalled();
   });
 
+  it('uses PayNote mock summary fields when LLM summary is disabled', async () => {
+    const payNoteDocument = {
+      type: { blueId: payNoteTypeBlueId },
+      name: 'Mocked PayNote',
+      LLM_SUMMARY_DISABLED: true,
+      payNoteInitialStateDescription: {
+        summary: 'Mock proposal summary',
+        details: '## Detailed markdown text',
+      },
+      contracts: {},
+    };
+
+    payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValueOnce({
+      deliveryId: 'delivery-1',
+      deliverySessionId: 'session-1',
+      userId: 'user-1',
+      transactionIdentificationStatus: 'identified',
+      deliveryDocument: {
+        payNoteBootstrapRequest: {
+          document: payNoteDocument,
+        },
+      },
+      deliveryUpdatedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const result = await generatePayNoteDeliverySummaryHandler(
+      { params: { sessionId: 'session-1' }, body: { force: true } } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body.summary.story.headline).toBe('Mock proposal summary');
+    expect(result.body.summary.story.overview).toEqual([
+      'Mock proposal summary',
+    ]);
+    expect(result.body.summary.lastChange.short).toBe('Mock proposal summary');
+    expect(result.body.summary.lastChange.more).toBe('Mock proposal summary');
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(getOpenAiApiKey).not.toHaveBeenCalled();
+    expect(
+      payNoteDeliveryRepository.updateDeliverySummary
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryId: 'delivery-1',
+        summaryError: null,
+      })
+    );
+  });
+
   it('passes USD paynote amountDisplay as $x.xx', async () => {
     const payNoteDocument = {
       type: { blueId: payNoteTypeBlueId },

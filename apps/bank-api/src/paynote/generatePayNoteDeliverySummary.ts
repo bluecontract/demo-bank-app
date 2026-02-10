@@ -18,6 +18,10 @@ import type { PowertoolsLogger } from '@demo-bank-app/shared-observability';
 import { buildProposalSummaryPrompt } from '../contracts/summaryPrompts';
 import { normalizeContractSummary } from '../contracts/summaryNormalization';
 import {
+  buildMockProposalSummary,
+  getPayNoteSummaryMockConfig,
+} from '../contracts/payNoteSummaryMock';
+import {
   ContractSummaryInputError,
   buildTypeDefinitionPack,
   collectTypeBlueIdsFromNode,
@@ -245,6 +249,33 @@ const generateOrLoadProposalSummary = async (input: {
   const { record, payNoteDocument } = input;
   const model = process.env.CONTRACT_SUMMARY_MODEL || DEFAULT_MODEL;
   const sourceEpoch = record.deliveryEpoch;
+  const mockConfig = getPayNoteSummaryMockConfig(payNoteDocument);
+
+  if (mockConfig.enabled) {
+    const payNoteSummary = getPayNoteSummaryFromDocument(payNoteDocument);
+    const summary = buildMockProposalSummary({
+      config: mockConfig,
+      fallbackHeadline: payNoteSummary.name || 'PayNote proposal',
+    });
+    const now = new Date().toISOString();
+    const sourceUpdatedAt = record.deliveryUpdatedAt ?? record.updatedAt;
+
+    await input.payNoteDeliveryRepository.updateDeliverySummary({
+      deliveryId: record.deliveryId,
+      summary,
+      summaryUpdatedAt: now,
+      summarySourceUpdatedAt: sourceUpdatedAt,
+      summarySourceEpoch: sourceEpoch,
+      summaryError: null,
+    });
+
+    return {
+      summary,
+      summaryUpdatedAt: now,
+      summarySourceUpdatedAt: sourceUpdatedAt,
+      cached: false,
+    };
+  }
 
   const { facts, summaryInputBlueId } = buildProposalFacts({
     record,

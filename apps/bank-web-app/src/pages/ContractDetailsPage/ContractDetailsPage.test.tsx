@@ -314,6 +314,130 @@ describe('ContractDetailsPage', () => {
     expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
   });
 
+  it('renders mocked pending action card for contract view when PayNote mock action is provided', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'Mocked Contract',
+        document: {
+          name: 'Mocked Contract',
+          LLM_SUMMARY_DISABLED: true,
+          payNoteInitialStateDescription: {
+            action: {
+              title: 'Consent to data processing',
+              summary: 'Approve data sharing for this voucher.',
+              left: 'Reject',
+              right: 'Accept',
+            },
+          },
+        },
+        summary: {
+          story: {
+            headline: 'Mocked summary',
+            overview: ['Mocked details'],
+            bullets: [],
+          },
+          listPreview: 'Mocked summary',
+          nextSteps: {
+            title: 'Next steps',
+            items: [],
+          },
+          lastChange: {
+            short: 'Mocked summary',
+            more: 'Mocked summary',
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    expect(screen.getByText('Consent to data processing')).toBeInTheDocument();
+    expect(
+      screen.getByText('Approve data sharing for this voucher.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Accept' })).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Pending actions will appear here once they are available.'
+      )
+    ).not.toBeInTheDocument();
+  });
+
+  it('renders mocked contract details as markdown when PayNote mock summary is enabled', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'Mocked Contract',
+        document: {
+          name: 'Mocked Contract',
+          LLM_SUMMARY_DISABLED: true,
+        },
+        summary: {
+          story: {
+            headline: 'Mock summary headline',
+            overview: ['#### Participants\n* **Payer**: Alice'],
+            bullets: [],
+          },
+          listPreview: 'Mock summary headline',
+          nextSteps: {
+            title: 'Next steps',
+            items: [],
+          },
+          lastChange: {
+            short: 'Mock summary headline',
+            more: 'Mock summary headline',
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    expect(
+      screen.getByRole('heading', { name: 'Participants', level: 4 })
+    ).toBeInTheDocument();
+    expect(screen.getByText('Payer')).toBeInTheDocument();
+    expect(screen.getByText(/Alice/)).toBeInTheDocument();
+  });
+
   it('does not render history section in proposal view', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-2' });
     mockUseLocation.mockReturnValue({

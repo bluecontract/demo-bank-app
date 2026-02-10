@@ -631,4 +631,55 @@ describe('generateContractSummaryHandler', () => {
       }
     }
   });
+
+  it('uses PayNote mock summary fields when LLM summary is disabled', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Mocked PayNote',
+        LLM_SUMMARY_DISABLED: true,
+        payNoteInitialStateDescription: {
+          summary: 'Mock summary line',
+          details: '## Markdown details',
+        },
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body.summary.story.headline).toBe('Mock summary line');
+    expect(result.body.summary.story.overview).toEqual(['## Markdown details']);
+    expect(result.body.summary.lastChange.short).toBe('Mock summary line');
+    expect(result.body.summary.lastChange.more).toBe('Mock summary line');
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(getOpenAiApiKey).not.toHaveBeenCalled();
+    expect(contractRepository.updateContractSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'sess-1',
+        summaryModel: null,
+        summaryError: null,
+      })
+    );
+    expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        short: 'Mock summary line',
+        more: 'Mock summary line',
+      })
+    );
+  });
 });
