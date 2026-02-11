@@ -2,6 +2,44 @@ import { describe, it, expect, vi } from 'vitest';
 import { handleWebhookEvent } from './handleWebhookEvent';
 import type { HandleWebhookEventDependencies } from './handleWebhookEvent';
 import type { MyOsFetchEventResult, MyOsFetchDocumentResult } from '../ports';
+import { blue } from '../../blue';
+
+const resolveTypeBlueId = (typeLabel: string): string => {
+  const simple = blue.nodeToJson(
+    blue.jsonValueToNode({ type: typeLabel }),
+    'simple'
+  ) as { type?: { blueId?: string } } | null;
+  const blueId = simple?.type?.blueId;
+  if (typeof blueId !== 'string' || blueId.length === 0) {
+    throw new Error(`Unable to resolve BlueId for type ${typeLabel}`);
+  }
+  return blueId;
+};
+
+const expectGuarantorUpdatePayloadEvent = (
+  payload: unknown,
+  eventType: string
+) => {
+  const simplePayload = blue.nodeToJson(
+    blue.jsonValueToNode(payload),
+    'simple'
+  );
+  expect(Array.isArray(simplePayload)).toBe(true);
+
+  const payloadArray = simplePayload as Array<{
+    type?: { blueId?: string };
+  }>;
+
+  expect(payloadArray).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: expect.objectContaining({
+          blueId: resolveTypeBlueId(eventType),
+        }),
+      }),
+    ])
+  );
+};
 
 const createDependencies = () => {
   const fetchEvent = vi
@@ -296,8 +334,19 @@ describe('handleWebhookEvent', () => {
     expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
-        operation: 'confirmCardTransactionCaptureLocked',
+        operation: 'guarantorUpdate',
       })
+    );
+
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+
+    expectGuarantorUpdatePayloadEvent(
+      payload,
+      'PayNote/Card Transaction Capture Locked'
     );
   });
 
@@ -356,8 +405,110 @@ describe('handleWebhookEvent', () => {
     expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
-        operation: 'confirmCardTransactionCaptureLocked',
+        operation: 'guarantorUpdate',
       })
+    );
+
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+
+    expectGuarantorUpdatePayloadEvent(
+      payload,
+      'PayNote/Card Transaction Capture Locked'
+    );
+  });
+
+  it('reports capture unlock via guarantorUpdate when unlock request is valid', async () => {
+    const { deps, fetchEvent } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: { type: 'PayNote/PayNote', name: 'Slow Digestion PayNote' },
+          emitted: [
+            {
+              type: {
+                name: 'PayNote/Card Transaction Capture Unlock Requested',
+              },
+              cardTransactionDetails: {
+                authorizationCode: { value: 'AUTH01' },
+              },
+            },
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      holdId: 'hold-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    (deps.holdRepository.getHold as any).mockResolvedValue({
+      holdId: 'hold-1',
+      payerAccountNumber: '955',
+      amountMinor: 12000,
+      currency: 'USD',
+      status: 'PENDING',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '111111111111',
+        systemTraceAuditNumber: '222222',
+        transmissionDateTime: '0101000000',
+        authorizationCode: 'AUTH01',
+      },
+      captureDisabled: true,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    (deps.holdRepository.enableHoldCapture as any).mockResolvedValue({
+      holdId: 'hold-1',
+      payerAccountNumber: '955',
+      amountMinor: 12000,
+      currency: 'USD',
+      status: 'PENDING',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '111111111111',
+        systemTraceAuditNumber: '222222',
+        transmissionDateTime: '0101000000',
+        authorizationCode: 'AUTH01',
+      },
+      captureDisabled: false,
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    (deps.myOsClient.runDocumentOperation as any).mockResolvedValue({
+      ok: true,
+      status: 200,
+    });
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.holdRepository.enableHoldCapture).toHaveBeenCalledWith(
+      'hold-1'
+    );
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+
+    expectGuarantorUpdatePayloadEvent(
+      payload,
+      'PayNote/Card Transaction Capture Unlocked'
     );
   });
 

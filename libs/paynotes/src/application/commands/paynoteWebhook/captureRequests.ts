@@ -5,6 +5,7 @@ import type {
   WebhookEmittedEvent,
   WebhookEventObject,
 } from './types';
+import { runGuarantorUpdate } from '../documentOperations';
 import { blue } from '../../../blue';
 import {
   CAPTURE_LOCK_REQUESTED_EVENT_NAME,
@@ -335,7 +336,10 @@ const linkPayNoteHold = async (input: {
   });
 };
 
-const confirmCaptureLock = async (input: {
+const CAPTURE_LOCKED_EVENT_NAME = 'PayNote/Card Transaction Capture Locked';
+const CAPTURE_UNLOCKED_EVENT_NAME = 'PayNote/Card Transaction Capture Unlocked';
+
+const confirmCaptureStatusChange = async (input: {
   holdId: string;
   eventId: string;
   payNoteDocumentId: string;
@@ -343,6 +347,7 @@ const confirmCaptureLock = async (input: {
   credentials: Awaited<ReturnType<MyOsClient['getCredentials']>> | null;
   deps: HandleWebhookEventDependencies;
   logs: LogEntry[];
+  eventType: 'lock' | 'unlock';
 }): Promise<boolean> => {
   const {
     holdId,
@@ -352,81 +357,70 @@ const confirmCaptureLock = async (input: {
     credentials,
     deps,
     logs,
+    eventType,
   } = input;
 
-  if (!credentials) {
-    logs.push({
-      level: 'error',
-      message:
-        'Skipped confirming PayNote card transaction capture locked (missing MyOS credentials)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        holdId,
-      },
-    });
-    return false;
-  }
+  const isLock = eventType === 'lock';
+  const eventName = isLock
+    ? CAPTURE_LOCKED_EVENT_NAME
+    : CAPTURE_UNLOCKED_EVENT_NAME;
 
-  const response = await deps.myOsClient.runDocumentOperation({
-    credentials,
+  const payload = isLock
+    ? {
+        type: eventName,
+        lockedAt: deps.clock.now().toISOString(),
+      }
+    : {
+        type: eventName,
+        unlockedAt: deps.clock.now().toISOString(),
+      };
+
+  return runGuarantorUpdate({
+    myOsClient: deps.myOsClient,
     sessionId,
-    operation: 'confirmCardTransactionCaptureLocked',
-  });
-
-  if (!response.ok) {
-    logs.push({
-      level: 'error',
-      message: 'Failed to confirm PayNote card transaction capture locked',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        holdId,
-        status: response.status,
-        body: response.body,
-      },
-    });
-    return false;
-  }
-
-  logs.push({
-    level: 'info',
-    message: 'Confirmed PayNote card transaction capture locked',
-    context: {
+    credentials,
+    logs,
+    logContext: {
       eventId,
       payNoteDocumentId,
       holdId,
     },
+    request: [payload],
+    successMessage: `Reported PayNote card transaction capture ${
+      isLock ? 'locked' : 'unlocked'
+    } via guarantorUpdate`,
+    failureMessage: `Failed to report PayNote card transaction capture ${
+      isLock ? 'locked' : 'unlocked'
+    } via guarantorUpdate`,
+    missingCredentialsMessage: `Skipped PayNote card transaction capture ${
+      isLock ? 'lock' : 'unlock'
+    } update (missing MyOS credentials)`,
   });
-
-  return true;
 };
 
-const applyCaptureLock = async (input: {
+const updateHoldCaptureStatus = async (input: {
   holdId: string;
   eventId: string;
   payNoteDocumentId: string;
-  sessionId: string;
-  credentials: Awaited<ReturnType<MyOsClient['getCredentials']>> | null;
   deps: HandleWebhookEventDependencies;
   logs: LogEntry[];
+  eventType: 'lock' | 'unlock';
 }): Promise<boolean> => {
-  const {
-    holdId,
-    eventId,
-    payNoteDocumentId,
-    sessionId,
-    credentials,
-    deps,
-    logs,
-  } = input;
+  const { holdId, eventId, payNoteDocumentId, deps, logs, eventType } = input;
+  const isLock = eventType === 'lock';
 
-  const updatedHold = await deps.holdRepository.disableHoldCapture(holdId);
+  const updatedHold = isLock
+    ? await deps.holdRepository.disableHoldCapture(holdId)
+    : await deps.holdRepository.enableHoldCapture(holdId);
+
   if (!updatedHold) {
     logs.push({
       level: 'warn',
-      message:
-        'PayNote capture lock request ignored (hold not found while applying lock)',
+      message: `PayNote capture ${
+        isLock ? 'lock' : 'unlock'
+      } request ignored (hold not found while applying ${
+        isLock ? 'lock' : 'unlock'
+      })`,
       context: {
         eventId,
         payNoteDocumentId,
@@ -436,11 +430,18 @@ const applyCaptureLock = async (input: {
     return false;
   }
 
-  if (updatedHold.status !== 'PENDING' || !updatedHold.captureDisabled) {
+  const success = isLock
+    ? updatedHold.captureDisabled
+    : !updatedHold.captureDisabled;
+
+  if (updatedHold.status !== 'PENDING' || !success) {
     logs.push({
       level: 'warn',
-      message:
-        'PayNote capture lock request ignored (hold capture could not be locked)',
+      message: `PayNote capture ${
+        isLock ? 'lock' : 'unlock'
+      } request ignored (hold capture could not be ${
+        isLock ? 'locked' : 'unlocked'
+      })`,
       context: {
         eventId,
         payNoteDocumentId,
@@ -451,112 +452,6 @@ const applyCaptureLock = async (input: {
     });
     return false;
   }
-
-  return confirmCaptureLock({
-    holdId,
-    eventId,
-    payNoteDocumentId,
-    sessionId,
-    credentials,
-    deps,
-    logs,
-  });
-};
-
-const applyCaptureUnlock = async (input: {
-  holdId: string;
-  eventId: string;
-  payNoteDocumentId: string;
-  sessionId: string;
-  credentials: Awaited<ReturnType<MyOsClient['getCredentials']>> | null;
-  deps: HandleWebhookEventDependencies;
-  logs: LogEntry[];
-}): Promise<boolean> => {
-  const {
-    holdId,
-    eventId,
-    payNoteDocumentId,
-    sessionId,
-    credentials,
-    deps,
-    logs,
-  } = input;
-
-  const updatedHold = await deps.holdRepository.enableHoldCapture(holdId);
-  if (!updatedHold) {
-    logs.push({
-      level: 'warn',
-      message:
-        'PayNote capture unlock request ignored (hold not found while applying unlock)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        holdId,
-      },
-    });
-    return false;
-  }
-
-  if (updatedHold.status !== 'PENDING' || updatedHold.captureDisabled) {
-    logs.push({
-      level: 'warn',
-      message:
-        'PayNote capture unlock request ignored (hold capture could not be unlocked)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        holdId,
-        holdStatus: updatedHold.status,
-        captureDisabled: updatedHold.captureDisabled ?? false,
-      },
-    });
-    return false;
-  }
-
-  if (!credentials) {
-    logs.push({
-      level: 'error',
-      message:
-        'Skipped confirming PayNote card transaction capture unlocked (missing MyOS credentials)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        holdId,
-      },
-    });
-    return false;
-  }
-
-  const response = await deps.myOsClient.runDocumentOperation({
-    credentials,
-    sessionId,
-    operation: 'confirmCardTransactionCaptureUnlocked',
-  });
-
-  if (!response.ok) {
-    logs.push({
-      level: 'error',
-      message: 'Failed to confirm PayNote card transaction capture unlocked',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        holdId,
-        status: response.status,
-        body: response.body,
-      },
-    });
-    return false;
-  }
-
-  logs.push({
-    level: 'info',
-    message: 'Confirmed PayNote card transaction capture unlocked',
-    context: {
-      eventId,
-      payNoteDocumentId,
-      holdId,
-    },
-  });
 
   return true;
 };
@@ -607,26 +502,26 @@ const handleCaptureRequestEvent = async (
     credentials,
   } = context;
 
-  const eventType = resolveEmittedEventType(event);
+  const eventName = resolveEmittedEventType(event);
   if (
-    eventType !== CAPTURE_LOCK_REQUESTED_EVENT_NAME &&
-    eventType !== CAPTURE_UNLOCK_REQUESTED_EVENT_NAME
+    eventName !== CAPTURE_LOCK_REQUESTED_EVENT_NAME &&
+    eventName !== CAPTURE_UNLOCK_REQUESTED_EVENT_NAME
   ) {
     return;
   }
 
+  const isLock = eventName === CAPTURE_LOCK_REQUESTED_EVENT_NAME;
   const captureEventId = resolveCaptureEventId(event) ?? eventId;
-  const lastCaptureEventId =
-    eventType === CAPTURE_LOCK_REQUESTED_EVENT_NAME
-      ? updatedRecord.lastCaptureLockEventId
-      : updatedRecord.lastCaptureUnlockEventId;
+  const lastCaptureEventId = isLock
+    ? updatedRecord.lastCaptureLockEventId
+    : updatedRecord.lastCaptureUnlockEventId;
 
   if (captureEventId && lastCaptureEventId === captureEventId) {
     trace(logs, 'Skipped duplicate PayNote capture request', {
       eventId,
       payNoteDocumentId,
       captureEventId,
-      eventType,
+      eventName,
     });
     return;
   }
@@ -644,7 +539,7 @@ const handleCaptureRequestEvent = async (
     completeCardDetails,
     eventId,
     payNoteDocumentId,
-    eventType,
+    eventType: eventName,
     deps,
     logs,
   });
@@ -660,7 +555,7 @@ const handleCaptureRequestEvent = async (
       eventId,
       payNoteDocumentId,
       sessionId,
-      eventType,
+      eventType: eventName,
       eventObject,
       emittedEvents,
       deps,
@@ -668,67 +563,15 @@ const handleCaptureRequestEvent = async (
     });
   }
 
-  if (eventType === CAPTURE_LOCK_REQUESTED_EVENT_NAME) {
-    if (captureHold.hold.captureDisabled) {
-      trace(
-        logs,
-        'PayNote capture already locked locally; confirming in MyOS',
-        {
-          eventId,
-          payNoteDocumentId,
-          holdId: captureHold.holdId,
-          captureEventId,
-        }
-      );
-      const confirmed = await confirmCaptureLock({
-        holdId: captureHold.holdId,
-        eventId,
-        payNoteDocumentId,
-        sessionId,
-        credentials,
-        deps,
-        logs,
-      });
-      if (confirmed && captureEventId) {
-        await persistCaptureEventId({
-          updatedRecord,
-          captureEventId,
-          eventType: 'lock',
-          deps,
-          logs,
-          payNoteDocumentId,
-          eventId,
-        });
-      }
-      return;
-    }
-    const confirmed = await applyCaptureLock({
-      holdId: captureHold.holdId,
-      eventId,
-      payNoteDocumentId,
-      sessionId,
-      credentials,
-      deps,
-      logs,
-    });
-    if (confirmed && captureEventId) {
-      await persistCaptureEventId({
-        updatedRecord,
-        captureEventId,
-        eventType: 'lock',
-        deps,
-        logs,
-        payNoteDocumentId,
-        eventId,
-      });
-    }
-    return;
-  }
+  const captureDisabled = captureHold.hold.captureDisabled ?? false;
+  const alreadyInState = isLock ? captureDisabled : !captureDisabled;
 
-  if (!captureHold.hold.captureDisabled) {
+  if (alreadyInState) {
     trace(
       logs,
-      'Skipped PayNote capture unlock confirmation (already unlocked)',
+      `PayNote capture already ${
+        isLock ? 'locked' : 'unlocked'
+      } locally; confirming in MyOS`,
       {
         eventId,
         payNoteDocumentId,
@@ -736,21 +579,21 @@ const handleCaptureRequestEvent = async (
         captureEventId,
       }
     );
-    if (captureEventId) {
-      await persistCaptureEventId({
-        updatedRecord,
-        captureEventId,
-        eventType: 'unlock',
-        deps,
-        logs,
-        payNoteDocumentId,
-        eventId,
-      });
+  } else {
+    const updated = await updateHoldCaptureStatus({
+      holdId: captureHold.holdId,
+      eventId,
+      payNoteDocumentId,
+      deps,
+      logs,
+      eventType: isLock ? 'lock' : 'unlock',
+    });
+    if (!updated) {
+      return;
     }
-    return;
   }
 
-  const confirmed = await applyCaptureUnlock({
+  const confirmed = await confirmCaptureStatusChange({
     holdId: captureHold.holdId,
     eventId,
     payNoteDocumentId,
@@ -758,12 +601,14 @@ const handleCaptureRequestEvent = async (
     credentials,
     deps,
     logs,
+    eventType: isLock ? 'lock' : 'unlock',
   });
+
   if (confirmed && captureEventId) {
     await persistCaptureEventId({
       updatedRecord,
       captureEventId,
-      eventType: 'unlock',
+      eventType: isLock ? 'lock' : 'unlock',
       deps,
       logs,
       payNoteDocumentId,
