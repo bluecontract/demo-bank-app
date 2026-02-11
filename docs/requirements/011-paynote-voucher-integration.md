@@ -12,7 +12,7 @@ This iteration delivers:
 - voucher behavior as a merchant-defined `PayNote/Merchant To Customer PayNote` instance,
 - card transaction monitoring requiring customer approval and resulting in a consent contract (`Conversation/Customer Consent`),
 - customer Pending Actions as a generic UX mechanism,
-- inbox-style contracts UX (Gmail-like) with tabs and archive,
+- inbox-style contracts UX (Gmail-like) with Inbox as the primary/only contracts view,
 - summary regeneration on every contract change, returning structured JSON that includes a short list preview sentence,
 - stored human-readable contract history.
 
@@ -148,19 +148,17 @@ List columns:
 - last change preview sentence,
 - last updated timestamp.
 
-### FR-17 Tabs: Inbox / Archived / Consents
+### FR-17 Inbox-only contracts view + Data permissions entry
 
-- Tabs MUST exist:
-  - Inbox: active non-consent contracts
-  - Archived: archived non-consent contracts
-  - Consents: consent contracts only (`Conversation/Customer Consent` detected via schema type check)
-- Consent contracts MUST NOT appear in Inbox/Archived.
+- Contracts view MUST be Inbox-only in this iteration (no Inbox/Archived/Consents tabs).
+- Inbox MUST list active non-consent contracts.
+- Consent contracts (`Conversation/Customer Consent`) MUST NOT appear in Inbox.
+- Customer access to consent/data-permission contracts MUST be provided via a low-visibility **Data permissions** entry (for example side/burger navigation).
 
-### FR-18 Archive behavior
+### FR-18 Archive behavior is optional in this iteration
 
-- User can archive from list or contract view.
-- Archived contracts are hidden from Inbox, appear under Archived, remain accessible.
-- Archived contracts should not trigger inbox notifications/badges.
+- Dedicated archive tab/view is NOT required in this iteration.
+- If archive actions are available, archived contracts MUST remain hidden from Inbox by default.
 
 ### FR-19 Summary generation is structured JSON and regenerated on every change
 

@@ -72,12 +72,12 @@ If the customer approves monitoring:
 
 - the bank bootstraps a consent contract of type `Conversation/Customer Consent`,
 - the document name and description are human-readable (e.g., “Card Transaction Monitoring Customer Consent”),
-- the consent doc is visible under a dedicated **Consents** tab (not in Inbox),
+- the consent doc is not shown in a dedicated contracts tab; it is reachable from a low-visibility **Data permissions** entry (for example in side/burger navigation),
 - revoking the consent stops monitoring and triggers `Card Transaction Monitoring Stopped` injected into the requesting contract.
 
 Important: The customer does not operate in MyOS. The bank represents the customer in the consent document via channel bindings / account identifiers, while the merchant sees the consent in its own MyOS account.
 
-### 6) Contracts UX should be Gmail-like
+### 6) Contracts UX should be Inbox-first
 
 We want a single-page inbox list and navigation like Gmail:
 
@@ -88,10 +88,8 @@ We want a single-page inbox list and navigation like Gmail:
   - contract name
   - last change preview (one short sentence)
   - last update timestamp
-- tabs:
-  - Inbox (active non-consent contracts)
-  - Archived
-  - Consents
+- no contracts tabs in this iteration (Inbox is the primary view),
+- consent/data-permission management is reachable via a low-visibility **Data permissions** entry in side/burger navigation.
 
 ### 7) Summary + history must be pre-generated
 
@@ -108,7 +106,7 @@ We require:
 - PayNote `transactionStatus` validation/auto-fill.
 - Voucher demo via Merchant-to-Customer PayNote instance using monitoring and capture.
 - Monitoring approval as a Pending Action, and consent as `Conversation/Customer Consent` contract.
-- Inbox UX (tabs + archive) and summary/history pipeline.
+- Inbox-first UX (no tabs) with low-visibility Data permissions entry, plus summary/history pipeline.
 
 ## Non-goals
 

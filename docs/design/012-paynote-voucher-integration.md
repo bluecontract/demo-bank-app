@@ -11,8 +11,8 @@ We implement:
 - Delivery-internal proposal flow for Card Transaction PayNotes.
 - Voucher behavior as merchant-defined Merchant-to-Customer PayNote.
 - Monitoring approval as a generic Pending Action in the contract view.
-- Consent as a generic `Conversation/Customer Consent` contract (visible under a Consents tab).
-- Inbox-style contracts UX (Gmail-like list, tabs, archive).
+- Consent as a generic `Conversation/Customer Consent` contract (managed via Data permissions entry, not dedicated contracts tabs).
+- Inbox-style contracts UX (Gmail-like list, Inbox-first, no contracts tabs in this iteration).
 - Summary regeneration on every contract change, returning structured JSON (`overallSummary`, `lastChangeSummary`, `nextStepsSummary`) and stored history entries.
 
 ## Key design decisions
@@ -59,7 +59,7 @@ Channel roles:
 - `guarantorChannel`: bank (admin channel)
 - `granterChannel`: bank representation of the customer (customer has no MyOS account)
 
-The consent document is visible to the bank customer in the **Consents** tab and can be revoked.
+The consent document is visible to the bank customer via a low-visibility **Data permissions** entry and can be revoked there.
 
 ## Data model
 
@@ -169,10 +169,8 @@ Replace “Regenerate” with a dev-only modal:
   - contract name
   - truncated lastChangeSummary
   - lastUpdatedAt
-- Tabs:
-  - Inbox (category=contract AND archivedAt is null)
-  - Archived (category=contract AND archivedAt not null)
-  - Consents (category=consent)
+- Contracts list is Inbox-only in this iteration (`category=contract` and active items by default).
+- Consent contracts (`category=consent`) are reachable from a low-visibility **Data permissions** entry in side/burger navigation.
 
 ### Contract view
 
@@ -213,7 +211,7 @@ Customer rejects pending action:
 
 ### Revocation
 
-Customer revokes from consent contract view:
+Customer revokes from Data permissions view (consent details):
 
 - bank executes revoke operation on consent doc,
 - bank stops monitoring subscriptions,
