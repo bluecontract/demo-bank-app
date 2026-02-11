@@ -253,7 +253,7 @@ describe('payNoteWebhookHandler', () => {
       payNoteDocumentId: 'doc-123',
     });
     expect(logger.debug).toHaveBeenCalledWith(
-      'PayNote transfer triggered',
+      'PayNote capture immediately request received',
       expect.objectContaining({ transferAmountMinor: 15000 })
     );
   });
@@ -291,7 +291,7 @@ describe('payNoteWebhookHandler', () => {
 
     expect(hoistedAdapters.transferFundsMock).not.toHaveBeenCalled();
     expect(logger.debug).toHaveBeenCalledWith(
-      'PayNote webhook event ignored',
+      'PayNote emitted event intentionally ignored (unsupported type)',
       expect.objectContaining({ eventType: 'PayNote/PayNote Cancelled' })
     );
   });

@@ -4,7 +4,6 @@ import {
   runGuarantorUpdate,
 } from './documentOperations';
 import type { LogEntry, MyOsClient, MyOsCredentials } from '../ports';
-import { blue } from '../../blue';
 
 const credentials: MyOsCredentials = {
   apiKey: 'key',
@@ -24,11 +23,6 @@ const createMyOsClient = (ok = true) =>
     fetchEvent: vi.fn(),
     fetchDocument: vi.fn(),
   } as unknown as MyOsClient);
-
-const toOfficialPayload = (payload: unknown): unknown =>
-  blue.nodeToJson(blue.jsonValueToNode(payload), {
-    format: 'official',
-  });
 
 describe('documentOperations', () => {
   it('returns false and logs error when credentials are missing', async () => {
@@ -120,7 +114,12 @@ describe('documentOperations', () => {
   it('runs guarantor update as a standard document operation', async () => {
     const myOsClient = createMyOsClient(true);
     const logs: LogEntry[] = [];
-    const events = [{ type: 'PayNote/Card Transaction Capture Locked' }];
+    const events = [
+      {
+        type: 'PayNote/Card Transaction Capture Locked',
+        lockedAt: '2024-01-01T00:00:00.000Z',
+      },
+    ];
 
     const result = await runGuarantorUpdate({
       myOsClient,
@@ -135,11 +134,51 @@ describe('documentOperations', () => {
     });
 
     expect(result).toBe(true);
-    expect(myOsClient.runDocumentOperation).toHaveBeenCalledWith({
+    expect(myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentials,
+        sessionId: 'session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+
+    const payload = (
+      myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload as Array<Record<string, unknown>>;
+
+    expect(Array.isArray(payload)).toBe(true);
+    expect(payload[0]).toEqual(
+      expect.objectContaining({
+        type: 'PayNote/Card Transaction Capture Locked',
+      })
+    );
+    expect(payload[0]).toHaveProperty('lockedAt');
+  });
+
+  it('fails and logs when guarantorUpdate payload serialization fails', async () => {
+    const myOsClient = createMyOsClient(true);
+    const logs: LogEntry[] = [];
+
+    const result = await runGuarantorUpdate({
+      myOsClient,
       credentials,
       sessionId: 'session-1',
-      operation: 'guarantorUpdate',
-      payload: toOfficialPayload(events),
+      request: [{ type: 'Definitely Unknown Event Type' }],
+      logs,
+      successMessage: 'ok',
+      failureMessage: 'fail',
+      missingCredentialsMessage: 'missing',
     });
+
+    expect(result).toBe(false);
+    expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        level: 'error',
+        message: 'Failed to serialize guarantorUpdate payload',
+      })
+    );
   });
 });

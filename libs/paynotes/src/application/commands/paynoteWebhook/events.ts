@@ -1,3 +1,4 @@
+import { DocumentBootstrapRequestedSchema } from '@blue-repository/types/packages/conversation/schemas';
 import {
   CardTransactionCaptureLockRequestedSchema,
   CardTransactionCaptureUnlockRequestedSchema,
@@ -7,6 +8,7 @@ import {
 } from '@blue-repository/types/packages/paynote/schemas';
 import { blue } from '../../../blue';
 import type { WebhookEmittedEvent } from './types';
+import { getString } from './utils';
 
 export const RESERVE_FUNDS_EVENT_NAME = 'PayNote/Reserve Funds Requested';
 export const CAPTURE_FUNDS_EVENT_NAME = 'PayNote/Capture Funds Requested';
@@ -16,6 +18,8 @@ export const CAPTURE_LOCK_REQUESTED_EVENT_NAME =
   'PayNote/Card Transaction Capture Lock Requested';
 export const CAPTURE_UNLOCK_REQUESTED_EVENT_NAME =
   'PayNote/Card Transaction Capture Unlock Requested';
+export const DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME =
+  'Conversation/Document Bootstrap Requested';
 
 const resolveEventTypeLabel = (event: unknown): string | undefined => {
   if (!event || typeof event !== 'object') {
@@ -48,6 +52,9 @@ const resolveEventType = (event: unknown): string | undefined => {
     if (blue.isTypeOf(node, CardTransactionCaptureUnlockRequestedSchema)) {
       return CAPTURE_UNLOCK_REQUESTED_EVENT_NAME;
     }
+    if (blue.isTypeOf(node, DocumentBootstrapRequestedSchema)) {
+      return DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME;
+    }
     if (blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema)) {
       return CAPTURE_IMMEDIATELY_EVENT_NAME;
     }
@@ -68,3 +75,32 @@ export const resolveEmittedEventType = (
   event: WebhookEmittedEvent
 ): string | undefined =>
   resolveEventType(event) ?? resolveEventTypeLabel(event);
+
+export const resolveTransferRequestId = (
+  event: WebhookEmittedEvent
+): string | undefined => {
+  try {
+    const node = blue.jsonValueToNode(event);
+
+    if (blue.isTypeOf(node, ReserveFundsRequestedSchema)) {
+      const output = blue.nodeToSchemaOutput(node, ReserveFundsRequestedSchema);
+      return getString(output.requestId);
+    }
+
+    if (blue.isTypeOf(node, CaptureFundsRequestedSchema)) {
+      const output = blue.nodeToSchemaOutput(node, CaptureFundsRequestedSchema);
+      return getString(output.requestId);
+    }
+
+    if (blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema)) {
+      const output = blue.nodeToSchemaOutput(
+        node,
+        ReserveFundsAndCaptureImmediatelyRequestedSchema
+      );
+      return getString(output.requestId);
+    }
+  } catch {
+    // unsupported structure or unparsable event
+  }
+  return undefined;
+};

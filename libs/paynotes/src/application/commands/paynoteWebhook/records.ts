@@ -161,8 +161,10 @@ export const buildPayNoteRecord = (input: {
     | undefined;
   const payerAccountNumber =
     existingRecord?.payerAccountNumber ??
+    existingRecord?.accountNumber ??
     deliveryRecord?.accountNumber ??
-    getRecordString(payNoteSimple, 'payerAccountNumber');
+    getRecordString(payNoteSimple, 'payerAccountNumber') ??
+    getRecordString(payNoteSimple, 'accountNumber');
   const payeeAccountNumber =
     existingRecord?.payeeAccountNumber ??
     getRecordString(payNoteSimple, 'payeeAccountNumber');

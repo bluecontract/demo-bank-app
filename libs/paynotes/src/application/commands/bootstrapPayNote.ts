@@ -15,6 +15,7 @@ export interface BootstrapPayNoteInput {
   formData: {
     fromAccount?: string;
     toAccount?: string;
+    totalAmount?: string;
   };
 }
 
@@ -44,7 +45,127 @@ export type BootstrapPayNoteResult =
       type: 'success';
       response: MyOsBootstrapResponse;
       bootstrapSessionId?: string;
+      preparedPayNote: Record<string, unknown>;
     };
+
+const IMMEDIATE_CAPTURE_EVENT_TYPE =
+  'PayNote/Reserve Funds and Capture Immediately Requested';
+
+const normalizeString = (value: string | undefined): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const parseMinorAmount = (value: string | undefined): number | undefined => {
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const amountRegex = /^\d+(\.\d{1,2})?$/;
+  if (!amountRegex.test(normalized)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  return Math.round(parsed * 100);
+};
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const withImmediateCaptureAmount = (
+  contracts: Record<string, unknown>,
+  amountMinor: number
+): Record<string, unknown> => {
+  const bootstrap = asRecord(contracts.bootstrap);
+  if (!bootstrap || !Array.isArray(bootstrap.steps)) {
+    return contracts;
+  }
+
+  let updated = false;
+  const steps = bootstrap.steps.map(step => {
+    const stepRecord = asRecord(step);
+    if (!stepRecord || stepRecord.type !== 'Conversation/Trigger Event') {
+      return step;
+    }
+
+    const eventRecord = asRecord(stepRecord.event);
+    if (!eventRecord || eventRecord.type !== IMMEDIATE_CAPTURE_EVENT_TYPE) {
+      return step;
+    }
+
+    updated = true;
+    return {
+      ...stepRecord,
+      event: {
+        ...eventRecord,
+        amount: amountMinor,
+      },
+    };
+  });
+
+  if (!updated) {
+    return contracts;
+  }
+
+  return {
+    ...contracts,
+    bootstrap: {
+      ...bootstrap,
+      steps,
+    },
+  };
+};
+
+const preparePayNoteForBootstrap = (
+  payNote: Record<string, unknown>,
+  formData: BootstrapPayNoteInput['formData']
+): Record<string, unknown> => {
+  const payerAccountNumber = normalizeString(formData.fromAccount);
+  const payeeAccountNumber = normalizeString(formData.toAccount);
+  const amountMinor = parseMinorAmount(formData.totalAmount);
+
+  const preparedPayNote: Record<string, unknown> = { ...payNote };
+
+  if (payerAccountNumber) {
+    preparedPayNote.payerAccountNumber = payerAccountNumber;
+  }
+
+  if (payeeAccountNumber) {
+    preparedPayNote.payeeAccountNumber = payeeAccountNumber;
+  }
+
+  if (typeof amountMinor !== 'number') {
+    return preparedPayNote;
+  }
+
+  const amountRecord = asRecord(preparedPayNote.amount);
+  preparedPayNote.amount = {
+    ...(amountRecord ?? {}),
+    total: amountMinor,
+  };
+
+  const contracts = asRecord(preparedPayNote.contracts);
+  if (contracts) {
+    preparedPayNote.contracts = withImmediateCaptureAmount(
+      contracts,
+      amountMinor
+    );
+  }
+
+  return preparedPayNote;
+};
 
 const buildChannelBindings = ({
   payNote,
@@ -124,9 +245,13 @@ export const bootstrapPayNote = async (
   }
 
   const credentials = await deps.myOsClient.getCredentials();
+  const preparedPayNote = preparePayNoteForBootstrap(
+    input.payNote,
+    input.formData
+  );
 
   const channelBindings = buildChannelBindings({
-    payNote: input.payNote,
+    payNote: preparedPayNote,
     userEmail: input.userEmail,
     myOsAccountId: credentials.accountId,
   });
@@ -135,7 +260,7 @@ export const bootstrapPayNote = async (
     credentials,
     payload: {
       channelBindings,
-      document: input.payNote,
+      document: preparedPayNote,
     },
   });
 
@@ -163,5 +288,6 @@ export const bootstrapPayNote = async (
     type: 'success',
     response,
     bootstrapSessionId,
+    preparedPayNote,
   };
 };

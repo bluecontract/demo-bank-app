@@ -41,6 +41,22 @@ const expectGuarantorUpdatePayloadEvent = (
   );
 };
 
+const parseGuarantorUpdatePayloadEvents = (
+  payload: unknown
+): Array<Record<string, unknown>> => {
+  const simplePayload = blue.nodeToJson(
+    blue.jsonValueToNode(payload),
+    'simple'
+  );
+  expect(Array.isArray(simplePayload)).toBe(true);
+  return simplePayload as Array<Record<string, unknown>>;
+};
+
+const toOfficialBlue = <T>(value: T): T =>
+  blue.nodeToJson(blue.jsonValueToNode(value), {
+    format: 'official',
+  }) as T;
+
 const createDependencies = () => {
   const fetchEvent = vi
     .fn<HandleWebhookEventDependencies['myOsClient']['fetchEvent']>()
@@ -72,7 +88,10 @@ const createDependencies = () => {
       baseUrl: 'https://example.test',
     }),
     bootstrapDocument: vi.fn(),
-    runDocumentOperation: vi.fn(),
+    runDocumentOperation: vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+    }),
     fetchEvent,
     fetchDocument,
   };
@@ -96,7 +115,7 @@ const createDependencies = () => {
       getPayNote: vi.fn().mockResolvedValue(null),
       getPayNoteBySessionId: vi.fn().mockResolvedValue(null),
       savePayNote: vi.fn(),
-      markEventProcessed: vi.fn().mockResolvedValue(true),
+      markEventProcessed: vi.fn().mockImplementation(async () => true),
     };
 
   const bootstrapContextRepository: HandleWebhookEventDependencies['bootstrapContextRepository'] =
@@ -208,7 +227,7 @@ describe('handleWebhookEvent', () => {
     const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
 
     expect(Array.isArray(result.logs)).toBe(true);
-    expect(deps.bankingFacade.getAccountByNumber).toHaveBeenCalled();
+    expect(deps.bankingFacade.getAccountByNumber).not.toHaveBeenCalled();
     expect(deps.payNoteRepository.savePayNote).toHaveBeenCalledWith(
       expect.objectContaining({
         payNoteDocumentId: 'doc-1',
@@ -230,10 +249,10 @@ describe('handleWebhookEvent', () => {
             payeeAccountNumber: { value: '9876543210' },
           },
           emitted: [
-            {
-              type: { name: 'PayNote/Capture Funds Requested' },
-              amount: { value: 1200 },
-            },
+            toOfficialBlue({
+              type: 'PayNote/Capture Funds Requested',
+              amount: 1200,
+            }),
           ],
         },
       },
@@ -263,6 +282,20 @@ describe('handleWebhookEvent', () => {
         relatedTransactionIds: ['txn-1'],
       })
     );
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Funds Captured');
   });
 
   it('handles card transaction capture lock request without payer account', async () => {
@@ -274,12 +307,12 @@ describe('handleWebhookEvent', () => {
           sessionId: 'session-1',
           document: { type: 'PayNote/PayNote', name: 'Slow Digestion PayNote' },
           emitted: [
-            {
-              type: { name: 'PayNote/Card Transaction Capture Lock Requested' },
+            toOfficialBlue({
+              type: 'PayNote/Card Transaction Capture Lock Requested',
               cardTransactionDetails: {
-                authorizationCode: { value: 'AUTH01' },
+                authorizationCode: 'AUTH01',
               },
-            },
+            }),
           ],
         },
       },
@@ -359,12 +392,12 @@ describe('handleWebhookEvent', () => {
           sessionId: 'session-1',
           document: { type: 'PayNote/PayNote', name: 'Slow Digestion PayNote' },
           emitted: [
-            {
-              type: { name: 'PayNote/Card Transaction Capture Lock Requested' },
+            toOfficialBlue({
+              type: 'PayNote/Card Transaction Capture Lock Requested',
               cardTransactionDetails: {
-                authorizationCode: { value: 'AUTH01' },
+                authorizationCode: 'AUTH01',
               },
-            },
+            }),
           ],
         },
       },
@@ -430,14 +463,12 @@ describe('handleWebhookEvent', () => {
           sessionId: 'session-1',
           document: { type: 'PayNote/PayNote', name: 'Slow Digestion PayNote' },
           emitted: [
-            {
-              type: {
-                name: 'PayNote/Card Transaction Capture Unlock Requested',
-              },
+            toOfficialBlue({
+              type: 'PayNote/Card Transaction Capture Unlock Requested',
               cardTransactionDetails: {
-                authorizationCode: { value: 'AUTH01' },
+                authorizationCode: 'AUTH01',
               },
-            },
+            }),
           ],
         },
       },
@@ -526,12 +557,11 @@ describe('handleWebhookEvent', () => {
             name: 'Quick PayNote',
           },
           emitted: [
-            {
-              type: {
-                name: 'PayNote/Reserve Funds and Capture Immediately Requested',
-              },
-              amount: { value: 2500 },
-            },
+            toOfficialBlue({
+              type: 'PayNote/Reserve Funds and Capture Immediately Requested',
+              requestId: 'capture-now-1',
+              amount: 2500,
+            }),
           ],
         },
       },
@@ -561,6 +591,475 @@ describe('handleWebhookEvent', () => {
         payNoteDocumentId: 'doc-1',
       })
     );
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Funds Captured');
+    const simpleEvents = parseGuarantorUpdatePayloadEvents(payload);
+    expect(JSON.stringify(simpleEvents)).toContain('capture-now-1');
+    expect(JSON.stringify(simpleEvents)).toContain('amountCaptured');
+  });
+
+  it('reports capture failed via guarantorUpdate when capture immediately transfer fails', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Quick PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Reserve Funds and Capture Immediately Requested',
+              requestId: 'capture-now-fail-1',
+              amount: 2500,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+    deps.bankingFacade.transferFunds = vi
+      .fn()
+      .mockRejectedValue(new Error('Transfer blocked'));
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Capture Failed');
+    const simpleEvents = parseGuarantorUpdatePayloadEvents(payload);
+    expect(JSON.stringify(simpleEvents)).toContain('capture-now-fail-1');
+    expect(JSON.stringify(simpleEvents)).toContain('Transfer blocked');
+  });
+
+  it('uses existing paynote accountNumber as payer mapping fallback', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      accountNumber: '1234567890',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Quick PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Reserve Funds and Capture Immediately Requested',
+              requestId: 'capture-now-fallback-1',
+              amount: 2500,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.bankingFacade.getAccountByNumber).toHaveBeenCalledWith(
+      '1234567890'
+    );
+    expect(deps.bankingFacade.transferFunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceAccountId: 'account-id',
+        destinationAccountNumber: '9876543210',
+        amountMinor: 2500,
+      })
+    );
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Funds Captured');
+  });
+
+  it('reports funds reserved via guarantorUpdate when reserve request is valid', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Reserve PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Reserve Funds Requested',
+              requestId: 'reserve-1',
+              amount: 3300,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.bankingFacade.reserveFunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdId: 'doc-1',
+        amountMinor: 3300,
+        payNoteDocumentId: 'doc-1',
+      })
+    );
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Funds Reserved');
+    const simpleEvents = parseGuarantorUpdatePayloadEvents(payload);
+    expect(JSON.stringify(simpleEvents)).toContain('reserve-1');
+    expect(JSON.stringify(simpleEvents)).toContain('amountReserved');
+  });
+
+  it('reports reservation declined via guarantorUpdate when reserve fails', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Reserve PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Reserve Funds Requested',
+              requestId: 'reserve-fail-1',
+              amount: 3300,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+    deps.bankingFacade.reserveFunds = vi
+      .fn()
+      .mockRejectedValue(new Error('Insufficient funds'));
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Reservation Declined');
+    const simpleEvents = parseGuarantorUpdatePayloadEvents(payload);
+    expect(JSON.stringify(simpleEvents)).toContain('reserve-fail-1');
+    expect(JSON.stringify(simpleEvents)).toContain('Insufficient funds');
+  });
+
+  it('reports capture failed via guarantorUpdate when capture throws', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Capture PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Capture Funds Requested',
+              requestId: 'capture-fail-1',
+              amount: 2100,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+    deps.bankingFacade.captureHold = vi
+      .fn()
+      .mockRejectedValue(new Error('Capture blocked'));
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Capture Failed');
+    const simpleEvents = parseGuarantorUpdatePayloadEvents(payload);
+    expect(JSON.stringify(simpleEvents)).toContain('capture-fail-1');
+    expect(JSON.stringify(simpleEvents)).toContain('Capture blocked');
+  });
+
+  it('intentionally ignores document bootstrap requests emitted by paynote', async () => {
+    const { deps, fetchEvent } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: { type: 'PayNote/PayNote', name: 'PayNote with bootstrap' },
+          emitted: [
+            toOfficialBlue({
+              type: 'Conversation/Document Bootstrap Requested',
+              document: { type: 'PayNote/PayNote', name: 'Nested PayNote' },
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(deps.bankingFacade.transferFunds).not.toHaveBeenCalled();
+    expect(deps.bankingFacade.reserveFunds).not.toHaveBeenCalled();
+    expect(result.logs).toContainEqual(
+      expect.objectContaining({
+        level: 'info',
+        message:
+          'PayNote emitted event intentionally ignored (Document Bootstrap Requested handled by delivery pipeline)',
+      })
+    );
+  });
+
+  it('intentionally ignores unsupported emitted events', async () => {
+    const { deps, fetchEvent } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            name: 'PayNote with unsupported event',
+          },
+          emitted: [
+            {
+              type: 'PayNote/Future Event Requested',
+            },
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(deps.bankingFacade.transferFunds).not.toHaveBeenCalled();
+    expect(deps.bankingFacade.reserveFunds).not.toHaveBeenCalled();
+    expect(result.logs).toContainEqual(
+      expect.objectContaining({
+        level: 'info',
+        message:
+          'PayNote emitted event intentionally ignored (unsupported type)',
+      })
+    );
+  });
+
+  it('deduplicates repeated capture immediately requests across webhook events', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    const processedEventIds = new Set<string>();
+    deps.payNoteRepository.markEventProcessed = vi
+      .fn()
+      .mockImplementation(async (eventId: string) => {
+        if (processedEventIds.has(eventId)) {
+          return false;
+        }
+        processedEventIds.add(eventId);
+        return true;
+      });
+
+    const repeatedPayload = {
+      kind: 'success' as const,
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Quick PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Reserve Funds and Capture Immediately Requested',
+              requestId: 'capture-now-repeat-1',
+              amount: 2500,
+            }),
+          ],
+        },
+      },
+    } satisfies MyOsFetchEventResult;
+
+    fetchEvent.mockResolvedValueOnce(repeatedPayload);
+    fetchDocument.mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    const first = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+    expect(first.note).toBe('');
+
+    fetchEvent.mockResolvedValueOnce(repeatedPayload);
+    const second = await handleWebhookEvent({ eventId: 'event-2' }, deps);
+    expect(second.note).toBe('');
+
+    expect(deps.bankingFacade.transferFunds).toHaveBeenCalledTimes(1);
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledTimes(1);
+    expect(second.logs).toContainEqual(
+      expect.objectContaining({
+        level: 'info',
+        message: 'Skipped duplicate PayNote transfer request',
+      })
+    );
   });
 
   it('ignores card transaction capture lock request when details mismatch', async () => {
@@ -572,12 +1071,12 @@ describe('handleWebhookEvent', () => {
           sessionId: 'session-1',
           document: { type: 'PayNote/PayNote', name: 'Slow Digestion PayNote' },
           emitted: [
-            {
-              type: { name: 'PayNote/Card Transaction Capture Lock Requested' },
+            toOfficialBlue({
+              type: 'PayNote/Card Transaction Capture Lock Requested',
               cardTransactionDetails: {
-                authorizationCode: { value: 'AUTH99' },
+                authorizationCode: 'AUTH99',
               },
-            },
+            }),
           ],
         },
       },

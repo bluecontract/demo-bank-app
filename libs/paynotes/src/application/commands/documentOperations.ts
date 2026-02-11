@@ -78,14 +78,52 @@ export const runDocumentOperationWithLogs = async <TPayload>(
   return true;
 };
 
-const toOfficialBluePayload = (payload: unknown): unknown => {
+const toMinimalOperationEventPayload = (
+  event: unknown,
+  index?: number
+): unknown => {
+  const rawType =
+    event &&
+    typeof event === 'object' &&
+    !Array.isArray(event) &&
+    typeof (event as { type?: unknown }).type === 'string'
+      ? ((event as { type: string }).type as string)
+      : undefined;
+
   try {
-    return blue.nodeToJson(blue.jsonValueToNode(payload), {
-      format: 'official',
-    });
-  } catch {
-    return payload;
+    const node = blue.resolve(blue.jsonValueToNode(event)).getMinimalNode();
+    const minimal = blue.nodeToJson(node);
+
+    if (
+      rawType &&
+      minimal &&
+      typeof minimal === 'object' &&
+      !Array.isArray(minimal)
+    ) {
+      return {
+        ...(minimal as Record<string, unknown>),
+        type: rawType,
+      };
+    }
+
+    return minimal;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Unknown serialization error';
+    const atIndex = typeof index === 'number' ? ` at index ${index}` : '';
+    throw new Error(
+      `Cannot serialize guarantorUpdate request payload${atIndex}: ${message}`
+    );
   }
+};
+
+const toOperationRequestPayload = (payload: unknown): unknown => {
+  if (Array.isArray(payload)) {
+    return payload.map((event, index) =>
+      toMinimalOperationEventPayload(event, index)
+    );
+  }
+  return toMinimalOperationEventPayload(payload);
 };
 
 type RunGuarantorUpdateInput = {
@@ -102,16 +140,32 @@ type RunGuarantorUpdateInput = {
 
 export const runGuarantorUpdate = async (
   input: RunGuarantorUpdateInput
-): Promise<boolean> =>
-  runDocumentOperationWithLogs({
+): Promise<boolean> => {
+  let payload: unknown;
+  try {
+    payload = toOperationRequestPayload(input.request);
+  } catch (error) {
+    input.logs.push({
+      level: 'error',
+      message: 'Failed to serialize guarantorUpdate payload',
+      context: {
+        ...input.logContext,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    return false;
+  }
+
+  return runDocumentOperationWithLogs({
     myOsClient: input.myOsClient,
     credentials: input.credentials,
     sessionId: input.sessionId,
     operation: 'guarantorUpdate',
-    payload: toOfficialBluePayload(input.request),
+    payload,
     logs: input.logs,
     logContext: input.logContext,
     successMessage: input.successMessage,
     failureMessage: input.failureMessage,
     missingCredentialsMessage: input.missingCredentialsMessage,
   });
+};
