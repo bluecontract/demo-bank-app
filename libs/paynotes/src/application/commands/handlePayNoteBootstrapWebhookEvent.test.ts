@@ -44,6 +44,23 @@ const buildPayNoteDocument = () => {
   return blue.nodeToJson(node) as Record<string, unknown>;
 };
 
+const getDocumentOperationCalls = (myOsClient: {
+  runDocumentOperation: unknown;
+}): Array<{
+  sessionId?: string;
+  operation?: string;
+  payload?: unknown;
+}> =>
+  (
+    myOsClient.runDocumentOperation as {
+      mock: {
+        calls: Array<
+          Array<{ sessionId?: string; operation?: string; payload?: unknown }>
+        >;
+      };
+    }
+  ).mock.calls.map(call => call[0]);
+
 const createDependencies = () => {
   const myOsClient: HandlePayNoteBootstrapWebhookDependencies['myOsClient'] = {
     getCredentials: vi.fn(),
@@ -174,6 +191,7 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
       .mockResolvedValue({
         bootstrapSessionId: 'bootstrap-1',
         merchantId: 'merchant-1',
+        customerChannelKey: 'payerChannel',
         createdAt: '2024-01-01T00:00:00.000Z',
       });
 
@@ -218,9 +236,157 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
         sessionId: 'session-1',
         accountNumber: 'acct-1',
         userId: 'user-1',
+        customerChannelKey: 'payerChannel',
       })
     );
     expect(pendingBootstrapEventRepository.addPending).not.toHaveBeenCalled();
+  });
+
+  it('reports bootstrap completion to requesting session using bootstrapped paynote document id', async () => {
+    const {
+      deps,
+      myOsClient,
+      payNoteRepository,
+      payNoteDeliveryRepository,
+      payNoteBootstrapRepository,
+      bootstrapContextRepository,
+    } = createDependencies();
+
+    payNoteDeliveryRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(true);
+    payNoteDeliveryRepository.getDeliveryByBootstrapSessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    payNoteBootstrapRepository.getBootstrapBySessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    bootstrapContextRepository.getContextBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-complete-1',
+        merchantId: 'merchant-1',
+        accountNumber: '9559276001',
+        userId: 'user-1',
+        requestingSessionId: 'requesting-session-1',
+        requestId: 'bootstrap-request-1',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+    myOsClient.getCredentials = vi.fn().mockResolvedValue({
+      apiKey: 'api-key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.example.com',
+    });
+    myOsClient.runDocumentOperation = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200 });
+    myOsClient.fetchDocument = vi.fn().mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'target-paynote-doc-1',
+        sessionId: 'target-session-1',
+        document: buildPayNoteDocument(),
+      },
+    } as MyOsFetchDocumentResult);
+    payNoteRepository.getPayNote = vi.fn().mockResolvedValue(null);
+
+    const payload: HandlePayNoteBootstrapWebhookInput['payload'] = {
+      id: 'event-bootstrap-complete-1',
+      object: {
+        sessionId: 'bootstrap-complete-1',
+        document: buildBootstrapDocument(),
+        emitted: [buildTargetSessionStartedEvent('target-session-1')],
+        created: '2024-01-01T00:00:00.000Z',
+      },
+    };
+
+    const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
+
+    expect(result.handled).toBe(true);
+    const guarantorUpdateCall = getDocumentOperationCalls(myOsClient).find(
+      call => call.operation === 'guarantorUpdate'
+    );
+    expect(guarantorUpdateCall).toBeDefined();
+    expect(guarantorUpdateCall).toEqual(
+      expect.objectContaining({
+        sessionId: 'requesting-session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+    const payloadJson = JSON.stringify(guarantorUpdateCall?.payload);
+    expect(payloadJson).toContain('Conversation/Document Bootstrap Completed');
+    expect(payloadJson).toContain('target-paynote-doc-1');
+    expect(payloadJson).toContain('bootstrap-request-1');
+  });
+
+  it('omits inResponseTo for completion when requestId is not provided', async () => {
+    const {
+      deps,
+      myOsClient,
+      payNoteRepository,
+      payNoteDeliveryRepository,
+      payNoteBootstrapRepository,
+      bootstrapContextRepository,
+    } = createDependencies();
+
+    payNoteDeliveryRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(true);
+    payNoteDeliveryRepository.getDeliveryByBootstrapSessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    payNoteBootstrapRepository.getBootstrapBySessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    bootstrapContextRepository.getContextBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-complete-2',
+        merchantId: 'merchant-1',
+        accountNumber: '9559276001',
+        userId: 'user-2',
+        requestingSessionId: 'requesting-session-2',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+    myOsClient.getCredentials = vi.fn().mockResolvedValue({
+      apiKey: 'api-key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.example.com',
+    });
+    myOsClient.runDocumentOperation = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200 });
+    myOsClient.fetchDocument = vi.fn().mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'target-paynote-doc-2',
+        sessionId: 'target-session-2',
+        document: buildPayNoteDocument(),
+      },
+    } as MyOsFetchDocumentResult);
+    payNoteRepository.getPayNote = vi.fn().mockResolvedValue(null);
+
+    const payload: HandlePayNoteBootstrapWebhookInput['payload'] = {
+      id: 'event-bootstrap-complete-2',
+      object: {
+        sessionId: 'bootstrap-complete-2',
+        document: buildBootstrapDocument(),
+        emitted: [buildTargetSessionStartedEvent('target-session-2')],
+        created: '2024-01-01T00:00:00.000Z',
+      },
+    };
+
+    const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
+
+    expect(result.handled).toBe(true);
+    const guarantorUpdateCall = getDocumentOperationCalls(myOsClient).find(
+      call => call.operation === 'guarantorUpdate'
+    );
+    expect(guarantorUpdateCall).toBeDefined();
+    const payloadJson = JSON.stringify(guarantorUpdateCall?.payload);
+    expect(payloadJson).toContain('Conversation/Document Bootstrap Completed');
+    expect(payloadJson).toContain('target-paynote-doc-2');
+    expect(payloadJson).not.toContain('inResponseTo');
   });
 
   it('skips non-bootstrap payloads', async () => {
@@ -301,6 +467,139 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
       expect.objectContaining({
         bootstrapSessionId: 'bootstrap-4',
         eventId: 'event-4',
+      })
+    );
+  });
+
+  it('buffers when bootstrap context exists but linking data is missing', async () => {
+    const {
+      deps,
+      myOsClient,
+      payNoteDeliveryRepository,
+      payNoteBootstrapRepository,
+      bootstrapContextRepository,
+      pendingBootstrapEventRepository,
+    } = createDependencies();
+
+    payNoteDeliveryRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(true);
+    payNoteDeliveryRepository.getDeliveryByBootstrapSessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    payNoteBootstrapRepository.getBootstrapBySessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    bootstrapContextRepository.getContextBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-5',
+        merchantId: 'merchant-1',
+        requestingSessionId: 'requesting-session-1',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+
+    const payload: HandlePayNoteBootstrapWebhookInput['payload'] = {
+      id: 'event-5',
+      object: {
+        sessionId: 'bootstrap-5',
+        document: buildBootstrapDocument(),
+        emitted: [buildTargetSessionStartedEvent('session-5')],
+      },
+    };
+
+    const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
+
+    expect(result.handled).toBe(true);
+    expect(result.note).toBe('Buffered waiting for bootstrap context');
+    expect(myOsClient.fetchDocument).not.toHaveBeenCalled();
+    expect(pendingBootstrapEventRepository.addPending).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bootstrapSessionId: 'bootstrap-5',
+        eventId: 'event-5',
+      })
+    );
+  });
+
+  it('links paynote using bootstrap context when delivery/bootstrap records are missing', async () => {
+    const {
+      deps,
+      myOsClient,
+      payNoteRepository,
+      payNoteDeliveryRepository,
+      payNoteBootstrapRepository,
+      bootstrapContextRepository,
+      pendingBootstrapEventRepository,
+      contractRepository,
+    } = createDependencies();
+
+    payNoteDeliveryRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(true);
+    payNoteDeliveryRepository.getDeliveryByBootstrapSessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    payNoteBootstrapRepository.getBootstrapBySessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    bootstrapContextRepository.getContextBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-ctx-1',
+        merchantId: 'merchant-ctx-1',
+        accountNumber: '9559276001',
+        userId: 'user-ctx-1',
+        holdId: 'hold-ctx-1',
+        transactionId: 'txn-ctx-1',
+        payeeAccountNumber: '9559276001',
+        customerChannelKey: 'payerChannel',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+    myOsClient.fetchDocument = vi.fn().mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'doc-ctx-1',
+        sessionId: 'session-ctx-1',
+        document: buildPayNoteDocument(),
+      },
+    } as MyOsFetchDocumentResult);
+    payNoteRepository.getPayNote = vi.fn().mockResolvedValue(null);
+
+    const payload: HandlePayNoteBootstrapWebhookInput['payload'] = {
+      id: 'event-ctx-1',
+      object: {
+        sessionId: 'bootstrap-ctx-1',
+        document: buildBootstrapDocument(),
+        emitted: [buildTargetSessionStartedEvent('session-ctx-1')],
+        created: '2024-01-01T00:00:00.000Z',
+      },
+    };
+
+    const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
+
+    expect(result.handled).toBe(true);
+    expect(result.note).toBeUndefined();
+    expect(pendingBootstrapEventRepository.addPending).not.toHaveBeenCalled();
+    expect(payNoteRepository.savePayNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payNoteDocumentId: 'doc-ctx-1',
+        sessionIds: ['session-ctx-1'],
+        accountNumber: '9559276001',
+        userId: 'user-ctx-1',
+        merchantId: 'merchant-ctx-1',
+        holdId: 'hold-ctx-1',
+        transactionId: 'txn-ctx-1',
+        payerAccountNumber: '9559276001',
+        payeeAccountNumber: '9559276001',
+      })
+    );
+    expect(contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentId: 'doc-ctx-1',
+        sessionId: 'session-ctx-1',
+        accountNumber: '9559276001',
+        userId: 'user-ctx-1',
+        customerChannelKey: 'payerChannel',
       })
     );
   });

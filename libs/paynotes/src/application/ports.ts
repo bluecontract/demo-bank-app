@@ -260,7 +260,16 @@ export interface PayNoteBootstrapRepository {
 
 export interface BootstrapContextRecord {
   bootstrapSessionId: string;
-  merchantId: string;
+  merchantId?: string;
+  accountNumber?: string;
+  userId?: string;
+  holdId?: string;
+  transactionId?: string;
+  payerAccountNumber?: string;
+  payeeAccountNumber?: string;
+  customerChannelKey?: string;
+  requestingSessionId?: string;
+  requestId?: string;
   createdAt: string;
 }
 

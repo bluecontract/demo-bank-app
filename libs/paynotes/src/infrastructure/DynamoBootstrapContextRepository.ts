@@ -33,7 +33,16 @@ interface BootstrapContextItem {
   SK: typeof SORT_KEYS.META;
   entityType: typeof ENTITY_TYPES.BOOTSTRAP_CONTEXT;
   bootstrapSessionId: string;
-  merchantId: string;
+  merchantId?: string;
+  accountNumber?: string;
+  userId?: string;
+  holdId?: string;
+  transactionId?: string;
+  payerAccountNumber?: string;
+  payeeAccountNumber?: string;
+  customerChannelKey?: string;
+  requestingSessionId?: string;
+  requestId?: string;
   createdAt: string;
 }
 
@@ -78,7 +87,16 @@ export class DynamoBootstrapContextRepository
     const item = response.Item as BootstrapContextItem;
     return {
       bootstrapSessionId: item.bootstrapSessionId,
-      merchantId: item.merchantId,
+      ...(item.merchantId ? { merchantId: item.merchantId } : {}),
+      accountNumber: item.accountNumber,
+      userId: item.userId,
+      holdId: item.holdId,
+      transactionId: item.transactionId,
+      payerAccountNumber: item.payerAccountNumber,
+      payeeAccountNumber: item.payeeAccountNumber,
+      customerChannelKey: item.customerChannelKey,
+      requestingSessionId: item.requestingSessionId,
+      requestId: item.requestId,
       createdAt: item.createdAt,
     };
   }
@@ -89,7 +107,24 @@ export class DynamoBootstrapContextRepository
       SK: SORT_KEYS.META,
       entityType: ENTITY_TYPES.BOOTSTRAP_CONTEXT,
       bootstrapSessionId: record.bootstrapSessionId,
-      merchantId: record.merchantId,
+      ...(record.merchantId ? { merchantId: record.merchantId } : {}),
+      ...(record.accountNumber ? { accountNumber: record.accountNumber } : {}),
+      ...(record.userId ? { userId: record.userId } : {}),
+      ...(record.holdId ? { holdId: record.holdId } : {}),
+      ...(record.transactionId ? { transactionId: record.transactionId } : {}),
+      ...(record.payerAccountNumber
+        ? { payerAccountNumber: record.payerAccountNumber }
+        : {}),
+      ...(record.payeeAccountNumber
+        ? { payeeAccountNumber: record.payeeAccountNumber }
+        : {}),
+      ...(record.customerChannelKey
+        ? { customerChannelKey: record.customerChannelKey }
+        : {}),
+      ...(record.requestingSessionId
+        ? { requestingSessionId: record.requestingSessionId }
+        : {}),
+      ...(record.requestId ? { requestId: record.requestId } : {}),
       createdAt: record.createdAt,
     };
 

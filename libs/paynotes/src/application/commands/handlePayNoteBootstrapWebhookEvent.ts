@@ -17,6 +17,7 @@ import type { HoldRepository } from '@demo-bank-app/banking';
 import type { ContractRepository } from '@demo-bank-app/contracts';
 import { blue } from '../../blue';
 import { isPayNoteDocument } from '../payNoteDelivery/blueUtils';
+import { runGuarantorUpdate } from './documentOperations';
 import { upsertPayNoteContractRecord } from './payNoteContractUtils';
 import { updateHoldPayNoteDocumentId } from './payNoteHoldUtils';
 import { mergeSessionIds } from './payNoteSessionUtils';
@@ -86,6 +87,75 @@ const updateHoldPayNoteDocumentIdForBootstrap = async (
     payNoteDocumentId,
     context,
     message: 'Hold PayNote reference updated after bootstrap',
+  });
+};
+
+const withInResponseTo = (
+  event: Record<string, unknown>,
+  requestId: string | undefined
+): Record<string, unknown> => {
+  if (!requestId) {
+    return event;
+  }
+  return {
+    ...event,
+    inResponseTo: {
+      requestId,
+    },
+  };
+};
+
+const reportBootstrapCompleted = async (input: {
+  eventId: string;
+  bootstrapSessionId?: string;
+  payNoteDocumentId: string;
+  requestingSessionId?: string;
+  requestId?: string;
+  deps: HandlePayNoteBootstrapWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<boolean> => {
+  const {
+    eventId,
+    bootstrapSessionId,
+    payNoteDocumentId,
+    requestingSessionId,
+    requestId,
+    deps,
+    logs,
+  } = input;
+
+  if (!requestingSessionId) {
+    return false;
+  }
+
+  const credentials = await deps.myOsClient.getCredentials();
+  return runGuarantorUpdate({
+    myOsClient: deps.myOsClient,
+    credentials,
+    sessionId: requestingSessionId,
+    request: [
+      withInResponseTo(
+        {
+          type: 'Conversation/Document Bootstrap Completed',
+          documentId: payNoteDocumentId,
+        },
+        requestId
+      ),
+    ],
+    logs,
+    logContext: {
+      eventId,
+      bootstrapSessionId: bootstrapSessionId ?? null,
+      requestId: requestId ?? null,
+      requestingSessionId,
+      payNoteDocumentId,
+    },
+    successMessage:
+      'Reported document bootstrap completion via guarantorUpdate',
+    failureMessage:
+      'Failed to report document bootstrap completion via guarantorUpdate',
+    missingCredentialsMessage:
+      'Skipped document bootstrap completion (missing MyOS credentials)',
   });
 };
 
@@ -337,8 +407,14 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         bootstrapSessionId
       )
     : null;
+  const hasBootstrapContextLinkingData = Boolean(
+    bootstrapContext?.userId &&
+      (bootstrapContext.accountNumber ??
+        bootstrapContext.payerAccountNumber ??
+        bootstrapContext.payeeAccountNumber)
+  );
 
-  if (!deliveryRecord && !bootstrapRecord) {
+  if (!deliveryRecord && !bootstrapRecord && !hasBootstrapContextLinkingData) {
     if (bootstrapSessionId && !input.skipPendingBuffer) {
       await bufferPendingBootstrapEvent({
         eventId,
@@ -370,7 +446,11 @@ export const handlePayNoteBootstrapWebhookEvent = async (
     bootstrapSessionId,
     hasDeliveryRecord: Boolean(deliveryRecord),
     hasBootstrapRecord: Boolean(bootstrapRecord),
+    hasBootstrapContext: Boolean(bootstrapContext),
+    hasBootstrapContextLinkingData,
   });
+
+  let completionReported = false;
 
   for (const { sessionIds } of targetEvents) {
     if (!sessionIds.length) {
@@ -422,17 +502,27 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         sessionIds: [sessionId],
         deliveryId: deliveryRecord?.deliveryId,
         accountNumber:
-          deliveryRecord?.accountNumber ?? bootstrapRecord?.accountNumber,
-        userId: deliveryRecord?.userId ?? bootstrapRecord?.userId,
-        holdId: deliveryRecord?.holdId,
-        transactionId: deliveryRecord?.transactionId,
+          deliveryRecord?.accountNumber ??
+          bootstrapRecord?.accountNumber ??
+          bootstrapContext?.accountNumber,
+        userId:
+          deliveryRecord?.userId ??
+          bootstrapRecord?.userId ??
+          bootstrapContext?.userId,
+        holdId: deliveryRecord?.holdId ?? bootstrapContext?.holdId,
+        transactionId:
+          deliveryRecord?.transactionId ?? bootstrapContext?.transactionId,
         merchantId: deliveryRecord?.merchantId ?? bootstrapContext?.merchantId,
         payerAccountNumber:
           bootstrapRecord?.payerAccountNumber ??
+          bootstrapContext?.payerAccountNumber ??
+          bootstrapContext?.accountNumber ??
           deliveryRecord?.accountNumber ??
           existingPayNote?.payerAccountNumber,
         payeeAccountNumber:
           bootstrapRecord?.payeeAccountNumber ??
+          bootstrapContext?.payeeAccountNumber ??
+          bootstrapContext?.accountNumber ??
           existingPayNote?.payeeAccountNumber,
         document: resolved.document,
         createdAt: existingPayNote?.createdAt ?? now,
@@ -445,7 +535,8 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         updatedRecord,
         sessionId,
         documentId: payNoteDocumentId,
-        document: resolved.document,
+        customerChannelKey: bootstrapContext?.customerChannelKey,
+        document: updatedRecord.document,
         emittedEvents,
         now,
       });
@@ -476,6 +567,18 @@ export const handlePayNoteBootstrapWebhookEvent = async (
           deps,
           { eventId, deliveryId: deliveryRecord.deliveryId }
         );
+      }
+
+      if (!completionReported && bootstrapContext?.requestingSessionId) {
+        completionReported = await reportBootstrapCompleted({
+          eventId,
+          bootstrapSessionId,
+          payNoteDocumentId,
+          requestingSessionId: bootstrapContext.requestingSessionId,
+          requestId: bootstrapContext.requestId,
+          deps,
+          logs,
+        });
       }
 
       log(logs, 'info', 'PayNote bootstrap linked', {

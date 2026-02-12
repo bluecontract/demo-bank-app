@@ -48,6 +48,50 @@ describe('OperationForm', () => {
     );
   });
 
+  it('allows optional payload editing for no-schema operations', () => {
+    const mutate = vi.fn();
+    (useRunContractOperation as any).mockReturnValue({
+      mutate,
+      isError: false,
+      isPending: false,
+      error: null,
+    });
+
+    render(
+      <OperationForm
+        operation={{
+          name: 'bootstrap',
+          label: 'Bootstrap',
+          description: 'Bootstrap without explicit request schema',
+        }}
+        sessionId="session-1"
+        isOpen
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole('button', { name: /edit payload/i })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /edit payload/i }));
+
+    fireEvent.change(screen.getByPlaceholderText(/enter json/i), {
+      target: { value: '{"reason":"manual"}' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^ok$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        sessionId: 'session-1',
+        operation: 'bootstrap',
+        body: { reason: 'manual' },
+      },
+      expect.any(Object)
+    );
+  });
+
   it('shows raw JSON fallback errors and confirmation', () => {
     const mutate = vi.fn();
     (useRunContractOperation as any).mockReturnValue({
@@ -71,6 +115,13 @@ describe('OperationForm', () => {
         onClose={vi.fn()}
       />
     );
+
+    expect(screen.getByText('No input')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /edit payload/i })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /edit payload/i }));
 
     fireEvent.change(screen.getByPlaceholderText(/enter json/i), {
       target: { value: '{not-json}' },

@@ -172,6 +172,23 @@ export const handleDeliveryDocumentUpdate = async (input: {
     sessionId,
     deliveryDocumentId: deliveryDocumentId ?? null,
   });
+  const canonicalDeliveryContract = deliveryDocumentId
+    ? await deps.contractRepository.getContractByDocumentId(deliveryDocumentId)
+    : null;
+  const canonicalDeliverySessionId = canonicalDeliveryContract?.sessionId;
+  if (
+    canonicalDeliverySessionId &&
+    sessionId &&
+    canonicalDeliverySessionId !== sessionId
+  ) {
+    log(logs, 'info', 'Delivery event ignored (non-canonical session)', {
+      eventId,
+      deliveryId,
+      sessionId,
+      canonicalDeliverySessionId,
+    });
+    return;
+  }
 
   const { existing, matchedBy } = await resolveExistingDelivery({
     deliveryDocumentId,
@@ -242,11 +259,11 @@ export const handleDeliveryDocumentUpdate = async (input: {
   });
 
   const enqueuePayNoteDeliverySummary = deps.enqueuePayNoteDeliverySummary;
-  const canonicalDeliverySessionId = persistedDeliveryRecord.deliverySessionId;
+  const canonicalSessionForSummary = persistedDeliveryRecord.deliverySessionId;
   const shouldEnqueuePayNoteDeliverySummary =
     enqueuePayNoteDeliverySummary &&
-    canonicalDeliverySessionId &&
-    sessionId === canonicalDeliverySessionId &&
+    canonicalSessionForSummary &&
+    sessionId === canonicalSessionForSummary &&
     (eventType === 'DOCUMENT_CREATED' ||
       eventType === 'DOCUMENT_EPOCH_ADVANCED') &&
     persistedDeliveryRecord.transactionIdentificationStatus === 'identified' &&
@@ -254,13 +271,13 @@ export const handleDeliveryDocumentUpdate = async (input: {
 
   if (shouldEnqueuePayNoteDeliverySummary) {
     await enqueuePayNoteDeliverySummary({
-      sessionId: canonicalDeliverySessionId,
+      sessionId: canonicalSessionForSummary,
       reason: 'delivery-update',
     });
     trace(logs, 'Enqueued PayNote Delivery summary', {
       eventId,
       deliveryId,
-      sessionId: canonicalDeliverySessionId,
+      sessionId: canonicalSessionForSummary,
     });
   }
 

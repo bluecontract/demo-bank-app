@@ -135,6 +135,8 @@ export const handleWebhookEvent = async (
       existingRecord,
       deliveryRecord,
       bootstrapMerchantId: bootstrapContext?.merchantId,
+      bootstrapAccountNumber: bootstrapContext?.accountNumber,
+      bootstrapUserId: bootstrapContext?.userId,
       document,
       resolvedDocument,
       eventObject,

@@ -153,6 +153,10 @@ describe('payNoteWebhookHandler', () => {
         getHold: vi.fn(),
         putHoldMeta: vi.fn(),
       },
+      merchantDirectoryRepository: {
+        getMerchantsByIds: vi.fn().mockResolvedValue([]),
+        upsertMerchantProfile: vi.fn(),
+      },
       getMyOsCredentials: vi.fn(),
       getOpenAiApiKey: vi.fn(),
       payNoteVerificationRepository: {} as any,
