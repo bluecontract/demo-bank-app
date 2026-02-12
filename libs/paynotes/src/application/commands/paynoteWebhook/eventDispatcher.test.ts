@@ -28,35 +28,51 @@ describe('paynote event dispatcher', () => {
       context?: Record<string, unknown>;
     }> = [];
 
-    const { captureRequestEvents, transferEvents, monitoringRequestEvents } =
-      dispatchPayNoteEvents({
-        eventId: 'event-1',
-        payNoteDocumentId: 'doc-1',
-        logs,
-        events: [
-          toOfficialBlue({
-            type: 'PayNote/Card Transaction Capture Lock Requested',
-          }),
-          toOfficialBlue({
-            type: 'PayNote/Capture Funds Requested',
-          }),
-          toOfficialBlue({
-            type: 'Conversation/Document Bootstrap Requested',
-          }),
-          toOfficialBlue({
-            type: 'PayNote/Start Card Transaction Monitoring Requested',
-            targetMerchantId: 'merchant-123',
-            events: ['transaction'],
-          }),
-          {
-            type: 'PayNote/Future Event Requested',
-          },
-        ],
-      });
+    const {
+      captureRequestEvents,
+      chargeRequestEvents,
+      transferEvents,
+      monitoringRequestEvents,
+    } = dispatchPayNoteEvents({
+      eventId: 'event-1',
+      payNoteDocumentId: 'doc-1',
+      logs,
+      events: [
+        toOfficialBlue({
+          type: 'PayNote/Card Transaction Capture Lock Requested',
+        }),
+        toOfficialBlue({
+          type: 'PayNote/Capture Funds Requested',
+        }),
+        toOfficialBlue({
+          type: 'PayNote/Linked Card Charge Requested',
+          amount: 2500,
+        }),
+        toOfficialBlue({
+          type: 'Conversation/Document Bootstrap Requested',
+        }),
+        toOfficialBlue({
+          type: 'PayNote/Start Card Transaction Monitoring Requested',
+          targetMerchantId: 'merchant-123',
+          events: ['transaction'],
+        }),
+        {
+          type: 'PayNote/Future Event Requested',
+        },
+      ],
+    });
 
     expect(captureRequestEvents).toHaveLength(1);
+    expect(chargeRequestEvents).toHaveLength(1);
     expect(transferEvents).toHaveLength(1);
     expect(monitoringRequestEvents).toHaveLength(1);
+    expect(chargeRequestEvents[0]).toEqual(
+      expect.objectContaining({
+        eventType: 'PayNote/Linked Card Charge Requested',
+        eventIndex: 2,
+        event: expect.any(Object),
+      })
+    );
     expect(transferEvents[0]).toEqual(
       expect.objectContaining({
         eventType: 'PayNote/Capture Funds Requested',

@@ -22,6 +22,20 @@ interface BankingFacadeDependencies {
 
 const mapMoney = (amountMinor: number) => new Money(amountMinor);
 
+const isAccountActive = (account: {
+  status?: string;
+  isActive?: () => boolean;
+}): boolean => {
+  if (typeof account.isActive === 'function') {
+    try {
+      return account.isActive();
+    } catch {
+      return false;
+    }
+  }
+  return account.status === 'ACTIVE';
+};
+
 const buildTransferRequest = (request: TransferFundsRequest) => ({
   srcAccountId: request.sourceAccountId,
   dstAccountNumber: request.destinationAccountNumber,
@@ -110,6 +124,26 @@ export const createBankingFacade = (
     return {
       id: account.id,
       accountNumber: account.accountNumber,
+      ownerUserId,
+    };
+  },
+
+  async getActiveCreditLineAccountByUserId(userId) {
+    const accounts = await deps.bankingRepository.getAccountsByUserId(userId);
+    const activeCreditLine = accounts.find(
+      account =>
+        account.accountType === 'CREDIT_LINE' && isAccountActive(account)
+    );
+    if (!activeCreditLine) {
+      return null;
+    }
+
+    const ownerUserId = (activeCreditLine as { ownerUserId?: string })
+      .ownerUserId;
+
+    return {
+      id: activeCreditLine.id,
+      accountNumber: activeCreditLine.accountNumber,
       ownerUserId,
     };
   },

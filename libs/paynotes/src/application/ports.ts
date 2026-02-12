@@ -350,6 +350,13 @@ export interface BankingFacade {
   ): Promise<BankingAccount | null>;
 
   /**
+   * Resolves an active merchant credit line account when available.
+   */
+  getActiveCreditLineAccountByUserId?(
+    userId: string
+  ): Promise<BankingAccount | null>;
+
+  /**
    * Transfers funds between two bank accounts.
    */
   transferFunds(request: TransferFundsRequest): Promise<void>;

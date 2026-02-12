@@ -5,7 +5,11 @@ import {
   CAPTURE_LOCK_REQUESTED_EVENT_NAME,
   CAPTURE_UNLOCK_REQUESTED_EVENT_NAME,
   DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME,
+  LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
+  LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME,
   RESERVE_FUNDS_EVENT_NAME,
+  REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
+  REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME,
   START_CARD_TRANSACTION_MONITORING_REQUESTED_EVENT_NAME,
   resolveEmittedEventType,
 } from './events';
@@ -27,9 +31,17 @@ const MONITORING_EVENT_TYPES = new Set<string>([
   START_CARD_TRANSACTION_MONITORING_REQUESTED_EVENT_NAME,
 ]);
 
+const CHARGE_REQUEST_EVENT_TYPES = new Set<string>([
+  LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME,
+  LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
+  REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME,
+  REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
+]);
+
 export type PayNoteEventDispatchDecision =
   | 'capture-request'
   | 'transfer'
+  | 'charge-request'
   | 'monitoring-request'
   | 'document-bootstrap-requested'
   | 'unsupported';
@@ -75,6 +87,14 @@ export const classifyPayNoteEvent = (
     };
   }
 
+  if (eventType && CHARGE_REQUEST_EVENT_TYPES.has(eventType)) {
+    return {
+      event,
+      eventType,
+      decision: 'charge-request',
+    };
+  }
+
   if (eventType === DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME) {
     return {
       event,
@@ -97,6 +117,7 @@ export const dispatchPayNoteEvents = (input: {
   logs: LogEntry[];
 }): {
   captureRequestEvents: WebhookEmittedEvent[];
+  chargeRequestEvents: DispatchedTransferEvent[];
   transferEvents: DispatchedTransferEvent[];
   monitoringRequestEvents: Array<{
     event: WebhookEmittedEvent;
@@ -107,6 +128,7 @@ export const dispatchPayNoteEvents = (input: {
   const { events, eventId, payNoteDocumentId, logs } = input;
 
   const captureRequestEvents: WebhookEmittedEvent[] = [];
+  const chargeRequestEvents: DispatchedTransferEvent[] = [];
   const transferEvents: DispatchedTransferEvent[] = [];
   const monitoringRequestEvents: Array<{
     event: WebhookEmittedEvent;
@@ -132,6 +154,15 @@ export const dispatchPayNoteEvents = (input: {
 
     if (classified.decision === 'transfer') {
       transferEvents.push({
+        event: classified.event,
+        eventType: classified.eventType,
+        eventIndex,
+      });
+      continue;
+    }
+
+    if (classified.decision === 'charge-request') {
+      chargeRequestEvents.push({
         event: classified.event,
         eventType: classified.eventType,
         eventIndex,
@@ -177,6 +208,7 @@ export const dispatchPayNoteEvents = (input: {
 
   return {
     captureRequestEvents,
+    chargeRequestEvents,
     transferEvents,
     monitoringRequestEvents,
   };

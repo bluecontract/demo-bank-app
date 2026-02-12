@@ -24,6 +24,7 @@ const createDependencies = () => {
   const bankingRepository = {
     getAccountIdByNumber: vi.fn(),
     getAccountById: vi.fn(),
+    getAccountsByUserId: vi.fn(),
   } as unknown as BankingRepository;
   const holdRepository = {} as HoldRepository;
   const logger = {} as PowertoolsLogger;
@@ -110,5 +111,62 @@ describe('createBankingFacade - capture branch routing', () => {
     );
     expect(bankingMocks.partialCaptureHold).not.toHaveBeenCalled();
     expect(result).toEqual(hold);
+  });
+
+  it('returns active merchant credit line account when available', async () => {
+    const deps = createDependencies();
+    const facade = createBankingFacade(deps);
+
+    (
+      deps.bankingRepository.getAccountsByUserId as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce([
+      {
+        id: 'deposit-1',
+        accountNumber: '1111111111',
+        accountType: 'DEPOSIT',
+        ownerUserId: 'merchant-1',
+        isActive: () => true,
+      },
+      {
+        id: 'credit-line-1',
+        accountNumber: '2222222222',
+        accountType: 'CREDIT_LINE',
+        ownerUserId: 'merchant-1',
+        isActive: () => true,
+      },
+    ]);
+
+    const result = await facade.getActiveCreditLineAccountByUserId?.(
+      'merchant-1'
+    );
+
+    expect(result).toEqual({
+      id: 'credit-line-1',
+      accountNumber: '2222222222',
+      ownerUserId: 'merchant-1',
+    });
+  });
+
+  it('returns null when active merchant credit line account is missing', async () => {
+    const deps = createDependencies();
+    const facade = createBankingFacade(deps);
+
+    (
+      deps.bankingRepository.getAccountsByUserId as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce([
+      {
+        id: 'credit-line-1',
+        accountNumber: '2222222222',
+        accountType: 'CREDIT_LINE',
+        ownerUserId: 'merchant-1',
+        isActive: () => false,
+      },
+    ]);
+
+    const result = await facade.getActiveCreditLineAccountByUserId?.(
+      'merchant-1'
+    );
+
+    expect(result).toBeNull();
   });
 });

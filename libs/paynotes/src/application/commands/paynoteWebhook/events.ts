@@ -3,8 +3,12 @@ import {
   CardTransactionCaptureLockRequestedSchema,
   CardTransactionCaptureUnlockRequestedSchema,
   CaptureFundsRequestedSchema,
+  LinkedCardChargeAndCaptureImmediatelyRequestedSchema,
+  LinkedCardChargeRequestedSchema,
   ReserveFundsAndCaptureImmediatelyRequestedSchema,
   ReserveFundsRequestedSchema,
+  ReverseCardChargeAndCaptureImmediatelyRequestedSchema,
+  ReverseCardChargeRequestedSchema,
   StartCardTransactionMonitoringRequestedSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
 import { blue } from '../../../blue';
@@ -23,6 +27,14 @@ export const DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME =
   'Conversation/Document Bootstrap Requested';
 export const START_CARD_TRANSACTION_MONITORING_REQUESTED_EVENT_NAME =
   'PayNote/Start Card Transaction Monitoring Requested';
+export const LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME =
+  'PayNote/Linked Card Charge Requested';
+export const LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME =
+  'PayNote/Linked Card Charge and Capture Immediately Requested';
+export const REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME =
+  'PayNote/Reverse Card Charge Requested';
+export const REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME =
+  'PayNote/Reverse Card Charge and Capture Immediately Requested';
 
 const resolveEventTypeLabel = (event: unknown): string | undefined => {
   if (!event || typeof event !== 'object') {
@@ -55,6 +67,22 @@ const resolveEventType = (event: unknown): string | undefined => {
     if (blue.isTypeOf(node, CardTransactionCaptureUnlockRequestedSchema)) {
       return CAPTURE_UNLOCK_REQUESTED_EVENT_NAME;
     }
+    if (
+      blue.isTypeOf(node, LinkedCardChargeAndCaptureImmediatelyRequestedSchema)
+    ) {
+      return LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME;
+    }
+    if (blue.isTypeOf(node, LinkedCardChargeRequestedSchema)) {
+      return LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME;
+    }
+    if (
+      blue.isTypeOf(node, ReverseCardChargeAndCaptureImmediatelyRequestedSchema)
+    ) {
+      return REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME;
+    }
+    if (blue.isTypeOf(node, ReverseCardChargeRequestedSchema)) {
+      return REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME;
+    }
     if (blue.isTypeOf(node, DocumentBootstrapRequestedSchema)) {
       return DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME;
     }
@@ -80,7 +108,7 @@ const resolveEventType = (event: unknown): string | undefined => {
 export const resolveEmittedEventType = (
   event: WebhookEmittedEvent
 ): string | undefined =>
-  resolveEventType(event) ?? resolveEventTypeLabel(event);
+  resolveEventTypeLabel(event) ?? resolveEventType(event);
 
 export const resolveTransferRequestId = (
   event: WebhookEmittedEvent
@@ -145,6 +173,21 @@ export const resolveMonitoringRequestId = (
       StartCardTransactionMonitoringRequestedSchema
     );
     return getString(output.requestId);
+  } catch {
+    // unsupported structure or unparsable event
+  }
+  return undefined;
+};
+
+export const resolveChargeRequestId = (
+  event: WebhookEmittedEvent
+): string | undefined => {
+  try {
+    const node = blue.jsonValueToNode(event);
+    const simple = blue.nodeToJson(node, 'simple') as
+      | Record<string, unknown>
+      | undefined;
+    return getString(simple?.requestId);
   } catch {
     // unsupported structure or unparsable event
   }
