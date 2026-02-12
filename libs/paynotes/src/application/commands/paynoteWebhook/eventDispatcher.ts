@@ -6,6 +6,7 @@ import {
   CAPTURE_UNLOCK_REQUESTED_EVENT_NAME,
   DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME,
   RESERVE_FUNDS_EVENT_NAME,
+  START_CARD_TRANSACTION_MONITORING_REQUESTED_EVENT_NAME,
   resolveEmittedEventType,
 } from './events';
 import { trace } from './logging';
@@ -22,9 +23,14 @@ const TRANSFER_EVENT_TYPES = new Set<string>([
   RESERVE_FUNDS_EVENT_NAME,
 ]);
 
+const MONITORING_EVENT_TYPES = new Set<string>([
+  START_CARD_TRANSACTION_MONITORING_REQUESTED_EVENT_NAME,
+]);
+
 export type PayNoteEventDispatchDecision =
   | 'capture-request'
   | 'transfer'
+  | 'monitoring-request'
   | 'document-bootstrap-requested'
   | 'unsupported';
 
@@ -55,6 +61,14 @@ export const classifyPayNoteEvent = (
     };
   }
 
+  if (eventType && MONITORING_EVENT_TYPES.has(eventType)) {
+    return {
+      event,
+      eventType,
+      decision: 'monitoring-request',
+    };
+  }
+
   if (eventType === DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME) {
     return {
       event,
@@ -78,11 +92,21 @@ export const dispatchPayNoteEvents = (input: {
 }): {
   captureRequestEvents: WebhookEmittedEvent[];
   transferEvents: WebhookEmittedEvent[];
+  monitoringRequestEvents: Array<{
+    event: WebhookEmittedEvent;
+    eventType?: string;
+    eventIndex: number;
+  }>;
 } => {
   const { events, eventId, payNoteDocumentId, logs } = input;
 
   const captureRequestEvents: WebhookEmittedEvent[] = [];
   const transferEvents: WebhookEmittedEvent[] = [];
+  const monitoringRequestEvents: Array<{
+    event: WebhookEmittedEvent;
+    eventType?: string;
+    eventIndex: number;
+  }> = [];
 
   for (const [eventIndex, event] of events.entries()) {
     const classified = classifyPayNoteEvent(event);
@@ -102,6 +126,15 @@ export const dispatchPayNoteEvents = (input: {
 
     if (classified.decision === 'transfer') {
       transferEvents.push(classified.event);
+      continue;
+    }
+
+    if (classified.decision === 'monitoring-request') {
+      monitoringRequestEvents.push({
+        event: classified.event,
+        eventType: classified.eventType,
+        eventIndex,
+      });
       continue;
     }
 
@@ -135,5 +168,6 @@ export const dispatchPayNoteEvents = (input: {
   return {
     captureRequestEvents,
     transferEvents,
+    monitoringRequestEvents,
   };
 };

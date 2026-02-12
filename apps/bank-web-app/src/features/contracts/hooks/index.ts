@@ -4,6 +4,7 @@ export * from './useContractDetails';
 export * from './useContractHistory';
 export * from './useContractSummary';
 export * from './useRunContractOperation';
+export * from './useDecideContractPendingAction';
 export * from './useContractReviewState';
 export * from './useActiveContractSession';
 export * from './useArchiveContract';

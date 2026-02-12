@@ -6,21 +6,15 @@ import {
   IdempotencyConflictError,
   captureCardAuthorization,
 } from '@demo-bank-app/banking';
+import { resolveMonitoringReportStatusFromHoldStatus } from '@demo-bank-app/contracts';
 import { ServerInferRequest } from '@ts-rest/core';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { getDependencies } from './dependencies';
+import { getDependencies as getPaynoteDependencies } from '../paynote/dependencies';
 import { requireProcessorAuth } from '../auth/processorAuth';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
-
-const mergeUnique = (existing?: string[], incoming?: string[]) => {
-  const set = new Set<string>(existing ?? []);
-  (incoming ?? []).forEach(value => {
-    if (value) {
-      set.add(value);
-    }
-  });
-  return set.size ? Array.from(set) : undefined;
-};
+import { reportCardTransactionToMonitoringSubscribers } from '../contracts/reportMonitoringTransaction';
+import { mergeUniqueStrings } from '../shared/mergeUniqueStrings';
 
 export const captureCardAuthorizationHandler = async (
   request: ServerInferRequest<
@@ -70,6 +64,50 @@ export const captureCardAuthorizationHandler = async (
     });
 
     try {
+      const hold = await holdRepository.getHold(result.holdId);
+      if (hold?.merchantId) {
+        const accountId = await repository.getAccountIdByNumber(
+          hold.payerAccountNumber
+        );
+        const account = accountId
+          ? await repository.getAccountById(accountId)
+          : null;
+        const ownerUserId = account?.ownerUserId;
+        const reportStatus = resolveMonitoringReportStatusFromHoldStatus(
+          hold.status
+        );
+
+        if (ownerUserId && reportStatus) {
+          const { myOsClient } = await getPaynoteDependencies();
+          await reportCardTransactionToMonitoringSubscribers({
+            contractRepository,
+            myOsClient,
+            logger,
+            userId: ownerUserId,
+            merchantId: hold.merchantId,
+            reportEvent: {
+              type: 'PayNote/Card Transaction Report',
+              status: reportStatus,
+              amountMinor: request.body.amountMinor,
+              merchantId: hold.merchantId,
+              transactionId: result.transactionId,
+              cardTransactionDetails: hold.cardTransactionDetails,
+            },
+            reportTransactionId: result.transactionId,
+            relatedHoldId: hold.holdId,
+            relatedTransactionId: result.transactionId,
+          });
+        }
+      }
+    } catch (error) {
+      logger.warn('Failed to report card capture to monitoring subscribers', {
+        authorizationId: result.holdId,
+        transactionId: result.transactionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
       const relatedContracts = await contractRepository.listContractsByHoldId(
         result.holdId
       );
@@ -90,7 +128,7 @@ export const captureCardAuthorizationHandler = async (
             }
             await contractRepository.saveContract({
               ...contract,
-              relatedTransactionIds: mergeUnique(
+              relatedTransactionIds: mergeUniqueStrings(
                 contract.relatedTransactionIds,
                 [result.transactionId]
               ),

@@ -97,6 +97,7 @@ export const getContractDetailsHandler = async (
       emittedEvents: contract.emittedEvents,
       relatedTransactionIds: contract.relatedTransactionIds,
       relatedHoldIds: contract.relatedHoldIds,
+      pendingActions: contract.pendingActions,
       accountNumber: contract.accountNumber,
       document: contract.document,
       summary: normalizedSummary ?? undefined,

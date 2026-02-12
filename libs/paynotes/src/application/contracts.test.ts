@@ -32,6 +32,30 @@ const buildExistingContract = (): ContractRecord => ({
   sessionId: 'session-1',
   documentId: 'doc-1',
   document: payNoteDocument,
+  pendingActions: [
+    {
+      actionId: 'monitoring-1:consent',
+      type: 'monitoringConsentApproval',
+      status: 'pending',
+      title: 'Allow monitoring',
+      targetMerchantId: 'merchant-1',
+      requestedEvents: ['transaction'],
+      createdAt: now,
+    },
+  ],
+  monitoringSubscriptions: [
+    {
+      subscriptionId: 'monitoring-1',
+      targetMerchantId: 'merchant-1',
+      requestedEvents: ['transaction'],
+      status: 'pending',
+      pendingActionId: 'monitoring-1:consent',
+      requestEventId: 'event-1',
+      requestEventIndex: 0,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ],
   createdAt: now,
   updatedAt: now,
 });
@@ -104,6 +128,22 @@ describe('upsertContractRecord', () => {
 
     expect(result).toBe('session-1');
     expect(mocks.saveContract).toHaveBeenCalledTimes(1);
+    expect(mocks.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingActions: expect.arrayContaining([
+          expect.objectContaining({
+            actionId: 'monitoring-1:consent',
+            status: 'pending',
+          }),
+        ]),
+        monitoringSubscriptions: expect.arrayContaining([
+          expect.objectContaining({
+            subscriptionId: 'monitoring-1',
+            status: 'pending',
+          }),
+        ]),
+      })
+    );
   });
 
   it('links non-canonical session id when document already exists', async () => {

@@ -5,6 +5,7 @@ import {
   CaptureFundsRequestedSchema,
   ReserveFundsAndCaptureImmediatelyRequestedSchema,
   ReserveFundsRequestedSchema,
+  StartCardTransactionMonitoringRequestedSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
 import { blue } from '../../../blue';
 import type { WebhookEmittedEvent } from './types';
@@ -20,6 +21,8 @@ export const CAPTURE_UNLOCK_REQUESTED_EVENT_NAME =
   'PayNote/Card Transaction Capture Unlock Requested';
 export const DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME =
   'Conversation/Document Bootstrap Requested';
+export const START_CARD_TRANSACTION_MONITORING_REQUESTED_EVENT_NAME =
+  'PayNote/Start Card Transaction Monitoring Requested';
 
 const resolveEventTypeLabel = (event: unknown): string | undefined => {
   if (!event || typeof event !== 'object') {
@@ -63,6 +66,9 @@ const resolveEventType = (event: unknown): string | undefined => {
     }
     if (blue.isTypeOf(node, ReserveFundsRequestedSchema)) {
       return RESERVE_FUNDS_EVENT_NAME;
+    }
+    if (blue.isTypeOf(node, StartCardTransactionMonitoringRequestedSchema)) {
+      return START_CARD_TRANSACTION_MONITORING_REQUESTED_EVENT_NAME;
     }
   } catch {
     // ignore parse failures; the label fallback is handled separately
@@ -120,6 +126,25 @@ export const resolveCaptureRequestId = (
       | Record<string, unknown>
       | undefined;
     return getString(simple?.requestId);
+  } catch {
+    // unsupported structure or unparsable event
+  }
+  return undefined;
+};
+
+export const resolveMonitoringRequestId = (
+  event: WebhookEmittedEvent
+): string | undefined => {
+  try {
+    const node = blue.jsonValueToNode(event);
+    if (!blue.isTypeOf(node, StartCardTransactionMonitoringRequestedSchema)) {
+      return undefined;
+    }
+    const output = blue.nodeToSchemaOutput(
+      node,
+      StartCardTransactionMonitoringRequestedSchema
+    );
+    return getString(output.requestId);
   } catch {
     // unsupported structure or unparsable event
   }

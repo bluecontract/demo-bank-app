@@ -14,6 +14,8 @@ export {
   ContractDocumentSummaryDto,
   ContractSummaryGenerationDto,
   ContractDetailsDto,
+  ContractPendingActionDto,
+  ContractPendingActionDecisionRequestDto,
   ContractOperationResponseDto,
   ContractAiChatMessageDto,
   ContractAiChatRequestDto,

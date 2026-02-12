@@ -546,6 +546,23 @@ export const ContractHistoryResponseDto = z.object({
   items: z.array(ContractHistoryEntryDto),
 });
 
+export const ContractPendingActionDto = z.object({
+  actionId: z.string(),
+  type: z.literal('monitoringConsentApproval'),
+  status: z.enum(['pending', 'accepted', 'rejected']),
+  title: z.string(),
+  summary: z.string().optional(),
+  requestId: z.string().optional(),
+  targetMerchantId: z.string().optional(),
+  requestedEvents: z.array(z.string()).optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  decidedAt: z.string().datetime({ offset: true }).optional(),
+});
+
+export const ContractPendingActionDecisionRequestDto = z.object({
+  decision: z.enum(['accepted', 'rejected']),
+});
+
 export const ContractDetailsDto = z.object({
   contractId: z.string(),
   typeBlueId: z.string(),
@@ -562,6 +579,7 @@ export const ContractDetailsDto = z.object({
   emittedEvents: z.array(z.unknown()).optional(),
   relatedTransactionIds: z.array(z.string()).optional(),
   relatedHoldIds: z.array(z.string()).optional(),
+  pendingActions: z.array(ContractPendingActionDto).optional(),
   accountNumber: z.string().optional(),
   document: z.unknown().optional(),
   summary: ContractDocumentSummaryDto.optional(),

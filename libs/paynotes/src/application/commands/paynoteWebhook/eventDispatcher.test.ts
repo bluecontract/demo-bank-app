@@ -28,28 +28,35 @@ describe('paynote event dispatcher', () => {
       context?: Record<string, unknown>;
     }> = [];
 
-    const { captureRequestEvents, transferEvents } = dispatchPayNoteEvents({
-      eventId: 'event-1',
-      payNoteDocumentId: 'doc-1',
-      logs,
-      events: [
-        toOfficialBlue({
-          type: 'PayNote/Card Transaction Capture Lock Requested',
-        }),
-        toOfficialBlue({
-          type: 'PayNote/Capture Funds Requested',
-        }),
-        toOfficialBlue({
-          type: 'Conversation/Document Bootstrap Requested',
-        }),
-        {
-          type: 'PayNote/Future Event Requested',
-        },
-      ],
-    });
+    const { captureRequestEvents, transferEvents, monitoringRequestEvents } =
+      dispatchPayNoteEvents({
+        eventId: 'event-1',
+        payNoteDocumentId: 'doc-1',
+        logs,
+        events: [
+          toOfficialBlue({
+            type: 'PayNote/Card Transaction Capture Lock Requested',
+          }),
+          toOfficialBlue({
+            type: 'PayNote/Capture Funds Requested',
+          }),
+          toOfficialBlue({
+            type: 'Conversation/Document Bootstrap Requested',
+          }),
+          toOfficialBlue({
+            type: 'PayNote/Start Card Transaction Monitoring Requested',
+            targetMerchantId: 'merchant-123',
+            events: ['transaction'],
+          }),
+          {
+            type: 'PayNote/Future Event Requested',
+          },
+        ],
+      });
 
     expect(captureRequestEvents).toHaveLength(1);
     expect(transferEvents).toHaveLength(1);
+    expect(monitoringRequestEvents).toHaveLength(1);
 
     expect(logs).toContainEqual(
       expect.objectContaining({

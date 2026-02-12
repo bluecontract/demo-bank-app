@@ -9,10 +9,12 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 import type {
+  ContractMonitoringSubscription,
   ContractRecord,
   ContractRepository,
   ContractSummary,
   ContractDocumentSummary,
+  ContractPendingAction,
   ContractHistoryEntry,
   ContractHistoryEntryInput,
   ContractSummarySnapshot,
@@ -117,6 +119,8 @@ interface ContractItem {
   summaryStatusTimestamps?: Record<string, string>;
   summaryTriggerEvent?: unknown;
   summaryEmittedEvents?: unknown[];
+  pendingActions?: ContractPendingAction[];
+  monitoringSubscriptions?: ContractMonitoringSubscription[];
   createdAt: string;
   updatedAt: string;
 }
@@ -335,6 +339,8 @@ export class DynamoContractRepository implements ContractRepository {
       summaryStatusTimestamps: item.summaryStatusTimestamps,
       summaryTriggerEvent: item.summaryTriggerEvent,
       summaryEmittedEvents: item.summaryEmittedEvents,
+      pendingActions: item.pendingActions,
+      monitoringSubscriptions: item.monitoringSubscriptions,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
@@ -528,6 +534,8 @@ export class DynamoContractRepository implements ContractRepository {
       summaryStatusTimestamps: record.summaryStatusTimestamps,
       summaryTriggerEvent: record.summaryTriggerEvent,
       summaryEmittedEvents: record.summaryEmittedEvents,
+      pendingActions: record.pendingActions,
+      monitoringSubscriptions: record.monitoringSubscriptions,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
     };

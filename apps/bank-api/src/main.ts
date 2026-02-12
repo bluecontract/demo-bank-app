@@ -42,6 +42,7 @@ import { acceptPayNoteDeliveryHandler } from './paynote/acceptPayNoteDelivery';
 import { rejectPayNoteDeliveryHandler } from './paynote/rejectPayNoteDelivery';
 import { generatePayNoteDeliverySummaryHandler } from './paynote/generatePayNoteDeliverySummary';
 import { runContractOperationHandler } from './contracts/runContractOperation';
+import { decideContractPendingActionHandler } from './contracts/decideContractPendingAction';
 import { listContractsHandler } from './contracts/listContracts';
 import { getContractDetailsHandler } from './contracts/getContractDetails';
 import { listContractHistoryHandler } from './contracts/listContractHistory';
@@ -113,6 +114,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       generateContractSummary: generateContractSummaryHandler,
       contractAiChat: contractAiChatHandler,
       runContractOperation: runContractOperationHandler,
+      decideContractPendingAction: decideContractPendingActionHandler,
       authorizeCard: authorizeCardHandler,
       captureCardAuthorization: captureCardAuthorizationHandler,
     },

@@ -5,6 +5,7 @@ import { DashboardShell } from '../../features/dashboard/components';
 import {
   useActiveContractSession,
   useContractDetails,
+  useDecideContractPendingAction,
   useContractHistory,
   useContractReviewState,
   useRelatedContracts,
@@ -40,6 +41,7 @@ import { formatShortDateTime } from '../../lib/formatDate';
 import { formatStatusLabel } from '../../lib/formatStatusLabel';
 import { getSupportedContractByTypeBlueId } from '@demo-bank-app/shared-bank-api-contract';
 import type {
+  ContractDetails,
   ContractSummary,
   PayNoteDeliveryDetailsSanitized,
   RelatedContractItem,
@@ -217,6 +219,62 @@ function MockPendingActionCard({
         </Button>
         <Button variant="primary" size="sm">
           {rightLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+type MonitoringPendingAction = NonNullable<
+  ContractDetails['pendingActions']
+>[number];
+
+interface MonitoringPendingActionCardProps {
+  action: MonitoringPendingAction;
+  sessionId: string | null;
+}
+
+function MonitoringPendingActionCard({
+  action,
+  sessionId,
+}: MonitoringPendingActionCardProps) {
+  const decisionMutation = useDecideContractPendingAction();
+  const isPending = decisionMutation.isPending;
+
+  const decide = (decision: 'accepted' | 'rejected') => {
+    if (!sessionId || isPending) {
+      return;
+    }
+    decisionMutation.mutate({
+      sessionId,
+      actionId: action.actionId,
+      decision,
+    });
+  };
+
+  return (
+    <div className="rounded-xl sm:rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
+      <h3 className="text-lg font-semibold text-slate-900">{action.title}</h3>
+      {action.summary && (
+        <p className="mt-2 text-sm text-slate-600">{action.summary}</p>
+      )}
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-rose-500 text-rose-500 hover:bg-rose-50 focus:ring-rose-500"
+          onClick={() => decide('rejected')}
+          disabled={isPending}
+        >
+          Reject
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => decide('accepted')}
+          disabled={isPending}
+        >
+          Accept
         </Button>
       </div>
     </div>
@@ -549,6 +607,14 @@ export function ContractDetailsPage() {
   const historyItems = historyQuery.data?.items ?? [];
   const hasHistory = resolvedKind === 'contract' && historyItems.length > 0;
   const mockPendingAction = payNoteInitialStateMeta.action;
+  const pendingMonitoringAction =
+    resolvedKind === 'contract'
+      ? contract?.pendingActions?.find(
+          action =>
+            action.type === 'monitoringConsentApproval' &&
+            action.status === 'pending'
+        ) ?? null
+      : null;
   const shouldShowMockPendingAction =
     resolvedKind !== 'proposal' &&
     Boolean(contract) &&
@@ -1081,7 +1147,12 @@ export function ContractDetailsPage() {
           </div>
 
           <div className="flex flex-col gap-4">
-            {shouldShowMockPendingAction ? (
+            {pendingMonitoringAction ? (
+              <MonitoringPendingActionCard
+                action={pendingMonitoringAction}
+                sessionId={sessionId ?? null}
+              />
+            ) : shouldShowMockPendingAction ? (
               <MockPendingActionCard
                 title={mockPendingAction?.title}
                 summary={mockPendingAction?.summary}

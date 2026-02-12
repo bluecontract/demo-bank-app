@@ -33,6 +33,7 @@ import {
   ContractListResponseDto,
   ContractDetailsDto,
   ContractHistoryResponseDto,
+  ContractPendingActionDecisionRequestDto,
   ContractSummaryGenerationDto,
   ContractOperationResponseDto,
   ContractAiChatRequestDto,
@@ -672,6 +673,24 @@ export const bankApiContract = c.router(
           409: ProblemDto,
         },
         summary: 'Run a MyOS document operation on a contract session.',
+      },
+
+      decideContractPendingAction: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/pending-actions/:actionId/decision',
+        pathParams: z.object({
+          sessionId: z.string(),
+          actionId: z.string(),
+        }),
+        body: ContractPendingActionDecisionRequestDto,
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+          500: ProblemDto,
+        },
+        summary: 'Decide a pending action linked to a contract session.',
       },
 
       authorizeCard: {

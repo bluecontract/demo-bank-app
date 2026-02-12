@@ -1122,4 +1122,147 @@ describe('handleWebhookEvent', () => {
     expect(deps.holdRepository.disableHoldCapture).not.toHaveBeenCalled();
     expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
   });
+
+  it('creates pending monitoring action from monitoring request event without immediate guarantor response', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Voucher Contract',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Start Card Transaction Monitoring Requested',
+              requestId: 'monitoring-request-1',
+              targetMerchantId: 'merchant-123',
+              events: ['transaction'],
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    deps.contractRepository.getContractBySessionId = vi.fn().mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      documentId: 'doc-1',
+      userId: 'user-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'contract-1',
+        pendingActions: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'monitoringConsentApproval',
+            status: 'pending',
+            targetMerchantId: 'merchant-123',
+          }),
+        ]),
+        monitoringSubscriptions: expect.arrayContaining([
+          expect.objectContaining({
+            targetMerchantId: 'merchant-123',
+            status: 'pending',
+          }),
+        ]),
+      })
+    );
+    expect(
+      deps.contractRepository.addContractHistoryEntry
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'contract-1',
+        kind: 'pendingActionRequested',
+      })
+    );
+    expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+  });
+
+  it('stores monitoring pending action without undefined requestId when requestId is absent', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Voucher Contract',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Start Card Transaction Monitoring Requested',
+              targetMerchantId: 'merchant-123',
+              events: ['transaction'],
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    deps.contractRepository.getContractBySessionId = vi.fn().mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      documentId: 'doc-1',
+      userId: 'user-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    const saved = (
+      deps.contractRepository.saveContract as ReturnType<typeof vi.fn>
+    ).mock.calls.at(-1)?.[0] as {
+      pendingActions?: Array<Record<string, unknown>>;
+      monitoringSubscriptions?: Array<Record<string, unknown>>;
+    };
+    expect(saved).toBeDefined();
+    expect(saved.pendingActions?.[0]).not.toHaveProperty('requestId');
+    expect(saved.monitoringSubscriptions?.[0]).not.toHaveProperty('requestId');
+  });
 });

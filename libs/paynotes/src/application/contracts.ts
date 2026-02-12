@@ -229,6 +229,8 @@ export const upsertContractRecord = async (input: {
     summaryStatusTimestamps: existing?.summaryStatusTimestamps,
     summaryTriggerEvent: existing?.summaryTriggerEvent,
     summaryEmittedEvents: existing?.summaryEmittedEvents,
+    pendingActions: existing?.pendingActions,
+    monitoringSubscriptions: existing?.monitoringSubscriptions,
     createdAt: existing?.createdAt ?? input.now,
     updatedAt,
   });

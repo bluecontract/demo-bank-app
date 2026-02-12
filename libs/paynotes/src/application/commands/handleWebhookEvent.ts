@@ -17,6 +17,7 @@ import {
 import { handleCaptureRequestEvents } from './paynoteWebhook/captureRequests';
 import { handleTransferEvents } from './paynoteWebhook/transfers';
 import { dispatchPayNoteEvents } from './paynoteWebhook/eventDispatcher';
+import { handleMonitoringRequestEvents } from './paynoteWebhook/monitoring';
 import { trace } from './paynoteWebhook/logging';
 import { getString } from './paynoteWebhook/utils';
 import { toCompactBlueJsonValue } from '../blue/compactBlue';
@@ -172,10 +173,20 @@ export const handleWebhookEvent = async (
     },
   });
 
-  const { captureRequestEvents, transferEvents } = dispatchPayNoteEvents({
-    events,
+  const { captureRequestEvents, transferEvents, monitoringRequestEvents } =
+    dispatchPayNoteEvents({
+      events,
+      eventId: input.eventId,
+      payNoteDocumentId,
+      logs,
+    });
+
+  await handleMonitoringRequestEvents({
+    events: monitoringRequestEvents,
     eventId: input.eventId,
     payNoteDocumentId,
+    sessionId,
+    deps,
     logs,
   });
 

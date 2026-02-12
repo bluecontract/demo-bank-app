@@ -1,5 +1,43 @@
 export type ContractStatusTimestamps = Record<string, string>;
 
+export type ContractPendingActionType = 'monitoringConsentApproval';
+
+export type ContractPendingActionStatus = 'pending' | 'accepted' | 'rejected';
+
+export type ContractPendingAction = {
+  actionId: string;
+  type: ContractPendingActionType;
+  status: ContractPendingActionStatus;
+  title: string;
+  summary?: string;
+  requestId?: string;
+  targetMerchantId?: string;
+  requestedEvents?: string[];
+  createdAt: string;
+  decidedAt?: string;
+};
+
+export type ContractMonitoringSubscriptionStatus =
+  | 'pending'
+  | 'active'
+  | 'rejected';
+
+export type ContractMonitoringSubscription = {
+  subscriptionId: string;
+  targetMerchantId: string;
+  requestedEvents: string[];
+  status: ContractMonitoringSubscriptionStatus;
+  pendingActionId?: string;
+  requestId?: string;
+  requestEventId: string;
+  requestEventIndex: number;
+  reportedTransactionIds?: string[];
+  createdAt: string;
+  updatedAt: string;
+  activatedAt?: string;
+  rejectedAt?: string;
+};
+
 export type ContractDocumentSummaryStory = {
   headline: string;
   overview: string[];
@@ -125,6 +163,8 @@ export interface ContractRecord {
   summaryStatusTimestamps?: ContractStatusTimestamps;
   summaryTriggerEvent?: unknown;
   summaryEmittedEvents?: unknown[];
+  pendingActions?: ContractPendingAction[];
+  monitoringSubscriptions?: ContractMonitoringSubscription[];
   createdAt: string;
   updatedAt: string;
 }
