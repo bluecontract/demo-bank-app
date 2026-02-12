@@ -23,6 +23,49 @@ export const getActivityTimestamp = (item: ActivityItem) => {
   return getHoldEventTimestamp(item);
 };
 
+export const getActivityLifecycleGroupKey = (item: ActivityItem): string => {
+  if (item.kind === 'POSTED_TRANSACTION') {
+    if (item.originHoldId) {
+      return `hold-${item.originHoldId}`;
+    }
+    if (item.processorChargeId) {
+      return `charge-${item.processorChargeId}`;
+    }
+    return `txn-${item.transactionId}`;
+  }
+
+  return `hold-${item.holdId}`;
+};
+
+export const collapseActivityLifecycle = (
+  items: ActivityItem[]
+): ActivityItem[] => {
+  if (!items.length) {
+    return items;
+  }
+  const holdIds = new Set(
+    items
+      .filter(
+        (item): item is Exclude<ActivityItem, { kind: 'POSTED_TRANSACTION' }> =>
+          item.kind !== 'POSTED_TRANSACTION'
+      )
+      .map(item => item.holdId)
+  );
+
+  // Keep full hold history (including partial captures), but hide
+  // settlement POSTED_TRANSACTION rows that only mirror a hold-origin flow.
+  return items.filter(item => {
+    if (
+      item.kind === 'POSTED_TRANSACTION' &&
+      item.originHoldId &&
+      holdIds.has(item.originHoldId)
+    ) {
+      return false;
+    }
+    return true;
+  });
+};
+
 export const getActivityKey = (item: ActivityItem) =>
   item.kind === 'POSTED_TRANSACTION'
     ? `txn-${item.transactionId}`

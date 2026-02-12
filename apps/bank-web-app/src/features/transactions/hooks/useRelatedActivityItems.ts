@@ -1,6 +1,9 @@
 import { useMemo } from 'react';
 import type { ActivityItem } from './useActivity';
-import { getActivityTimestamp } from '../lib/activityUtils';
+import {
+  collapseActivityLifecycle,
+  getActivityTimestamp,
+} from '../lib/activityUtils';
 
 interface UseRelatedActivityItemsInput {
   activityItems: ActivityItem[];
@@ -62,6 +65,19 @@ export const useRelatedActivityItems = ({
     [activityByHoldId, relatedHoldIds]
   );
 
+  const groupedRelatedItems = useMemo(() => {
+    const byRecency = [...relatedTransactionItems, ...relatedHoldItems].sort(
+      (a, b) => {
+        const timeA = Date.parse(getActivityTimestamp(a));
+        const timeB = Date.parse(getActivityTimestamp(b));
+        const normalizedA = Number.isNaN(timeA) ? 0 : timeA;
+        const normalizedB = Number.isNaN(timeB) ? 0 : timeB;
+        return normalizedB - normalizedA;
+      }
+    );
+    return collapseActivityLifecycle(byRecency);
+  }, [relatedHoldItems, relatedTransactionItems]);
+
   const missingTransactionIds = useMemo(
     () =>
       relatedTransactionIds.filter(
@@ -76,6 +92,7 @@ export const useRelatedActivityItems = ({
   );
 
   return {
+    groupedRelatedItems,
     relatedTransactionItems,
     relatedHoldItems,
     missingTransactionIds,

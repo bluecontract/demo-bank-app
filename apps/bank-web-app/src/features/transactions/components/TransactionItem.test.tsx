@@ -145,7 +145,7 @@ describe('TransactionItem', () => {
     expect(screen.getByText('Hold Captured')).toBeInTheDocument();
     expect(screen.getAllByText('HOLD CAPTURED').length).toBeGreaterThan(0);
     expect(screen.getAllByText('222 233 3344').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('$95').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('-$95').length).toBeGreaterThan(0);
   });
 
   it('renders failed hold with failure messaging', () => {

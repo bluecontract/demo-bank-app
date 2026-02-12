@@ -63,6 +63,31 @@ const holdCreated: ActivityItem = {
   idempotencyKeyHash: 'hash',
 };
 
+const holdCaptured: ActivityItem = {
+  kind: 'HOLD_CAPTURED',
+  activityId: 'HOLD#hold-1',
+  holdId: 'hold-1',
+  amountMinor: 50000,
+  description: 'Captured purchase',
+  capturedAt: '2023-01-02T12:05:00Z',
+  transactionId: 'txn-123',
+  counterpartyAccountNumber: '5555555555',
+};
+
+const postedFromHold: ActivityItem = {
+  kind: 'POSTED_TRANSACTION',
+  activityId: 'TXN#txn-123',
+  transactionId: 'txn-123',
+  amountMinor: 50000,
+  description: 'Captured purchase',
+  postedAt: '2023-01-02T12:06:00Z',
+  originHoldId: 'hold-1',
+  side: 'DEBIT',
+  type: 'TRANSFER',
+  status: 'POSTED',
+  counterpartyAccountNumber: '5555555555',
+};
+
 describe('TransactionList', () => {
   beforeEach(() => {
     navigateSpy.mockClear();
@@ -189,5 +214,26 @@ describe('TransactionList', () => {
         },
       }
     );
+  });
+
+  it('keeps hold lifecycle history and hides posted settlement row', () => {
+    render(
+      <TransactionList
+        activityItems={[postedFromHold, holdCaptured, holdCreated]}
+        accountId="acc-1"
+        isLoading={false}
+        isError={false}
+        isEmpty={false}
+        data-testid="activity-list"
+      />
+    );
+
+    expect(screen.queryByTestId('activity-item-txn-txn-123')).toBeNull();
+    expect(
+      screen.getByTestId('activity-item-hold_created-hold-1')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId('activity-item-hold_captured-hold-1')
+    ).toBeInTheDocument();
   });
 });

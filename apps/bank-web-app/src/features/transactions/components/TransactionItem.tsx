@@ -163,6 +163,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         subtitleLines: item.transactionId
           ? [...base.subtitleLines, `txn: ${item.transactionId}`]
           : base.subtitleLines,
+        amountText: `-${formatCurrency(item.amountMinor)}`,
         amountClass: 'text-amber-700',
         clickable: true,
         activityId: item.activityId,

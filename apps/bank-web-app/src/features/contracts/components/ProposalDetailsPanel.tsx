@@ -85,16 +85,12 @@ export function ProposalDetailsPanel({
     () => activityQuery.data?.items ?? [],
     [activityQuery.data?.items]
   );
-  const {
-    relatedTransactionItems,
-    relatedHoldItems,
-    missingTransactionIds,
-    missingHoldIds,
-  } = useRelatedActivityItems({
-    activityItems,
-    relatedTransactionIds: relatedTransactions,
-    relatedHoldIds: relatedHolds,
-  });
+  const { groupedRelatedItems, missingTransactionIds, missingHoldIds } =
+    useRelatedActivityItems({
+      activityItems,
+      relatedTransactionIds: relatedTransactions,
+      relatedHoldIds: relatedHolds,
+    });
 
   const handleActivitySelect = (activity: ActivityItem) => {
     if (!proposal?.accountNumber || !account?.accountId) {
@@ -267,89 +263,63 @@ export function ProposalDetailsPanel({
 
           {!isActivityLoading && (
             <div className="mt-4 space-y-4">
-              {relatedTransactions.length > 0 && (
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Transactions
-                  </p>
-                  <div className="mt-2 rounded-2xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
-                    {relatedTransactionItems.map(item => (
-                      <TransactionItem
-                        key={getActivityKey(item)}
-                        item={item}
-                        onActivitySelect={handleActivitySelect}
-                      />
-                    ))}
-                    {missingTransactionIds.map(txnId => (
-                      <div
-                        key={txnId}
-                        className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
-                      >
-                        <div>
-                          <p className="font-semibold text-slate-900">
-                            Transaction {txnId}
-                          </p>
-                          <p className="text-xs text-slate-500 mt-1">
-                            Details pending in activity feed.
-                          </p>
-                        </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={!proposal.accountNumber}
-                          onClick={() =>
-                            handleFallbackActivityOpen(`TXN#${txnId}`)
-                          }
-                        >
-                          View details
-                        </Button>
-                      </div>
-                    ))}
+              <div className="rounded-2xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
+                {groupedRelatedItems.map(item => (
+                  <TransactionItem
+                    key={getActivityKey(item)}
+                    item={item}
+                    onActivitySelect={handleActivitySelect}
+                  />
+                ))}
+                {missingTransactionIds.map(txnId => (
+                  <div
+                    key={txnId}
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
+                  >
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        Transaction {txnId}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Details pending in activity feed.
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={!proposal.accountNumber}
+                      onClick={() => handleFallbackActivityOpen(`TXN#${txnId}`)}
+                    >
+                      View details
+                    </Button>
                   </div>
-                </div>
-              )}
-
-              {relatedHolds.length > 0 && (
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Holds
-                  </p>
-                  <div className="mt-2 rounded-2xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
-                    {relatedHoldItems.map(item => (
-                      <TransactionItem
-                        key={getActivityKey(item)}
-                        item={item}
-                        onActivitySelect={handleActivitySelect}
-                      />
-                    ))}
-                    {missingHoldIds.map(holdId => (
-                      <div
-                        key={holdId}
-                        className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
-                      >
-                        <div>
-                          <p className="font-semibold text-slate-900">
-                            Hold {holdId}
-                          </p>
-                          <p className="text-xs text-slate-500 mt-1">
-                            Details pending in activity feed.
-                          </p>
-                        </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          disabled={!proposal.accountNumber}
-                          onClick={() =>
-                            handleFallbackActivityOpen(`HOLD#${holdId}`)
-                          }
-                        >
-                          View details
-                        </Button>
-                      </div>
-                    ))}
+                ))}
+                {missingHoldIds.map(holdId => (
+                  <div
+                    key={holdId}
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
+                  >
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        Hold {holdId}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Details pending in activity feed.
+                      </p>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={!proposal.accountNumber}
+                      onClick={() =>
+                        handleFallbackActivityOpen(`HOLD#${holdId}`)
+                      }
+                    >
+                      View details
+                    </Button>
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
             </div>
           )}
         </section>

@@ -1,9 +1,13 @@
+import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { TransactionItem } from './TransactionItem';
 import { ActivityItem } from '../hooks/useActivity';
 import { Spinner } from '../../../ui/Spinner';
 import { buildTransactionDetailsPath } from '../lib/activityRoutes';
-import { getActivityKey } from '../lib/activityUtils';
+import {
+  collapseActivityLifecycle,
+  getActivityKey,
+} from '../lib/activityUtils';
 
 interface TransactionListProps {
   activityItems: ActivityItem[];
@@ -11,6 +15,7 @@ interface TransactionListProps {
   isLoading: boolean;
   isError: boolean;
   isEmpty: boolean;
+  collapseLifecycle?: boolean;
   'data-testid'?: string;
 }
 
@@ -20,6 +25,7 @@ export function TransactionList({
   isLoading,
   isError,
   isEmpty,
+  collapseLifecycle = true,
   'data-testid': testId,
 }: TransactionListProps) {
   const navigate = useNavigate();
@@ -36,6 +42,17 @@ export function TransactionList({
       },
     });
   };
+
+  const displayItems = useMemo(
+    () =>
+      collapseLifecycle
+        ? collapseActivityLifecycle(activityItems)
+        : activityItems,
+    [activityItems, collapseLifecycle]
+  );
+
+  const shouldShowEmpty =
+    isEmpty || (!isLoading && !isError && displayItems.length === 0);
 
   if (isLoading) {
     return (
@@ -72,7 +89,7 @@ export function TransactionList({
     );
   }
 
-  if (isEmpty) {
+  if (shouldShowEmpty) {
     return (
       <div
         className="flex-1 flex items-center justify-center"
@@ -103,7 +120,7 @@ export function TransactionList({
     <div className="flex-1 flex flex-col min-h-0" data-testid={testId}>
       <div className="flex-1 overflow-y-auto">
         <div className="divide-y divide-slate-200">
-          {activityItems.map(item => {
+          {displayItems.map(item => {
             return (
               <TransactionItem
                 key={getActivityKey(item)}
