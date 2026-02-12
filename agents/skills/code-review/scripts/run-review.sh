@@ -12,6 +12,10 @@ timeout_seconds="${REVIEW_TIMEOUT_SECONDS:-600}"
 # Gemini needs shell tool access to inspect staged diffs via git.
 gemini_approval_mode="${GEMINI_APPROVAL_MODE:-yolo}"
 gemini_allowed_tools="${GEMINI_ALLOWED_TOOLS:-run_shell_command,read_file,search_file_content,save_memory}"
+# Codex defaults are explicit to avoid depending on local ~/.codex model settings.
+codex_review_model="${CODEX_REVIEW_MODEL:-gpt-5.2-codex}"
+codex_review_fallback_model="${CODEX_REVIEW_FALLBACK_MODEL:-gpt-5-codex}"
+codex_review_reasoning_effort="${CODEX_REVIEW_REASONING_EFFORT:-low}"
 
 if git diff --cached --quiet; then
   echo "No staged changes to review." >&2
@@ -174,11 +178,34 @@ run_gemini_with_fallback() {
 }
 
 run_gemini_with_fallback
-if [[ -n "${CODEX_REVIEW_MODEL:-}" ]]; then
-  run_model "codex" "${review_dir}/codex.md" codex review -c model="$CODEX_REVIEW_MODEL" "$prompt"
-else
-  run_model "codex" "${review_dir}/codex.md" codex review "$prompt"
-fi
+run_codex_with_fallback() {
+  local outfile="${review_dir}/codex.md"
+  if run_model \
+    "codex" \
+    "${outfile}" \
+    codex \
+    review \
+    -c model="${codex_review_model}" \
+    -c model_reasoning_effort="${codex_review_reasoning_effort}" \
+    "$prompt"; then
+    return 0
+  fi
+
+  if [[ -z "${codex_review_fallback_model}" || "${codex_review_fallback_model}" == "${codex_review_model}" ]]; then
+    return 1
+  fi
+
+  run_model \
+    "codex (fallback)" \
+    "${outfile}" \
+    codex \
+    review \
+    -c model="${codex_review_fallback_model}" \
+    -c model_reasoning_effort="${codex_review_reasoning_effort}" \
+    "$prompt"
+}
+
+run_codex_with_fallback
 
 cat <<'EOF' > "$result_file"
 # Review Resolution

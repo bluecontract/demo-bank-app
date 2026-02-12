@@ -55,6 +55,10 @@ Notes:
 - Gemini is run with shell/git tool access by default so it can inspect staged diffs directly:
   - `GEMINI_APPROVAL_MODE` (default: `yolo`)
   - `GEMINI_ALLOWED_TOOLS` (default: `run_shell_command,read_file,search_file_content,save_memory`)
+- Codex uses explicit defaults and fallback to avoid local config drift:
+  - `CODEX_REVIEW_MODEL` (default: `gpt-5.2-codex`)
+  - `CODEX_REVIEW_FALLBACK_MODEL` (default: `gpt-5-codex`)
+  - `CODEX_REVIEW_REASONING_EFFORT` (default: `low`)
 - If a model fails or times out, its output file will contain the error details.
 
 # Command Template (manual fallback)
@@ -100,8 +104,8 @@ gemini --approval-mode yolo \
     --allowed-tools search_file_content \
     --allowed-tools save_memory \
     -m gemini-3-flash-preview -p "$prompt" > "${review_dir}/gemini.md"
-# Uses the default codex CLI model; optionally override with CODEX_REVIEW_MODEL.
-codex review "$prompt" > "${review_dir}/codex.md"
+# Prefer explicit model settings for reproducibility.
+codex review -c model="gpt-5.2-codex" -c model_reasoning_effort="low" "$prompt" > "${review_dir}/codex.md"
 
 cat <<'EOF' > "$result_file"
 # Review Resolution
