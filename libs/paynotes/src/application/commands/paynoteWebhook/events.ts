@@ -104,3 +104,24 @@ export const resolveTransferRequestId = (
   }
   return undefined;
 };
+
+export const resolveCaptureRequestId = (
+  event: WebhookEmittedEvent
+): string | undefined => {
+  try {
+    const node = blue.jsonValueToNode(event);
+    const isCaptureRequest =
+      blue.isTypeOf(node, CardTransactionCaptureLockRequestedSchema) ||
+      blue.isTypeOf(node, CardTransactionCaptureUnlockRequestedSchema);
+    if (!isCaptureRequest) {
+      return undefined;
+    }
+    const simple = blue.nodeToJson(node, 'simple') as
+      | Record<string, unknown>
+      | undefined;
+    return getString(simple?.requestId);
+  } catch {
+    // unsupported structure or unparsable event
+  }
+  return undefined;
+};

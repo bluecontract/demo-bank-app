@@ -309,6 +309,7 @@ describe('handleWebhookEvent', () => {
           emitted: [
             toOfficialBlue({
               type: 'PayNote/Card Transaction Capture Lock Requested',
+              requestId: 'capture-lock-1',
               cardTransactionDetails: {
                 authorizationCode: 'AUTH01',
               },
@@ -380,6 +381,14 @@ describe('handleWebhookEvent', () => {
     expectGuarantorUpdatePayloadEvent(
       payload,
       'PayNote/Card Transaction Capture Locked'
+    );
+    const responseEvents = parseGuarantorUpdatePayloadEvents(payload);
+    expect(responseEvents[0]).toEqual(
+      expect.objectContaining({
+        inResponseTo: expect.objectContaining({
+          requestId: 'capture-lock-1',
+        }),
+      })
     );
   });
 
@@ -541,6 +550,8 @@ describe('handleWebhookEvent', () => {
       payload,
       'PayNote/Card Transaction Capture Unlocked'
     );
+    const responseEvents = parseGuarantorUpdatePayloadEvents(payload);
+    expect(responseEvents[0]).not.toHaveProperty('inResponseTo');
   });
 
   it('transfers funds when capture immediately is requested', async () => {

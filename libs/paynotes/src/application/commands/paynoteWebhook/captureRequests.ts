@@ -10,6 +10,7 @@ import { blue } from '../../../blue';
 import {
   CAPTURE_LOCK_REQUESTED_EVENT_NAME,
   CAPTURE_UNLOCK_REQUESTED_EVENT_NAME,
+  resolveCaptureRequestId,
   resolveEmittedEventType,
 } from './events';
 import { trace } from './logging';
@@ -344,6 +345,7 @@ const confirmCaptureStatusChange = async (input: {
   eventId: string;
   payNoteDocumentId: string;
   sessionId: string;
+  requestId?: string;
   credentials: Awaited<ReturnType<MyOsClient['getCredentials']>> | null;
   deps: HandleWebhookEventDependencies;
   logs: LogEntry[];
@@ -354,6 +356,7 @@ const confirmCaptureStatusChange = async (input: {
     eventId,
     payNoteDocumentId,
     sessionId,
+    requestId,
     credentials,
     deps,
     logs,
@@ -365,7 +368,7 @@ const confirmCaptureStatusChange = async (input: {
     ? CAPTURE_LOCKED_EVENT_NAME
     : CAPTURE_UNLOCKED_EVENT_NAME;
 
-  const payload = isLock
+  const payload: Record<string, unknown> = isLock
     ? {
         type: eventName,
         lockedAt: deps.clock.now().toISOString(),
@@ -374,6 +377,11 @@ const confirmCaptureStatusChange = async (input: {
         type: eventName,
         unlockedAt: deps.clock.now().toISOString(),
       };
+  if (requestId) {
+    payload.inResponseTo = {
+      requestId,
+    };
+  }
 
   return runGuarantorUpdate({
     myOsClient: deps.myOsClient,
@@ -511,6 +519,7 @@ const handleCaptureRequestEvent = async (
   }
 
   const isLock = eventName === CAPTURE_LOCK_REQUESTED_EVENT_NAME;
+  const requestId = resolveCaptureRequestId(event);
   const captureEventId = resolveCaptureEventId(event) ?? eventId;
   const lastCaptureEventId = isLock
     ? updatedRecord.lastCaptureLockEventId
@@ -598,6 +607,7 @@ const handleCaptureRequestEvent = async (
     eventId,
     payNoteDocumentId,
     sessionId,
+    requestId,
     credentials,
     deps,
     logs,
