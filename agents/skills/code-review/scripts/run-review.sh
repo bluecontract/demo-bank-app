@@ -16,6 +16,9 @@ gemini_allowed_tools="${GEMINI_ALLOWED_TOOLS:-run_shell_command,read_file,search
 codex_review_model="${CODEX_REVIEW_MODEL:-gpt-5.2-codex}"
 codex_review_fallback_model="${CODEX_REVIEW_FALLBACK_MODEL:-gpt-5-codex}"
 codex_review_reasoning_effort="${CODEX_REVIEW_REASONING_EFFORT:-low}"
+# Disable MCP for Codex review by default to avoid long tool startup/loops.
+codex_disable_playwright_mcp="${CODEX_REVIEW_DISABLE_PLAYWRIGHT_MCP:-true}"
+codex_disable_figma_mcp="${CODEX_REVIEW_DISABLE_FIGMA_MCP:-true}"
 
 if git diff --cached --quiet; then
   echo "No staged changes to review." >&2
@@ -180,14 +183,25 @@ run_gemini_with_fallback() {
 run_gemini_with_fallback
 run_codex_with_fallback() {
   local outfile="${review_dir}/codex.md"
+  local -a codex_args=(
+    review
+    -c model="${codex_review_model}"
+    -c model_reasoning_effort="${codex_review_reasoning_effort}"
+  )
+
+  if [[ "${codex_disable_playwright_mcp}" == "true" ]]; then
+    codex_args+=(-c mcp_servers.playwright.enabled=false)
+  fi
+  if [[ "${codex_disable_figma_mcp}" == "true" ]]; then
+    codex_args+=(-c mcp_servers.figma.enabled=false)
+  fi
+  codex_args+=("$prompt")
+
   if run_model \
     "codex" \
     "${outfile}" \
     codex \
-    review \
-    -c model="${codex_review_model}" \
-    -c model_reasoning_effort="${codex_review_reasoning_effort}" \
-    "$prompt"; then
+    "${codex_args[@]}"; then
     return 0
   fi
 
@@ -195,14 +209,24 @@ run_codex_with_fallback() {
     return 1
   fi
 
+  local -a codex_fallback_args=(
+    review
+    -c model="${codex_review_fallback_model}"
+    -c model_reasoning_effort="${codex_review_reasoning_effort}"
+  )
+  if [[ "${codex_disable_playwright_mcp}" == "true" ]]; then
+    codex_fallback_args+=(-c mcp_servers.playwright.enabled=false)
+  fi
+  if [[ "${codex_disable_figma_mcp}" == "true" ]]; then
+    codex_fallback_args+=(-c mcp_servers.figma.enabled=false)
+  fi
+  codex_fallback_args+=("$prompt")
+
   run_model \
     "codex (fallback)" \
     "${outfile}" \
     codex \
-    review \
-    -c model="${codex_review_fallback_model}" \
-    -c model_reasoning_effort="${codex_review_reasoning_effort}" \
-    "$prompt"
+    "${codex_fallback_args[@]}"
 }
 
 run_codex_with_fallback
