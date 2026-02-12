@@ -593,6 +593,43 @@ const resolveRequestedMerchantId = (
   );
 };
 
+const hasExplicitBootstrapAccountNumbers = (
+  requestedDocumentPayload: Record<string, unknown>
+): boolean => {
+  const simple =
+    toSimpleRecord(requestedDocumentPayload) ?? requestedDocumentPayload;
+  return Boolean(
+    getString(simple.payerAccountNumber) || getString(simple.payeeAccountNumber)
+  );
+};
+
+const isAccountActive = (account: {
+  status?: string;
+  isActive?: () => boolean;
+}): boolean => {
+  if (typeof account.isActive === 'function') {
+    try {
+      return account.isActive();
+    } catch {
+      return false;
+    }
+  }
+  return account.status === 'ACTIVE';
+};
+
+const resolveMerchantCreditLineAccountNumber = async (input: {
+  merchantId: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<string | undefined> => {
+  const accounts = await input.deps.bankingRepository.getAccountsByUserId(
+    input.merchantId
+  );
+  const activeCreditLine = accounts.find(
+    account => account.accountType === 'CREDIT_LINE' && isAccountActive(account)
+  );
+  return activeCreditLine?.accountNumber;
+};
+
 const validateActiveBootstrapBindings = (input: {
   request: NormalizedBootstrapRequest;
   requestingPayerAccountId?: string;
@@ -627,8 +664,9 @@ const validateActiveBootstrapBindings = (input: {
     return { ok: false, reason: 'missing_requesting_participant_bindings' };
   }
 
-  const boundClientAccountId = [payerAccountId, payeeAccountId].find(
-    accountId => requestingParticipantAccountIds.includes(accountId)
+  const boundAccountIds = [payerAccountId, payeeAccountId];
+  const boundClientAccountId = requestingParticipantAccountIds.find(accountId =>
+    boundAccountIds.includes(accountId)
   );
 
   if (!boundClientAccountId) {
@@ -744,6 +782,102 @@ const handleExistingDocBootstrapRequest = async (input: {
     return true;
   }
 
+  if (hasExplicitBootstrapAccountNumbers(requestedDocumentPayload)) {
+    log(
+      logs,
+      'warn',
+      'Bootstrap request rejected (explicit account numbers are not allowed for active PayNote bootstrap)',
+      {
+        eventId,
+        bootstrapAssignee,
+        requestedTypeName,
+      }
+    );
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason:
+        'payerAccountNumber/payeeAccountNumber are not supported for bootstrap from active PayNotes.',
+    });
+    return true;
+  }
+
+  const merchantId =
+    existingDelivery.merchantId ??
+    resolveRequestedMerchantId(requestedDocumentPayload);
+  let payerAccountNumber: string | undefined;
+  let payeeAccountNumber: string | undefined;
+
+  if (requestedTypeName === 'PayNote/Merchant To Customer PayNote') {
+    const rootCustomerAccountNumber = existingDelivery.accountNumber;
+    if (!rootCustomerAccountNumber) {
+      log(
+        logs,
+        'warn',
+        'Bootstrap request rejected (missing root customer account for merchant-to-customer paynote)',
+        {
+          eventId,
+          bootstrapAssignee,
+          requestedTypeName,
+          deliveryId: existingDelivery.deliveryId,
+        }
+      );
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason:
+          'Unable to resolve root customer account for Merchant To Customer PayNote bootstrap.',
+      });
+      return true;
+    }
+
+    if (!merchantId) {
+      log(
+        logs,
+        'warn',
+        'Bootstrap request rejected (missing merchant id for merchant-to-customer paynote)',
+        {
+          eventId,
+          bootstrapAssignee,
+          requestedTypeName,
+          deliveryId: existingDelivery.deliveryId,
+        }
+      );
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason:
+          'Unable to resolve merchant for Merchant To Customer PayNote bootstrap.',
+      });
+      return true;
+    }
+
+    const merchantPayerAccountNumber =
+      await resolveMerchantCreditLineAccountNumber({
+        merchantId,
+        deps,
+      });
+    if (!merchantPayerAccountNumber) {
+      log(
+        logs,
+        'warn',
+        'Bootstrap request rejected (merchant credit line account not found)',
+        {
+          eventId,
+          bootstrapAssignee,
+          requestedTypeName,
+          merchantId,
+        }
+      );
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason:
+          'Unable to resolve merchant credit line account for Merchant To Customer PayNote bootstrap.',
+      });
+      return true;
+    }
+
+    payerAccountNumber = merchantPayerAccountNumber;
+    payeeAccountNumber = rootCustomerAccountNumber;
+  }
+
   const bootstrapDocument = normalizeBootstrapDocument(
     requestedDocumentPayload
   );
@@ -795,12 +929,9 @@ const handleExistingDocBootstrapRequest = async (input: {
   const bootstrapSessionId = extractBootstrapSessionId(response);
 
   if (bootstrapSessionId) {
-    const merchantId =
-      existingDelivery.merchantId ??
-      resolveRequestedMerchantId(requestedDocumentPayload);
     const customerChannelKey = resolveBootstrapCustomerChannelKey({
       request,
-      accountId: credentials.accountId,
+      accountId: bindingsValidation.boundClientAccountId,
     });
     await deps.bootstrapContextRepository.saveContext({
       bootstrapSessionId,
@@ -813,6 +944,8 @@ const handleExistingDocBootstrapRequest = async (input: {
       ...(existingDelivery.transactionId
         ? { transactionId: existingDelivery.transactionId }
         : {}),
+      ...(payerAccountNumber ? { payerAccountNumber } : {}),
+      ...(payeeAccountNumber ? { payeeAccountNumber } : {}),
       ...(customerChannelKey ? { customerChannelKey } : {}),
       ...(responseContext.requestingSessionId
         ? { requestingSessionId: responseContext.requestingSessionId }
