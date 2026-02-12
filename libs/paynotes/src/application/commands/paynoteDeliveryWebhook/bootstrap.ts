@@ -13,6 +13,7 @@ import type { LogEntry, MyOsClient, PayNoteDeliveryRecord } from '../../ports';
 import { runGuarantorUpdate } from '../documentOperations';
 import {
   buildChannelBindingsFromContracts,
+  ensureTimelineChannel,
   getCardTransactionDetailsFromDocument,
   getPayNoteSummaryFromDocument,
   getSynchronySessionIdFromDocument,
@@ -141,6 +142,44 @@ const getBindingIdentity = (binding?: {
   email?: string;
   accountId?: string;
 }): string | undefined => binding?.accountId ?? binding?.email;
+
+const validateBankControlledChannelBinding = (input: {
+  request: NormalizedBootstrapRequest;
+  requestedDocumentPayload: Record<string, unknown>;
+  channelKey: string;
+  accountId: string;
+}): { ok: true } | { ok: false; reason: string } => {
+  const { request, requestedDocumentPayload, channelKey, accountId } = input;
+  const requestBindingIdentity = getBindingIdentity(
+    request.channelBindings[channelKey]
+  );
+  if (requestBindingIdentity && requestBindingIdentity !== accountId) {
+    return {
+      ok: false,
+      reason: `${channelKey} binding is already set to ${requestBindingIdentity}`,
+    };
+  }
+
+  const contracts = toSimpleRecord(requestedDocumentPayload.contracts);
+  if (!contracts) {
+    return { ok: true };
+  }
+
+  const contractsForValidation = { ...contracts };
+  const validation = ensureTimelineChannel(
+    contractsForValidation,
+    channelKey,
+    accountId
+  );
+  if (!validation.ok) {
+    return {
+      ok: false,
+      reason: validation.error ?? `${channelKey} is already bound`,
+    };
+  }
+
+  return { ok: true };
+};
 
 const isBootstrapAssigneeMatch = (
   requestingDocument: Record<string, unknown> | undefined,
@@ -679,6 +718,32 @@ const handleExistingDocBootstrapRequest = async (input: {
     return true;
   }
 
+  const guarantorBindingValidation = validateBankControlledChannelBinding({
+    request,
+    requestedDocumentPayload,
+    channelKey: 'guarantorChannel',
+    accountId: credentials.accountId,
+  });
+  if (!guarantorBindingValidation.ok) {
+    log(
+      logs,
+      'warn',
+      'Bootstrap request rejected (guarantor channel conflict)',
+      {
+        eventId,
+        bootstrapAssignee,
+        requestedTypeName,
+        reason: guarantorBindingValidation.reason,
+      }
+    );
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason:
+        'guarantorChannel must be bound to the bank guarantor account for bootstrap.',
+    });
+    return true;
+  }
+
   const bootstrapDocument = normalizeBootstrapDocument(
     requestedDocumentPayload
   );
@@ -889,6 +954,32 @@ const handleDeliveryBootstrapRequest = async (input: {
   };
 
   await deps.payNoteDeliveryRepository.saveDelivery(deliveryRecord);
+
+  const payNoteDelivererBindingValidation =
+    validateBankControlledChannelBinding({
+      request,
+      requestedDocumentPayload: deliveryDocument,
+      channelKey: 'payNoteDeliverer',
+      accountId: credentials.accountId,
+    });
+  if (!payNoteDelivererBindingValidation.ok) {
+    log(
+      logs,
+      'warn',
+      'Bootstrap request rejected (delivery channel conflict)',
+      {
+        eventId,
+        bootstrapAssignee,
+        reason: payNoteDelivererBindingValidation.reason,
+      }
+    );
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason:
+        'payNoteDeliverer must be bound to the bank delivery account for bootstrap.',
+    });
+    return true;
+  }
 
   const channelBindings: ChannelBindings = {
     ...request.channelBindings,
@@ -1111,6 +1202,27 @@ const handlePayNoteBootstrapRequest = async (input: {
     }
   }
 
+  const guarantorBindingValidation = validateBankControlledChannelBinding({
+    request,
+    requestedDocumentPayload: payNoteDocument,
+    channelKey: 'guarantorChannel',
+    accountId: credentials.accountId,
+  });
+  if (!guarantorBindingValidation.ok) {
+    return rejectPayNoteBootstrapRequest({
+      context: responseContext,
+      eventId,
+      deliveryId,
+      reason:
+        'guarantorChannel must be bound to the bank guarantor account for bootstrap.',
+      logMessage:
+        'PayNote bootstrap request rejected (guarantor channel conflict)',
+      logContext: {
+        reason: guarantorBindingValidation.reason,
+      },
+    });
+  }
+
   const channelBindings: ChannelBindings = {
     ...request.channelBindings,
     payerChannel: { accountId: credentials.accountId },
@@ -1255,8 +1367,41 @@ export const handleBootstrapRequests = async (input: {
   };
   const shouldRequireKnownRequestingSession =
     !isRequestingDeliveryDoc && !isSynchronyMerchantDoc;
+  const canResolveCanonicalRequestingSession =
+    typeof deps.contractRepository.getContractBySessionId === 'function';
+  const canonicalRequestingContract =
+    shouldRequireKnownRequestingSession &&
+    canResolveCanonicalRequestingSession &&
+    requestingSessionId
+      ? await deps.contractRepository.getContractBySessionId?.(
+          requestingSessionId
+        )
+      : null;
+  if (
+    shouldRequireKnownRequestingSession &&
+    canResolveCanonicalRequestingSession &&
+    !canonicalRequestingContract
+  ) {
+    log(
+      logs,
+      'info',
+      'Bootstrap requests ignored (unknown or non-canonical requesting session)',
+      {
+        eventId,
+        requestingSessionId: requestingSessionId ?? null,
+      }
+    );
+    return;
+  }
+  const canonicalRequestingDocumentId = getString(
+    canonicalRequestingContract?.documentId
+  );
   const knownRequestingDelivery = shouldRequireKnownRequestingSession
-    ? await getKnownDelivery()
+    ? canonicalRequestingDocumentId
+      ? await deps.payNoteDeliveryRepository.getDeliveryByPayNoteDocumentId(
+          canonicalRequestingDocumentId
+        )
+      : await getKnownDelivery()
     : null;
   if (shouldRequireKnownRequestingSession && !knownRequestingDelivery) {
     log(

@@ -236,6 +236,66 @@ describe('handleWebhookEvent', () => {
     );
   });
 
+  it('ignores paynote events from non-canonical session before dispatching handlers', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-shadow',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Card Transaction Capture Lock Requested',
+              requestId: 'capture-lock-shadow',
+              cardTransactionDetails: {
+                authorizationCode: 'AUTH01',
+              },
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-shadow',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+    deps.contractRepository.getContractByDocumentId = vi
+      .fn()
+      .mockResolvedValue({
+        contractId: 'contract-1',
+        typeBlueId: 'type-1',
+        displayName: 'PayNote',
+        sessionId: 'session-canonical',
+        documentId: 'doc-1',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+
+    const result = await handleWebhookEvent({ eventId: 'event-shadow' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.payNoteRepository.savePayNote).not.toHaveBeenCalled();
+    expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(
+      result.logs.some(
+        entry =>
+          entry.message ===
+          'PayNote webhook event ignored (non-canonical session)'
+      )
+    ).toBe(true);
+  });
+
   it('adds transaction relationship after capture hold succeeds', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     fetchEvent.mockResolvedValueOnce({

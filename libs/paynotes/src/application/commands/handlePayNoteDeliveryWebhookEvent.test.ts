@@ -490,6 +490,96 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     });
   });
 
+  it('rejects active paynote bootstrap when guarantor binding conflicts with bank account', async () => {
+    const activePayNoteDocument = buildActivePayNoteDocument();
+    const counterPayNoteDocument = buildPayNoteWithCounterDocument();
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: 'api-key',
+        accountId: 'bank-account',
+        baseUrl: 'https://myos.example.com',
+      }),
+      bootstrapDocument: vi.fn(),
+      runDocumentOperation: vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200 }),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn().mockResolvedValue({
+        kind: 'not-found',
+        status: 404,
+      } satisfies MyOsFetchDocumentResult),
+    };
+
+    const payNoteDeliveryRepository = {
+      markEventProcessed: vi.fn().mockResolvedValue(true),
+      getDelivery: vi.fn(),
+      getDeliveryByDocumentId: vi.fn(),
+      getDeliveryBySessionId: vi.fn().mockResolvedValue({
+        deliveryId: 'delivery-1',
+        accountNumber: '9559276001',
+        userId: 'customer-user-1',
+        merchantId: 'merchant-1',
+        createdAt: '2024-01-10T00:00:00.000Z',
+        updatedAt: '2024-01-10T00:00:00.000Z',
+      }),
+      getDeliveryByBootstrapSessionId: vi.fn().mockResolvedValue(null),
+      getDeliveryByPayNoteDocumentId: vi.fn(),
+      getDeliveryByCardTransactionDetails: vi.fn(),
+      saveDelivery: vi.fn(),
+      listDeliveriesByUserId: vi.fn(),
+    };
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn(),
+      saveContract: vi.fn(),
+    };
+
+    const result = await handlePayNoteDeliveryWebhookEvent(
+      {
+        payload: {
+          id: 'event-bootstrap-paynote-counter-guarantor-conflict',
+          object: {
+            sessionId: 'active-paynote-session-1',
+            document: activePayNoteDocument,
+            emitted: [
+              {
+                type: 'Conversation/Document Bootstrap Requested',
+                bootstrapAssignee: 'guarantorChannel',
+                channelBindings: {
+                  payerChannel: { accountId: 'customer-account-id' },
+                  payeeChannel: { accountId: 'merchant-account-id' },
+                  guarantorChannel: { accountId: 'external-guarantor' },
+                },
+                document: counterPayNoteDocument,
+              },
+            ],
+          },
+        },
+      },
+      {
+        myOsClient: myOsClient as any,
+        payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+        contractRepository: contractRepository as any,
+        bankingRepository: {} as any,
+        holdRepository: {} as any,
+        bootstrapContextRepository,
+        clock: { now: () => new Date('2024-01-10T00:00:00.000Z') },
+      }
+    );
+
+    expect(result.handled).toBe(true);
+    expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
+    const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
+    expect(guarantorUpdateCall).toBeDefined();
+    const payload = JSON.stringify(guarantorUpdateCall?.payload);
+    expect(payload).toContain('Conversation/Document Bootstrap Responded');
+    expect(payload).toContain('rejected');
+    expect(payload).toContain(
+      'guarantorChannel must be bound to the bank guarantor account for bootstrap.'
+    );
+  });
+
   it('stores customer channel key when active bootstrap bindings contain bank account id', async () => {
     const activePayNoteDocument = buildActivePayNoteDocument();
     const activeContracts = activePayNoteDocument.contracts as Record<
@@ -928,7 +1018,14 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       markEventProcessed: vi.fn().mockResolvedValue(true),
       getDelivery: vi.fn(),
       getDeliveryByDocumentId: vi.fn(),
-      getDeliveryBySessionId: vi.fn().mockResolvedValue(null),
+      getDeliveryBySessionId: vi.fn().mockResolvedValue({
+        deliveryId: 'delivery-1',
+        accountNumber: '9559276001',
+        userId: 'customer-user-1',
+        merchantId: 'merchant-1',
+        createdAt: '2024-01-10T00:00:00.000Z',
+        updatedAt: '2024-01-10T00:00:00.000Z',
+      }),
       getDeliveryByBootstrapSessionId: vi.fn().mockResolvedValue(null),
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
@@ -978,6 +1075,9 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(contractRepository.getContractBySessionId).toHaveBeenCalledWith(
       'active-paynote-session-non-canonical'
     );
+    expect(
+      payNoteDeliveryRepository.getDeliveryBySessionId
+    ).not.toHaveBeenCalled();
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     expect(getOperationCall(myOsClient, 'guarantorUpdate')).toBeUndefined();
     expect(
@@ -1469,6 +1569,103 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(payload).toContain('Conversation/Document Bootstrap Responded');
     expect(payload).toContain('rejected');
     expect(payload).toContain('Payee binding must match the delivery sender.');
+  });
+
+  it('reports delivery errors when paynote guarantor channel conflicts with bank account', async () => {
+    const deliveryDocument = buildDeliveryDocument();
+    const payNoteDocument = {
+      type: 'PayNote/Card Transaction PayNote',
+      currency: 'USD',
+      amount: { total: 1200 },
+      contracts: {
+        guarantorChannel: {
+          type: 'MyOS/MyOS Timeline Channel',
+          accountId: 'other-guarantor',
+        },
+      },
+    };
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: 'api-key',
+        accountId: 'bank-account',
+        baseUrl: 'https://myos.example.com',
+      }),
+      bootstrapDocument: vi.fn(),
+      runDocumentOperation: vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200 }),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn().mockResolvedValue({
+        kind: 'not-found',
+        status: 404,
+      } satisfies MyOsFetchDocumentResult),
+    };
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
+      saveContract: vi.fn(),
+    };
+
+    const result = await handlePayNoteDeliveryWebhookEvent(
+      {
+        payload: {
+          id: 'event-guarantor-conflict',
+          object: {
+            sessionId: 'delivery-session',
+            document: deliveryDocument,
+            emitted: [
+              {
+                type: 'Conversation/Document Bootstrap Requested',
+                bootstrapAssignee: 'payNoteDeliverer',
+                channelBindings: {
+                  payeeChannel: { accountId: 'merchant-account' },
+                },
+                document: payNoteDocument,
+              },
+            ],
+          },
+        },
+      },
+      {
+        myOsClient: myOsClient as any,
+        payNoteDeliveryRepository: {
+          markEventProcessed: vi.fn().mockResolvedValue(true),
+          saveDelivery: vi.fn(),
+          getDelivery: vi.fn().mockResolvedValue(null),
+          getDeliveryByDocumentId: vi.fn(),
+          getDeliveryBySessionId: vi.fn(),
+          getDeliveryByBootstrapSessionId: vi.fn(),
+          getDeliveryByPayNoteDocumentId: vi.fn(),
+          getDeliveryByCardTransactionDetails: vi.fn(),
+          listDeliveriesByUserId: vi.fn(),
+        } as any,
+        contractRepository: contractRepository as any,
+        bankingRepository: {} as any,
+        holdRepository: {
+          getHoldByCardTransactionDetails: vi.fn().mockResolvedValue(null),
+        } as any,
+        bootstrapContextRepository,
+        clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
+      }
+    );
+
+    expect(result.handled).toBe(true);
+    expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
+    const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
+    expect(guarantorUpdateCall).toBeDefined();
+    expect(guarantorUpdateCall).toEqual(
+      expect.objectContaining({
+        sessionId: 'delivery-session',
+        operation: 'guarantorUpdate',
+      })
+    );
+    const payload = JSON.stringify(guarantorUpdateCall?.payload);
+    expect(payload).toContain('Conversation/Document Bootstrap Responded');
+    expect(payload).toContain('rejected');
+    expect(payload).toContain(
+      'guarantorChannel must be bound to the bank guarantor account for bootstrap.'
+    );
   });
 
   it('identifies delivery and reports status for delivery documents', async () => {

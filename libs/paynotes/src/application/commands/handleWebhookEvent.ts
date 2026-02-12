@@ -96,6 +96,23 @@ export const handleWebhookEvent = async (
   const { payNoteDocumentId, resolvedDocument, resolvedDocumentRaw } =
     documentResolution.resolution;
 
+  const canonicalContract =
+    await deps.contractRepository.getContractByDocumentId(payNoteDocumentId);
+  const canonicalSessionId = getString(canonicalContract?.sessionId);
+  if (canonicalSessionId && canonicalSessionId !== sessionId) {
+    logs.push({
+      level: 'info',
+      message: 'PayNote webhook event ignored (non-canonical session)',
+      context: {
+        eventId: input.eventId,
+        payNoteDocumentId,
+        sessionId,
+        canonicalSessionId,
+      },
+    });
+    return { note: '', logs };
+  }
+
   const now = deps.clock.now().toISOString();
   const existingRecord =
     payNoteRecord ??
