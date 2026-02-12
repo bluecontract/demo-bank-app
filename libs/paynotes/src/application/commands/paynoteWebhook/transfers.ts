@@ -22,7 +22,7 @@ import {
 import { logAndReturn } from './logging';
 import { upsertPayNoteContract } from './records';
 import { runGuarantorUpdate } from '../documentOperations';
-import { blue } from '../../../blue';
+import type { DispatchedTransferEvent } from './eventDispatcher';
 
 const FUNDS_RESERVED_EVENT_NAME = 'PayNote/Funds Reserved';
 const RESERVATION_DECLINED_EVENT_NAME = 'PayNote/Reservation Declined';
@@ -114,18 +114,10 @@ type TransferContext = {
   logs: LogEntry[];
 };
 
+type TransferEventWithMetadata = DispatchedTransferEvent;
+
 const resolveRequestId = (event: WebhookEmittedEvent): string | undefined =>
   resolveTransferRequestId(event);
-
-const resolveTransferEventBlueId = (
-  event: WebhookEmittedEvent
-): string | undefined => {
-  try {
-    return blue.calculateBlueIdSync(blue.jsonValueToNode(event));
-  } catch {
-    return undefined;
-  }
-};
 
 const isTransferEventType = (
   eventType: string | undefined
@@ -137,39 +129,37 @@ const isTransferEventType = (
   eventType === CAPTURE_FUNDS_EVENT_NAME ||
   eventType === CAPTURE_IMMEDIATELY_EVENT_NAME;
 
+const buildTransferOperationIdempotencyKey = (input: {
+  eventId: string;
+  eventIndex: number;
+  operation: 'capture-immediately' | 'reserve-funds' | 'capture-funds';
+}): string =>
+  [
+    'paynote-transfer',
+    input.operation,
+    input.eventId,
+    String(input.eventIndex),
+  ].join(':');
+
 const reserveTransferRequestProcessing = async (input: {
   payNoteDocumentId: string;
   eventType:
     | typeof RESERVE_FUNDS_EVENT_NAME
     | typeof CAPTURE_FUNDS_EVENT_NAME
     | typeof CAPTURE_IMMEDIATELY_EVENT_NAME;
-  event: WebhookEmittedEvent;
+  eventId: string;
+  eventIndex: number;
   deps: HandleWebhookEventDependencies;
   logs: LogEntry[];
-  context: {
-    eventId: string;
-    requestId?: string;
-  };
 }): Promise<boolean> => {
-  const { payNoteDocumentId, eventType, event, deps, logs, context } = input;
-  const requestId = resolveRequestId(event);
-  const eventBlueId = resolveTransferEventBlueId(event);
-  const requestKey =
-    requestId && requestId.trim().length > 0
-      ? `request:${requestId}`
-      : eventBlueId
-      ? `event:${eventBlueId}`
-      : undefined;
-
-  if (!requestKey) {
-    return true;
-  }
+  const { payNoteDocumentId, eventType, eventId, eventIndex, deps, logs } =
+    input;
 
   const dedupeEventId = [
     'paynote-transfer-request',
     payNoteDocumentId,
-    eventType,
-    requestKey,
+    eventId,
+    String(eventIndex),
   ].join(':');
   const firstProcessing = await deps.payNoteRepository.markEventProcessed(
     dedupeEventId
@@ -180,10 +170,10 @@ const reserveTransferRequestProcessing = async (input: {
       level: 'info',
       message: 'Skipped duplicate PayNote transfer request',
       context: {
-        eventId: context.eventId,
+        eventId,
         payNoteDocumentId,
+        eventIndex,
         eventType,
-        requestId: context.requestId ?? requestId,
         dedupeEventId,
       },
     });
@@ -293,6 +283,7 @@ const handleCaptureImmediately = async (input: {
   context: TransferContext;
   account: BankingAccount & { ownerUserId: string };
   event: WebhookEmittedEvent;
+  eventIndex: number;
   transferAmountMinor: number;
 }): Promise<void> => {
   const {
@@ -308,9 +299,15 @@ const handleCaptureImmediately = async (input: {
     },
     account,
     event,
+    eventIndex,
     transferAmountMinor,
   } = input;
   const requestId = resolveRequestId(event);
+  const idempotencyKey = buildTransferOperationIdempotencyKey({
+    eventId,
+    eventIndex,
+    operation: 'capture-immediately',
+  });
 
   if (!payeeAccountNumber) {
     logs.push({
@@ -358,6 +355,7 @@ const handleCaptureImmediately = async (input: {
       payerAccountNumber,
       payeeAccountNumber,
       transferAmountMinor,
+      idempotencyKey,
     },
   });
 
@@ -368,7 +366,7 @@ const handleCaptureImmediately = async (input: {
       amountMinor: transferAmountMinor,
       description: transferDescription,
       userId: account.ownerUserId,
-      idempotencyKey: payNoteDocumentId,
+      idempotencyKey,
       payNoteDocumentId,
     });
   } catch (error) {
@@ -454,6 +452,7 @@ const handleReserveFundsRequest = async (input: {
   context: TransferContext;
   account: BankingAccount & { ownerUserId: string };
   event: WebhookEmittedEvent;
+  eventIndex: number;
   transferAmountMinor: number;
 }): Promise<void> => {
   const {
@@ -468,10 +467,16 @@ const handleReserveFundsRequest = async (input: {
     },
     account,
     event,
+    eventIndex,
     transferAmountMinor,
   } = input;
 
   const requestId = resolveRequestId(event);
+  const idempotencyKey = buildTransferOperationIdempotencyKey({
+    eventId,
+    eventIndex,
+    operation: 'reserve-funds',
+  });
 
   logs.push({
     level: 'info',
@@ -484,6 +489,7 @@ const handleReserveFundsRequest = async (input: {
       payerAccountNumber,
       payeeAccountNumber,
       transferAmountMinor,
+      idempotencyKey,
     },
   });
 
@@ -498,7 +504,7 @@ const handleReserveFundsRequest = async (input: {
       amountMinor: transferAmountMinor,
       counterpartyAccountNumber: payeeAccountNumber,
       userId: account.ownerUserId,
-      idempotencyKey: payNoteDocumentId,
+      idempotencyKey,
       payNoteDocumentId,
     });
   } catch (error) {
@@ -585,6 +591,7 @@ const handleCaptureFundsRequest = async (input: {
   context: TransferContext;
   account: BankingAccount & { ownerUserId: string };
   event: WebhookEmittedEvent;
+  eventIndex: number;
   transferAmountMinor: number;
 }): Promise<void> => {
   const {
@@ -602,10 +609,16 @@ const handleCaptureFundsRequest = async (input: {
     },
     account,
     event,
+    eventIndex,
     transferAmountMinor,
   } = input;
 
   const requestId = resolveRequestId(event);
+  const idempotencyKey = buildTransferOperationIdempotencyKey({
+    eventId,
+    eventIndex,
+    operation: 'capture-funds',
+  });
 
   logs.push({
     level: 'info',
@@ -617,6 +630,7 @@ const handleCaptureFundsRequest = async (input: {
       payerAccountId: account.id,
       payeeAccountNumber,
       transferAmountMinor,
+      idempotencyKey,
     },
   });
 
@@ -624,7 +638,8 @@ const handleCaptureFundsRequest = async (input: {
     const capturedHold = await deps.bankingFacade.captureHold({
       holdId: payNoteDocumentId,
       userId: account.ownerUserId,
-      idempotencyKey: payNoteDocumentId,
+      idempotencyKey,
+      amountMinor: transferAmountMinor > 0 ? transferAmountMinor : undefined,
       counterpartyAccountNumber: payeeAccountNumber,
       payNoteDocumentId,
     });
@@ -827,6 +842,7 @@ const emitDeclinedDueToMissingPayer = async (input: {
 
 const logIgnoredTransferEvent = (
   context: TransferContext,
+  eventIndex: number,
   eventType: string | undefined,
   transferAmountMinor: number
 ) => {
@@ -837,6 +853,7 @@ const logIgnoredTransferEvent = (
     message: 'PayNote webhook event ignored',
     context: {
       eventId,
+      eventIndex,
       eventType,
       payerAccountNumber,
       payeeAccountNumber,
@@ -846,7 +863,7 @@ const logIgnoredTransferEvent = (
 };
 
 export const handleTransferEvents = async (input: {
-  events: WebhookEmittedEvent[];
+  events: TransferEventWithMetadata[];
   eventId: string;
   payNoteDocumentId: string;
   sessionId: string;
@@ -892,8 +909,9 @@ export const handleTransferEvents = async (input: {
   };
 
   try {
-    const needsPayerResolution = events.some(event => {
-      const eventType = resolveEmittedEventType(event);
+    const needsPayerResolution = events.some(transferEvent => {
+      const eventType =
+        transferEvent.eventType ?? resolveEmittedEventType(transferEvent.event);
       return isTransferEventType(eventType);
     });
 
@@ -908,8 +926,10 @@ export const handleTransferEvents = async (input: {
       });
 
       if ('result' in accountResolution) {
-        for (const event of events) {
-          const eventType = resolveEmittedEventType(event);
+        for (const transferEvent of events) {
+          const eventType =
+            transferEvent.eventType ??
+            resolveEmittedEventType(transferEvent.event);
           if (!isTransferEventType(eventType)) {
             continue;
           }
@@ -917,13 +937,10 @@ export const handleTransferEvents = async (input: {
           const shouldProcess = await reserveTransferRequestProcessing({
             payNoteDocumentId,
             eventType,
-            event,
+            eventId,
+            eventIndex: transferEvent.eventIndex,
             deps,
             logs,
-            context: {
-              eventId,
-              requestId: resolveRequestId(event),
-            },
           });
           if (!shouldProcess) {
             continue;
@@ -931,7 +948,7 @@ export const handleTransferEvents = async (input: {
 
           await emitDeclinedDueToMissingPayer({
             context: transferContext,
-            event,
+            event: transferEvent.event,
             eventType,
           });
         }
@@ -946,9 +963,12 @@ export const handleTransferEvents = async (input: {
       });
     }
 
-    for (const event of events) {
+    for (const transferEvent of events) {
+      const event = transferEvent.event;
       const transferAmountMinor: number = event.amount?.value ?? 0;
-      const eventType = resolveEmittedEventType(event);
+      const eventType =
+        transferEvent.eventType ?? resolveEmittedEventType(event);
+      const { eventIndex } = transferEvent;
 
       if (
         eventType === CAPTURE_LOCK_REQUESTED_EVENT_NAME ||
@@ -961,13 +981,10 @@ export const handleTransferEvents = async (input: {
         const shouldProcess = await reserveTransferRequestProcessing({
           payNoteDocumentId,
           eventType,
-          event,
+          eventId,
+          eventIndex,
           deps,
           logs,
-          context: {
-            eventId,
-            requestId: resolveRequestId(event),
-          },
         });
         if (!shouldProcess) {
           continue;
@@ -992,6 +1009,7 @@ export const handleTransferEvents = async (input: {
           context: transferContext,
           account,
           event,
+          eventIndex,
           transferAmountMinor,
         });
         continue;
@@ -1006,6 +1024,7 @@ export const handleTransferEvents = async (input: {
           context: transferContext,
           account,
           event,
+          eventIndex,
           transferAmountMinor,
         });
         continue;
@@ -1020,12 +1039,18 @@ export const handleTransferEvents = async (input: {
           context: transferContext,
           account,
           event,
+          eventIndex,
           transferAmountMinor,
         });
         continue;
       }
 
-      logIgnoredTransferEvent(transferContext, eventType, transferAmountMinor);
+      logIgnoredTransferEvent(
+        transferContext,
+        eventIndex,
+        eventType,
+        transferAmountMinor
+      );
     }
   } catch (error) {
     const note = logAndReturn(

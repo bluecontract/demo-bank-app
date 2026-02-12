@@ -237,13 +237,14 @@ describe('payNoteWebhookHandler', () => {
       amountMinor: 15000,
       description: 'Invoice Q3',
       userId: 'user-456',
-      idempotencyKey: 'doc-123',
+      idempotencyKey: 'paynote-transfer:capture-immediately:event-123:0',
       payNoteDocumentId: 'doc-123',
     });
     expect(hoistedAdapters.captureHoldMock).toHaveBeenCalledWith({
       holdId: 'doc-123',
       userId: 'user-456',
-      idempotencyKey: 'doc-123',
+      idempotencyKey: 'paynote-transfer:capture-funds:event-123:1',
+      amountMinor: 15000,
       counterpartyAccountNumber: '9595234002',
       payNoteDocumentId: 'doc-123',
     });
@@ -253,7 +254,7 @@ describe('payNoteWebhookHandler', () => {
       amountMinor: 15000,
       counterpartyAccountNumber: '9595234002',
       userId: 'user-456',
-      idempotencyKey: 'doc-123',
+      idempotencyKey: 'paynote-transfer:reserve-funds:event-123:2',
       payNoteDocumentId: 'doc-123',
     });
     expect(logger.debug).toHaveBeenCalledWith(

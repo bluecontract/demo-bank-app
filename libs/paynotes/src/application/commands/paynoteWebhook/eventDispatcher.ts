@@ -40,6 +40,12 @@ export type ClassifiedPayNoteEvent = {
   decision: PayNoteEventDispatchDecision;
 };
 
+export type DispatchedTransferEvent = {
+  event: WebhookEmittedEvent;
+  eventType?: string;
+  eventIndex: number;
+};
+
 export const classifyPayNoteEvent = (
   event: WebhookEmittedEvent
 ): ClassifiedPayNoteEvent => {
@@ -91,7 +97,7 @@ export const dispatchPayNoteEvents = (input: {
   logs: LogEntry[];
 }): {
   captureRequestEvents: WebhookEmittedEvent[];
-  transferEvents: WebhookEmittedEvent[];
+  transferEvents: DispatchedTransferEvent[];
   monitoringRequestEvents: Array<{
     event: WebhookEmittedEvent;
     eventType?: string;
@@ -101,7 +107,7 @@ export const dispatchPayNoteEvents = (input: {
   const { events, eventId, payNoteDocumentId, logs } = input;
 
   const captureRequestEvents: WebhookEmittedEvent[] = [];
-  const transferEvents: WebhookEmittedEvent[] = [];
+  const transferEvents: DispatchedTransferEvent[] = [];
   const monitoringRequestEvents: Array<{
     event: WebhookEmittedEvent;
     eventType?: string;
@@ -125,7 +131,11 @@ export const dispatchPayNoteEvents = (input: {
     }
 
     if (classified.decision === 'transfer') {
-      transferEvents.push(classified.event);
+      transferEvents.push({
+        event: classified.event,
+        eventType: classified.eventType,
+        eventIndex,
+      });
       continue;
     }
 

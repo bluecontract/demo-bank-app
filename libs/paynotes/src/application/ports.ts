@@ -329,6 +329,7 @@ export interface CaptureHoldRequest {
   holdId: string;
   userId: string;
   idempotencyKey: string;
+  amountMinor?: number;
   counterpartyAccountNumber?: string;
   payNoteDocumentId?: string;
 }

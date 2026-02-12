@@ -57,6 +57,13 @@ describe('paynote event dispatcher', () => {
     expect(captureRequestEvents).toHaveLength(1);
     expect(transferEvents).toHaveLength(1);
     expect(monitoringRequestEvents).toHaveLength(1);
+    expect(transferEvents[0]).toEqual(
+      expect.objectContaining({
+        eventType: 'PayNote/Capture Funds Requested',
+        eventIndex: 1,
+        event: expect.any(Object),
+      })
+    );
 
     expect(logs).toContainEqual(
       expect.objectContaining({

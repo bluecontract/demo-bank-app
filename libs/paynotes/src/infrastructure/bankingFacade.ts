@@ -9,6 +9,7 @@ import {
   transferMoney,
   reserveFunds,
   captureHold,
+  partialCaptureHold,
 } from '@demo-bank-app/banking';
 import type { BankingRepository, HoldRepository } from '@demo-bank-app/banking';
 import type { PowertoolsLogger } from '@demo-bank-app/shared-observability';
@@ -47,6 +48,17 @@ const buildCaptureRequest = (request: CaptureHoldRequest) => ({
   holdId: request.holdId,
   userId: request.userId,
   idempotencyKey: request.idempotencyKey,
+  counterpartyAccountNumber: request.counterpartyAccountNumber,
+  payNoteDocumentId: request.payNoteDocumentId,
+});
+
+const buildPartialCaptureRequest = (
+  request: CaptureHoldRequest & { amountMinor: number }
+) => ({
+  holdId: request.holdId,
+  userId: request.userId,
+  idempotencyKey: request.idempotencyKey,
+  amountMinor: request.amountMinor,
   counterpartyAccountNumber: request.counterpartyAccountNumber,
   payNoteDocumentId: request.payNoteDocumentId,
 });
@@ -118,6 +130,21 @@ export const createBankingFacade = (
   },
 
   async captureHold(request) {
+    if (typeof request.amountMinor === 'number') {
+      const requestWithAmount = request as CaptureHoldRequest & {
+        amountMinor: number;
+      };
+      const partialResult = await partialCaptureHold(
+        buildPartialCaptureRequest(requestWithAmount),
+        {
+          bankingRepository: deps.bankingRepository,
+          holdRepository: deps.holdRepository,
+          logger: deps.logger,
+        }
+      );
+      return partialResult.hold;
+    }
+
     return captureHold(buildCaptureRequest(request), {
       bankingRepository: deps.bankingRepository,
       holdRepository: deps.holdRepository,

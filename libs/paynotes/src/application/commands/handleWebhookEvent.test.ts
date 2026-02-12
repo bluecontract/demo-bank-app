@@ -337,6 +337,14 @@ describe('handleWebhookEvent', () => {
 
     await handleWebhookEvent({ eventId: 'event-1' }, deps);
 
+    expect(deps.bankingFacade.captureHold).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdId: 'doc-1',
+        amountMinor: 1200,
+        idempotencyKey: 'paynote-transfer:capture-funds:event-1:0',
+      })
+    );
+
     expect(deps.contractRepository.saveContract).toHaveBeenCalledWith(
       expect.objectContaining({
         relatedTransactionIds: ['txn-1'],
@@ -1067,7 +1075,7 @@ describe('handleWebhookEvent', () => {
     );
   });
 
-  it('deduplicates repeated capture immediately requests across webhook events', async () => {
+  it('processes repeated capture immediately requests when webhook event ids differ', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     const processedEventIds = new Set<string>();
     deps.payNoteRepository.markEventProcessed = vi
@@ -1123,12 +1131,78 @@ describe('handleWebhookEvent', () => {
     const second = await handleWebhookEvent({ eventId: 'event-2' }, deps);
     expect(second.note).toBe('');
 
+    expect(deps.bankingFacade.transferFunds).toHaveBeenCalledTimes(2);
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledTimes(2);
+  });
+
+  it('deduplicates transfer request processing by webhook event id and emitted index', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    const processedTransferMarkers = new Set<string>();
+    deps.payNoteRepository.markEventProcessed = vi
+      .fn()
+      .mockImplementation(async (marker: string) => {
+        if (!marker.startsWith('paynote-transfer-request:')) {
+          return true;
+        }
+        if (processedTransferMarkers.has(marker)) {
+          return false;
+        }
+        processedTransferMarkers.add(marker);
+        return true;
+      });
+
+    const repeatedPayload = {
+      kind: 'success' as const,
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Quick PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Reserve Funds and Capture Immediately Requested',
+              requestId: 'capture-now-repeat-1',
+              amount: 2500,
+            }),
+          ],
+        },
+      },
+    } satisfies MyOsFetchEventResult;
+
+    fetchDocument.mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    fetchEvent.mockResolvedValueOnce(repeatedPayload);
+    const first = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+    expect(first.note).toBe('');
+
+    fetchEvent.mockResolvedValueOnce(repeatedPayload);
+    const second = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+    expect(second.note).toBe('');
+
     expect(deps.bankingFacade.transferFunds).toHaveBeenCalledTimes(1);
-    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledTimes(1);
     expect(second.logs).toContainEqual(
       expect.objectContaining({
         level: 'info',
         message: 'Skipped duplicate PayNote transfer request',
+        context: expect.objectContaining({
+          eventId: 'event-1',
+          eventIndex: 0,
+        }),
       })
     );
   });
