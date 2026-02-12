@@ -279,6 +279,92 @@ const emitGuarantorResponseEvent = async (input: {
   });
 };
 
+type TransferResponseMessages = {
+  successMessage: string;
+  failureMessage: string;
+  missingCredentialsMessage: string;
+};
+
+const emitTransferGuarantorResponse = async (input: {
+  context: TransferContext;
+  eventType:
+    | typeof RESERVE_FUNDS_EVENT_NAME
+    | typeof CAPTURE_FUNDS_EVENT_NAME
+    | typeof CAPTURE_IMMEDIATELY_EVENT_NAME;
+  requestId?: string;
+  responseEvent: Record<string, unknown>;
+  messages: TransferResponseMessages;
+}): Promise<boolean> => {
+  const {
+    context: { sessionId, eventId, payNoteDocumentId, deps, logs },
+    eventType,
+    requestId,
+    responseEvent,
+    messages,
+  } = input;
+
+  return emitGuarantorResponseEvent({
+    sessionId,
+    responseEvent,
+    successMessage: messages.successMessage,
+    failureMessage: messages.failureMessage,
+    missingCredentialsMessage: messages.missingCredentialsMessage,
+    context: {
+      eventId,
+      payNoteDocumentId,
+      eventType,
+      requestId,
+    },
+    deps,
+    logs,
+  });
+};
+
+const emitTransferGuarantorResponseSafely = async (input: {
+  context: TransferContext;
+  eventType:
+    | typeof RESERVE_FUNDS_EVENT_NAME
+    | typeof CAPTURE_FUNDS_EVENT_NAME
+    | typeof CAPTURE_IMMEDIATELY_EVENT_NAME;
+  requestId?: string;
+  responseEvent: Record<string, unknown>;
+  messages: TransferResponseMessages;
+  unexpectedFailureMessage: string;
+}): Promise<void> => {
+  const {
+    context: { eventId, payNoteDocumentId, logs },
+    eventType,
+    requestId,
+    unexpectedFailureMessage,
+  } = input;
+
+  try {
+    await emitTransferGuarantorResponse(input);
+  } catch (error) {
+    logs.push({
+      level: 'error',
+      message: unexpectedFailureMessage,
+      context: {
+        eventId,
+        payNoteDocumentId,
+        eventType,
+        requestId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
+};
+
+const resolveFailureReason = (
+  error: unknown,
+  fallbackReason: string
+): string => {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return fallbackReason;
+};
+
 const handleCaptureImmediately = async (input: {
   context: TransferContext;
   account: BankingAccount & { ownerUserId: string };
@@ -290,7 +376,6 @@ const handleCaptureImmediately = async (input: {
     context: {
       eventId,
       payNoteDocumentId,
-      sessionId,
       payerAccountNumber,
       payeeAccountNumber,
       transferDescription,
@@ -308,6 +393,7 @@ const handleCaptureImmediately = async (input: {
     eventIndex,
     operation: 'capture-immediately',
   });
+  const eventType = CAPTURE_IMMEDIATELY_EVENT_NAME;
 
   if (!payeeAccountNumber) {
     logs.push({
@@ -320,26 +406,22 @@ const handleCaptureImmediately = async (input: {
         reason: 'Missing counterparty account number',
       },
     });
-    await emitGuarantorResponseEvent({
-      sessionId,
+    await emitTransferGuarantorResponse({
+      context: input.context,
+      eventType,
+      requestId,
       responseEvent: buildResponseEvent({
         type: CAPTURE_DECLINED_EVENT_NAME,
         requestId,
         reason: 'Missing counterparty account number',
       }),
-      successMessage: 'Reported PayNote capture declined via guarantorUpdate',
-      failureMessage:
-        'Failed to report PayNote capture declined via guarantorUpdate',
-      missingCredentialsMessage:
-        'Skipped PayNote capture declined update (missing MyOS credentials)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        eventType: CAPTURE_IMMEDIATELY_EVENT_NAME,
-        requestId,
+      messages: {
+        successMessage: 'Reported PayNote capture declined via guarantorUpdate',
+        failureMessage:
+          'Failed to report PayNote capture declined via guarantorUpdate',
+        missingCredentialsMessage:
+          'Skipped PayNote capture declined update (missing MyOS credentials)',
       },
-      deps,
-      logs,
     });
     return;
   }
@@ -370,10 +452,10 @@ const handleCaptureImmediately = async (input: {
       payNoteDocumentId,
     });
   } catch (error) {
-    const reason =
-      error instanceof Error && error.message.trim().length > 0
-        ? error.message
-        : 'Unable to capture funds immediately';
+    const reason = resolveFailureReason(
+      error,
+      'Unable to capture funds immediately'
+    );
 
     logs.push({
       level: 'warn',
@@ -386,66 +468,46 @@ const handleCaptureImmediately = async (input: {
       },
     });
 
-    await emitGuarantorResponseEvent({
-      sessionId,
+    await emitTransferGuarantorResponse({
+      context: input.context,
+      eventType,
+      requestId,
       responseEvent: buildResponseEvent({
         type: CAPTURE_FAILED_EVENT_NAME,
         requestId,
         reason,
       }),
-      successMessage: 'Reported PayNote capture failed via guarantorUpdate',
-      failureMessage:
-        'Failed to report PayNote capture failed via guarantorUpdate',
-      missingCredentialsMessage:
-        'Skipped PayNote capture failed update (missing MyOS credentials)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        eventType: CAPTURE_IMMEDIATELY_EVENT_NAME,
-        requestId,
+      messages: {
+        successMessage: 'Reported PayNote capture failed via guarantorUpdate',
+        failureMessage:
+          'Failed to report PayNote capture failed via guarantorUpdate',
+        missingCredentialsMessage:
+          'Skipped PayNote capture failed update (missing MyOS credentials)',
       },
-      deps,
-      logs,
     });
     return;
   }
 
-  try {
-    await emitGuarantorResponseEvent({
-      sessionId,
-      responseEvent: buildResponseEvent({
-        type: FUNDS_CAPTURED_EVENT_NAME,
-        requestId,
-        amountField: 'amountCaptured',
-        amount: transferAmountMinor,
-      }),
+  await emitTransferGuarantorResponseSafely({
+    context: input.context,
+    eventType,
+    requestId,
+    responseEvent: buildResponseEvent({
+      type: FUNDS_CAPTURED_EVENT_NAME,
+      requestId,
+      amountField: 'amountCaptured',
+      amount: transferAmountMinor,
+    }),
+    messages: {
       successMessage: 'Reported PayNote funds captured via guarantorUpdate',
       failureMessage:
         'Failed to report PayNote funds captured via guarantorUpdate',
       missingCredentialsMessage:
         'Skipped PayNote funds captured update (missing MyOS credentials)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        eventType: CAPTURE_IMMEDIATELY_EVENT_NAME,
-        requestId,
-      },
-      deps,
-      logs,
-    });
-  } catch (error) {
-    logs.push({
-      level: 'error',
-      message:
-        'PayNote immediate capture succeeded but guarantorUpdate reporting failed unexpectedly',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        requestId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
+    },
+    unexpectedFailureMessage:
+      'PayNote immediate capture succeeded but guarantorUpdate reporting failed unexpectedly',
+  });
 };
 
 const handleReserveFundsRequest = async (input: {
@@ -459,7 +521,6 @@ const handleReserveFundsRequest = async (input: {
     context: {
       eventId,
       payNoteDocumentId,
-      sessionId,
       payerAccountNumber,
       payeeAccountNumber,
       deps,
@@ -477,6 +538,7 @@ const handleReserveFundsRequest = async (input: {
     eventIndex,
     operation: 'reserve-funds',
   });
+  const eventType = RESERVE_FUNDS_EVENT_NAME;
 
   logs.push({
     level: 'info',
@@ -508,10 +570,7 @@ const handleReserveFundsRequest = async (input: {
       payNoteDocumentId,
     });
   } catch (error) {
-    const reason =
-      error instanceof Error && error.message.trim().length > 0
-        ? error.message
-        : 'Unable to reserve funds';
+    const reason = resolveFailureReason(error, 'Unable to reserve funds');
 
     logs.push({
       level: 'warn',
@@ -524,67 +583,47 @@ const handleReserveFundsRequest = async (input: {
       },
     });
 
-    await emitGuarantorResponseEvent({
-      sessionId,
+    await emitTransferGuarantorResponse({
+      context: input.context,
+      eventType,
+      requestId,
       responseEvent: buildResponseEvent({
         type: RESERVATION_DECLINED_EVENT_NAME,
         requestId,
         reason,
       }),
-      successMessage:
-        'Reported PayNote reservation declined via guarantorUpdate',
-      failureMessage:
-        'Failed to report PayNote reservation declined via guarantorUpdate',
-      missingCredentialsMessage:
-        'Skipped PayNote reservation declined update (missing MyOS credentials)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        eventType: RESERVE_FUNDS_EVENT_NAME,
-        requestId,
+      messages: {
+        successMessage:
+          'Reported PayNote reservation declined via guarantorUpdate',
+        failureMessage:
+          'Failed to report PayNote reservation declined via guarantorUpdate',
+        missingCredentialsMessage:
+          'Skipped PayNote reservation declined update (missing MyOS credentials)',
       },
-      deps,
-      logs,
     });
     return;
   }
 
-  try {
-    await emitGuarantorResponseEvent({
-      sessionId,
-      responseEvent: buildResponseEvent({
-        type: FUNDS_RESERVED_EVENT_NAME,
-        requestId,
-        amountField: 'amountReserved',
-        amount: transferAmountMinor,
-      }),
+  await emitTransferGuarantorResponseSafely({
+    context: input.context,
+    eventType,
+    requestId,
+    responseEvent: buildResponseEvent({
+      type: FUNDS_RESERVED_EVENT_NAME,
+      requestId,
+      amountField: 'amountReserved',
+      amount: transferAmountMinor,
+    }),
+    messages: {
       successMessage: 'Reported PayNote funds reserved via guarantorUpdate',
       failureMessage:
         'Failed to report PayNote funds reserved via guarantorUpdate',
       missingCredentialsMessage:
         'Skipped PayNote funds reserved update (missing MyOS credentials)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        eventType: RESERVE_FUNDS_EVENT_NAME,
-        requestId,
-      },
-      deps,
-      logs,
-    });
-  } catch (error) {
-    logs.push({
-      level: 'error',
-      message:
-        'PayNote funds reserved but guarantorUpdate reporting failed unexpectedly',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        requestId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
+    },
+    unexpectedFailureMessage:
+      'PayNote funds reserved but guarantorUpdate reporting failed unexpectedly',
+  });
 };
 
 const handleCaptureFundsRequest = async (input: {
@@ -619,6 +658,7 @@ const handleCaptureFundsRequest = async (input: {
     eventIndex,
     operation: 'capture-funds',
   });
+  const eventType = CAPTURE_FUNDS_EVENT_NAME;
 
   logs.push({
     level: 'info',
@@ -668,7 +708,7 @@ const handleCaptureFundsRequest = async (input: {
         deliveryRecord,
         sessionId,
         payNoteDocumentId,
-        eventType: CAPTURE_FUNDS_EVENT_NAME,
+        eventType,
         triggerEvent: eventObject?.triggeredBy,
         emittedEvents,
         now: updatedAt,
@@ -684,10 +724,7 @@ const handleCaptureFundsRequest = async (input: {
       }
     }
   } catch (error) {
-    const reason =
-      error instanceof Error && error.message.trim().length > 0
-        ? error.message
-        : 'Unable to capture funds';
+    const reason = resolveFailureReason(error, 'Unable to capture funds');
 
     logs.push({
       level: 'warn',
@@ -700,66 +737,46 @@ const handleCaptureFundsRequest = async (input: {
       },
     });
 
-    await emitGuarantorResponseEvent({
-      sessionId,
+    await emitTransferGuarantorResponse({
+      context: input.context,
+      eventType,
+      requestId,
       responseEvent: buildResponseEvent({
         type: CAPTURE_FAILED_EVENT_NAME,
         requestId,
         reason,
       }),
-      successMessage: 'Reported PayNote capture failed via guarantorUpdate',
-      failureMessage:
-        'Failed to report PayNote capture failed via guarantorUpdate',
-      missingCredentialsMessage:
-        'Skipped PayNote capture failed update (missing MyOS credentials)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        eventType: CAPTURE_FUNDS_EVENT_NAME,
-        requestId,
+      messages: {
+        successMessage: 'Reported PayNote capture failed via guarantorUpdate',
+        failureMessage:
+          'Failed to report PayNote capture failed via guarantorUpdate',
+        missingCredentialsMessage:
+          'Skipped PayNote capture failed update (missing MyOS credentials)',
       },
-      deps,
-      logs,
     });
     return;
   }
 
-  try {
-    await emitGuarantorResponseEvent({
-      sessionId,
-      responseEvent: buildResponseEvent({
-        type: FUNDS_CAPTURED_EVENT_NAME,
-        requestId,
-        amountField: 'amountCaptured',
-        amount: transferAmountMinor,
-      }),
+  await emitTransferGuarantorResponseSafely({
+    context: input.context,
+    eventType,
+    requestId,
+    responseEvent: buildResponseEvent({
+      type: FUNDS_CAPTURED_EVENT_NAME,
+      requestId,
+      amountField: 'amountCaptured',
+      amount: transferAmountMinor,
+    }),
+    messages: {
       successMessage: 'Reported PayNote funds captured via guarantorUpdate',
       failureMessage:
         'Failed to report PayNote funds captured via guarantorUpdate',
       missingCredentialsMessage:
         'Skipped PayNote funds captured update (missing MyOS credentials)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        eventType: CAPTURE_FUNDS_EVENT_NAME,
-        requestId,
-      },
-      deps,
-      logs,
-    });
-  } catch (error) {
-    logs.push({
-      level: 'error',
-      message:
-        'PayNote funds captured but guarantorUpdate reporting failed unexpectedly',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        requestId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
+    },
+    unexpectedFailureMessage:
+      'PayNote funds captured but guarantorUpdate reporting failed unexpectedly',
+  });
 };
 
 const emitDeclinedDueToMissingPayer = async (input: {
@@ -771,7 +788,7 @@ const emitDeclinedDueToMissingPayer = async (input: {
     | typeof CAPTURE_IMMEDIATELY_EVENT_NAME;
 }): Promise<void> => {
   const {
-    context: { eventId, payNoteDocumentId, sessionId, deps, logs },
+    context: { eventId, payNoteDocumentId, logs },
     event,
     eventType,
   } = input;
@@ -792,14 +809,16 @@ const emitDeclinedDueToMissingPayer = async (input: {
     },
   });
 
-  try {
-    await emitGuarantorResponseEvent({
-      sessionId,
-      responseEvent: buildResponseEvent({
-        type: responseEventType,
-        requestId,
-        reason: 'Missing payer account mapping',
-      }),
+  await emitTransferGuarantorResponseSafely({
+    context: input.context,
+    eventType,
+    requestId,
+    responseEvent: buildResponseEvent({
+      type: responseEventType,
+      requestId,
+      reason: 'Missing payer account mapping',
+    }),
+    messages: {
       successMessage: `Reported PayNote ${
         eventType === RESERVE_FUNDS_EVENT_NAME
           ? 'reservation declined'
@@ -815,29 +834,10 @@ const emitDeclinedDueToMissingPayer = async (input: {
           ? 'reservation declined'
           : 'capture declined'
       } update (missing MyOS credentials)`,
-      context: {
-        eventId,
-        payNoteDocumentId,
-        eventType,
-        requestId,
-      },
-      deps,
-      logs,
-    });
-  } catch (error) {
-    logs.push({
-      level: 'error',
-      message:
-        'Failed to report PayNote decline due to missing payer mapping unexpectedly',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        eventType,
-        requestId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
+    },
+    unexpectedFailureMessage:
+      'Failed to report PayNote decline due to missing payer mapping unexpectedly',
+  });
 };
 
 const logIgnoredTransferEvent = (
