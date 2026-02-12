@@ -4,6 +4,16 @@
 
 2026-01-30
 
+## Update note (2026-02-12)
+
+Design for contract-driven linked/reverse charge requests and Payment Mandate
+policy is documented in:
+
+- `docs/design/015-linked-card-charge-and-payment-mandate.md`
+
+This document remains the baseline for Delivery/proposal UX, monitoring pending
+actions, and Inbox-oriented contract presentation.
+
 ## Summary
 
 We implement:

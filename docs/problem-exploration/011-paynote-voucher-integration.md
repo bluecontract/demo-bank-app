@@ -4,6 +4,16 @@
 
 2026-01-30
 
+## Update note (2026-02-12)
+
+Contract-driven transaction initiation (`Linked/Reverse Card Charge`) and
+Payment Mandate-first sequencing are extended in:
+
+- `docs/problem-exploration/014-linked-card-charge-and-payment-mandate.md`
+
+This document remains valid for Delivery/proposal, voucher, monitoring, and
+Inbox UX context.
+
 ## Context
 
 The demo bank already supports:

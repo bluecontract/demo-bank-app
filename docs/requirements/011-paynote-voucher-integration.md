@@ -4,6 +4,16 @@
 
 2026-01-30
 
+## Update note (2026-02-12)
+
+Additional requirements for contract-driven charge initiation and Payment
+Mandate integration are defined in:
+
+- `docs/requirements/014-linked-card-charge-and-payment-mandate.md`
+
+`Conversation/Customer Consent` requirements in this document stay valid but are
+sequenced as a later phase after linked/reverse charge + mandate work.
+
 ## Overview
 
 This iteration delivers:
