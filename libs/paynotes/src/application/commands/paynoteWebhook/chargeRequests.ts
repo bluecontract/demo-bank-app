@@ -81,35 +81,26 @@ type ResolvedChargeAccounts = {
   payerAccount: BankingAccount & { ownerUserId: string };
 };
 
-const CHARGE_EVENT_TYPES = new Set<string>([
+const SUPPORTED_CHARGE_EVENTS: readonly ChargeRequestEventType[] = [
   LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME,
   LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
   REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME,
   REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
-]);
+];
+
+const SUPPORTED_CHARGE_EVENT_SET = new Set<ChargeRequestEventType>(
+  SUPPORTED_CHARGE_EVENTS
+);
+
+const CHARGE_EVENT_TYPES = new Set<string>(SUPPORTED_CHARGE_EVENTS);
 
 const CHARGE_CAPABILITY_MATRIX: Record<
   SourcePayNoteType,
   Set<ChargeRequestEventType>
 > = {
-  'card-transaction-paynote': new Set<ChargeRequestEventType>([
-    LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME,
-    LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
-    REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME,
-    REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
-  ]),
-  'merchant-to-customer-paynote': new Set<ChargeRequestEventType>([
-    LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME,
-    LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
-    REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME,
-    REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
-  ]),
-  paynote: new Set<ChargeRequestEventType>([
-    LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME,
-    LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
-    REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME,
-    REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
-  ]),
+  'card-transaction-paynote': SUPPORTED_CHARGE_EVENT_SET,
+  'merchant-to-customer-paynote': SUPPORTED_CHARGE_EVENT_SET,
+  paynote: SUPPORTED_CHARGE_EVENT_SET,
   unknown: new Set<ChargeRequestEventType>(),
 };
 
@@ -204,6 +195,45 @@ const extractPaynoteDocument = (
   }
 };
 
+const CHARGE_REQUEST_SCHEMA_BY_EVENT_TYPE: Record<
+  ChargeRequestEventType,
+  Parameters<typeof blue.nodeToSchemaOutput>[1]
+> = {
+  [LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME]: LinkedCardChargeRequestedSchema,
+  [LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME]:
+    LinkedCardChargeAndCaptureImmediatelyRequestedSchema,
+  [REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME]: ReverseCardChargeRequestedSchema,
+  [REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME]:
+    ReverseCardChargeAndCaptureImmediatelyRequestedSchema,
+};
+
+type ParsedChargeRequestSchemaOutput = {
+  amount?: unknown;
+  requestId?: unknown;
+  paymentMandateDocumentId?: unknown;
+  paynote?: BlueNode;
+};
+
+const buildParsedChargeRequest = (input: {
+  output: ParsedChargeRequestSchemaOutput;
+  fallbackAmount?: number;
+  event: WebhookEmittedEvent;
+}): ParsedChargeRequest | null => {
+  const amountMinor =
+    toPositiveInteger(input.output.amount) ?? input.fallbackAmount;
+  if (!amountMinor) {
+    return null;
+  }
+
+  return {
+    amountMinor,
+    requestId:
+      getString(input.output.requestId) ?? resolveChargeRequestId(input.event),
+    paymentMandateDocumentId: getString(input.output.paymentMandateDocumentId),
+    paynoteDocument: extractPaynoteDocument(input.output.paynote),
+  };
+};
+
 const parseChargeRequest = (
   event: WebhookEmittedEvent,
   eventType: ChargeRequestEventType
@@ -217,74 +247,16 @@ const parseChargeRequest = (
       toPositiveInteger(simple?.amount) ??
       toPositiveInteger(event.amount?.value);
 
-    if (eventType === LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME) {
-      const output = blue.nodeToSchemaOutput(
-        node,
-        LinkedCardChargeRequestedSchema
-      );
-      const amountMinor = toPositiveInteger(output.amount) ?? fallbackAmount;
-      if (!amountMinor) {
-        return null;
-      }
-      return {
-        amountMinor,
-        requestId: getString(output.requestId) ?? resolveChargeRequestId(event),
-        paymentMandateDocumentId: getString(output.paymentMandateDocumentId),
-        paynoteDocument: extractPaynoteDocument(output.paynote),
-      };
-    }
-
-    if (
-      eventType ===
-      LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME
-    ) {
-      const output = blue.nodeToSchemaOutput(
-        node,
-        LinkedCardChargeAndCaptureImmediatelyRequestedSchema
-      );
-      const amountMinor = toPositiveInteger(output.amount) ?? fallbackAmount;
-      if (!amountMinor) {
-        return null;
-      }
-      return {
-        amountMinor,
-        requestId: getString(output.requestId) ?? resolveChargeRequestId(event),
-        paymentMandateDocumentId: getString(output.paymentMandateDocumentId),
-        paynoteDocument: extractPaynoteDocument(output.paynote),
-      };
-    }
-
-    if (eventType === REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME) {
-      const output = blue.nodeToSchemaOutput(
-        node,
-        ReverseCardChargeRequestedSchema
-      );
-      const amountMinor = toPositiveInteger(output.amount) ?? fallbackAmount;
-      if (!amountMinor) {
-        return null;
-      }
-      return {
-        amountMinor,
-        requestId: getString(output.requestId) ?? resolveChargeRequestId(event),
-        paymentMandateDocumentId: getString(output.paymentMandateDocumentId),
-        paynoteDocument: extractPaynoteDocument(output.paynote),
-      };
-    }
-
+    const schema = CHARGE_REQUEST_SCHEMA_BY_EVENT_TYPE[eventType];
     const output = blue.nodeToSchemaOutput(
       node,
-      ReverseCardChargeAndCaptureImmediatelyRequestedSchema
-    );
-    const amountMinor = toPositiveInteger(output.amount) ?? fallbackAmount;
-    if (!amountMinor) {
-      return null;
-    }
-    return {
-      amountMinor,
-      requestId: getString(output.requestId) ?? resolveChargeRequestId(event),
-      paymentMandateDocumentId: getString(output.paymentMandateDocumentId),
-      paynoteDocument: extractPaynoteDocument(output.paynote),
-    };
+      schema
+    ) as ParsedChargeRequestSchemaOutput;
+    return buildParsedChargeRequest({
+      output,
+      fallbackAmount,
+      event,
+    });
   } catch {
     return null;
   }
@@ -565,26 +537,24 @@ const resolveMerchantFundingAccountNumber = async (input: {
   return account ? getString(account.accountNumber) : undefined;
 };
 
+const resolveRootCustomerAccountNumber = (
+  context: ChargeRequestContext
+): string | undefined =>
+  getString(
+    context.deliveryRecord?.accountNumber ??
+      context.updatedRecord.accountNumber ??
+      context.updatedRecord.payerAccountNumber
+  );
+
 const resolveChargeAccounts = async (input: {
   context: ChargeRequestContext;
   sourcePayNoteType: SourcePayNoteType;
   direction: ChargeDirection;
 }): Promise<ResolvedChargeAccounts | null> => {
   const { context, sourcePayNoteType, direction } = input;
-  const {
-    updatedRecord,
-    deliveryRecord,
-    deps,
-    logs,
-    eventId,
-    payNoteDocumentId,
-  } = context;
+  const { deps, logs, eventId, payNoteDocumentId } = context;
 
-  const rootCustomerAccountNumber = getString(
-    deliveryRecord?.accountNumber ??
-      updatedRecord.accountNumber ??
-      updatedRecord.payerAccountNumber
-  );
+  const rootCustomerAccountNumber = resolveRootCustomerAccountNumber(context);
   const merchantFundingAccountNumber =
     await resolveMerchantFundingAccountNumber({
       context,
@@ -641,6 +611,18 @@ const resolveChargeAccounts = async (input: {
     payeeAccountNumber,
     payerAccount,
   };
+};
+
+const hasCardTransactionChainContext = (
+  context: ChargeRequestContext
+): boolean => {
+  if (context.deliveryRecord) {
+    return true;
+  }
+
+  const holdId = getString(context.updatedRecord.holdId);
+  const transactionId = getString(context.updatedRecord.transactionId);
+  return Boolean(holdId || transactionId);
 };
 
 const executeCardCharge = async (input: {
@@ -1021,7 +1003,7 @@ export const handleChargeRequestEvents = async (input: {
       continue;
     }
 
-    if (!deliveryRecord) {
+    if (!hasCardTransactionChainContext(context)) {
       await emitCardChargeResponded({
         context,
         eventType,

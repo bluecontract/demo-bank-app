@@ -1515,7 +1515,325 @@ describe('handleWebhookEvent', () => {
     );
   });
 
-  it('rejects linked card charge request when contract is not rooted in delivery chain', async () => {
+  it('handles reverse card charge request with swapped payer/payee accounts', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      deliveryId: 'delivery-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue({
+      deliveryId: 'delivery-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    deps.bankingFacade.getAccountByNumber = vi
+      .fn()
+      .mockImplementation(async accountNumber => {
+        if (accountNumber === '4444444444') {
+          return {
+            id: 'merchant-credit-line-id',
+            accountNumber,
+            ownerUserId: 'merchant-owner',
+          };
+        }
+        return {
+          id: 'customer-account-id',
+          accountNumber,
+          ownerUserId: 'customer-owner',
+        };
+      });
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/Card Transaction PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Reverse Card Charge Requested',
+              requestId: 'reverse-charge-1',
+              amount: 2700,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/Card Transaction PayNote',
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.bankingFacade.reserveFunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdId: 'paynote-card-charge:doc-1:event-1:0',
+        payerAccountNumber: '4444444444',
+        counterpartyAccountNumber: '1234567890',
+        amountMinor: 2700,
+        idempotencyKey: 'paynote-card-charge:reserve:event-1:0',
+        payNoteDocumentId: 'doc-1',
+      })
+    );
+
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls;
+    expectRunOperationIncludesEventType(
+      runOperationCalls,
+      'PayNote/Card Charge Responded'
+    );
+    expectRunOperationIncludesEventType(
+      runOperationCalls,
+      'PayNote/Card Charge Completed'
+    );
+  });
+
+  it('handles reverse card charge and capture immediately with swapped accounts', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      deliveryId: 'delivery-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue({
+      deliveryId: 'delivery-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    deps.bankingFacade.getAccountByNumber = vi
+      .fn()
+      .mockImplementation(async accountNumber => {
+        if (accountNumber === '4444444444') {
+          return {
+            id: 'merchant-credit-line-id',
+            accountNumber,
+            ownerUserId: 'merchant-owner',
+          };
+        }
+        return {
+          id: 'customer-account-id',
+          accountNumber,
+          ownerUserId: 'customer-owner',
+        };
+      });
+    deps.bankingFacade.captureHold = vi.fn().mockResolvedValue({
+      holdId: 'paynote-card-charge:doc-1:event-1:0',
+      relatedTransactionId: 'txn-reverse-1',
+    } as any);
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/Card Transaction PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Reverse Card Charge and Capture Immediately Requested',
+              requestId: 'reverse-charge-capture-1',
+              amount: 1300,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/Card Transaction PayNote',
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.bankingFacade.reserveFunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payerAccountNumber: '4444444444',
+        counterpartyAccountNumber: '1234567890',
+        amountMinor: 1300,
+      })
+    );
+    expect(deps.bankingFacade.captureHold).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdId: 'paynote-card-charge:doc-1:event-1:0',
+        userId: 'merchant-owner',
+        counterpartyAccountNumber: '1234567890',
+        idempotencyKey: 'paynote-card-charge:capture:event-1:0',
+        payNoteDocumentId: 'doc-1',
+      })
+    );
+
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls;
+    expectRunOperationIncludesEventType(
+      runOperationCalls,
+      'PayNote/Card Charge Responded'
+    );
+    expectRunOperationIncludesEventType(
+      runOperationCalls,
+      'PayNote/Card Charge Completed'
+    );
+  });
+
+  it('handles linked card charge request for chained paynote without direct delivery record', async () => {
+    const { deps, fetchEvent } = createDependencies();
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      holdId: 'root-hold-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue(null);
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Linked Card Charge Requested',
+              requestId: 'charge-chain-1',
+              amount: 2500,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.bankingFacade.reserveFunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdId: 'paynote-card-charge:doc-1:event-1:0',
+        payerAccountNumber: '1234567890',
+        counterpartyAccountNumber: '4444444444',
+        amountMinor: 2500,
+      })
+    );
+
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls;
+    expectRunOperationIncludesEventType(
+      runOperationCalls,
+      'PayNote/Card Charge Responded'
+    );
+    expectRunOperationIncludesEventType(
+      runOperationCalls,
+      'PayNote/Card Charge Completed'
+    );
+  });
+
+  it('rejects linked card charge request without delivery when record has no hold/transaction context', async () => {
+    const { deps, fetchEvent } = createDependencies();
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue(null);
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Linked Card Charge Requested',
+              requestId: 'charge-no-chain-1',
+              amount: 2500,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.bankingFacade.reserveFunds).not.toHaveBeenCalled();
+
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls;
+    expectRunOperationIncludesEventType(
+      runOperationCalls,
+      'PayNote/Card Charge Responded'
+    );
+    expect(
+      runOperationCalls.some(call =>
+        runOperationPayloadContainsEventType(
+          call[0]?.payload,
+          'PayNote/Card Charge Completed'
+        )
+      )
+    ).toBe(false);
+  });
+
+  it('rejects linked card charge request when contract is not in card txn chain', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
 
     fetchEvent.mockResolvedValueOnce({
