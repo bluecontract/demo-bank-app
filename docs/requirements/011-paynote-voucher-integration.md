@@ -11,6 +11,12 @@ Mandate integration are defined in:
 
 - `docs/requirements/014-linked-card-charge-and-payment-mandate.md`
 
+Mandate orchestration update (2026-02-13):
+
+- async mandate events (`...Authorization Requested/Responded`, `...Settled`) and
+  `chargeAttemptId` correlation are specified in 014 and treated as normative
+  for mandate-gated charge execution.
+
 `Conversation/Customer Consent` requirements in this document stay valid but are
 sequenced as a later phase after linked/reverse charge + mandate work.
 

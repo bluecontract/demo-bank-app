@@ -11,6 +11,11 @@ policy is documented in:
 
 - `docs/design/015-linked-card-charge-and-payment-mandate.md`
 
+Mandate orchestration update (2026-02-13):
+
+- 015 now defines async mandate saga flow with `chargeAttemptId` correlation and
+  mandate-owned cumulative usage state.
+
 This document remains the baseline for Delivery/proposal UX, monitoring pending
 actions, and Inbox-oriented contract presentation.
 

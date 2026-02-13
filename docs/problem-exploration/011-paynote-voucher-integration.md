@@ -11,6 +11,11 @@ Payment Mandate-first sequencing are extended in:
 
 - `docs/problem-exploration/014-linked-card-charge-and-payment-mandate.md`
 
+Mandate orchestration update (2026-02-13):
+
+- authorization/settlement now follows async `chargeAttemptId`-correlated saga,
+- cumulative mandate usage is tracked in mandate document state.
+
 This document remains valid for Delivery/proposal, voucher, monitoring, and
 Inbox UX context.
 

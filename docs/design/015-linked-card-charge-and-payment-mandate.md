@@ -4,6 +4,12 @@
 
 2026-02-12
 
+## Update note (2026-02-13)
+
+Mandate processing is refined to an asynchronous saga-style handshake:
+authorization request -> authorization response -> charge execution ->
+settlement update -> settlement response.
+
 ## Summary
 
 This design adds a new bank capability layer for starting card transactions from
@@ -14,6 +20,7 @@ Key principles:
 - explicit event intent (no inference-heavy routing),
 - capability matrix per source contract type,
 - mandate-aware policy gating,
+- mandate as single source of truth for cumulative usage state,
 - separate lifecycle reporting for charge and linked PayNote start.
 
 ## Event model
@@ -49,6 +56,15 @@ Notes:
 - `requestId` is propagated only when present in request.
 - Charge and linked PayNote responses are separate processes.
 
+## Mandate orchestration events
+
+- `PayNote/Mandate Spend Authorization Requested`
+- `PayNote/Mandate Spend Authorization Responded`
+- `PayNote/Mandate Spend Settled`
+- `PayNote/Mandate Spend Settlement Responded`
+
+`chargeAttemptId` is the mandatory correlation key for this handshake.
+
 ## Processing pipeline
 
 ### 1) Classify and validate event
@@ -57,13 +73,17 @@ Notes:
 2. Resolve source contract/document type and validate against capability matrix.
 3. Resolve canonical session and root chain context.
 4. Apply idempotency gate `(webhookEventId, emittedEventIndex)`.
+5. Derive stable `chargeAttemptId` from source event identity.
 
 ### 2) Mandate policy gate
 
 1. If `paymentMandateDocumentId` is present:
    - load mandate doc,
    - verify active status, scope, expiry/revocation.
-2. If mandate is missing/invalid:
+2. Emit `PayNote/Mandate Spend Authorization Requested` to mandate.
+3. Wait for `PayNote/Mandate Spend Authorization Responded`.
+4. Continue only when mandate responds `approved`.
+5. If mandate is missing/invalid:
    - create pending action or reject (policy-driven),
    - emit corresponding charge response.
 
@@ -73,6 +93,8 @@ Notes:
 2. Resolve funding account and destination account from root context and policy.
 3. Run auth-only or auth+capture-immediate path (from request type).
 4. Emit charge responses.
+5. Emit `PayNote/Mandate Spend Settled` with execution deltas and ids.
+6. Persist/observe `PayNote/Mandate Spend Settlement Responded` for final mandate consistency.
 
 ### 4) Optional linked PayNote start
 
@@ -89,10 +111,19 @@ For each accepted request, persist causation metadata:
 
 - source contract session/document,
 - root card-transaction context,
+- `chargeAttemptId`,
 - charge transaction/hold id,
 - linked delivery session/document id (if created),
 - linked paynote session/document id (if started),
 - dedupe key `(webhookEventId, emittedEventIndex)`.
+
+Mandate document stores per-attempt runtime state under:
+
+- `chargeAttempts[chargeAttemptId]`:
+  - authorization decision and reason,
+  - reserved/captured deltas,
+  - settlement status,
+  - hold/transaction identifiers.
 
 This metadata is used by:
 
@@ -108,7 +139,7 @@ This metadata is used by:
 
 ## Open design checkpoints before coding
 
-1. Finalize exact payload schema for charge response events.
-2. Finalize exact payload schema for linked PayNote start response events.
-3. Confirm policy defaults for missing/invalid mandates (pending action vs reject)
+1. Confirm timeout/retry strategy when settlement response is delayed.
+2. Confirm final policy defaults for missing/invalid mandates (pending action vs reject)
    per contract type.
+3. Confirm rollout of mandate event listeners across webhook lag scenarios.
