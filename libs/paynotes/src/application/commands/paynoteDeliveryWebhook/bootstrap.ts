@@ -506,6 +506,118 @@ const ensureValidPayNoteBootstrapRequest = async (input: {
   return payNoteDocument;
 };
 
+const resolveReferencedPaymentMandateDocumentId = (
+  payNoteDocument: Record<string, unknown>
+): string | undefined => getString(payNoteDocument.paymentMandateDocumentId);
+
+const validateReferencedPaymentMandateForBootstrap = async (input: {
+  mandateDocumentId: string;
+  now: string;
+  eventId: string;
+  deliveryId?: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<
+  { ok: true; mandateSessionId: string } | { ok: false; reason: string }
+> => {
+  const { mandateDocumentId, now, eventId, deliveryId, deps, logs } = input;
+
+  const mandateContract = await deps.contractRepository.getContractByDocumentId(
+    mandateDocumentId
+  );
+  const mandateSessionId = getString(mandateContract?.sessionId);
+  if (!mandateSessionId) {
+    log(
+      logs,
+      'warn',
+      'PayNote bootstrap request rejected (missing payment mandate session mapping)',
+      {
+        eventId,
+        deliveryId,
+        mandateDocumentId,
+      }
+    );
+    return {
+      ok: false,
+      reason: 'Unable to resolve payment mandate session for bootstrap.',
+    };
+  }
+
+  const fetchedMandate = await deps.myOsClient.fetchDocument(mandateSessionId);
+  if (fetchedMandate.kind !== 'success' || !fetchedMandate.document.document) {
+    log(
+      logs,
+      'warn',
+      'PayNote bootstrap request rejected (payment mandate document unavailable)',
+      {
+        eventId,
+        deliveryId,
+        mandateDocumentId,
+        mandateSessionId,
+        status: 'status' in fetchedMandate ? fetchedMandate.status : null,
+      }
+    );
+    return {
+      ok: false,
+      reason: 'Unable to load payment mandate document for bootstrap.',
+    };
+  }
+
+  const mandateNode = toBlueNode(fetchedMandate.document.document);
+  if (
+    !mandateNode ||
+    !blue.isTypeOf(mandateNode, PaymentMandateSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    log(
+      logs,
+      'warn',
+      'PayNote bootstrap request rejected (invalid payment mandate type)',
+      {
+        eventId,
+        deliveryId,
+        mandateDocumentId,
+        mandateSessionId,
+      }
+    );
+    return {
+      ok: false,
+      reason: 'Referenced payment mandate document is invalid.',
+    };
+  }
+
+  const mandateSimple = blue.nodeToJson(mandateNode, 'simple') as Record<
+    string,
+    unknown
+  > | null;
+  const revokedAt = getString(mandateSimple?.revokedAt);
+  if (revokedAt) {
+    return {
+      ok: false,
+      reason: 'Referenced payment mandate is revoked.',
+    };
+  }
+
+  const expiresAt = getString(mandateSimple?.expiresAt);
+  if (expiresAt) {
+    const expiresAtMs = Date.parse(expiresAt);
+    const nowMs = Date.parse(now);
+    if (
+      Number.isFinite(expiresAtMs) &&
+      Number.isFinite(nowMs) &&
+      expiresAtMs < nowMs
+    ) {
+      return {
+        ok: false,
+        reason: 'Referenced payment mandate is expired.',
+      };
+    }
+  }
+
+  return { ok: true, mandateSessionId };
+};
+
 const resolveExistingDelivery = async (input: {
   deliveryId?: string;
   requestingSessionId?: string;
@@ -1591,6 +1703,33 @@ const handlePayNoteBootstrapRequest = async (input: {
     });
   }
 
+  const paymentMandateDocumentId =
+    resolveReferencedPaymentMandateDocumentId(payNoteDocument);
+  if (paymentMandateDocumentId) {
+    const mandateValidation =
+      await validateReferencedPaymentMandateForBootstrap({
+        mandateDocumentId: paymentMandateDocumentId,
+        now,
+        eventId,
+        deliveryId,
+        deps,
+        logs,
+      });
+    if (!mandateValidation.ok) {
+      return rejectPayNoteBootstrapRequest({
+        context: responseContext,
+        eventId,
+        deliveryId,
+        reason: mandateValidation.reason,
+        logMessage:
+          'PayNote bootstrap request rejected (payment mandate validation failed)',
+        logContext: {
+          paymentMandateDocumentId,
+        },
+      });
+    }
+  }
+
   const channelBindings: ChannelBindings = {
     ...request.channelBindings,
     payerChannel: { accountId: credentials.accountId },
@@ -1675,6 +1814,58 @@ const handlePayNoteBootstrapRequest = async (input: {
         eventId,
         bootstrapSessionId,
         error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (bootstrapSessionId && paymentMandateDocumentId) {
+    const attachedReported = await runGuarantorUpdate({
+      myOsClient: deps.myOsClient,
+      sessionId: bootstrapSessionId,
+      credentials,
+      logs,
+      logContext: {
+        eventId,
+        bootstrapSessionId,
+        paymentMandateDocumentId,
+      },
+      request: [
+        {
+          type: 'PayNote/Payment Mandate Attached',
+          paymentMandateDocumentId,
+        },
+      ],
+      successMessage:
+        'Reported payment mandate attachment for bootstrapped PayNote',
+      failureMessage:
+        'Failed to report payment mandate attachment for bootstrapped PayNote',
+      missingCredentialsMessage:
+        'Skipped payment mandate attachment update (missing MyOS credentials)',
+    });
+
+    if (!attachedReported) {
+      await runGuarantorUpdate({
+        myOsClient: deps.myOsClient,
+        sessionId: bootstrapSessionId,
+        credentials,
+        logs,
+        logContext: {
+          eventId,
+          bootstrapSessionId,
+          paymentMandateDocumentId,
+        },
+        request: [
+          {
+            type: 'PayNote/Payment Mandate Attachment Failed',
+            reason: 'Unable to attach referenced payment mandate.',
+          },
+        ],
+        successMessage:
+          'Reported payment mandate attachment failure for bootstrapped PayNote',
+        failureMessage:
+          'Failed to report payment mandate attachment failure for bootstrapped PayNote',
+        missingCredentialsMessage:
+          'Skipped payment mandate attachment failure update (missing MyOS credentials)',
       });
     }
   }
