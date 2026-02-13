@@ -126,6 +126,8 @@ export const authorizeCardHandler = async (
             type: 'PayNote/Card Transaction Report',
             status: reportStatus,
             amountMinor: result.hold.amountMinor,
+            currency: result.hold.currency,
+            occurredAt: result.hold.createdAt ?? new Date().toISOString(),
             merchantId,
             transactionId: result.hold.holdId,
             cardTransactionDetails: result.hold.cardTransactionDetails,
