@@ -225,19 +225,19 @@ function MockPendingActionCard({
   );
 }
 
-type MonitoringPendingAction = NonNullable<
+type ContractPendingAction = NonNullable<
   ContractDetails['pendingActions']
 >[number];
 
-interface MonitoringPendingActionCardProps {
-  action: MonitoringPendingAction;
+interface ContractPendingActionCardProps {
+  action: ContractPendingAction;
   sessionId: string | null;
 }
 
-function MonitoringPendingActionCard({
+function ContractPendingActionCard({
   action,
   sessionId,
-}: MonitoringPendingActionCardProps) {
+}: ContractPendingActionCardProps) {
   const decisionMutation = useDecideContractPendingAction();
   const isPending = decisionMutation.isPending;
 
@@ -607,13 +607,10 @@ export function ContractDetailsPage() {
   const historyItems = historyQuery.data?.items ?? [];
   const hasHistory = resolvedKind === 'contract' && historyItems.length > 0;
   const mockPendingAction = payNoteInitialStateMeta.action;
-  const pendingMonitoringAction =
+  const pendingContractAction =
     resolvedKind === 'contract'
-      ? contract?.pendingActions?.find(
-          action =>
-            action.type === 'monitoringConsentApproval' &&
-            action.status === 'pending'
-        ) ?? null
+      ? contract?.pendingActions?.find(action => action.status === 'pending') ??
+        null
       : null;
   const shouldShowMockPendingAction =
     resolvedKind !== 'proposal' &&
@@ -1147,9 +1144,9 @@ export function ContractDetailsPage() {
           </div>
 
           <div className="flex flex-col gap-4">
-            {pendingMonitoringAction ? (
-              <MonitoringPendingActionCard
-                action={pendingMonitoringAction}
+            {pendingContractAction ? (
+              <ContractPendingActionCard
+                action={pendingContractAction}
                 sessionId={sessionId ?? null}
               />
             ) : shouldShowMockPendingAction ? (

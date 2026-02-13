@@ -1,6 +1,8 @@
 export type ContractStatusTimestamps = Record<string, string>;
 
-export type ContractPendingActionType = 'monitoringConsentApproval';
+export type ContractPendingActionType =
+  | 'monitoringConsentApproval'
+  | 'chargeMandateApproval';
 
 export type ContractPendingActionStatus = 'pending' | 'accepted' | 'rejected';
 
@@ -13,6 +15,7 @@ export type ContractPendingAction = {
   requestId?: string;
   targetMerchantId?: string;
   requestedEvents?: string[];
+  payload?: Record<string, unknown>;
   createdAt: string;
   decidedAt?: string;
 };

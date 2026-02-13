@@ -546,7 +546,7 @@ export const ContractHistoryResponseDto = z.object({
   items: z.array(ContractHistoryEntryDto),
 });
 
-export const ContractPendingActionDto = z.object({
+const MonitoringContractPendingActionDto = z.object({
   actionId: z.string(),
   type: z.literal('monitoringConsentApproval'),
   status: z.enum(['pending', 'accepted', 'rejected']),
@@ -555,9 +555,27 @@ export const ContractPendingActionDto = z.object({
   requestId: z.string().optional(),
   targetMerchantId: z.string().optional(),
   requestedEvents: z.array(z.string()).optional(),
+  payload: z.record(z.unknown()).optional(),
   createdAt: z.string().datetime({ offset: true }),
   decidedAt: z.string().datetime({ offset: true }).optional(),
 });
+
+const ChargeMandateContractPendingActionDto = z.object({
+  actionId: z.string(),
+  type: z.literal('chargeMandateApproval'),
+  status: z.enum(['pending', 'accepted', 'rejected']),
+  title: z.string(),
+  summary: z.string().optional(),
+  requestId: z.string().optional(),
+  payload: z.record(z.unknown()).optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  decidedAt: z.string().datetime({ offset: true }).optional(),
+});
+
+export const ContractPendingActionDto = z.discriminatedUnion('type', [
+  MonitoringContractPendingActionDto,
+  ChargeMandateContractPendingActionDto,
+]);
 
 export const ContractPendingActionDecisionRequestDto = z.object({
   decision: z.enum(['accepted', 'rejected']),
