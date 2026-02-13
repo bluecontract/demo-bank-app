@@ -18,7 +18,10 @@ import { handleCaptureRequestEvents } from './paynoteWebhook/captureRequests';
 import { handleTransferEvents } from './paynoteWebhook/transfers';
 import { dispatchPayNoteEvents } from './paynoteWebhook/eventDispatcher';
 import { handleMonitoringRequestEvents } from './paynoteWebhook/monitoring';
-import { handleChargeRequestEvents } from './paynoteWebhook/chargeRequests';
+import {
+  handleChargeRequestEvents,
+  handleMandateResponseEvents,
+} from './paynoteWebhook/chargeRequests';
 import { trace } from './paynoteWebhook/logging';
 import { getString } from './paynoteWebhook/utils';
 import { toCompactBlueJsonValue } from '../blue/compactBlue';
@@ -194,6 +197,7 @@ export const handleWebhookEvent = async (
   const {
     captureRequestEvents,
     chargeRequestEvents,
+    mandateResponseEvents,
     transferEvents,
     monitoringRequestEvents,
   } = dispatchPayNoteEvents({
@@ -238,6 +242,20 @@ export const handleWebhookEvent = async (
 
   if (chargeResult) {
     return chargeResult;
+  }
+
+  const mandateResponseResult = await handleMandateResponseEvents({
+    events: mandateResponseEvents,
+    eventId: input.eventId,
+    payNoteDocumentId,
+    sessionId,
+    eventObject,
+    deps,
+    logs,
+  });
+
+  if (mandateResponseResult) {
+    return mandateResponseResult;
   }
 
   const transferDescription =

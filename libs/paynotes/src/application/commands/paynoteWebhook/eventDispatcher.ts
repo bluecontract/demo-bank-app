@@ -7,6 +7,8 @@ import {
   DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME,
   LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
   LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME,
+  MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME,
+  MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME,
   RESERVE_FUNDS_EVENT_NAME,
   REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
   REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME,
@@ -38,10 +40,16 @@ const CHARGE_REQUEST_EVENT_TYPES = new Set<string>([
   REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
 ]);
 
+const MANDATE_RESPONSE_EVENT_TYPES = new Set<string>([
+  MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME,
+  MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME,
+]);
+
 export type PayNoteEventDispatchDecision =
   | 'capture-request'
   | 'transfer'
   | 'charge-request'
+  | 'mandate-response'
   | 'monitoring-request'
   | 'document-bootstrap-requested'
   | 'unsupported';
@@ -95,6 +103,14 @@ export const classifyPayNoteEvent = (
     };
   }
 
+  if (eventType && MANDATE_RESPONSE_EVENT_TYPES.has(eventType)) {
+    return {
+      event,
+      eventType,
+      decision: 'mandate-response',
+    };
+  }
+
   if (eventType === DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME) {
     return {
       event,
@@ -118,6 +134,7 @@ export const dispatchPayNoteEvents = (input: {
 }): {
   captureRequestEvents: WebhookEmittedEvent[];
   chargeRequestEvents: DispatchedTransferEvent[];
+  mandateResponseEvents: DispatchedTransferEvent[];
   transferEvents: DispatchedTransferEvent[];
   monitoringRequestEvents: Array<{
     event: WebhookEmittedEvent;
@@ -129,6 +146,7 @@ export const dispatchPayNoteEvents = (input: {
 
   const captureRequestEvents: WebhookEmittedEvent[] = [];
   const chargeRequestEvents: DispatchedTransferEvent[] = [];
+  const mandateResponseEvents: DispatchedTransferEvent[] = [];
   const transferEvents: DispatchedTransferEvent[] = [];
   const monitoringRequestEvents: Array<{
     event: WebhookEmittedEvent;
@@ -163,6 +181,15 @@ export const dispatchPayNoteEvents = (input: {
 
     if (classified.decision === 'charge-request') {
       chargeRequestEvents.push({
+        event: classified.event,
+        eventType: classified.eventType,
+        eventIndex,
+      });
+      continue;
+    }
+
+    if (classified.decision === 'mandate-response') {
+      mandateResponseEvents.push({
         event: classified.event,
         eventType: classified.eventType,
         eventIndex,
@@ -209,6 +236,7 @@ export const dispatchPayNoteEvents = (input: {
   return {
     captureRequestEvents,
     chargeRequestEvents,
+    mandateResponseEvents,
     transferEvents,
     monitoringRequestEvents,
   };

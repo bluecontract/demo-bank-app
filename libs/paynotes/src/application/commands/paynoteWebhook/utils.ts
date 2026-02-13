@@ -1,4 +1,7 @@
-import { PayNoteSchema } from '@blue-repository/types/packages/paynote/schemas';
+import {
+  PayNoteSchema,
+  PaymentMandateSchema,
+} from '@blue-repository/types/packages/paynote/schemas';
 import { blue } from '../../../blue';
 import { toBlueNode } from '../webhookUtils';
 
@@ -20,14 +23,27 @@ export const toSimpleRecord = (
 
 export const parsePayNoteDocument = (value: unknown) => {
   const node = toBlueNode(value);
-  if (
-    !node ||
-    !blue.isTypeOf(node, PayNoteSchema, {
-      checkSchemaExtensions: true,
-    })
-  ) {
+  if (!node) {
     return null;
   }
+
+  const isPayNote = blue.isTypeOf(node, PayNoteSchema, {
+    checkSchemaExtensions: true,
+  });
+  const isPaymentMandate = blue.isTypeOf(node, PaymentMandateSchema, {
+    checkSchemaExtensions: true,
+  });
+  if (!isPayNote && !isPaymentMandate) {
+    return null;
+  }
+
+  if (isPaymentMandate) {
+    return {
+      node,
+      output: blue.nodeToSchemaOutput(node, PaymentMandateSchema),
+    };
+  }
+
   return {
     node,
     output: blue.nodeToSchemaOutput(node, PayNoteSchema),

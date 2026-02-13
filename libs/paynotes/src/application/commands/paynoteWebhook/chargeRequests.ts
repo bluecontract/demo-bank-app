@@ -3,6 +3,7 @@ import {
   CardTransactionPayNoteSchema,
   LinkedCardChargeAndCaptureImmediatelyRequestedSchema,
   LinkedCardChargeRequestedSchema,
+  MandateSpendAuthorizationRespondedSchema,
   MerchantToCustomerPayNoteSchema,
   PaymentMandateSchema,
   PayNoteSchema,
@@ -23,9 +24,12 @@ import type { DispatchedTransferEvent } from './eventDispatcher';
 import {
   LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
   LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME,
+  MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME,
+  MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME,
   REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
   REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME,
   resolveChargeRequestId,
+  resolveEmittedEventType,
 } from './events';
 import type {
   HandleWebhookEventDependencies,
@@ -33,8 +37,9 @@ import type {
   WebhookEmittedEvent,
   WebhookEventObject,
 } from './types';
+import { resolveWebhookContext } from './payload';
 import { getString, toSimpleRecord } from './utils';
-import { upsertPayNoteContract } from './records';
+import { resolveDeliveryRecord, upsertPayNoteContract } from './records';
 import { trace } from './logging';
 
 const CARD_CHARGE_RESPONDED_EVENT_NAME = 'PayNote/Card Charge Responded';
@@ -45,13 +50,17 @@ const LINKED_PAYNOTE_STARTED_EVENT_NAME = 'PayNote/Linked PayNote Started';
 const LINKED_PAYNOTE_START_FAILED_EVENT_NAME =
   'PayNote/Linked PayNote Start Failed';
 const CHARGE_MANDATE_PENDING_ACTION_TYPE = 'chargeMandateApproval';
-const CHARGE_MANDATE_PENDING_REASON = 'Awaiting payment mandate approval.';
+const CHARGE_MANDATE_PENDING_REASON = 'Awaiting payment mandate authorization.';
 
 type ChargeRequestEventType =
   | typeof LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME
   | typeof LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME
   | typeof REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME
   | typeof REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME;
+
+type MandateResponseEventType =
+  | typeof MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME
+  | typeof MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME;
 
 type SourcePayNoteType =
   | 'card-transaction-paynote'
@@ -66,20 +75,6 @@ type ParsedChargeRequest = {
   amountMinor: number;
   requestId?: string;
   paymentMandateDocumentId?: string;
-  payNoteDocument?: Record<string, unknown>;
-};
-
-type ChargeMandatePendingActionPayload = {
-  source: 'card-charge-request';
-  eventId: string;
-  eventIndex: number;
-  eventType: ChargeRequestEventType;
-  payNoteDocumentId: string;
-  amountMinor: number;
-  direction: ChargeDirection;
-  mode: ChargeMode;
-  sourcePayNoteType: SourcePayNoteType;
-  mandateFailureReason: string;
   payNoteDocument?: Record<string, unknown>;
 };
 
@@ -100,6 +95,12 @@ type ResolvedChargeAccounts = {
   payerAccount: BankingAccount & { ownerUserId: string };
 };
 
+type ParsedMandateAuthorizationResponse = {
+  chargeAttemptId: string;
+  status: 'approved' | 'rejected';
+  reason?: string;
+};
+
 const SUPPORTED_CHARGE_EVENTS: readonly ChargeRequestEventType[] = [
   LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME,
   LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
@@ -112,13 +113,15 @@ const SUPPORTED_CHARGE_EVENT_SET = new Set<ChargeRequestEventType>(
 );
 
 const CHARGE_EVENT_TYPES = new Set<string>(SUPPORTED_CHARGE_EVENTS);
+const MANDATE_RESPONSE_EVENT_TYPES = new Set<MandateResponseEventType>([
+  MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME,
+  MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME,
+]);
 const MANDATE_AUTHORIZE_OPERATION = 'authorizeSpend';
 const MANDATE_SETTLE_OPERATION = 'settleSpend';
 const MANDATE_SPEND_AUTHORIZATION_REQUESTED_EVENT_NAME =
   'PayNote/Mandate Spend Authorization Requested';
 const MANDATE_SPEND_SETTLED_EVENT_NAME = 'PayNote/Mandate Spend Settled';
-const MANDATE_POLL_ATTEMPTS = 5;
-const MANDATE_POLL_INTERVAL_MS = 75;
 
 const CHARGE_CAPABILITY_MATRIX: Record<
   SourcePayNoteType,
@@ -150,6 +153,14 @@ const isChargeRequestEventType = (
 ): eventType is ChargeRequestEventType =>
   Boolean(eventType && CHARGE_EVENT_TYPES.has(eventType));
 
+const isMandateResponseEventType = (
+  eventType: string | undefined
+): eventType is MandateResponseEventType =>
+  Boolean(
+    eventType &&
+      MANDATE_RESPONSE_EVENT_TYPES.has(eventType as MandateResponseEventType)
+  );
+
 const resolveChargeMode = (eventType: ChargeRequestEventType): ChargeMode =>
   eventType ===
     LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME ||
@@ -165,21 +176,10 @@ const resolveChargeDirection = (
     ? 'linked'
     : 'reverse';
 
-const formatAmountMinorUsd = (amountMinor: number): string =>
-  (amountMinor / 100).toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  });
-
 const buildChargeRequestDedupeKey = (input: {
   eventId: string;
   eventIndex: number;
 }) => `paynote-card-charge-request:${input.eventId}:${input.eventIndex}`;
-
-const buildChargeMandatePendingActionId = (input: {
-  eventId: string;
-  eventIndex: number;
-}) => `card-charge-mandate:${input.eventId}:${input.eventIndex}`;
 
 const buildChargeHoldId = (input: {
   payNoteDocumentId: string;
@@ -214,6 +214,47 @@ const buildChargeAttemptId = (input: {
     input.eventId,
     String(input.eventIndex),
   ].join(':');
+
+const CHARGE_ATTEMPT_ID_PREFIX = 'paynote-card-charge-attempt:';
+
+const parseChargeAttemptId = (
+  value: string
+): {
+  payNoteDocumentId: string;
+  eventId: string;
+  eventIndex: number;
+} | null => {
+  if (!value.startsWith(CHARGE_ATTEMPT_ID_PREFIX)) {
+    return null;
+  }
+
+  const payload = value.slice(CHARGE_ATTEMPT_ID_PREFIX.length);
+  const parts = payload.split(':');
+  if (parts.length < 3) {
+    return null;
+  }
+
+  const eventIndexRaw = parts.pop();
+  const eventId = parts.pop();
+  const payNoteDocumentId = parts.join(':');
+  if (!eventIndexRaw || !eventId || !payNoteDocumentId) {
+    return null;
+  }
+
+  const eventIndex = Number.parseInt(eventIndexRaw, 10);
+  if (!Number.isInteger(eventIndex) || eventIndex < 0) {
+    return null;
+  }
+
+  return {
+    payNoteDocumentId,
+    eventId,
+    eventIndex,
+  };
+};
+
+const buildChargeAttemptProcessingKey = (chargeAttemptId: string) =>
+  `paynote-card-charge-attempt-processed:${chargeAttemptId}`;
 
 const toPositiveInteger = (value: unknown): number | undefined => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -363,6 +404,39 @@ const parseChargeRequest = (
       fallbackAmount,
       event,
     });
+  } catch {
+    return null;
+  }
+};
+
+const parseMandateAuthorizationResponse = (
+  event: WebhookEmittedEvent
+): ParsedMandateAuthorizationResponse | null => {
+  try {
+    const node = blue.jsonValueToNode(event);
+    if (!blue.isTypeOf(node, MandateSpendAuthorizationRespondedSchema)) {
+      return null;
+    }
+
+    const output = blue.nodeToSchemaOutput(
+      node,
+      MandateSpendAuthorizationRespondedSchema
+    ) as {
+      chargeAttemptId?: unknown;
+      status?: unknown;
+      reason?: unknown;
+    };
+    const chargeAttemptId = getString(output.chargeAttemptId);
+    const status = getString(output.status);
+    if (!chargeAttemptId || (status !== 'approved' && status !== 'rejected')) {
+      return null;
+    }
+
+    return {
+      chargeAttemptId,
+      status,
+      reason: getString(output.reason),
+    };
   } catch {
     return null;
   }
@@ -848,58 +922,47 @@ const validatePaymentMandate = async (input: {
   };
 };
 
-const waitFor = async (ms: number): Promise<void> => {
-  if (ms <= 0) {
-    return;
-  }
-  await new Promise(resolve => {
-    setTimeout(resolve, ms);
-  });
-};
+type ImmediateMandateAuthorizationDecision =
+  | { status: 'approved' }
+  | { status: 'rejected'; reason?: string }
+  | { status: 'pending' };
 
-type MandateAttemptDecision =
-  | { kind: 'approved' }
-  | { kind: 'rejected'; reason?: string }
-  | { kind: 'pending'; reason?: string };
-
-const resolveMandateAttemptDecision = (input: {
-  mandate: ParsedPaymentMandate;
+const resolveImmediateMandateAuthorizationDecision = async (input: {
+  context: ChargeRequestContext;
+  mandateSessionId?: string;
   chargeAttemptId: string;
-}): MandateAttemptDecision => {
-  const attempt = input.mandate.chargeAttempts?.[input.chargeAttemptId];
-  if (!attempt) {
-    return { kind: 'pending' };
+}): Promise<ImmediateMandateAuthorizationDecision> => {
+  if (!input.mandateSessionId) {
+    return { status: 'pending' };
   }
 
-  if (attempt.authorizationStatus === 'approved') {
-    return { kind: 'approved' };
+  const fetched = await input.context.deps.myOsClient.fetchDocument(
+    input.mandateSessionId
+  );
+  if (fetched.kind !== 'success' || !fetched.document.document) {
+    return { status: 'pending' };
   }
 
-  if (attempt.authorizationStatus === 'rejected') {
-    return { kind: 'rejected', reason: attempt.authorizationReason };
+  const mandate = parsePaymentMandate(fetched.document.document);
+  if (!mandate) {
+    return { status: 'pending' };
   }
 
-  return { kind: 'pending', reason: attempt.authorizationReason };
-};
-
-const resolveMandateSettlementState = (input: {
-  mandate: ParsedPaymentMandate;
-  chargeAttemptId: string;
-}): { status: 'accepted' | 'rejected' | 'pending'; reason?: string } => {
-  const attempt = input.mandate.chargeAttempts?.[input.chargeAttemptId];
+  const attempt = mandate.chargeAttempts?.[input.chargeAttemptId];
   if (!attempt) {
     return { status: 'pending' };
   }
-  if (attempt.lastSettlementProcessingStatus === 'accepted') {
-    return { status: 'accepted' };
+
+  if (attempt.authorizationStatus === 'approved') {
+    return { status: 'approved' };
   }
-  if (attempt.lastSettlementProcessingStatus === 'rejected') {
+  if (attempt.authorizationStatus === 'rejected') {
     return {
       status: 'rejected',
-      reason: attempt.settlementReason,
+      reason: attempt.authorizationReason,
     };
   }
-  return { status: 'pending', reason: attempt.settlementReason };
+  return { status: 'pending' };
 };
 
 const resolveMandateCounterparty = async (input: {
@@ -952,9 +1015,6 @@ const toMandateChargeMode = (
 
 const runMandateAuthorization = async (input: {
   context: ChargeRequestContext;
-  eventType: ChargeRequestEventType;
-  eventIndex: number;
-  requestId?: string;
   sourcePayNoteType: SourcePayNoteType;
   direction: ChargeDirection;
   mode: ChargeMode;
@@ -964,9 +1024,6 @@ const runMandateAuthorization = async (input: {
 }): Promise<{ ok: true } | { ok: false; reason: string }> => {
   const {
     context,
-    eventType,
-    eventIndex,
-    requestId,
     sourcePayNoteType,
     direction,
     mode,
@@ -1035,66 +1092,7 @@ const runMandateAuthorization = async (input: {
       }),
     };
   }
-
-  let fallbackReason: string | undefined;
-  for (
-    let attemptIndex = 0;
-    attemptIndex < MANDATE_POLL_ATTEMPTS;
-    attemptIndex += 1
-  ) {
-    const fetched = await context.deps.myOsClient.fetchDocument(
-      mandateSessionId
-    );
-    if (fetched.kind === 'success' && fetched.document.document) {
-      const parsed = parsePaymentMandate(fetched.document.document);
-      if (parsed) {
-        const decision = resolveMandateAttemptDecision({
-          mandate: parsed,
-          chargeAttemptId,
-        });
-        if (decision.kind === 'approved') {
-          return { ok: true };
-        }
-        if (decision.kind === 'rejected') {
-          return {
-            ok: false,
-            reason:
-              decision.reason ??
-              'Payment mandate rejected charge authorization.',
-          };
-        }
-        fallbackReason = decision.reason ?? fallbackReason;
-      }
-    }
-
-    if (attemptIndex < MANDATE_POLL_ATTEMPTS - 1) {
-      await waitFor(MANDATE_POLL_INTERVAL_MS);
-    }
-  }
-
-  context.logs.push({
-    level: 'warn',
-    message:
-      'Payment mandate authorization status was not observed after authorizeSpend; rejecting request',
-    context: {
-      eventId: context.eventId,
-      payNoteDocumentId: context.payNoteDocumentId,
-      sessionId: context.sessionId,
-      eventType,
-      eventIndex,
-      requestId: requestId ?? null,
-      chargeAttemptId,
-      mandateSessionId,
-      reason: fallbackReason ?? null,
-    },
-  });
-
-  return {
-    ok: false,
-    reason:
-      fallbackReason ??
-      'Payment mandate authorization status was not confirmed.',
-  };
+  return { ok: true };
 };
 
 type ChargeExecutionSuccess = {
@@ -1230,183 +1228,6 @@ const runMandateSettlement = async (
     });
     return;
   }
-
-  for (
-    let attemptIndex = 0;
-    attemptIndex < MANDATE_POLL_ATTEMPTS;
-    attemptIndex += 1
-  ) {
-    const fetched = await context.deps.myOsClient.fetchDocument(
-      mandateSessionId
-    );
-    if (fetched.kind === 'success' && fetched.document.document) {
-      const parsed = parsePaymentMandate(fetched.document.document);
-      if (parsed) {
-        const settlement = resolveMandateSettlementState({
-          mandate: parsed,
-          chargeAttemptId,
-        });
-        if (settlement.status === 'accepted') {
-          return;
-        }
-        if (settlement.status === 'rejected') {
-          context.logs.push({
-            level: 'warn',
-            message: 'Payment mandate settlement was rejected',
-            context: {
-              eventId: context.eventId,
-              payNoteDocumentId: context.payNoteDocumentId,
-              sessionId: context.sessionId,
-              eventType,
-              eventIndex,
-              requestId: requestId ?? null,
-              mandateDocumentId,
-              chargeAttemptId,
-              reason: settlement.reason ?? null,
-            },
-          });
-          return;
-        }
-      }
-    }
-
-    if (attemptIndex < MANDATE_POLL_ATTEMPTS - 1) {
-      await waitFor(MANDATE_POLL_INTERVAL_MS);
-    }
-  }
-};
-
-const queueChargeMandatePendingAction = async (input: {
-  context: ChargeRequestContext;
-  request: ParsedChargeRequest;
-  eventType: ChargeRequestEventType;
-  eventIndex: number;
-  sourcePayNoteType: SourcePayNoteType;
-  direction: ChargeDirection;
-  mode: ChargeMode;
-  mandateFailureReason: string;
-}): Promise<boolean> => {
-  const {
-    context,
-    request,
-    eventType,
-    eventIndex,
-    sourcePayNoteType,
-    direction,
-    mode,
-    mandateFailureReason,
-  } = input;
-
-  const contract = await context.deps.contractRepository.getContractBySessionId(
-    context.sessionId
-  );
-  if (!contract || contract.sessionId !== context.sessionId) {
-    context.logs.push({
-      level: 'warn',
-      message:
-        'Unable to create charge mandate pending action (unknown canonical contract session)',
-      context: {
-        eventId: context.eventId,
-        payNoteDocumentId: context.payNoteDocumentId,
-        sessionId: context.sessionId,
-        eventType,
-        eventIndex,
-      },
-    });
-    return false;
-  }
-
-  const actionId = buildChargeMandatePendingActionId({
-    eventId: context.eventId,
-    eventIndex,
-  });
-  const existingAction = (contract.pendingActions ?? []).find(
-    action => action.actionId === actionId
-  );
-  if (existingAction?.status === 'pending') {
-    return true;
-  }
-  if (existingAction) {
-    context.logs.push({
-      level: 'warn',
-      message:
-        'Skipped creating mandate pending action because request already has a final decision',
-      context: {
-        eventId: context.eventId,
-        payNoteDocumentId: context.payNoteDocumentId,
-        sessionId: context.sessionId,
-        eventType,
-        eventIndex,
-        actionId,
-        existingStatus: existingAction.status,
-      },
-    });
-    return false;
-  }
-
-  const createdAt = context.deps.clock.now().toISOString();
-  const payload: ChargeMandatePendingActionPayload = {
-    source: 'card-charge-request',
-    eventId: context.eventId,
-    eventIndex,
-    eventType,
-    payNoteDocumentId: context.payNoteDocumentId,
-    amountMinor: request.amountMinor,
-    direction,
-    mode,
-    sourcePayNoteType,
-    mandateFailureReason,
-    ...(request.payNoteDocument
-      ? { payNoteDocument: request.payNoteDocument }
-      : {}),
-  };
-  const action = {
-    actionId,
-    type: CHARGE_MANDATE_PENDING_ACTION_TYPE,
-    status: 'pending',
-    title: 'Approve payment mandate',
-    summary: `Approve a ${formatAmountMinorUsd(
-      request.amountMinor
-    )} card charge request.`,
-    ...(request.requestId ? { requestId: request.requestId } : {}),
-    payload,
-    createdAt,
-  } as const;
-
-  const nextActions = (contract.pendingActions ?? []).filter(
-    item => item.actionId !== actionId
-  );
-  nextActions.push(action);
-
-  await context.deps.contractRepository.saveContract({
-    ...contract,
-    pendingActions: nextActions,
-    updatedAt: createdAt,
-  });
-  await context.deps.contractRepository.addContractHistoryEntry({
-    contractId: contract.contractId,
-    kind: 'pendingActionRequested',
-    short: 'Payment mandate approval requested.',
-    more: mandateFailureReason,
-    createdAt,
-  });
-
-  context.logs.push({
-    level: 'info',
-    message: 'Card charge request queued as mandate pending action',
-    context: {
-      eventId: context.eventId,
-      payNoteDocumentId: context.payNoteDocumentId,
-      sessionId: context.sessionId,
-      eventType,
-      eventIndex,
-      actionId,
-      requestId: request.requestId ?? null,
-      reason: mandateFailureReason,
-    },
-  });
-
-  return true;
 };
 
 const resolveSourcePayNoteType = (document: unknown): SourcePayNoteType => {
@@ -2369,6 +2190,500 @@ const maybeStartLinkedPayNote = async (input: {
   });
 };
 
+type ResolvedChargeAttemptRequestContext = {
+  attempt: {
+    payNoteDocumentId: string;
+    eventId: string;
+    eventIndex: number;
+  };
+  context: ChargeRequestContext;
+  sourcePayNoteType: SourcePayNoteType;
+  eventType: ChargeRequestEventType;
+  request: ParsedChargeRequest;
+  requestId?: string;
+  direction: ChargeDirection;
+  mode: ChargeMode;
+};
+
+const resolveChargeRequestContextFromAttempt = async (input: {
+  chargeAttemptId: string;
+  mandateDocumentId: string;
+  deps: HandleWebhookEventDependencies;
+  logs: LogEntry[];
+}): Promise<ResolvedChargeAttemptRequestContext | null> => {
+  const attempt = parseChargeAttemptId(input.chargeAttemptId);
+  if (!attempt) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored mandate authorization response (invalid chargeAttemptId)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+      },
+    });
+    return null;
+  }
+
+  const fetchedEvent = await input.deps.myOsClient.fetchEvent(attempt.eventId);
+  if (fetchedEvent.kind !== 'success') {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored mandate authorization response (unable to load originating charge request event)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        originatingEventId: attempt.eventId,
+        reason: fetchedEvent.kind,
+      },
+    });
+    return null;
+  }
+
+  const contextResolution = resolveWebhookContext(
+    fetchedEvent.payload as Record<string, unknown>,
+    attempt.eventId,
+    []
+  );
+  if ('result' in contextResolution) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored mandate authorization response (invalid originating event payload)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        originatingEventId: attempt.eventId,
+      },
+    });
+    return null;
+  }
+
+  const originatingContext = contextResolution.context;
+  const payNoteRecord =
+    (await input.deps.payNoteRepository.getPayNote(
+      attempt.payNoteDocumentId
+    )) ??
+    (await input.deps.payNoteRepository.getPayNoteBySessionId(
+      originatingContext.sessionId
+    ));
+  if (!payNoteRecord) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored mandate authorization response (missing requesting PayNote record)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        payNoteDocumentId: attempt.payNoteDocumentId,
+        originatingSessionId: originatingContext.sessionId,
+      },
+    });
+    return null;
+  }
+
+  const contract = await input.deps.contractRepository.getContractByDocumentId(
+    attempt.payNoteDocumentId
+  );
+  const canonicalSessionId = getString(contract?.sessionId);
+  if (
+    canonicalSessionId &&
+    originatingContext.sessionId !== canonicalSessionId
+  ) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored mandate authorization response (originating event from non-canonical session)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        payNoteDocumentId: attempt.payNoteDocumentId,
+        originatingSessionId: originatingContext.sessionId,
+        canonicalSessionId,
+      },
+    });
+    return null;
+  }
+  const resolvedSessionId = canonicalSessionId ?? originatingContext.sessionId;
+
+  const originatingEvent = originatingContext.events.at(attempt.eventIndex);
+  if (!originatingEvent) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored mandate authorization response (originating emitted event index not found)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        originatingEventId: attempt.eventId,
+        originatingEventIndex: attempt.eventIndex,
+      },
+    });
+    return null;
+  }
+
+  const eventType = resolveEmittedEventType(originatingEvent);
+  if (!isChargeRequestEventType(eventType)) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored mandate authorization response (originating event is not a card charge request)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        originatingEventId: attempt.eventId,
+        originatingEventIndex: attempt.eventIndex,
+        eventType: eventType ?? null,
+      },
+    });
+    return null;
+  }
+
+  const request = parseChargeRequest(originatingEvent, eventType);
+  if (!request) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored mandate authorization response (invalid originating card charge request payload)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        originatingEventId: attempt.eventId,
+        originatingEventIndex: attempt.eventIndex,
+        eventType,
+      },
+    });
+    return null;
+  }
+
+  if (request.paymentMandateDocumentId !== input.mandateDocumentId) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored mandate authorization response (mandate document mismatch)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        originatingEventId: attempt.eventId,
+        originatingEventIndex: attempt.eventIndex,
+        expectedMandateDocumentId: request.paymentMandateDocumentId ?? null,
+        actualMandateDocumentId: input.mandateDocumentId,
+      },
+    });
+    return null;
+  }
+
+  const deliveryRecord = await resolveDeliveryRecord(
+    payNoteRecord,
+    attempt.payNoteDocumentId,
+    input.deps
+  );
+  const requestContext: ChargeRequestContext = {
+    eventId: attempt.eventId,
+    payNoteDocumentId: attempt.payNoteDocumentId,
+    sessionId: resolvedSessionId,
+    eventObject: originatingContext.eventObject,
+    updatedRecord: {
+      ...payNoteRecord,
+    },
+    deliveryRecord,
+    deps: input.deps,
+    logs: input.logs,
+  };
+
+  const sourcePayNoteType = resolveSourcePayNoteType(
+    originatingContext.document ?? payNoteRecord.document
+  );
+
+  return {
+    attempt,
+    context: requestContext,
+    sourcePayNoteType,
+    eventType,
+    request,
+    requestId: request.requestId,
+    direction: resolveChargeDirection(eventType),
+    mode: resolveChargeMode(eventType),
+  };
+};
+
+const resolveMandateFromWebhookContext = async (input: {
+  eventObject?: WebhookEventObject;
+  sessionId: string;
+  deps: HandleWebhookEventDependencies;
+}): Promise<ParsedPaymentMandate | null> => {
+  const direct = parsePaymentMandate(input.eventObject?.document);
+  if (direct) {
+    return direct;
+  }
+
+  const fetched = await input.deps.myOsClient.fetchDocument(input.sessionId);
+  if (fetched.kind !== 'success') {
+    return null;
+  }
+  return parsePaymentMandate(fetched.document.document);
+};
+
+export const handleMandateResponseEvents = async (input: {
+  events: DispatchedTransferEvent[];
+  eventId: string;
+  payNoteDocumentId: string;
+  sessionId: string;
+  eventObject?: WebhookEventObject;
+  deps: HandleWebhookEventDependencies;
+  logs: LogEntry[];
+}): Promise<HandleWebhookEventResult | null> => {
+  const {
+    events,
+    eventId,
+    payNoteDocumentId,
+    sessionId,
+    eventObject,
+    deps,
+    logs,
+  } = input;
+
+  const mandate = await resolveMandateFromWebhookContext({
+    eventObject,
+    sessionId,
+    deps,
+  });
+
+  for (const item of events) {
+    if (!isMandateResponseEventType(item.eventType)) {
+      continue;
+    }
+
+    if (item.eventType === MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME) {
+      logs.push({
+        level: 'info',
+        message:
+          'Ignored mandate settlement response event in charge orchestration (non-blocking)',
+        context: {
+          eventId,
+          mandateDocumentId: payNoteDocumentId,
+          mandateSessionId: sessionId,
+          eventIndex: item.eventIndex,
+        },
+      });
+      continue;
+    }
+
+    const response = parseMandateAuthorizationResponse(item.event);
+    if (!response) {
+      logs.push({
+        level: 'warn',
+        message:
+          'Ignored mandate authorization response event (invalid payload)',
+        context: {
+          eventId,
+          mandateDocumentId: payNoteDocumentId,
+          mandateSessionId: sessionId,
+          eventIndex: item.eventIndex,
+        },
+      });
+      continue;
+    }
+
+    const attemptProcessingKey = buildChargeAttemptProcessingKey(
+      response.chargeAttemptId
+    );
+    const firstProcess = await deps.payNoteRepository.markEventProcessed(
+      attemptProcessingKey
+    );
+    if (!firstProcess) {
+      logs.push({
+        level: 'info',
+        message: 'Skipped duplicate mandate authorization response',
+        context: {
+          eventId,
+          mandateDocumentId: payNoteDocumentId,
+          mandateSessionId: sessionId,
+          chargeAttemptId: response.chargeAttemptId,
+          status: response.status,
+          dedupeKey: attemptProcessingKey,
+        },
+      });
+      continue;
+    }
+
+    const resolved = await resolveChargeRequestContextFromAttempt({
+      chargeAttemptId: response.chargeAttemptId,
+      mandateDocumentId: payNoteDocumentId,
+      deps,
+      logs,
+    });
+    if (!resolved) {
+      continue;
+    }
+
+    if (response.status === 'rejected') {
+      await emitCardChargeResponded({
+        context: resolved.context,
+        eventType: resolved.eventType,
+        requestId: resolved.requestId,
+        status: 'rejected',
+        reason:
+          response.reason ?? 'Payment mandate rejected charge authorization.',
+      });
+      if (resolved.request.payNoteDocument) {
+        await emitLinkedPayNoteStartResponded({
+          context: resolved.context,
+          eventType: resolved.eventType,
+          requestId: resolved.requestId,
+          status: 'rejected',
+          reason:
+            'Linked PayNote start rejected because mandate authorization failed.',
+        });
+      }
+      continue;
+    }
+
+    if (!mandate) {
+      await emitCardChargeResponded({
+        context: resolved.context,
+        eventType: resolved.eventType,
+        requestId: resolved.requestId,
+        status: 'rejected',
+        reason:
+          'Unable to resolve payment mandate state for approved authorization response.',
+      });
+      if (resolved.request.payNoteDocument) {
+        await emitLinkedPayNoteStartResponded({
+          context: resolved.context,
+          eventType: resolved.eventType,
+          requestId: resolved.requestId,
+          status: 'rejected',
+          reason:
+            'Linked PayNote start rejected because payment mandate state is unavailable.',
+        });
+      }
+      continue;
+    }
+
+    const accounts = await resolveChargeAccounts({
+      context: resolved.context,
+      sourcePayNoteType: resolved.sourcePayNoteType,
+      direction: resolved.direction,
+    });
+    if (!accounts) {
+      await emitCardChargeResponded({
+        context: resolved.context,
+        eventType: resolved.eventType,
+        requestId: resolved.requestId,
+        status: 'rejected',
+        reason: 'Unable to resolve payer/payee account mapping.',
+      });
+      if (resolved.request.payNoteDocument) {
+        await emitLinkedPayNoteStartResponded({
+          context: resolved.context,
+          eventType: resolved.eventType,
+          requestId: resolved.requestId,
+          status: 'rejected',
+          reason:
+            'Linked PayNote start requires successful card charge account resolution.',
+        });
+      }
+      continue;
+    }
+
+    await emitCardChargeResponded({
+      context: resolved.context,
+      eventType: resolved.eventType,
+      requestId: resolved.requestId,
+      status: 'accepted',
+    });
+
+    const chargeResult = await executeCardCharge({
+      context: resolved.context,
+      accounts,
+      eventType: resolved.eventType,
+      amountMinor: resolved.request.amountMinor,
+      eventIndex: resolved.attempt.eventIndex,
+    });
+
+    if (!chargeResult.ok) {
+      await emitCardChargeCompleted({
+        context: resolved.context,
+        eventType: resolved.eventType,
+        requestId: resolved.requestId,
+        status: 'failed',
+        holdId: chargeResult.holdId,
+        reason: chargeResult.reason,
+      });
+      await runMandateSettlement({
+        context: resolved.context,
+        eventType: resolved.eventType,
+        eventIndex: resolved.attempt.eventIndex,
+        requestId: resolved.requestId,
+        mandateDocumentId: payNoteDocumentId,
+        mandateSessionId: sessionId,
+        chargeAttemptId: response.chargeAttemptId,
+        amountMinor: resolved.request.amountMinor,
+        mode: resolved.mode,
+        chargeResult,
+      });
+      if (resolved.request.payNoteDocument) {
+        await emitLinkedPayNoteStartResponded({
+          context: resolved.context,
+          eventType: resolved.eventType,
+          requestId: resolved.requestId,
+          status: 'rejected',
+          reason:
+            'Linked PayNote start rejected because card charge did not complete.',
+        });
+      }
+      if (chargeResult.holdId) {
+        await persistChargeExecutionArtifacts({
+          context: resolved.context,
+          eventType: resolved.eventType,
+          chargeResult: { holdId: chargeResult.holdId },
+        });
+      }
+      continue;
+    }
+
+    await emitCardChargeCompleted({
+      context: resolved.context,
+      eventType: resolved.eventType,
+      requestId: resolved.requestId,
+      status: 'succeeded',
+      holdId: chargeResult.holdId,
+      transactionId: chargeResult.transactionId,
+    });
+    await runMandateSettlement({
+      context: resolved.context,
+      eventType: resolved.eventType,
+      eventIndex: resolved.attempt.eventIndex,
+      requestId: resolved.requestId,
+      mandateDocumentId: payNoteDocumentId,
+      mandateSessionId: sessionId,
+      chargeAttemptId: response.chargeAttemptId,
+      amountMinor: resolved.request.amountMinor,
+      mode: resolved.mode,
+      chargeResult,
+    });
+
+    if (resolved.request.payNoteDocument) {
+      const autoAcceptLinkedPayNote = isLinkedPayNoteAutoAcceptAllowed({
+        mandate,
+        request: resolved.request,
+      });
+      await maybeStartLinkedPayNote({
+        context: resolved.context,
+        eventType: resolved.eventType,
+        requestId: resolved.requestId,
+        payNoteDocument: resolved.request.payNoteDocument,
+        holdId: chargeResult.holdId,
+        transactionId: chargeResult.transactionId,
+        payerAccountNumber: accounts.payerAccountNumber,
+        payeeAccountNumber: accounts.payeeAccountNumber,
+        autoAcceptLinkedPayNote,
+      });
+    }
+
+    await persistChargeExecutionArtifacts({
+      context: resolved.context,
+      eventType: resolved.eventType,
+      chargeResult,
+    });
+  }
+
+  return null;
+};
+
 export const handleChargeRequestEvents = async (input: {
   events: DispatchedTransferEvent[];
   eventId: string;
@@ -2499,34 +2814,13 @@ export const handleChargeRequestEvents = async (input: {
       request,
     });
     if (!mandateValidation.ok) {
-      const queuedPendingAction = await queueChargeMandatePendingAction({
+      await emitCardChargeResponded({
         context,
-        request,
         eventType,
-        eventIndex: item.eventIndex,
-        sourcePayNoteType,
-        direction,
-        mode,
-        mandateFailureReason: mandateValidation.reason,
+        requestId,
+        status: 'rejected',
+        reason: mandateValidation.reason,
       });
-
-      if (queuedPendingAction) {
-        await emitCardChargeResponded({
-          context,
-          eventType,
-          requestId,
-          status: 'pending',
-          reason: CHARGE_MANDATE_PENDING_REASON,
-        });
-      } else {
-        await emitCardChargeResponded({
-          context,
-          eventType,
-          requestId,
-          status: 'rejected',
-          reason: mandateValidation.reason,
-        });
-      }
       continue;
     }
 
@@ -2537,9 +2831,6 @@ export const handleChargeRequestEvents = async (input: {
     });
     const mandateAuthorization = await runMandateAuthorization({
       context,
-      eventType,
-      eventIndex: item.eventIndex,
-      requestId,
       sourcePayNoteType,
       direction,
       mode,
@@ -2565,6 +2856,97 @@ export const handleChargeRequestEvents = async (input: {
             'Linked PayNote start rejected because mandate authorization failed.',
         });
       }
+      continue;
+    }
+
+    const immediateDecision =
+      await resolveImmediateMandateAuthorizationDecision({
+        context,
+        mandateSessionId: mandateValidation.mandateSessionId,
+        chargeAttemptId,
+      });
+
+    if (immediateDecision.status === 'rejected') {
+      const attemptProcessingKey =
+        buildChargeAttemptProcessingKey(chargeAttemptId);
+      const claimed = await deps.payNoteRepository.markEventProcessed(
+        attemptProcessingKey
+      );
+      if (!claimed) {
+        logs.push({
+          level: 'info',
+          message:
+            'Skipped duplicate card charge finalization (attempt already processed)',
+          context: {
+            eventId,
+            payNoteDocumentId,
+            sessionId,
+            eventType,
+            eventIndex: item.eventIndex,
+            requestId: requestId ?? null,
+            chargeAttemptId,
+            attemptProcessingKey,
+            status: 'rejected',
+          },
+        });
+        continue;
+      }
+
+      await emitCardChargeResponded({
+        context,
+        eventType,
+        requestId,
+        status: 'rejected',
+        reason:
+          immediateDecision.reason ??
+          'Payment mandate rejected charge authorization.',
+      });
+      if (request.payNoteDocument) {
+        await emitLinkedPayNoteStartResponded({
+          context,
+          eventType,
+          requestId,
+          status: 'rejected',
+          reason:
+            'Linked PayNote start rejected because mandate authorization failed.',
+        });
+      }
+      continue;
+    }
+
+    if (immediateDecision.status !== 'approved') {
+      await emitCardChargeResponded({
+        context,
+        eventType,
+        requestId,
+        status: 'pending',
+        reason: CHARGE_MANDATE_PENDING_REASON,
+      });
+      continue;
+    }
+
+    const attemptProcessingKey =
+      buildChargeAttemptProcessingKey(chargeAttemptId);
+    const claimed = await deps.payNoteRepository.markEventProcessed(
+      attemptProcessingKey
+    );
+    if (!claimed) {
+      logs.push({
+        level: 'info',
+        message:
+          'Skipped duplicate card charge finalization (attempt already processed)',
+        context: {
+          eventId,
+          payNoteDocumentId,
+          sessionId,
+          eventType,
+          eventIndex: item.eventIndex,
+          requestId: requestId ?? null,
+          chargeAttemptId,
+          attemptProcessingKey,
+          status: 'approved',
+        },
+      });
       continue;
     }
 
