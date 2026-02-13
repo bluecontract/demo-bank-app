@@ -521,8 +521,13 @@ const handleReserveFundsRequest = async (input: {
     context: {
       eventId,
       payNoteDocumentId,
+      sessionId,
+      eventObject,
+      emittedEvents,
       payerAccountNumber,
       payeeAccountNumber,
+      updatedRecord,
+      deliveryRecord,
       deps,
       logs,
     },
@@ -539,6 +544,7 @@ const handleReserveFundsRequest = async (input: {
     operation: 'reserve-funds',
   });
   const eventType = RESERVE_FUNDS_EVENT_NAME;
+  const reserveHoldId = updatedRecord.holdId ?? payNoteDocumentId;
 
   logs.push({
     level: 'info',
@@ -561,7 +567,7 @@ const handleReserveFundsRequest = async (input: {
 
   try {
     await deps.bankingFacade.reserveFunds({
-      holdId: payNoteDocumentId,
+      holdId: reserveHoldId,
       payerAccountNumber,
       amountMinor: transferAmountMinor,
       counterpartyAccountNumber: payeeAccountNumber,
@@ -602,6 +608,33 @@ const handleReserveFundsRequest = async (input: {
       },
     });
     return;
+  }
+
+  if (!updatedRecord.holdId) {
+    const updatedAt = deps.clock.now().toISOString();
+    updatedRecord.holdId = reserveHoldId;
+    updatedRecord.updatedAt = updatedAt;
+    await deps.payNoteRepository.savePayNote(updatedRecord);
+
+    await upsertPayNoteContract({
+      updatedRecord,
+      deliveryRecord,
+      sessionId,
+      payNoteDocumentId,
+      eventType,
+      triggerEvent: eventObject?.triggeredBy,
+      emittedEvents,
+      now: updatedAt,
+      deps,
+    });
+
+    if (deliveryRecord && !deliveryRecord.holdId) {
+      await deps.payNoteDeliveryRepository.saveDelivery({
+        ...deliveryRecord,
+        holdId: reserveHoldId,
+        updatedAt,
+      });
+    }
   }
 
   await emitTransferGuarantorResponseSafely({
@@ -674,9 +707,42 @@ const handleCaptureFundsRequest = async (input: {
     },
   });
 
+  const captureHoldId = updatedRecord.holdId;
+  if (!captureHoldId) {
+    logs.push({
+      level: 'warn',
+      message: 'PayNote capture funds request declined',
+      context: {
+        eventId,
+        payNoteDocumentId,
+        requestId,
+        reason: 'Missing hold mapping',
+      },
+    });
+
+    await emitTransferGuarantorResponse({
+      context: input.context,
+      eventType,
+      requestId,
+      responseEvent: buildResponseEvent({
+        type: CAPTURE_DECLINED_EVENT_NAME,
+        requestId,
+        reason: 'Missing hold mapping',
+      }),
+      messages: {
+        successMessage: 'Reported PayNote capture declined via guarantorUpdate',
+        failureMessage:
+          'Failed to report PayNote capture declined via guarantorUpdate',
+        missingCredentialsMessage:
+          'Skipped PayNote capture declined update (missing MyOS credentials)',
+      },
+    });
+    return;
+  }
+
   try {
     const capturedHold = await deps.bankingFacade.captureHold({
-      holdId: payNoteDocumentId,
+      holdId: captureHoldId,
       userId: account.ownerUserId,
       idempotencyKey,
       amountMinor: transferAmountMinor > 0 ? transferAmountMinor : undefined,
@@ -686,7 +752,8 @@ const handleCaptureFundsRequest = async (input: {
 
     const capturedTransactionId = capturedHold.relatedTransactionId;
     const capturedHoldId = capturedHold.holdId;
-    const shouldUpdateHoldId = !updatedRecord.holdId && capturedHoldId;
+    const shouldUpdateHoldId =
+      Boolean(capturedHoldId) && capturedHoldId !== updatedRecord.holdId;
     const shouldUpdateTransactionId =
       Boolean(capturedTransactionId) &&
       capturedTransactionId !== updatedRecord.transactionId;

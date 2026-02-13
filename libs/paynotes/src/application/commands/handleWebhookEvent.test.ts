@@ -436,6 +436,12 @@ describe('handleWebhookEvent', () => {
 
   it('adds transaction relationship after capture hold succeeds', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      holdId: 'hold-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
     fetchEvent.mockResolvedValueOnce({
       kind: 'success',
       payload: {
@@ -469,7 +475,7 @@ describe('handleWebhookEvent', () => {
     } as MyOsFetchDocumentResult);
 
     deps.bankingFacade.captureHold = vi.fn().mockResolvedValue({
-      holdId: 'doc-1',
+      holdId: 'hold-1',
       relatedTransactionId: 'txn-1',
     } as any);
 
@@ -477,7 +483,7 @@ describe('handleWebhookEvent', () => {
 
     expect(deps.bankingFacade.captureHold).toHaveBeenCalledWith(
       expect.objectContaining({
-        holdId: 'doc-1',
+        holdId: 'hold-1',
         amountMinor: 1200,
         idempotencyKey: 'paynote-transfer:capture-funds:event-1:0',
       })
@@ -1086,6 +1092,12 @@ describe('handleWebhookEvent', () => {
 
   it('reports capture failed via guarantorUpdate when capture throws', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      holdId: 'hold-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
     fetchEvent.mockResolvedValueOnce({
       kind: 'success',
       payload: {

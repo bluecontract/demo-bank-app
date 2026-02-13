@@ -20,6 +20,7 @@ const hoistedAdapters = vi.hoisted(() => ({
   fetchEventImpl: vi.fn(),
   fetchDocumentImpl: vi.fn(),
   getAccountByNumberImpl: vi.fn(),
+  getPayNoteBySessionIdImpl: vi.fn(),
   transferFundsMock: vi.fn(),
   reserveFundsMock: vi.fn(),
   captureHoldMock: vi.fn(),
@@ -60,6 +61,7 @@ describe('payNoteWebhookHandler', () => {
     hoistedAdapters.fetchEventImpl.mockReset();
     hoistedAdapters.fetchDocumentImpl.mockReset();
     hoistedAdapters.getAccountByNumberImpl.mockReset();
+    hoistedAdapters.getPayNoteBySessionIdImpl.mockReset();
     hoistedAdapters.transferFundsMock.mockReset();
     hoistedAdapters.reserveFundsMock.mockReset();
     hoistedAdapters.captureHoldMock.mockReset();
@@ -73,6 +75,7 @@ describe('payNoteWebhookHandler', () => {
       kind: 'success',
       document: { documentId: 'doc-default', sessionId: 'session-default' },
     });
+    hoistedAdapters.getPayNoteBySessionIdImpl.mockResolvedValue(null);
     hoistedAdapters.captureHoldMock.mockResolvedValue({ holdId: 'hold-1' });
 
     const myOsClient = {
@@ -113,7 +116,8 @@ describe('payNoteWebhookHandler', () => {
       bankingFacade,
       payNoteRepository: {
         getPayNote: vi.fn(),
-        getPayNoteBySessionId: vi.fn(),
+        getPayNoteBySessionId: (sessionId: string) =>
+          hoistedAdapters.getPayNoteBySessionIdImpl(sessionId),
         savePayNote: vi.fn(),
         markEventProcessed: vi.fn().mockResolvedValue(true),
       },
@@ -224,6 +228,13 @@ describe('payNoteWebhookHandler', () => {
       accountNumber: '9559276001',
       ownerUserId: 'user-456',
     });
+    hoistedAdapters.getPayNoteBySessionIdImpl.mockResolvedValue({
+      payNoteDocumentId: 'doc-123',
+      sessionId: 'session-1',
+      holdId: 'hold-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
 
     const response = await payNoteWebhookHandler({
       body: { id: 'event-123' },
@@ -241,7 +252,7 @@ describe('payNoteWebhookHandler', () => {
       payNoteDocumentId: 'doc-123',
     });
     expect(hoistedAdapters.captureHoldMock).toHaveBeenCalledWith({
-      holdId: 'doc-123',
+      holdId: 'hold-1',
       userId: 'user-456',
       idempotencyKey: 'paynote-transfer:capture-funds:event-123:1',
       amountMinor: 15000,
@@ -249,7 +260,7 @@ describe('payNoteWebhookHandler', () => {
       payNoteDocumentId: 'doc-123',
     });
     expect(hoistedAdapters.reserveFundsMock).toHaveBeenCalledWith({
-      holdId: 'doc-123',
+      holdId: 'hold-1',
       payerAccountNumber: '9559276001',
       amountMinor: 15000,
       counterpartyAccountNumber: '9595234002',
