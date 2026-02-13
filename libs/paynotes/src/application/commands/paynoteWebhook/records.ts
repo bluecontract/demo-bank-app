@@ -199,6 +199,7 @@ export const buildPayNoteRecord = (input: {
       eventObject?.emitted ?? existingRecord?.transactionRequest ?? null,
     triggerEvent:
       eventObject?.triggeredBy ?? existingRecord?.triggerEvent ?? null,
+    pendingMandateChargeAttempts: existingRecord?.pendingMandateChargeAttempts,
     createdAt: existingRecord?.createdAt ?? now,
     updatedAt: now,
   };

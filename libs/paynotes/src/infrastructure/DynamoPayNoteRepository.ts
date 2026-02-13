@@ -49,6 +49,18 @@ interface PayNoteItem {
   document?: Record<string, unknown>;
   transactionRequest?: unknown;
   triggerEvent?: unknown;
+  pendingMandateChargeAttempts?: Record<
+    string,
+    {
+      mandateDocumentId: string;
+      eventType: string;
+      requestId?: string;
+      queuedAt: string;
+      retryCount: number;
+      nextRetryAt?: string;
+      lastReason?: string;
+    }
+  >;
   createdAt: string;
   updatedAt: string;
 }
@@ -115,6 +127,7 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       document: item.document,
       transactionRequest: item.transactionRequest,
       triggerEvent: item.triggerEvent,
+      pendingMandateChargeAttempts: item.pendingMandateChargeAttempts,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
@@ -290,6 +303,12 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       valueKey: ':triggerEvent',
       attributeName: 'triggerEvent',
       value: record.triggerEvent,
+    });
+    addOptionalAttribute({
+      nameKey: '#pendingMandateChargeAttempts',
+      valueKey: ':pendingMandateChargeAttempts',
+      attributeName: 'pendingMandateChargeAttempts',
+      value: record.pendingMandateChargeAttempts,
     });
 
     const updateExpressionParts: string[] = [];

@@ -2435,7 +2435,7 @@ describe('handleWebhookEvent', () => {
     ).toBe(false);
   });
 
-  it('rejects charge when mandate document cannot be loaded even with accepted local action', async () => {
+  it('defers charge when mandate document cannot be loaded even with accepted local action', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
 
     deps.payNoteRepository.getPayNoteBySessionId = vi
@@ -2561,14 +2561,34 @@ describe('handleWebhookEvent', () => {
       runOperationCalls,
       'PayNote/Card Charge Responded'
     );
-    expect(respondedEvent).toBeDefined();
-    expect(respondedEvent?.status).toBe('rejected');
-    expect(respondedEvent?.reason).toBe(
+    expect(respondedEvent).toBeUndefined();
+
+    expect(deps.payNoteRepository.savePayNote).toHaveBeenCalled();
+    const savedPayNotes = (
+      deps.payNoteRepository.savePayNote as unknown as {
+        mock: { calls: Array<Array<Record<string, unknown>>> };
+      }
+    ).mock.calls.map(call => call[0] as Record<string, unknown>);
+    const deferredAttempt = savedPayNotes
+      .map(
+        saved =>
+          toSimpleRecord(saved.pendingMandateChargeAttempts)?.[
+            'paynote-card-charge-attempt:doc-1:event-1:0'
+          ]
+      )
+      .find(Boolean) as Record<string, unknown> | undefined;
+    expect(deferredAttempt).toBeDefined();
+    expect(deferredAttempt?.eventType).toBe(
+      'PayNote/Linked Card Charge Requested'
+    );
+    expect(deferredAttempt?.retryCount).toBe(1);
+    expect(deferredAttempt?.nextRetryAt).toBe('2024-01-01T00:00:01.000Z');
+    expect(deferredAttempt?.lastReason).toBe(
       'Unable to load payment mandate document.'
     );
   });
 
-  it('returns pending when mandate authorization is not yet confirmed', async () => {
+  it('waits for mandate response when mandate authorization is not yet confirmed', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     const { mandateDocumentId } = attachPaymentMandate({
       deps,
@@ -2648,11 +2668,7 @@ describe('handleWebhookEvent', () => {
       runOperationCalls,
       'PayNote/Card Charge Responded'
     );
-    expect(respondedEvent).toBeDefined();
-    expect(respondedEvent?.status).toBe('pending');
-    expect(respondedEvent?.reason).toBe(
-      'Awaiting payment mandate authorization.'
-    );
+    expect(respondedEvent).toBeUndefined();
   });
 
   it('ignores duplicate mandate response when charge attempt was already finalized immediately', async () => {
@@ -2889,9 +2905,7 @@ describe('handleWebhookEvent', () => {
       runOperationCalls,
       'PayNote/Card Charge Responded'
     );
-    expect(respondedEvents.map(event => event.status)).toEqual(
-      expect.arrayContaining(['pending', 'accepted'])
-    );
+    expect(respondedEvents.map(event => event.status)).toEqual(['accepted']);
     const completedEvent = findRunOperationEventByType(
       runOperationCalls,
       'PayNote/Card Charge Completed'
@@ -3006,9 +3020,7 @@ describe('handleWebhookEvent', () => {
       runOperationCalls,
       'PayNote/Card Charge Responded'
     );
-    expect(respondedEvents.map(event => event.status)).toEqual(
-      expect.arrayContaining(['pending', 'rejected'])
-    );
+    expect(respondedEvents.map(event => event.status)).toEqual(['rejected']);
     const lastRejected = respondedEvents.find(
       event => event.status === 'rejected'
     );

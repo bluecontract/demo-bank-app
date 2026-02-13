@@ -231,6 +231,18 @@ export interface PayNoteRecord {
   document?: Record<string, unknown>;
   transactionRequest?: unknown;
   triggerEvent?: unknown;
+  pendingMandateChargeAttempts?: Record<
+    string,
+    {
+      mandateDocumentId: string;
+      eventType: string;
+      requestId?: string;
+      queuedAt: string;
+      retryCount: number;
+      nextRetryAt?: string;
+      lastReason?: string;
+    }
+  >;
   createdAt: string;
   updatedAt: string;
 }
