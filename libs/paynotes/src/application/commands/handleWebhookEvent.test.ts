@@ -1763,7 +1763,7 @@ describe('handleWebhookEvent', () => {
       expect.objectContaining({
         type: expect.objectContaining({
           blueId: resolveTypeBlueId(
-            'PayNote/Mandate Spend Authorization Requested'
+            'PayNote/Payment Mandate Spend Authorization Requested'
           ),
         }),
         chargeAttemptId: 'paynote-card-charge-attempt:doc-1:event-1:0',
@@ -1784,7 +1784,7 @@ describe('handleWebhookEvent', () => {
     expect(settlePayloadSimple).toEqual(
       expect.objectContaining({
         type: expect.objectContaining({
-          blueId: resolveTypeBlueId('PayNote/Mandate Spend Settled'),
+          blueId: resolveTypeBlueId('PayNote/Payment Mandate Spend Settled'),
         }),
         chargeAttemptId: 'paynote-card-charge-attempt:doc-1:event-1:0',
         status: 'succeeded',
@@ -2569,7 +2569,7 @@ describe('handleWebhookEvent', () => {
           },
           emitted: [
             toOfficialBlue({
-              type: 'PayNote/Mandate Spend Authorization Responded',
+              type: 'PayNote/Payment Mandate Spend Authorization Responded',
               chargeAttemptId: 'paynote-card-charge-attempt:doc-1:event-1:0',
               status: 'approved',
             }),
@@ -2680,7 +2680,7 @@ describe('handleWebhookEvent', () => {
           },
           emitted: [
             toOfficialBlue({
-              type: 'PayNote/Mandate Spend Authorization Responded',
+              type: 'PayNote/Payment Mandate Spend Authorization Responded',
               chargeAttemptId,
               status: 'approved',
             }),
@@ -2802,7 +2802,7 @@ describe('handleWebhookEvent', () => {
           },
           emitted: [
             toOfficialBlue({
-              type: 'PayNote/Mandate Spend Authorization Responded',
+              type: 'PayNote/Payment Mandate Spend Authorization Responded',
               chargeAttemptId: 'paynote-card-charge-attempt:doc-1:event-1:0',
               status: 'rejected',
               reason: 'Denied by mandate policy.',

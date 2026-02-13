@@ -3,7 +3,7 @@ import {
   CardTransactionPayNoteSchema,
   LinkedCardChargeAndCaptureImmediatelyRequestedSchema,
   LinkedCardChargeRequestedSchema,
-  MandateSpendAuthorizationRespondedSchema,
+  PaymentMandateSpendAuthorizationRespondedSchema,
   MerchantToCustomerPayNoteSchema,
   PaymentMandateSchema,
   PayNoteSchema,
@@ -120,8 +120,9 @@ const MANDATE_RESPONSE_EVENT_TYPES = new Set<MandateResponseEventType>([
 const MANDATE_AUTHORIZE_OPERATION = 'authorizeSpend';
 const MANDATE_SETTLE_OPERATION = 'settleSpend';
 const MANDATE_SPEND_AUTHORIZATION_REQUESTED_EVENT_NAME =
-  'PayNote/Mandate Spend Authorization Requested';
-const MANDATE_SPEND_SETTLED_EVENT_NAME = 'PayNote/Mandate Spend Settled';
+  'PayNote/Payment Mandate Spend Authorization Requested';
+const MANDATE_SPEND_SETTLED_EVENT_NAME =
+  'PayNote/Payment Mandate Spend Settled';
 
 const CHARGE_CAPABILITY_MATRIX: Record<
   SourcePayNoteType,
@@ -414,13 +415,13 @@ const parseMandateAuthorizationResponse = (
 ): ParsedMandateAuthorizationResponse | null => {
   try {
     const node = blue.jsonValueToNode(event);
-    if (!blue.isTypeOf(node, MandateSpendAuthorizationRespondedSchema)) {
+    if (!blue.isTypeOf(node, PaymentMandateSpendAuthorizationRespondedSchema)) {
       return null;
     }
 
     const output = blue.nodeToSchemaOutput(
       node,
-      MandateSpendAuthorizationRespondedSchema
+      PaymentMandateSpendAuthorizationRespondedSchema
     ) as {
       chargeAttemptId?: unknown;
       status?: unknown;

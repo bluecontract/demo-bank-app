@@ -15,6 +15,8 @@ import { getDependencies } from '../paynote/dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 
 const CHARGE_MANDATE_PENDING_ACTION_TYPE = 'chargeMandateApproval';
+const PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE =
+  'paymentMandateBootstrapApproval';
 
 type PendingActionDecision = Extract<
   ContractPendingActionStatus,
@@ -25,6 +27,12 @@ type ChargeMandatePayload = {
   amountMinor: number;
   direction: 'linked' | 'reverse';
   payNoteDocument?: Record<string, unknown>;
+};
+
+type PaymentMandateBootstrapPayload = {
+  requestId?: string;
+  channelBindings?: Record<string, { accountId?: string; email?: string }>;
+  paymentMandateDocument: Record<string, unknown>;
 };
 
 type PaymentMandateSnapshot = {
@@ -50,7 +58,7 @@ type PaymentMandateSnapshot = {
 type MonitoringDecisionOutcome = {
   kind: 'monitoring';
   contract: ContractRecord;
-  responseEvent: Record<string, unknown>;
+  responseEvents: Record<string, unknown>[];
   targetMerchantId: string;
   requestId?: string;
   historyShort: string;
@@ -60,13 +68,25 @@ type MonitoringDecisionOutcome = {
 type ChargeMandateDecisionOutcome = {
   kind: 'charge-mandate';
   contract: ContractRecord;
-  responseEvent: Record<string, unknown>;
+  responseEvents: Record<string, unknown>[];
   requestId?: string;
   historyShort: string;
   historyMore: string;
 };
 
-type DecisionOutcome = MonitoringDecisionOutcome | ChargeMandateDecisionOutcome;
+type PaymentMandateBootstrapDecisionOutcome = {
+  kind: 'payment-mandate-bootstrap';
+  contract: ContractRecord;
+  responseEvents: Record<string, unknown>[];
+  requestId?: string;
+  historyShort: string;
+  historyMore: string;
+};
+
+type DecisionOutcome =
+  | MonitoringDecisionOutcome
+  | ChargeMandateDecisionOutcome
+  | PaymentMandateBootstrapDecisionOutcome;
 
 const toEventWithRequestId = (input: {
   event: Record<string, unknown>;
@@ -166,6 +186,57 @@ const parseChargeMandatePayload = (
   };
 };
 
+const normalizeChannelBindings = (
+  value: unknown
+): Record<string, { accountId?: string; email?: string }> | undefined => {
+  const record = toRecord(value);
+  if (!record) {
+    return undefined;
+  }
+
+  const bindings = Object.entries(record).reduce<
+    Record<string, { accountId?: string; email?: string }>
+  >((acc, [key, item]) => {
+    const itemRecord = toRecord(item);
+    if (!itemRecord) {
+      return acc;
+    }
+    const accountId = getString(itemRecord.accountId);
+    const email = getString(itemRecord.email);
+    if (!accountId && !email) {
+      return acc;
+    }
+    acc[key] = {
+      ...(accountId ? { accountId } : {}),
+      ...(email ? { email } : {}),
+    };
+    return acc;
+  }, {});
+
+  return Object.keys(bindings).length > 0 ? bindings : undefined;
+};
+
+const parsePaymentMandateBootstrapPayload = (
+  action: ContractPendingAction
+): PaymentMandateBootstrapPayload | null => {
+  const payload = toRecord(action.payload);
+  if (!payload) {
+    return null;
+  }
+
+  const paymentMandateDocument =
+    toRecord(payload.paymentMandateDocument) ?? toRecord(payload.document);
+  if (!paymentMandateDocument) {
+    return null;
+  }
+
+  return {
+    requestId: getString(payload.requestId) ?? action.requestId,
+    channelBindings: normalizeChannelBindings(payload.channelBindings),
+    paymentMandateDocument,
+  };
+};
+
 const applyChargeMandateDecisionToContract = (input: {
   contract: ContractRecord;
   actionId: string;
@@ -218,6 +289,76 @@ const applyChargeMandateDecisionToContract = (input: {
     ...(paymentMandate
       ? {
           paymentMandate,
+        }
+      : {}),
+  };
+
+  const nextAction: ContractPendingAction = {
+    ...action,
+    status: decision,
+    decidedAt,
+    payload: nextPayload,
+  };
+
+  const nextActions = (contract.pendingActions ?? []).map(item =>
+    item.actionId === actionId ? nextAction : item
+  );
+
+  return {
+    ok: true,
+    contract: {
+      ...contract,
+      pendingActions: nextActions,
+    },
+    action: nextAction,
+  };
+};
+
+const applyPaymentMandateBootstrapDecisionToContract = (input: {
+  contract: ContractRecord;
+  actionId: string;
+  decision: PendingActionDecision;
+  decidedAt: string;
+  paymentMandateDocumentId?: string;
+  paymentMandateSessionId?: string;
+}):
+  | { ok: true; contract: ContractRecord; action: ContractPendingAction }
+  | {
+      ok: false;
+      reason: 'action-not-found' | 'action-not-pending' | 'unsupported-action';
+    } => {
+  const {
+    contract,
+    actionId,
+    decision,
+    decidedAt,
+    paymentMandateDocumentId,
+    paymentMandateSessionId,
+  } = input;
+
+  const action = (contract.pendingActions ?? []).find(
+    item => item.actionId === actionId
+  );
+  if (!action) {
+    return { ok: false, reason: 'action-not-found' };
+  }
+  if (action.type !== PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE) {
+    return { ok: false, reason: 'unsupported-action' };
+  }
+  if (action.status !== 'pending') {
+    return { ok: false, reason: 'action-not-pending' };
+  }
+
+  const nextPayload = {
+    ...(toRecord(action.payload) ?? {}),
+    ...(paymentMandateDocumentId
+      ? {
+          paymentMandateDocumentId,
+        }
+      : {}),
+    ...(paymentMandateSessionId
+      ? {
+          paymentMandateSessionId,
         }
       : {}),
   };
@@ -487,7 +628,7 @@ const resolveDecisionOutcome = async (input: {
         contract: decisionResult.contract,
         requestId: resolvedAction.requestId,
         targetMerchantId,
-        responseEvent,
+        responseEvents: [responseEvent],
         historyShort:
           input.decision === 'accepted'
             ? 'Monitoring consent granted.'
@@ -611,7 +752,7 @@ const resolveDecisionOutcome = async (input: {
         kind: 'charge-mandate',
         contract: decisionResult.contract,
         requestId: decisionResult.action.requestId,
-        responseEvent,
+        responseEvents: [responseEvent],
         historyShort:
           input.decision === 'accepted'
             ? 'Payment mandate approved.'
@@ -620,6 +761,135 @@ const resolveDecisionOutcome = async (input: {
           input.decision === 'accepted'
             ? 'Card charge request can proceed with the approved mandate.'
             : 'Card charge request was rejected by user decision.',
+      },
+    };
+  }
+
+  if (action.type === PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE) {
+    const payload = parsePaymentMandateBootstrapPayload(action);
+    if (!payload) {
+      return {
+        ok: false,
+        status: 409,
+        message:
+          'Pending action cannot be decided: invalid payment mandate bootstrap payload',
+      };
+    }
+
+    let paymentMandateDocumentId: string | undefined;
+    let paymentMandateSessionId: string | undefined;
+    if (input.decision === 'accepted') {
+      const bootstrapResponse = await input.myOsClient.bootstrapDocument({
+        credentials: input.credentials,
+        payload: {
+          channelBindings: payload.channelBindings ?? {},
+          document: payload.paymentMandateDocument,
+        },
+      });
+      if (!bootstrapResponse.ok) {
+        return {
+          ok: false,
+          status: 500,
+          message: 'Failed to bootstrap payment mandate document',
+          detail: resolveOperationFailureReason({
+            status: bootstrapResponse.status,
+            body: bootstrapResponse.body,
+            fallbackPrefix: 'Payment mandate bootstrap failed',
+          }),
+        };
+      }
+
+      paymentMandateSessionId = getString(
+        toRecord(bootstrapResponse.body)?.sessionId
+      );
+      paymentMandateDocumentId = await resolveMandateDocumentIdFromBootstrap({
+        myOsClient: input.myOsClient,
+        bootstrapBody: bootstrapResponse.body,
+      });
+      if (!paymentMandateDocumentId) {
+        return {
+          ok: false,
+          status: 500,
+          message: 'Failed to bootstrap payment mandate document',
+          detail: 'Payment mandate bootstrap did not return document identity.',
+        };
+      }
+    }
+
+    const decisionResult = applyPaymentMandateBootstrapDecisionToContract({
+      contract: input.contract,
+      actionId: input.actionId,
+      decision: input.decision,
+      decidedAt: input.decidedAt,
+      paymentMandateDocumentId,
+      paymentMandateSessionId,
+    });
+    if (!decisionResult.ok) {
+      return {
+        ok: false,
+        status: 409,
+        message: `Pending action cannot be decided: ${decisionResult.reason}`,
+      };
+    }
+
+    const requestId = payload.requestId ?? decisionResult.action.requestId;
+    const responseEvents: Record<string, unknown>[] = [];
+    if (input.decision === 'accepted') {
+      responseEvents.push(
+        toEventWithRequestId({
+          event: {
+            type: 'Conversation/Document Bootstrap Responded',
+            status: 'accepted',
+          },
+          requestId,
+        })
+      );
+      responseEvents.push(
+        toEventWithRequestId({
+          event: {
+            type: 'Conversation/Document Bootstrap Completed',
+            documentId: paymentMandateDocumentId,
+          },
+          requestId,
+        })
+      );
+      responseEvents.push(
+        toEventWithRequestId({
+          event: {
+            type: 'PayNote/Payment Mandate Attached',
+            paymentMandateDocumentId,
+          },
+          requestId,
+        })
+      );
+    } else {
+      responseEvents.push(
+        toEventWithRequestId({
+          event: {
+            type: 'Conversation/Document Bootstrap Responded',
+            status: 'rejected',
+            reason: 'Payment mandate bootstrap rejected by user.',
+          },
+          requestId,
+        })
+      );
+    }
+
+    return {
+      ok: true,
+      outcome: {
+        kind: 'payment-mandate-bootstrap',
+        contract: decisionResult.contract,
+        requestId,
+        responseEvents,
+        historyShort:
+          input.decision === 'accepted'
+            ? 'Payment Mandate bootstrap approved.'
+            : 'Payment Mandate bootstrap rejected.',
+        historyMore:
+          input.decision === 'accepted'
+            ? 'Payment Mandate document was bootstrapped and attached to contract.'
+            : 'Payment Mandate bootstrap request was rejected by user.',
       },
     };
   }
@@ -714,7 +984,7 @@ export const decideContractPendingActionHandler = async (
     myOsClient,
     credentials,
     sessionId,
-    request: [decisionOutcome.outcome.responseEvent],
+    request: decisionOutcome.outcome.responseEvents,
     logs,
     logContext: {
       sessionId,

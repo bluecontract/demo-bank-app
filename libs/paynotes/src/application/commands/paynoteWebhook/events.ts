@@ -5,8 +5,8 @@ import {
   CaptureFundsRequestedSchema,
   LinkedCardChargeAndCaptureImmediatelyRequestedSchema,
   LinkedCardChargeRequestedSchema,
-  MandateSpendAuthorizationRespondedSchema,
-  MandateSpendSettlementRespondedSchema,
+  PaymentMandateSpendAuthorizationRespondedSchema,
+  PaymentMandateSpendSettlementRespondedSchema,
   ReserveFundsAndCaptureImmediatelyRequestedSchema,
   ReserveFundsRequestedSchema,
   ReverseCardChargeAndCaptureImmediatelyRequestedSchema,
@@ -38,9 +38,9 @@ export const REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME =
 export const REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME =
   'PayNote/Reverse Card Charge and Capture Immediately Requested';
 export const MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME =
-  'PayNote/Mandate Spend Authorization Responded';
+  'PayNote/Payment Mandate Spend Authorization Responded';
 export const MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME =
-  'PayNote/Mandate Spend Settlement Responded';
+  'PayNote/Payment Mandate Spend Settlement Responded';
 
 const resolveEventTypeLabel = (event: unknown): string | undefined => {
   if (!event || typeof event !== 'object') {
@@ -89,10 +89,10 @@ const resolveEventType = (event: unknown): string | undefined => {
     if (blue.isTypeOf(node, ReverseCardChargeRequestedSchema)) {
       return REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, MandateSpendAuthorizationRespondedSchema)) {
+    if (blue.isTypeOf(node, PaymentMandateSpendAuthorizationRespondedSchema)) {
       return MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, MandateSpendSettlementRespondedSchema)) {
+    if (blue.isTypeOf(node, PaymentMandateSpendSettlementRespondedSchema)) {
       return MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME;
     }
     if (blue.isTypeOf(node, DocumentBootstrapRequestedSchema)) {

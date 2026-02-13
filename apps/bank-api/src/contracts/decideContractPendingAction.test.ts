@@ -357,4 +357,189 @@ describe('decideContractPendingActionHandler', () => {
       })
     );
   });
+
+  it('accepts payment mandate bootstrap pending action and emits attachment events', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      documentId: 'doc-1',
+      userId: 'user-1',
+      merchantId: 'merchant-1',
+      pendingActions: [
+        {
+          actionId: 'payment-mandate-bootstrap:event-1:0',
+          type: 'paymentMandateBootstrapApproval',
+          status: 'pending',
+          title: 'Approve Payment Mandate bootstrap',
+          requestId: 'subscription-payment-mandate',
+          payload: {
+            requestId: 'subscription-payment-mandate',
+            channelBindings: {
+              granterChannel: { accountId: 'user-1' },
+              granteeChannel: { accountId: 'merchant-1' },
+            },
+            paymentMandateDocument: {
+              type: 'PayNote/Payment Mandate',
+              granterType: 'customer',
+              granterId: 'user-1',
+              granteeType: 'documentId',
+              granteeId: 'doc-1',
+              amountLimit: 12000,
+              currency: 'USD',
+              sourceAccount: 'root',
+            },
+          },
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    myOsClient.getCredentials.mockResolvedValue({
+      apiKey: 'key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.local',
+    });
+    myOsClient.bootstrapDocument.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {
+        sessionId: 'payment-mandate-session-1',
+      },
+    });
+    myOsClient.fetchDocument.mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'payment-mandate-doc-1',
+        sessionId: 'payment-mandate-session-1',
+        document: {
+          type: 'PayNote/Payment Mandate',
+        },
+      },
+    });
+    myOsClient.runDocumentOperation.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {},
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'payment-mandate-bootstrap:event-1:0',
+        },
+        body: {
+          decision: 'accepted',
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(200);
+    expect(myOsClient.bootstrapDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          document: expect.objectContaining({
+            type: 'PayNote/Payment Mandate',
+          }),
+        }),
+      })
+    );
+
+    const runCall = myOsClient.runDocumentOperation.mock.calls[0]?.[0];
+    expect(runCall?.operation).toBe('guarantorUpdate');
+    const payload = JSON.stringify(runCall?.payload);
+    expect(payload).toContain('Conversation/Document Bootstrap Responded');
+    expect(payload).toContain('Conversation/Document Bootstrap Completed');
+    expect(payload).toContain('PayNote/Payment Mandate Attached');
+
+    expect(contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingActions: expect.arrayContaining([
+          expect.objectContaining({
+            actionId: 'payment-mandate-bootstrap:event-1:0',
+            type: 'paymentMandateBootstrapApproval',
+            status: 'accepted',
+          }),
+        ]),
+      })
+    );
+  });
+
+  it('rejects payment mandate bootstrap pending action and reports rejection', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      documentId: 'doc-1',
+      userId: 'user-1',
+      pendingActions: [
+        {
+          actionId: 'payment-mandate-bootstrap:event-1:0',
+          type: 'paymentMandateBootstrapApproval',
+          status: 'pending',
+          title: 'Approve Payment Mandate bootstrap',
+          requestId: 'subscription-payment-mandate',
+          payload: {
+            requestId: 'subscription-payment-mandate',
+            paymentMandateDocument: {
+              type: 'PayNote/Payment Mandate',
+            },
+          },
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    myOsClient.getCredentials.mockResolvedValue({
+      apiKey: 'key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.local',
+    });
+    myOsClient.runDocumentOperation.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {},
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'payment-mandate-bootstrap:event-1:0',
+        },
+        body: {
+          decision: 'rejected',
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(200);
+    expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
+    const runCall = myOsClient.runDocumentOperation.mock.calls[0]?.[0];
+    expect(runCall?.operation).toBe('guarantorUpdate');
+    const payload = JSON.stringify(runCall?.payload);
+    expect(payload).toContain('Conversation/Document Bootstrap Responded');
+    expect(payload).toContain('rejected');
+    expect(payload).not.toContain('PayNote/Payment Mandate Attached');
+    expect(contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingActions: expect.arrayContaining([
+          expect.objectContaining({
+            actionId: 'payment-mandate-bootstrap:event-1:0',
+            type: 'paymentMandateBootstrapApproval',
+            status: 'rejected',
+          }),
+        ]),
+      })
+    );
+  });
 });

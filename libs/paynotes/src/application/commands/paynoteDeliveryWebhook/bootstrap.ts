@@ -4,6 +4,7 @@ import {
   CardTransactionPayNoteSchema,
   MerchantToCustomerPayNoteSchema,
   PayNoteDeliverySchema,
+  PaymentMandateSchema,
   PayNoteSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
 import { blueIds as payNoteBlueIds } from '@blue-repository/types/packages/paynote/blue-ids';
@@ -42,7 +43,11 @@ type NormalizedBootstrapRequest = {
   requestId?: string;
   document?: Record<string, unknown> | null;
   channelBindings: ChannelBindings;
+  initialMessages?: Record<string, unknown>;
 };
+
+const PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE =
+  'paymentMandateBootstrapApproval' as const;
 
 type PayNoteBootstrapContext = {
   payNoteDocument?: Record<string, unknown> | null;
@@ -363,6 +368,7 @@ const normalizeBootstrapRequest = (
   requestId: getString(request.requestId),
   document: toSimpleRecord(request.document),
   channelBindings: normalizeChannelBindings(request.channelBindings),
+  initialMessages: toSimpleRecord(request.initialMessages) ?? undefined,
 });
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -551,6 +557,215 @@ const isPayNoteDocumentNode = (node: BlueNode | null): boolean =>
         checkSchemaExtensions: true,
       })
   );
+
+const isPaymentMandateDocumentNode = (node: BlueNode | null): boolean =>
+  Boolean(
+    node &&
+      blue.isTypeOf(node, PaymentMandateSchema, {
+        checkSchemaExtensions: true,
+      })
+  );
+
+const isPaymentMandateDocumentPayload = (input: {
+  node: BlueNode | null;
+  payload: Record<string, unknown>;
+}): boolean => {
+  if (isPaymentMandateDocumentNode(input.node)) {
+    return true;
+  }
+  return getString(input.payload.type) === 'PayNote/Payment Mandate';
+};
+
+const resolveInitialMessageText = (input: {
+  initialMessages?: Record<string, unknown>;
+}): string | undefined => {
+  const initialMessages = input.initialMessages;
+  if (!initialMessages) {
+    return undefined;
+  }
+
+  const defaultMessage = getString(initialMessages.defaultMessage);
+  if (defaultMessage) {
+    return defaultMessage;
+  }
+
+  const perChannel = toSimpleRecord(initialMessages.perChannel);
+  if (!perChannel) {
+    return undefined;
+  }
+  return (
+    getString(perChannel.granterChannel) ??
+    getString(perChannel.payerChannel) ??
+    getString(perChannel.payeeChannel)
+  );
+};
+
+const buildPaymentMandateBootstrapPendingActionId = (input: {
+  eventId: string;
+  requestIndex: number;
+}) => `payment-mandate-bootstrap:${input.eventId}:${input.requestIndex}`;
+
+const queuePaymentMandateBootstrapPendingAction = async (input: {
+  request: NormalizedBootstrapRequest;
+  requestedDocumentPayload: Record<string, unknown>;
+  requestingSessionId?: string;
+  eventId: string;
+  requestIndex: number;
+  now: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<{ ok: true } | { ok: false; reason: string }> => {
+  const {
+    request,
+    requestedDocumentPayload,
+    requestingSessionId,
+    eventId,
+    requestIndex,
+    now,
+    deps,
+    logs,
+  } = input;
+
+  if (!requestingSessionId) {
+    return {
+      ok: false,
+      reason:
+        'Payment mandate bootstrap from active PayNote requires requesting session context.',
+    };
+  }
+
+  const contract = await deps.contractRepository.getContractBySessionId(
+    requestingSessionId
+  );
+  if (!contract || contract.sessionId !== requestingSessionId) {
+    return {
+      ok: false,
+      reason:
+        'Unable to resolve requesting contract session for payment mandate bootstrap.',
+    };
+  }
+
+  const actionId = buildPaymentMandateBootstrapPendingActionId({
+    eventId,
+    requestIndex,
+  });
+  const existingAction = (contract.pendingActions ?? []).find(
+    action => action.actionId === actionId
+  );
+  if (existingAction) {
+    trace(logs, 'Payment mandate bootstrap pending action already exists', {
+      eventId,
+      requestingSessionId,
+      actionId,
+    });
+    return { ok: true };
+  }
+
+  const summary =
+    resolveInitialMessageText({
+      initialMessages: request.initialMessages,
+    }) ?? 'Approve Payment Mandate bootstrap requested by this contract.';
+
+  const nextAction = {
+    actionId,
+    type: PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE,
+    status: 'pending',
+    title: 'Approve Payment Mandate bootstrap',
+    summary,
+    ...(request.requestId ? { requestId: request.requestId } : {}),
+    payload: {
+      requestId: request.requestId,
+      bootstrapAssignee: request.bootstrapAssignee,
+      initialMessages: request.initialMessages,
+      channelBindings: request.channelBindings,
+      paymentMandateDocument: requestedDocumentPayload,
+      requestEventId: eventId,
+      requestEventIndex: requestIndex,
+    },
+    createdAt: now,
+  } as const;
+
+  await deps.contractRepository.saveContract({
+    ...contract,
+    pendingActions: [...(contract.pendingActions ?? []), nextAction],
+    updatedAt: now,
+  });
+
+  await deps.contractRepository.addContractHistoryEntry({
+    contractId: contract.contractId,
+    kind: 'pendingActionRequested',
+    short: 'Payment Mandate approval requested.',
+    more: summary,
+    createdAt: now,
+  });
+
+  log(
+    logs,
+    'info',
+    'Payment mandate bootstrap request recorded as pending action',
+    {
+      eventId,
+      requestingSessionId,
+      actionId,
+      requestId: request.requestId ?? null,
+    }
+  );
+
+  return { ok: true };
+};
+
+const handlePaymentMandateBootstrapRequest = async (input: {
+  request: NormalizedBootstrapRequest;
+  requestedDocumentPayload: Record<string, unknown>;
+  responseContext: BootstrapResponseContext;
+  eventId: string;
+  requestIndex: number;
+  now: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<boolean> => {
+  const {
+    request,
+    requestedDocumentPayload,
+    responseContext,
+    eventId,
+    requestIndex,
+    now,
+    deps,
+    logs,
+  } = input;
+
+  const granterType = getString(requestedDocumentPayload.granterType);
+  if (granterType !== 'customer') {
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason:
+        'Payment mandate bootstrap is supported here only for customer-granted mandates.',
+    });
+    return true;
+  }
+
+  const queued = await queuePaymentMandateBootstrapPendingAction({
+    request,
+    requestedDocumentPayload,
+    requestingSessionId: responseContext.requestingSessionId,
+    eventId,
+    requestIndex,
+    now,
+    deps,
+    logs,
+  });
+
+  if (!queued.ok) {
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason: queued.reason,
+    });
+    return true;
+  }
+
+  return true;
+};
 
 const resolveExistingDocAllowedBootstrapType = (input: {
   node: BlueNode | null;
@@ -1574,7 +1789,7 @@ export const handleBootstrapRequests = async (input: {
     return;
   }
 
-  for (const request of requests) {
+  for (const [requestIndex, request] of requests.entries()) {
     const normalized = normalizeBootstrapRequest(request.request);
     const bootstrapAssignee = normalized.bootstrapAssignee;
     const responseContext: BootstrapResponseContext = {
@@ -1620,6 +1835,25 @@ export const handleBootstrapRequests = async (input: {
     }
 
     const requestedDocumentNode = request.documentNode;
+
+    if (
+      isPaymentMandateDocumentPayload({
+        node: requestedDocumentNode,
+        payload: requestedDocumentPayload,
+      })
+    ) {
+      await handlePaymentMandateBootstrapRequest({
+        request: normalized,
+        requestedDocumentPayload,
+        responseContext,
+        eventId,
+        requestIndex,
+        now,
+        deps,
+        logs,
+      });
+      continue;
+    }
 
     if (isDeliveryDocumentNode(requestedDocumentNode)) {
       if (!isSynchronyMerchantDoc) {

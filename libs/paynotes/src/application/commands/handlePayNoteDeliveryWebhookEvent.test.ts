@@ -2901,4 +2901,233 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       )
     ).toBe(true);
   });
+
+  it('records pending action for customer payment mandate bootstrap request', async () => {
+    const now = '2024-01-06T10:00:00.000Z';
+    const requestingDocument = buildActivePayNoteDocument();
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: 'api-key',
+        accountId: 'bank-account',
+        baseUrl: 'https://myos.example.com',
+      }),
+      bootstrapDocument: vi.fn(),
+      runDocumentOperation: vi.fn(),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn(),
+    };
+
+    const payNoteDeliveryRepository = {
+      markEventProcessed: vi.fn().mockResolvedValue(true),
+      getDeliveryByPayNoteDocumentId: vi.fn().mockResolvedValue({
+        deliveryId: 'delivery-1',
+        accountNumber: '1234567890',
+        userId: 'user-1',
+        merchantId: 'merchant-1',
+        createdAt: now,
+        updatedAt: now,
+      }),
+      saveDelivery: vi.fn(),
+      getDeliveryByDocumentId: vi.fn(),
+      getDeliveryBySessionId: vi.fn(),
+      getDeliveryByBootstrapSessionId: vi.fn(),
+      getDeliveryByCardTransactionDetails: vi.fn(),
+      getDelivery: vi.fn(),
+      listDeliveriesByUserId: vi.fn(),
+    };
+
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn(),
+      getContractBySessionId: vi.fn().mockResolvedValue({
+        contractId: 'contract-1',
+        typeBlueId: 'type-1',
+        displayName: 'Card Transaction PayNote',
+        sessionId: 'paynote-session-1',
+        documentId: 'paynote-doc-1',
+        userId: 'user-1',
+        pendingActions: [],
+        createdAt: now,
+        updatedAt: now,
+      }),
+      saveContract: vi.fn(),
+      addContractHistoryEntry: vi.fn(),
+    };
+
+    const result = await handlePayNoteDeliveryWebhookEvent(
+      {
+        payload: {
+          id: 'event-mandate-bootstrap-1',
+          object: {
+            sessionId: 'paynote-session-1',
+            document: requestingDocument,
+            emitted: [
+              {
+                type: 'Conversation/Document Bootstrap Requested',
+                bootstrapAssignee: 'guarantorChannel',
+                requestId: 'subscription-payment-mandate',
+                initialMessages: {
+                  defaultMessage:
+                    'Authorize recurring monthly payments for this contract.',
+                },
+                channelBindings: {
+                  granterChannel: { accountId: 'user-1' },
+                  granteeChannel: { accountId: 'merchant-1' },
+                },
+                document: {
+                  type: 'PayNote/Payment Mandate',
+                  granterType: 'customer',
+                  granterId: 'user-1',
+                  granteeType: 'documentId',
+                  granteeId: 'paynote-doc-1',
+                  amountLimit: 12000,
+                  currency: 'USD',
+                  sourceAccount: 'root',
+                },
+              },
+            ],
+          },
+        },
+      },
+      {
+        myOsClient: myOsClient as any,
+        payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+        contractRepository: contractRepository as any,
+        bankingRepository: {} as any,
+        holdRepository: {} as any,
+        bootstrapContextRepository,
+        clock: { now: () => new Date(now) },
+      }
+    );
+
+    expect(result.handled).toBe(true);
+    expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
+    expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingActions: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'paymentMandateBootstrapApproval',
+            status: 'pending',
+            requestId: 'subscription-payment-mandate',
+          }),
+        ]),
+      })
+    );
+    expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'pendingActionRequested',
+        short: 'Payment Mandate approval requested.',
+      })
+    );
+  });
+
+  it('rejects non-customer payment mandate bootstrap requests', async () => {
+    const now = '2024-01-06T11:00:00.000Z';
+    const requestingDocument = buildActivePayNoteDocument();
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: 'api-key',
+        accountId: 'bank-account',
+        baseUrl: 'https://myos.example.com',
+      }),
+      bootstrapDocument: vi.fn(),
+      runDocumentOperation: vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200 }),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn(),
+    };
+
+    const payNoteDeliveryRepository = {
+      markEventProcessed: vi.fn().mockResolvedValue(true),
+      getDeliveryByPayNoteDocumentId: vi.fn().mockResolvedValue({
+        deliveryId: 'delivery-1',
+        accountNumber: '1234567890',
+        userId: 'user-1',
+        merchantId: 'merchant-1',
+        createdAt: now,
+        updatedAt: now,
+      }),
+      saveDelivery: vi.fn(),
+      getDeliveryByDocumentId: vi.fn(),
+      getDeliveryBySessionId: vi.fn(),
+      getDeliveryByBootstrapSessionId: vi.fn(),
+      getDeliveryByCardTransactionDetails: vi.fn(),
+      getDelivery: vi.fn(),
+      listDeliveriesByUserId: vi.fn(),
+    };
+
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn(),
+      getContractBySessionId: vi.fn().mockResolvedValue({
+        contractId: 'contract-1',
+        typeBlueId: 'type-1',
+        displayName: 'Card Transaction PayNote',
+        sessionId: 'paynote-session-1',
+        documentId: 'paynote-doc-1',
+        userId: 'user-1',
+        pendingActions: [],
+        createdAt: now,
+        updatedAt: now,
+      }),
+      saveContract: vi.fn(),
+      addContractHistoryEntry: vi.fn(),
+    };
+
+    const result = await handlePayNoteDeliveryWebhookEvent(
+      {
+        payload: {
+          id: 'event-mandate-bootstrap-merchant-1',
+          object: {
+            sessionId: 'paynote-session-1',
+            document: requestingDocument,
+            emitted: [
+              {
+                type: 'Conversation/Document Bootstrap Requested',
+                bootstrapAssignee: 'guarantorChannel',
+                requestId: 'merchant-payment-mandate',
+                document: {
+                  type: 'PayNote/Payment Mandate',
+                  granterType: 'merchant',
+                  granterId: 'merchant-1',
+                  granteeType: 'documentId',
+                  granteeId: 'paynote-doc-1',
+                  amountLimit: 12000,
+                  currency: 'USD',
+                  sourceAccount: 'root',
+                },
+              },
+            ],
+          },
+        },
+      },
+      {
+        myOsClient: myOsClient as any,
+        payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+        contractRepository: contractRepository as any,
+        bankingRepository: {} as any,
+        holdRepository: {} as any,
+        bootstrapContextRepository,
+        clock: { now: () => new Date(now) },
+      }
+    );
+
+    expect(result.handled).toBe(true);
+    expect(contractRepository.saveContract).not.toHaveBeenCalled();
+    expect(myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'paynote-session-1',
+        operation: 'guarantorUpdate',
+      })
+    );
+    const payload = JSON.stringify(
+      getOperationCall(myOsClient as any, 'guarantorUpdate')?.payload
+    );
+    expect(payload).toContain('Conversation/Document Bootstrap Responded');
+    expect(payload).toContain('rejected');
+  });
 });

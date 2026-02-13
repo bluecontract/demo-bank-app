@@ -2,7 +2,8 @@ export type ContractStatusTimestamps = Record<string, string>;
 
 export type ContractPendingActionType =
   | 'monitoringConsentApproval'
-  | 'chargeMandateApproval';
+  | 'chargeMandateApproval'
+  | 'paymentMandateBootstrapApproval';
 
 export type ContractPendingActionStatus = 'pending' | 'accepted' | 'rejected';
 

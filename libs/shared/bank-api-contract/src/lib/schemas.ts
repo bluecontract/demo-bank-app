@@ -572,9 +572,22 @@ const ChargeMandateContractPendingActionDto = z.object({
   decidedAt: z.string().datetime({ offset: true }).optional(),
 });
 
+const PaymentMandateBootstrapContractPendingActionDto = z.object({
+  actionId: z.string(),
+  type: z.literal('paymentMandateBootstrapApproval'),
+  status: z.enum(['pending', 'accepted', 'rejected']),
+  title: z.string(),
+  summary: z.string().optional(),
+  requestId: z.string().optional(),
+  payload: z.record(z.unknown()).optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  decidedAt: z.string().datetime({ offset: true }).optional(),
+});
+
 export const ContractPendingActionDto = z.discriminatedUnion('type', [
   MonitoringContractPendingActionDto,
   ChargeMandateContractPendingActionDto,
+  PaymentMandateBootstrapContractPendingActionDto,
 ]);
 
 export const ContractPendingActionDecisionRequestDto = z.object({
