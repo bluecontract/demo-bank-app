@@ -29,6 +29,10 @@ type ChargeMandatePayload = {
 
 type PaymentMandateSnapshot = {
   amountLimit?: number;
+  amountReserved?: number;
+  amountCaptured?: number;
+  currency?: string;
+  sourceAccount?: string;
   allowLinkedPayNote?: boolean;
   granteeType?: string;
   granteeId?: string;
@@ -36,6 +40,10 @@ type PaymentMandateSnapshot = {
   granterId?: string;
   expiresAt?: string;
   revokedAt?: string;
+  allowedPaymentCounterparties?: Array<{
+    counterpartyType?: string;
+    counterpartyId?: string;
+  }>;
   allowedPayNotes?: Array<{ typeBlueId?: string; documentBlueId?: string }>;
 };
 
@@ -164,6 +172,7 @@ const applyChargeMandateDecisionToContract = (input: {
   decision: PendingActionDecision;
   decidedAt: string;
   paymentMandateDocumentId?: string;
+  paymentMandateSessionId?: string;
   paymentMandate?: PaymentMandateSnapshot;
 }):
   | { ok: true; contract: ContractRecord; action: ContractPendingAction }
@@ -177,6 +186,7 @@ const applyChargeMandateDecisionToContract = (input: {
     decision,
     decidedAt,
     paymentMandateDocumentId,
+    paymentMandateSessionId,
     paymentMandate,
   } = input;
 
@@ -198,6 +208,11 @@ const applyChargeMandateDecisionToContract = (input: {
     ...(paymentMandateDocumentId
       ? {
           paymentMandateDocumentId,
+        }
+      : {}),
+    ...(paymentMandateSessionId
+      ? {
+          paymentMandateSessionId,
         }
       : {}),
     ...(paymentMandate
@@ -313,6 +328,26 @@ const buildPaymentMandateDocument = (input: {
 const buildPaymentMandateSnapshot = (
   document: Record<string, unknown>
 ): PaymentMandateSnapshot => {
+  const allowedPaymentCounterparties = Array.isArray(
+    document.allowedPaymentCounterparties
+  )
+    ? document.allowedPaymentCounterparties.reduce<
+        Array<{ counterpartyType?: string; counterpartyId?: string }>
+      >((acc, item) => {
+        const itemRecord = toRecord(item);
+        if (!itemRecord) {
+          return acc;
+        }
+        const counterpartyType = getString(itemRecord.counterpartyType);
+        const counterpartyId = getString(itemRecord.counterpartyId);
+        if (!counterpartyType || !counterpartyId) {
+          return acc;
+        }
+        acc.push({ counterpartyType, counterpartyId });
+        return acc;
+      }, [])
+    : undefined;
+
   const allowedPayNotes = Array.isArray(document.allowedPayNotes)
     ? document.allowedPayNotes.reduce<
         Array<{ typeBlueId?: string; documentBlueId?: string }>
@@ -333,6 +368,10 @@ const buildPaymentMandateSnapshot = (
 
   return {
     amountLimit: getNumber(document.amountLimit),
+    amountReserved: getNumber(document.amountReserved),
+    amountCaptured: getNumber(document.amountCaptured),
+    currency: getString(document.currency),
+    sourceAccount: getString(document.sourceAccount),
     allowLinkedPayNote: getBoolean(document.allowLinkedPayNote),
     granteeType: getString(document.granteeType),
     granteeId: getString(document.granteeId),
@@ -340,6 +379,7 @@ const buildPaymentMandateSnapshot = (
     granterId: getString(document.granterId),
     expiresAt: getString(document.expiresAt),
     revokedAt: getString(document.revokedAt),
+    ...(allowedPaymentCounterparties ? { allowedPaymentCounterparties } : {}),
     ...(allowedPayNotes ? { allowedPayNotes } : {}),
   };
 };
@@ -471,6 +511,7 @@ const resolveDecisionOutcome = async (input: {
     }
 
     let paymentMandateDocumentId: string | undefined;
+    let paymentMandateSessionId: string | undefined;
     let paymentMandateSnapshot: PaymentMandateSnapshot | undefined;
     if (input.decision === 'accepted') {
       const mandateDocumentResult = buildPaymentMandateDocument({
@@ -506,6 +547,9 @@ const resolveDecisionOutcome = async (input: {
         };
       }
 
+      paymentMandateSessionId = getString(
+        toRecord(bootstrapResponse.body)?.sessionId
+      );
       paymentMandateDocumentId = await resolveMandateDocumentIdFromBootstrap({
         myOsClient: input.myOsClient,
         bootstrapBody: bootstrapResponse.body,
@@ -529,6 +573,7 @@ const resolveDecisionOutcome = async (input: {
       decision: input.decision,
       decidedAt: input.decidedAt,
       paymentMandateDocumentId,
+      paymentMandateSessionId,
       paymentMandate: paymentMandateSnapshot,
     });
     if (!decisionResult.ok) {

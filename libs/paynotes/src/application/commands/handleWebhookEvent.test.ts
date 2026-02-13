@@ -1642,9 +1642,60 @@ describe('handleWebhookEvent', () => {
 
     const runOperationCalls = (
       deps.myOsClient.runDocumentOperation as unknown as {
-        mock: { calls: Array<Array<{ payload?: unknown }>> };
+        mock: {
+          calls: Array<
+            Array<{
+              operation?: string;
+              sessionId?: string;
+              payload?: unknown;
+            }>
+          >;
+        };
       }
     ).mock.calls;
+    const authorizeMandateCall = runOperationCalls.find(
+      call => call[0]?.operation === 'authorizeSpend'
+    );
+    expect(authorizeMandateCall?.[0]).toEqual(
+      expect.objectContaining({
+        sessionId: 'mandate-session-1',
+      })
+    );
+    const authorizePayloadSimple = blue.nodeToJson(
+      blue.jsonValueToNode(authorizeMandateCall?.[0]?.payload),
+      'simple'
+    ) as Record<string, unknown>;
+    expect(authorizePayloadSimple).toEqual(
+      expect.objectContaining({
+        type: expect.objectContaining({
+          blueId: resolveTypeBlueId(
+            'PayNote/Mandate Spend Authorization Requested'
+          ),
+        }),
+        chargeAttemptId: 'paynote-card-charge-attempt:doc-1:event-1:0',
+      })
+    );
+    const settleMandateCall = runOperationCalls.find(
+      call => call[0]?.operation === 'settleSpend'
+    );
+    expect(settleMandateCall?.[0]).toEqual(
+      expect.objectContaining({
+        sessionId: 'mandate-session-1',
+      })
+    );
+    const settlePayloadSimple = blue.nodeToJson(
+      blue.jsonValueToNode(settleMandateCall?.[0]?.payload),
+      'simple'
+    ) as Record<string, unknown>;
+    expect(settlePayloadSimple).toEqual(
+      expect.objectContaining({
+        type: expect.objectContaining({
+          blueId: resolveTypeBlueId('PayNote/Mandate Spend Settled'),
+        }),
+        chargeAttemptId: 'paynote-card-charge-attempt:doc-1:event-1:0',
+        status: 'succeeded',
+      })
+    );
     expectRunOperationIncludesEventType(
       runOperationCalls,
       'PayNote/Card Charge Responded'
@@ -2015,6 +2066,7 @@ describe('handleWebhookEvent', () => {
           requestId: 'charge-lag-1',
           payload: {
             paymentMandateDocumentId: 'mandate-doc-lag-1',
+            paymentMandateSessionId: 'mandate-session-lag-1',
             paymentMandate: {
               amountLimit: 10_000,
               granteeType: 'documentId',
