@@ -945,6 +945,92 @@ describe('handleWebhookEvent', () => {
     expect(JSON.stringify(simpleEvents)).toContain('amountCaptured');
   });
 
+  it('processes transfer reserve request without payment mandate gating', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Reserve-only PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Reserve Funds Requested',
+              requestId: 'reserve-no-mandate-1',
+              amount: 2500,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(deps.bankingFacade.reserveFunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdId: 'doc-1',
+        payerAccountNumber: '1234567890',
+        counterpartyAccountNumber: '9876543210',
+        amountMinor: 2500,
+        idempotencyKey: 'paynote-transfer:reserve-funds:event-1:0',
+        payNoteDocumentId: 'doc-1',
+      })
+    );
+
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: {
+          calls: Array<
+            Array<{
+              operation?: string;
+              payload?: unknown;
+            }>
+          >;
+        };
+      }
+    ).mock.calls;
+
+    expect(
+      runOperationCalls.some(
+        call =>
+          call[0]?.operation === 'authorizeSpend' ||
+          call[0]?.operation === 'settleSpend'
+      )
+    ).toBe(false);
+
+    expect(
+      runOperationCalls.some(call =>
+        runOperationPayloadContainsEventType(
+          call[0]?.payload,
+          'PayNote/Card Charge Responded'
+        )
+      )
+    ).toBe(false);
+
+    const payload = runOperationCalls.at(-1)?.[0]?.payload;
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Funds Reserved');
+    const simpleEvents = parseGuarantorUpdatePayloadEvents(payload);
+    expect(JSON.stringify(simpleEvents)).toContain('reserve-no-mandate-1');
+    expect(JSON.stringify(simpleEvents)).toContain('amountReserved');
+  });
+
   it('reports capture failed via guarantorUpdate when capture immediately transfer fails', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     fetchEvent.mockResolvedValueOnce({
