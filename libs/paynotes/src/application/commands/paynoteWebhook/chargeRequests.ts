@@ -318,7 +318,6 @@ type ParsedPaymentMandate = {
 type AcceptedChargeMandatePendingActionPayload = {
   paymentMandateDocumentId?: string;
   paymentMandateSessionId?: string;
-  paymentMandate?: Record<string, unknown>;
 };
 
 const buildParsedChargeRequest = (input: {
@@ -512,46 +511,11 @@ const parsePaymentMandate = (value: unknown): ParsedPaymentMandate | null => {
   }
 };
 
-const parsePaymentMandateSnapshot = (
-  value: unknown
-): ParsedPaymentMandate | null => {
-  const record = toSimpleRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  return {
-    amountLimit: toNonNegativeInteger(record.amountLimit),
-    amountReserved: toNonNegativeInteger(record.amountReserved),
-    amountCaptured: toNonNegativeInteger(record.amountCaptured),
-    currency: getString(record.currency),
-    sourceAccount: getString(record.sourceAccount),
-    allowLinkedPayNote:
-      typeof record.allowLinkedPayNote === 'boolean'
-        ? record.allowLinkedPayNote
-        : undefined,
-    granteeType: getString(record.granteeType),
-    granteeId: getString(record.granteeId),
-    granterType: getString(record.granterType),
-    granterId: getString(record.granterId),
-    expiresAt: resolveIsoTimestamp(record.expiresAt),
-    revokedAt: resolveIsoTimestamp(record.revokedAt),
-    allowedPaymentCounterparties: parseAllowedPaymentCounterparties(
-      record.allowedPaymentCounterparties
-    ),
-    allowedPayNotes: parseAllowedPayNotes(record.allowedPayNotes),
-    chargeAttempts: parseMandateChargeAttempts(record.chargeAttempts),
-  };
-};
-
 const resolveLocalPaymentMandateFromPendingActions = async (input: {
   context: ChargeRequestContext;
-  request: ParsedChargeRequest;
   mandateDocumentId: string;
 }): Promise<
-  | { ok: true; mandate: ParsedPaymentMandate; mandateSessionId?: string }
-  | { ok: false; reason: string }
-  | null
+  { ok: true; mandateSessionId?: string } | { ok: false; reason: string } | null
 > => {
   const contract =
     await input.context.deps.contractRepository.getContractBySessionId(
@@ -581,23 +545,9 @@ const resolveLocalPaymentMandateFromPendingActions = async (input: {
   const payload = toSimpleRecord(
     matchedAction.payload
   ) as AcceptedChargeMandatePendingActionPayload | null;
-  const snapshot = parsePaymentMandateSnapshot(payload?.paymentMandate);
-  if (!snapshot) {
-    return null;
-  }
-
-  const scopeValidation = validatePaymentMandateScope({
-    mandate: snapshot,
-    context: input.context,
-    request: input.request,
-  });
-  if (!scopeValidation.ok) {
-    return scopeValidation;
-  }
 
   return {
     ok: true,
-    mandate: snapshot,
     mandateSessionId: getString(payload?.paymentMandateSessionId),
   };
 };
@@ -832,7 +782,6 @@ const validatePaymentMandate = async (input: {
 
   const localMandate = await resolveLocalPaymentMandateFromPendingActions({
     context: input.context,
-    request: input.request,
     mandateDocumentId,
   });
   if (localMandate && !localMandate.ok) {
@@ -851,13 +800,6 @@ const validatePaymentMandate = async (input: {
   }
 
   if (!mandateSessionId) {
-    if (localMandate?.ok) {
-      return {
-        ok: true,
-        mandateDocumentId,
-        mandate: localMandate.mandate,
-      };
-    }
     return {
       ok: false,
       reason: 'Unable to resolve payment mandate session id.',
@@ -867,14 +809,6 @@ const validatePaymentMandate = async (input: {
   const mandateDocumentResult =
     await input.context.deps.myOsClient.fetchDocument(mandateSessionId);
   if (mandateDocumentResult.kind !== 'success') {
-    if (localMandate?.ok) {
-      return {
-        ok: true,
-        mandateDocumentId,
-        mandateSessionId,
-        mandate: localMandate.mandate,
-      };
-    }
     return {
       ok: false,
       reason: 'Unable to load payment mandate document.',
@@ -883,14 +817,6 @@ const validatePaymentMandate = async (input: {
 
   const mandateDocument = mandateDocumentResult.document.document;
   if (!mandateDocument) {
-    if (localMandate?.ok) {
-      return {
-        ok: true,
-        mandateDocumentId,
-        mandateSessionId,
-        mandate: localMandate.mandate,
-      };
-    }
     return {
       ok: false,
       reason: 'Payment mandate document payload is missing.',
@@ -899,14 +825,6 @@ const validatePaymentMandate = async (input: {
 
   const mandate = parsePaymentMandate(mandateDocument);
   if (!mandate) {
-    if (localMandate?.ok) {
-      return {
-        ok: true,
-        mandateDocumentId,
-        mandateSessionId,
-        mandate: localMandate.mandate,
-      };
-    }
     return {
       ok: false,
       reason: 'Invalid payment mandate document payload.',
@@ -1041,7 +959,6 @@ const runMandateAuthorization = async (input: {
   direction: ChargeDirection;
   mode: ChargeMode;
   amountMinor: number;
-  mandateDocumentId: string;
   mandateSessionId?: string;
   chargeAttemptId: string;
 }): Promise<{ ok: true } | { ok: false; reason: string }> => {
@@ -1054,27 +971,15 @@ const runMandateAuthorization = async (input: {
     direction,
     mode,
     amountMinor,
-    mandateDocumentId,
     mandateSessionId,
     chargeAttemptId,
   } = input;
 
   if (!mandateSessionId) {
-    context.logs.push({
-      level: 'warn',
-      message:
-        'Skipping mandate authorizeSpend operation (missing mandate session id)',
-      context: {
-        eventId: context.eventId,
-        payNoteDocumentId: context.payNoteDocumentId,
-        sessionId: context.sessionId,
-        eventType,
-        requestId: requestId ?? null,
-        mandateDocumentId,
-        chargeAttemptId,
-      },
-    });
-    return { ok: true };
+    return {
+      ok: false,
+      reason: 'Unable to resolve payment mandate session id.',
+    };
   }
 
   const credentials = await resolveCredentials({
@@ -1170,7 +1075,7 @@ const runMandateAuthorization = async (input: {
   context.logs.push({
     level: 'warn',
     message:
-      'Payment mandate authorization status was not observed after authorizeSpend; continuing with validated snapshot',
+      'Payment mandate authorization status was not observed after authorizeSpend; rejecting request',
     context: {
       eventId: context.eventId,
       payNoteDocumentId: context.payNoteDocumentId,
@@ -1184,7 +1089,12 @@ const runMandateAuthorization = async (input: {
     },
   });
 
-  return { ok: true };
+  return {
+    ok: false,
+    reason:
+      fallbackReason ??
+      'Payment mandate authorization status was not confirmed.',
+  };
 };
 
 type ChargeExecutionSuccess = {
@@ -1415,6 +1325,23 @@ const queueChargeMandatePendingAction = async (input: {
   );
   if (existingAction?.status === 'pending') {
     return true;
+  }
+  if (existingAction) {
+    context.logs.push({
+      level: 'warn',
+      message:
+        'Skipped creating mandate pending action because request already has a final decision',
+      context: {
+        eventId: context.eventId,
+        payNoteDocumentId: context.payNoteDocumentId,
+        sessionId: context.sessionId,
+        eventType,
+        eventIndex,
+        actionId,
+        existingStatus: existingAction.status,
+      },
+    });
+    return false;
   }
 
   const createdAt = context.deps.clock.now().toISOString();
@@ -2617,7 +2544,6 @@ export const handleChargeRequestEvents = async (input: {
       direction,
       mode,
       amountMinor: request.amountMinor,
-      mandateDocumentId: mandateValidation.mandateDocumentId,
       mandateSessionId: mandateValidation.mandateSessionId,
       chargeAttemptId,
     });
