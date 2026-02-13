@@ -3359,6 +3359,117 @@ describe('handleWebhookEvent', () => {
     );
   });
 
+  it.each([
+    {
+      name: 'linked capture-immediately',
+      eventType: 'PayNote/Linked Card Charge and Capture Immediately Requested',
+      eventId: 'event-linked-immediate-1',
+      requestId: 'linked-local-immediate-1',
+      expectedPayerAccountNumber: '4444444444',
+      expectedCounterpartyAccountNumber: '1234567890',
+      expectedCaptureUserId: 'merchant-owner',
+    },
+    {
+      name: 'reverse capture-immediately',
+      eventType:
+        'PayNote/Reverse Card Charge and Capture Immediately Requested',
+      eventId: 'event-reverse-immediate-1',
+      requestId: 'reverse-local-immediate-1',
+      expectedPayerAccountNumber: '1234567890',
+      expectedCounterpartyAccountNumber: '4444444444',
+      expectedCaptureUserId: 'customer-owner',
+    },
+  ])(
+    'uses local payer/payee roles for $name in merchant-to-customer paynote',
+    async scenario => {
+      const { deps, fetchEvent, fetchDocument } = createDependencies();
+      const { mandateDocumentId } = attachPaymentMandate({
+        deps,
+        fetchDocument,
+        payNoteDocumentId: 'voucher-doc-1',
+      });
+
+      deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+        payNoteDocumentId: 'voucher-doc-1',
+        accountNumber: '1234567890',
+        userId: 'user-123',
+        merchantId: 'merchant-123',
+        holdId: 'root-hold-1',
+        payerAccountNumber: '4444444444',
+        payeeAccountNumber: '1234567890',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+      (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue(
+        null
+      );
+      deps.bankingFacade.getAccountByNumber = vi
+        .fn()
+        .mockImplementation(async accountNumber => {
+          if (accountNumber === '4444444444') {
+            return {
+              id: 'merchant-credit-line-id',
+              accountNumber,
+              ownerUserId: 'merchant-owner',
+            };
+          }
+          return {
+            id: 'customer-account-id',
+            accountNumber,
+            ownerUserId: 'customer-owner',
+          };
+        });
+      deps.bankingFacade.captureHold = vi.fn().mockResolvedValue({
+        holdId: `paynote-card-charge:voucher-doc-1:${scenario.eventId}:0`,
+        relatedTransactionId: `txn-${scenario.eventId}`,
+      } as any);
+
+      fetchEvent.mockResolvedValueOnce({
+        kind: 'success',
+        payload: {
+          object: {
+            sessionId: 'session-1',
+            document: {
+              type: 'PayNote/Merchant To Customer PayNote',
+            },
+            emitted: [
+              toOfficialBlue({
+                type: scenario.eventType,
+                requestId: scenario.requestId,
+                amount: 900,
+                paymentMandateDocumentId: mandateDocumentId,
+              }),
+            ],
+          },
+        },
+      } as MyOsFetchEventResult);
+
+      const result = await handleWebhookEvent(
+        { eventId: scenario.eventId },
+        deps
+      );
+
+      expect(result.note).toBe('');
+      expect(deps.bankingFacade.reserveFunds).toHaveBeenCalledWith(
+        expect.objectContaining({
+          holdId: `paynote-card-charge:voucher-doc-1:${scenario.eventId}:0`,
+          payerAccountNumber: scenario.expectedPayerAccountNumber,
+          counterpartyAccountNumber: scenario.expectedCounterpartyAccountNumber,
+          amountMinor: 900,
+        })
+      );
+      expect(deps.bankingFacade.captureHold).toHaveBeenCalledWith(
+        expect.objectContaining({
+          holdId: `paynote-card-charge:voucher-doc-1:${scenario.eventId}:0`,
+          userId: scenario.expectedCaptureUserId,
+          counterpartyAccountNumber: scenario.expectedCounterpartyAccountNumber,
+          idempotencyKey: `paynote-card-charge:capture:${scenario.eventId}:0`,
+          payNoteDocumentId: 'voucher-doc-1',
+        })
+      );
+    }
+  );
+
   it('persists hold context across repeated linked and reverse charge cycles', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     const { mandateDocumentId } = attachPaymentMandate({
