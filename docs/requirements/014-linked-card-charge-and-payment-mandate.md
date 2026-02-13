@@ -90,6 +90,35 @@ Mandate usage limits MUST be validated and updated from mandate document state:
 
 Settlement retries MUST be idempotent and MUST NOT double-apply deltas.
 
+### FR-7a Payment Mandate state contract
+
+`PayNote/Payment Mandate` MUST be modeled with:
+
+- cumulative totals: `amountLimit`, `amountReserved`, `amountCaptured`,
+- per-attempt state: `chargeAttempts[chargeAttemptId]`.
+
+The implementation MUST treat `chargeAttempts` as the canonical per-attempt
+state store (no split per-attempt maps in bank state).
+
+### FR-7b Policy lists and source account semantics
+
+- `allowedPayNotes` missing/empty MUST mean wildcard (any PayNote allowed).
+- `allowedPaymentCounterparties` missing/empty MUST mean wildcard (any
+  counterparty allowed).
+- `sourceAccount` MUST support `"root"` and concrete account number values.
+- For current linked/reverse card charge flow, bank MUST support `"root"` and
+  reject unsupported source-account modes with explicit response reason.
+
+### FR-7c Mandate operations
+
+Payment Mandate documents used in this flow MUST expose operations:
+
+- `authorizeSpend` (request type
+  `PayNote/Mandate Spend Authorization Requested`),
+- `settleSpend` (request type `PayNote/Mandate Spend Settled`).
+
+Bank MUST call these operations for mandate-gated charge flow.
+
 ### FR-8 Linked PayNote startup path
 
 If request includes `paynote` and charge succeeds:
@@ -130,6 +159,13 @@ contracts.
 
 `Conversation/Customer Consent` integration is deferred to a later phase and is
 not a release blocker for this iteration.
+
+### FR-14 Mandate bootstrap lag fallback behavior
+
+If mandate doc bootstrap metadata exists but session linkage is temporarily
+unavailable, bank MAY use accepted pending-action snapshot to validate mandate
+scope for this request and continue charge processing, while logging that
+session-level mandate orchestration could not be executed.
 
 ## Non-functional Requirements
 

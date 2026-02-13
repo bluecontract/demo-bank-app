@@ -80,6 +80,37 @@ Direction:
 - bank sends `PayNote/Mandate Spend Settled` with final deltas,
 - mandate updates its own usage state and emits settlement response.
 
+### 5) What is the mandate state model we standardize on?
+
+Use one cohesive runtime map per attempt, keyed by `chargeAttemptId`:
+
+- mandate keeps totals in `amountReserved` and `amountCaptured`,
+- mandate keeps per-attempt state in `chargeAttempts[chargeAttemptId]`,
+- no split dictionaries per concern (for example separate maps for reasons,
+  statuses, amounts).
+
+This keeps correlation deterministic and avoids cross-map drift.
+
+### 6) How are wildcard policies represented?
+
+For both lists below, missing/empty list means wildcard:
+
+- `allowedPayNotes`: any linked PayNote is allowed,
+- `allowedPaymentCounterparties`: any counterparty is allowed.
+
+When list entries exist, each entry is explicit and matched as-is.
+
+### 7) How is source account policy expressed?
+
+Mandate uses one field:
+
+- `sourceAccount = "root"` or concrete account number.
+
+For current linked/reverse card charge scope:
+
+- bank supports `root` source policy,
+- account-number source selection can be extended later.
+
 ## Scope for this iteration
 
 - Add explicit linked/reverse charge request flow.

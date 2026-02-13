@@ -65,6 +65,26 @@ Notes:
 
 `chargeAttemptId` is the mandatory correlation key for this handshake.
 
+## Payment Mandate runtime model
+
+`PayNote/Payment Mandate` in this flow uses:
+
+- identity/scope: `granterType`, `granterId`, `granteeType`, `granteeId`,
+- cumulative totals: `amountLimit`, `amountReserved`, `amountCaptured`,
+- policy:
+  - `allowLinkedPayNote`,
+  - `allowedPayNotes` (missing list => wildcard),
+  - `allowedPaymentCounterparties` (missing list => wildcard),
+  - `sourceAccount` (`root` or concrete account number),
+- runtime attempt state:
+  - `chargeAttempts[chargeAttemptId]` containing authorization + settlement
+    fields.
+
+Mandate operations used by bank:
+
+- `authorizeSpend` for pre-execution decision,
+- `settleSpend` for post-execution reconciliation.
+
 ## Processing pipeline
 
 ### 1) Classify and validate event
@@ -86,6 +106,10 @@ Notes:
 5. If mandate is missing/invalid:
    - create pending action or reject (policy-driven),
    - emit corresponding charge response.
+6. If mandate session linkage is temporarily unavailable but accepted
+   pending-action mandate snapshot exists:
+   - validate against snapshot,
+   - continue with explicit warning log (operationally visible fallback).
 
 ### 3) Execute charge
 
@@ -117,7 +141,7 @@ For each accepted request, persist causation metadata:
 - linked paynote session/document id (if started),
 - dedupe key `(webhookEventId, emittedEventIndex)`.
 
-Mandate document stores per-attempt runtime state under:
+Mandate document stores per-attempt runtime state under a single map:
 
 - `chargeAttempts[chargeAttemptId]`:
   - authorization decision and reason,
