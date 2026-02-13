@@ -1031,6 +1031,99 @@ describe('handleWebhookEvent', () => {
     expect(JSON.stringify(simpleEvents)).toContain('amountReserved');
   });
 
+  it('processes transfer capture request without payment mandate gating', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      holdId: 'hold-1',
+      accountNumber: '1234567890',
+      transactionId: 'txn-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Capture-only PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Capture Funds Requested',
+              requestId: 'capture-no-mandate-1',
+              amount: 1400,
+              paymentMandateDocumentId: 'mandate-ignored-in-transfer-flow',
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+          payeeAccountNumber: { value: '9876543210' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(deps.bankingFacade.captureHold).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdId: 'hold-1',
+        amountMinor: 1400,
+        userId: 'user-123',
+        payNoteDocumentId: 'doc-1',
+      })
+    );
+
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: {
+          calls: Array<
+            Array<{
+              operation?: string;
+              payload?: unknown;
+            }>
+          >;
+        };
+      }
+    ).mock.calls;
+
+    expect(
+      runOperationCalls.some(
+        call =>
+          call[0]?.operation === 'authorizeSpend' ||
+          call[0]?.operation === 'settleSpend'
+      )
+    ).toBe(false);
+
+    expect(
+      runOperationCalls.some(call =>
+        runOperationPayloadContainsEventType(
+          call[0]?.payload,
+          'PayNote/Card Charge Responded'
+        )
+      )
+    ).toBe(false);
+
+    const payload = runOperationCalls.at(-1)?.[0]?.payload;
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Funds Captured');
+    const simpleEvents = parseGuarantorUpdatePayloadEvents(payload);
+    expect(JSON.stringify(simpleEvents)).toContain('capture-no-mandate-1');
+    expect(JSON.stringify(simpleEvents)).toContain('amountCaptured');
+  });
+
   it('reports capture failed via guarantorUpdate when capture immediately transfer fails', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     fetchEvent.mockResolvedValueOnce({
