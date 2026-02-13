@@ -2260,6 +2260,196 @@ describe('handleWebhookEvent', () => {
     );
   });
 
+  it('persists hold context across repeated linked and reverse charge cycles', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    const { mandateDocumentId } = attachPaymentMandate({
+      deps,
+      fetchDocument,
+      payNoteDocumentId: 'doc-1',
+    });
+
+    let persistedPayNote: Record<string, unknown> = {
+      payNoteDocumentId: 'doc-1',
+      deliveryId: 'delivery-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi
+      .fn()
+      .mockImplementation(async () => persistedPayNote);
+    deps.payNoteRepository.savePayNote = vi
+      .fn()
+      .mockImplementation(async record => {
+        persistedPayNote = { ...record };
+      });
+
+    let persistedContract: Record<string, unknown> | null = null;
+    const getContractByDocumentIdMock = deps.contractRepository
+      .getContractByDocumentId as unknown as ReturnType<typeof vi.fn>;
+    const baseGetContractByDocumentIdImpl =
+      getContractByDocumentIdMock.getMockImplementation();
+    deps.contractRepository.getContractByDocumentId = vi
+      .fn()
+      .mockImplementation(async documentId => {
+        if (documentId === 'doc-1') {
+          return persistedContract;
+        }
+        if (baseGetContractByDocumentIdImpl) {
+          return baseGetContractByDocumentIdImpl(documentId);
+        }
+        return null;
+      });
+    deps.contractRepository.saveContract = vi
+      .fn()
+      .mockImplementation(async contract => {
+        persistedContract = contract;
+      });
+
+    (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue({
+      deliveryId: 'delivery-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '123456789012',
+        systemTraceAuditNumber: '654321',
+        transmissionDateTime: '0101123456',
+        authorizationCode: 'ABC123',
+      },
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    deps.bankingFacade.getAccountByNumber = vi
+      .fn()
+      .mockImplementation(async accountNumber => {
+        if (accountNumber === '4444444444') {
+          return {
+            id: 'merchant-credit-line-id',
+            accountNumber,
+            ownerUserId: 'merchant-owner',
+          };
+        }
+        return {
+          id: 'customer-account-id',
+          accountNumber,
+          ownerUserId: 'customer-owner',
+        };
+      });
+
+    deps.bankingFacade.reserveFunds = vi
+      .fn()
+      .mockResolvedValueOnce({ holdId: 'ignored-reserve-hold-1' })
+      .mockResolvedValueOnce({ holdId: 'ignored-reserve-hold-2' });
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/Card Transaction PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Linked Card Charge Requested',
+              requestId: 'linked-cycle-1',
+              amount: 1100,
+              paymentMandateDocumentId: mandateDocumentId,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/Card Transaction PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Reverse Card Charge Requested',
+              requestId: 'reverse-cycle-2',
+              amount: 700,
+              paymentMandateDocumentId: mandateDocumentId,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    const first = await handleWebhookEvent({ eventId: 'event-linked-1' }, deps);
+    const second = await handleWebhookEvent(
+      { eventId: 'event-reverse-2' },
+      deps
+    );
+
+    expect(first.note).toBe('');
+    expect(second.note).toBe('');
+
+    expect(deps.bankingFacade.reserveFunds).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        holdId: 'paynote-card-charge:doc-1:event-linked-1:0',
+        payerAccountNumber: '1234567890',
+        counterpartyAccountNumber: '4444444444',
+        amountMinor: 1100,
+      })
+    );
+    expect(deps.bankingFacade.reserveFunds).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        holdId: 'paynote-card-charge:doc-1:event-reverse-2:0',
+        payerAccountNumber: '4444444444',
+        counterpartyAccountNumber: '1234567890',
+        amountMinor: 700,
+      })
+    );
+
+    const savedPayNotes = (
+      deps.payNoteRepository.savePayNote as unknown as {
+        mock: { calls: Array<Array<Record<string, unknown>>> };
+      }
+    ).mock.calls.map(call => call[0]);
+    expect(
+      savedPayNotes.some(
+        record => record.holdId === 'paynote-card-charge:doc-1:event-linked-1:0'
+      )
+    ).toBe(true);
+    expect(
+      savedPayNotes.some(
+        record =>
+          record.holdId === 'paynote-card-charge:doc-1:event-reverse-2:0'
+      )
+    ).toBe(true);
+
+    expect(deps.contractRepository.saveContract).toHaveBeenCalled();
+    const lastSavedContract = (
+      deps.contractRepository.saveContract as unknown as {
+        mock: { calls: Array<Array<Record<string, unknown>>> };
+      }
+    ).mock.calls.at(-1)?.[0];
+    expect(lastSavedContract).toEqual(
+      expect.objectContaining({
+        relatedHoldIds: expect.arrayContaining([
+          'paynote-card-charge:doc-1:event-linked-1:0',
+          'paynote-card-charge:doc-1:event-reverse-2:0',
+        ]),
+      })
+    );
+    expect(
+      (lastSavedContract?.relatedHoldIds as string[] | undefined)?.length
+    ).toBe(2);
+  });
+
   it('handles linked card charge request for chained paynote without direct delivery record', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     const { mandateDocumentId } = attachPaymentMandate({
@@ -2729,6 +2919,184 @@ describe('handleWebhookEvent', () => {
         customerChannelKey: 'payerChannel',
         requestingSessionId: 'session-1',
         requestId: 'charge-link-1',
+      })
+    );
+
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls;
+    expectRunOperationIncludesEventType(
+      runOperationCalls,
+      'PayNote/Linked PayNote Start Responded'
+    );
+    expectRunOperationIncludesEventType(
+      runOperationCalls,
+      'PayNote/Linked PayNote Started'
+    );
+  });
+
+  it('starts linked paynote for chained paynote using root hold transaction details', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      holdId: 'root-hold-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue(null);
+    deps.holdRepository.getHold = vi.fn().mockImplementation(async holdId => {
+      if (holdId === 'root-hold-1') {
+        return {
+          holdId,
+          cardTransactionDetails: {
+            retrievalReferenceNumber: '123456789012',
+            systemTraceAuditNumber: '654321',
+            transmissionDateTime: '0101123456',
+            authorizationCode: 'ABC123',
+          },
+        };
+      }
+      return null;
+    });
+    deps.myOsClient.bootstrapDocument = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: { sessionId: 'delivery-session-chain-1' },
+    });
+    deps.myOsClient.runDocumentOperation = vi
+      .fn()
+      .mockImplementation(async input => {
+        if (input.operation === 'acceptPayNote') {
+          return {
+            ok: true,
+            status: 200,
+            body: { payNoteSessionId: 'linked-paynote-chain-session-1' },
+          };
+        }
+        return { ok: true, status: 200 };
+      });
+    fetchDocument.mockImplementation(async sessionId => {
+      if (sessionId === 'linked-paynote-chain-session-1') {
+        return {
+          kind: 'success',
+          document: {
+            documentId: 'child-chain-doc-1',
+            sessionId: 'linked-paynote-chain-session-1',
+            document: { type: 'PayNote/PayNote' },
+          },
+        } as MyOsFetchDocumentResult;
+      }
+      return {
+        kind: 'success',
+        document: {
+          documentId: 'doc-1',
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            contracts: {
+              payerChannel: {
+                type: 'MyOS/MyOS Timeline Channel',
+                accountId: 'customer-account-id',
+              },
+              payeeChannel: {
+                type: 'MyOS/MyOS Timeline Channel',
+                accountId: 'merchant-account-id',
+              },
+              guarantorChannel: {
+                type: 'MyOS/MyOS Timeline Channel',
+                accountId: 'account-id',
+              },
+            },
+          },
+        },
+      } as MyOsFetchDocumentResult;
+    });
+    deps.contractRepository.getContractBySessionId = vi.fn().mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      documentId: 'doc-1',
+      customerChannelKey: 'payerChannel',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    const { mandateDocumentId } = attachPaymentMandate({
+      deps,
+      fetchDocument,
+      payNoteDocumentId: 'doc-1',
+    });
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            contracts: {
+              payerChannel: {
+                type: 'MyOS/MyOS Timeline Channel',
+                accountId: 'customer-account-id',
+              },
+              payeeChannel: {
+                type: 'MyOS/MyOS Timeline Channel',
+                accountId: 'merchant-account-id',
+              },
+              guarantorChannel: {
+                type: 'MyOS/MyOS Timeline Channel',
+                accountId: 'account-id',
+              },
+            },
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Linked Card Charge Requested',
+              requestId: 'charge-chain-linked-1',
+              amount: 1300,
+              paymentMandateDocumentId: mandateDocumentId,
+              paynote: {
+                type: 'PayNote/PayNote',
+                name: 'Chained linked voucher',
+                currency: 'USD',
+                amount: {
+                  total: 1,
+                },
+                contracts: {
+                  payerChannel: {
+                    type: 'MyOS/MyOS Timeline Channel',
+                  },
+                  payeeChannel: {
+                    type: 'MyOS/MyOS Timeline Channel',
+                  },
+                  guarantorChannel: {
+                    type: 'MyOS/MyOS Timeline Channel',
+                  },
+                },
+              },
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.holdRepository.getHold).toHaveBeenCalledWith('root-hold-1');
+    expect(deps.myOsClient.bootstrapDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          document: expect.objectContaining({
+            type: 'PayNote/PayNote Delivery',
+          }),
+        }),
       })
     );
 

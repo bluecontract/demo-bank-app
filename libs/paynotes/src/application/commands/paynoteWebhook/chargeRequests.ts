@@ -34,6 +34,8 @@ import type {
   WebhookEventObject,
 } from './types';
 import { getString, toSimpleRecord } from './utils';
+import { upsertPayNoteContract } from './records';
+import { trace } from './logging';
 
 const CARD_CHARGE_RESPONDED_EVENT_NAME = 'PayNote/Card Charge Responded';
 const CARD_CHARGE_COMPLETED_EVENT_NAME = 'PayNote/Card Charge Completed';
@@ -1287,6 +1289,52 @@ const executeCardCharge = async (input: {
   }
 };
 
+const persistChargeExecutionArtifacts = async (input: {
+  context: ChargeRequestContext;
+  eventType: ChargeRequestEventType;
+  chargeResult: { holdId: string; transactionId?: string };
+}): Promise<void> => {
+  const { context, eventType, chargeResult } = input;
+  const now = context.deps.clock.now().toISOString();
+
+  context.updatedRecord.holdId = chargeResult.holdId;
+  if (chargeResult.transactionId) {
+    context.updatedRecord.transactionId = chargeResult.transactionId;
+  }
+  context.updatedRecord.updatedAt = now;
+
+  await context.deps.payNoteRepository.savePayNote({
+    ...context.updatedRecord,
+    updatedAt: now,
+  });
+
+  await upsertPayNoteContract({
+    updatedRecord: context.updatedRecord,
+    deliveryRecord: context.deliveryRecord,
+    sessionId: context.sessionId,
+    payNoteDocumentId: context.payNoteDocumentId,
+    eventType,
+    eventEpoch: context.eventObject?.epoch,
+    triggerEvent: context.eventObject?.triggeredBy,
+    emittedEvents: context.eventObject?.emitted,
+    relatedHoldIds: [chargeResult.holdId],
+    relatedTransactionIds: chargeResult.transactionId
+      ? [chargeResult.transactionId]
+      : undefined,
+    now,
+    deps: context.deps,
+  });
+
+  trace(context.logs, 'Persisted card charge artifacts for PayNote contract', {
+    eventId: context.eventId,
+    payNoteDocumentId: context.payNoteDocumentId,
+    sessionId: context.sessionId,
+    eventType,
+    holdId: chargeResult.holdId,
+    transactionId: chargeResult.transactionId ?? null,
+  });
+};
+
 const resolveBootstrapFailureReason = (input: {
   status: number;
   body?: unknown;
@@ -1999,20 +2047,24 @@ export const handleChargeRequestEvents = async (input: {
       transactionId: chargeResult.transactionId,
     });
 
-    if (!request.payNoteDocument) {
-      continue;
+    if (request.payNoteDocument) {
+      await maybeStartLinkedPayNote({
+        context,
+        eventType,
+        requestId,
+        payNoteDocument: request.payNoteDocument,
+        holdId: chargeResult.holdId,
+        transactionId: chargeResult.transactionId,
+        payerAccountNumber: accounts.payerAccountNumber,
+        payeeAccountNumber: accounts.payeeAccountNumber,
+        autoAcceptLinkedPayNote,
+      });
     }
 
-    await maybeStartLinkedPayNote({
+    await persistChargeExecutionArtifacts({
       context,
       eventType,
-      requestId,
-      payNoteDocument: request.payNoteDocument,
-      holdId: chargeResult.holdId,
-      transactionId: chargeResult.transactionId,
-      payerAccountNumber: accounts.payerAccountNumber,
-      payeeAccountNumber: accounts.payeeAccountNumber,
-      autoAcceptLinkedPayNote,
+      chargeResult,
     });
   }
 
