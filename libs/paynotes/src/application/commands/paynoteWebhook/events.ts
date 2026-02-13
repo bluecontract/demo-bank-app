@@ -151,6 +151,48 @@ export const resolveTransferRequestId = (
   return undefined;
 };
 
+export const resolveTransferPaymentMandateDocumentId = (
+  event: WebhookEmittedEvent
+): string | undefined => {
+  try {
+    const node = blue.jsonValueToNode(event);
+    const simple = blue.nodeToJson(node, 'simple') as
+      | Record<string, unknown>
+      | undefined;
+    const direct = getString(simple?.paymentMandateDocumentId);
+    if (direct) {
+      return direct;
+    }
+
+    if (blue.isTypeOf(node, ReserveFundsRequestedSchema)) {
+      const output = blue.nodeToSchemaOutput(
+        node,
+        ReserveFundsRequestedSchema
+      ) as { paymentMandateDocumentId?: unknown } | undefined;
+      return getString(output?.paymentMandateDocumentId);
+    }
+
+    if (blue.isTypeOf(node, CaptureFundsRequestedSchema)) {
+      const output = blue.nodeToSchemaOutput(
+        node,
+        CaptureFundsRequestedSchema
+      ) as { paymentMandateDocumentId?: unknown } | undefined;
+      return getString(output?.paymentMandateDocumentId);
+    }
+
+    if (blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema)) {
+      const output = blue.nodeToSchemaOutput(
+        node,
+        ReserveFundsAndCaptureImmediatelyRequestedSchema
+      ) as { paymentMandateDocumentId?: unknown } | undefined;
+      return getString(output?.paymentMandateDocumentId);
+    }
+  } catch {
+    // unsupported structure or unparsable event
+  }
+  return undefined;
+};
+
 export const resolveCaptureRequestId = (
   event: WebhookEmittedEvent
 ): string | undefined => {

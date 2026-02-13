@@ -243,6 +243,15 @@ export interface PayNoteRecord {
       lastReason?: string;
     }
   >;
+  transferMandateAttemptsByHoldId?: Record<
+    string,
+    {
+      mandateDocumentId: string;
+      mandateSessionId: string;
+      chargeAttemptId: string;
+      updatedAt: string;
+    }
+  >;
   createdAt: string;
   updatedAt: string;
 }

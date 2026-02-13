@@ -61,6 +61,15 @@ interface PayNoteItem {
       lastReason?: string;
     }
   >;
+  transferMandateAttemptsByHoldId?: Record<
+    string,
+    {
+      mandateDocumentId: string;
+      mandateSessionId: string;
+      chargeAttemptId: string;
+      updatedAt: string;
+    }
+  >;
   createdAt: string;
   updatedAt: string;
 }
@@ -128,6 +137,7 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       transactionRequest: item.transactionRequest,
       triggerEvent: item.triggerEvent,
       pendingMandateChargeAttempts: item.pendingMandateChargeAttempts,
+      transferMandateAttemptsByHoldId: item.transferMandateAttemptsByHoldId,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
@@ -309,6 +319,12 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       valueKey: ':pendingMandateChargeAttempts',
       attributeName: 'pendingMandateChargeAttempts',
       value: record.pendingMandateChargeAttempts,
+    });
+    addOptionalAttribute({
+      nameKey: '#transferMandateAttemptsByHoldId',
+      valueKey: ':transferMandateAttemptsByHoldId',
+      attributeName: 'transferMandateAttemptsByHoldId',
+      value: record.transferMandateAttemptsByHoldId,
     });
 
     const updateExpressionParts: string[] = [];
