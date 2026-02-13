@@ -829,6 +829,7 @@ const queuePaymentMandateBootstrapPendingAction = async (input: {
 const handlePaymentMandateBootstrapRequest = async (input: {
   request: NormalizedBootstrapRequest;
   requestedDocumentPayload: Record<string, unknown>;
+  isRequestingDeliveryDoc: boolean;
   responseContext: BootstrapResponseContext;
   eventId: string;
   requestIndex: number;
@@ -839,6 +840,7 @@ const handlePaymentMandateBootstrapRequest = async (input: {
   const {
     request,
     requestedDocumentPayload,
+    isRequestingDeliveryDoc,
     responseContext,
     eventId,
     requestIndex,
@@ -848,33 +850,129 @@ const handlePaymentMandateBootstrapRequest = async (input: {
   } = input;
 
   const granterType = getString(requestedDocumentPayload.granterType);
-  if (granterType !== 'customer') {
+  if (granterType === 'customer') {
+    const queued = await queuePaymentMandateBootstrapPendingAction({
+      request,
+      requestedDocumentPayload,
+      requestingSessionId: responseContext.requestingSessionId,
+      eventId,
+      requestIndex,
+      now,
+      deps,
+      logs,
+    });
+
+    if (!queued.ok) {
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason: queued.reason,
+      });
+      return true;
+    }
+
+    return true;
+  }
+
+  if (!(isRequestingDeliveryDoc && granterType === 'merchant')) {
     await respondBootstrapDecision(responseContext, {
       status: 'rejected',
       reason:
-        'Payment mandate bootstrap is supported here only for customer-granted mandates.',
+        'Payment mandate bootstrap is supported only for customer-granted mandates in active PayNotes or merchant-granted mandates in delivery flow.',
     });
     return true;
   }
 
-  const queued = await queuePaymentMandateBootstrapPendingAction({
+  const guarantorBindingValidation = validateBankControlledChannelBinding({
     request,
     requestedDocumentPayload,
-    requestingSessionId: responseContext.requestingSessionId,
-    eventId,
-    requestIndex,
-    now,
-    deps,
-    logs,
+    channelKey: 'guarantorChannel',
+    accountId: responseContext.credentials.accountId,
   });
-
-  if (!queued.ok) {
+  if (!guarantorBindingValidation.ok) {
     await respondBootstrapDecision(responseContext, {
       status: 'rejected',
-      reason: queued.reason,
+      reason:
+        'guarantorChannel must be bound to the bank guarantor account for payment mandate bootstrap.',
     });
     return true;
   }
+
+  const channelBindings: ChannelBindings = {
+    ...request.channelBindings,
+    guarantorChannel: { accountId: responseContext.credentials.accountId },
+  };
+
+  await respondBootstrapDecision(responseContext, {
+    status: 'accepted',
+  });
+
+  const bootstrapDocument = normalizeBootstrapDocument(
+    requestedDocumentPayload
+  );
+  const response = await deps.myOsClient.bootstrapDocument({
+    credentials: responseContext.credentials,
+    payload: {
+      channelBindings,
+      document: bootstrapDocument,
+    },
+  });
+
+  if (!response.ok) {
+    await respondBootstrapFailed(
+      responseContext,
+      resolveBootstrapFailureReason({
+        status: response.status,
+        body: response.body,
+      })
+    );
+    return true;
+  }
+
+  const bootstrapSessionId = extractBootstrapSessionId(response);
+  if (bootstrapSessionId) {
+    await deps.bootstrapContextRepository.saveContext({
+      bootstrapSessionId,
+      ...(getString(requestedDocumentPayload.granterId)
+        ? { merchantId: getString(requestedDocumentPayload.granterId) }
+        : {}),
+      ...(responseContext.requestingSessionId
+        ? { requestingSessionId: responseContext.requestingSessionId }
+        : {}),
+      ...(responseContext.requestId
+        ? { requestId: responseContext.requestId }
+        : {}),
+      createdAt: now,
+    });
+
+    if (deps.consumePendingBootstrapEvents) {
+      try {
+        await deps.consumePendingBootstrapEvents(bootstrapSessionId);
+      } catch (error) {
+        log(
+          logs,
+          'error',
+          'Failed consuming pending bootstrap events for payment mandate bootstrap',
+          {
+            eventId,
+            bootstrapSessionId,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      }
+    }
+  }
+
+  log(
+    logs,
+    'info',
+    'Merchant payment mandate bootstrap requested from delivery flow',
+    {
+      eventId,
+      requestingSessionId: responseContext.requestingSessionId ?? null,
+      requestId: responseContext.requestId ?? null,
+      bootstrapSessionId: bootstrapSessionId ?? null,
+    }
+  );
 
   return true;
 };
@@ -2036,6 +2134,7 @@ export const handleBootstrapRequests = async (input: {
       await handlePaymentMandateBootstrapRequest({
         request: normalized,
         requestedDocumentPayload,
+        isRequestingDeliveryDoc,
         responseContext,
         eventId,
         requestIndex,

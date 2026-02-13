@@ -108,7 +108,7 @@ const withInResponseTo = (
 const reportBootstrapCompleted = async (input: {
   eventId: string;
   bootstrapSessionId?: string;
-  payNoteDocumentId: string;
+  documentId: string;
   requestingSessionId?: string;
   requestId?: string;
   deps: HandlePayNoteBootstrapWebhookDependencies;
@@ -117,7 +117,7 @@ const reportBootstrapCompleted = async (input: {
   const {
     eventId,
     bootstrapSessionId,
-    payNoteDocumentId,
+    documentId,
     requestingSessionId,
     requestId,
     deps,
@@ -137,7 +137,7 @@ const reportBootstrapCompleted = async (input: {
       withInResponseTo(
         {
           type: 'Conversation/Document Bootstrap Completed',
-          documentId: payNoteDocumentId,
+          documentId,
         },
         requestId
       ),
@@ -148,7 +148,7 @@ const reportBootstrapCompleted = async (input: {
       bootstrapSessionId: bootstrapSessionId ?? null,
       requestId: requestId ?? null,
       requestingSessionId,
-      payNoteDocumentId,
+      documentId,
     },
     successMessage:
       'Reported document bootstrap completion via guarantorUpdate',
@@ -489,6 +489,18 @@ export const handlePayNoteBootstrapWebhookEvent = async (
           sessionId,
           documentId: resolved.documentId,
         });
+
+        if (!completionReported && bootstrapContext?.requestingSessionId) {
+          completionReported = await reportBootstrapCompleted({
+            eventId,
+            bootstrapSessionId,
+            documentId: resolved.documentId,
+            requestingSessionId: bootstrapContext.requestingSessionId,
+            requestId: bootstrapContext.requestId,
+            deps,
+            logs,
+          });
+        }
         continue;
       }
 
@@ -573,7 +585,7 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         completionReported = await reportBootstrapCompleted({
           eventId,
           bootstrapSessionId,
-          payNoteDocumentId,
+          documentId: payNoteDocumentId,
           requestingSessionId: bootstrapContext.requestingSessionId,
           requestId: bootstrapContext.requestId,
           deps,
