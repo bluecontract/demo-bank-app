@@ -1356,6 +1356,26 @@ const handlePayNoteBootstrapRequest = async (input: {
     });
   }
 
+  const payerBindingValidation = validateBankControlledChannelBinding({
+    request,
+    requestedDocumentPayload: payNoteDocument,
+    channelKey: 'payerChannel',
+    accountId: credentials.accountId,
+  });
+  if (!payerBindingValidation.ok) {
+    return rejectPayNoteBootstrapRequest({
+      context: responseContext,
+      eventId,
+      deliveryId,
+      reason:
+        'payerChannel must be bound to the bank payer account for bootstrap.',
+      logMessage: 'PayNote bootstrap request rejected (payer channel conflict)',
+      logContext: {
+        reason: payerBindingValidation.reason,
+      },
+    });
+  }
+
   const channelBindings: ChannelBindings = {
     ...request.channelBindings,
     payerChannel: { accountId: credentials.accountId },
