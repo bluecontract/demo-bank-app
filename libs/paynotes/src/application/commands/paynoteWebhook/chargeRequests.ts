@@ -639,6 +639,29 @@ const isLinkedPayNoteAutoAcceptAllowed = (input: {
   return allowedPayNotes.some(item => item.typeBlueId === requestedTypeBlueId);
 };
 
+const hasExplicitLinkedPayNoteAccountMapping = (
+  payNoteDocument: Record<string, unknown>
+): boolean => {
+  try {
+    const simple = blue.nodeToJson(
+      blue.jsonValueToNode(payNoteDocument),
+      'simple'
+    ) as Record<string, unknown> | null;
+
+    if (!simple) {
+      return false;
+    }
+
+    return Boolean(
+      getString(simple.accountNumber) ||
+        getString(simple.payerAccountNumber) ||
+        getString(simple.payeeAccountNumber)
+    );
+  } catch {
+    return false;
+  }
+};
+
 const validatePaymentMandate = async (input: {
   context: ChargeRequestContext;
   request: ParsedChargeRequest;
@@ -1501,6 +1524,19 @@ const maybeStartLinkedPayNote = async (input: {
   autoAcceptLinkedPayNote: boolean;
 }): Promise<void> => {
   const { context, eventType, requestId } = input;
+
+  if (hasExplicitLinkedPayNoteAccountMapping(input.payNoteDocument)) {
+    await emitLinkedPayNoteStartResponded({
+      context,
+      eventType,
+      requestId,
+      status: 'rejected',
+      reason:
+        'Linked PayNote startup does not allow explicit payer/payee account mapping.',
+    });
+    return;
+  }
+
   const credentials = await resolveCredentials({
     deps: context.deps,
     logs: context.logs,
@@ -1592,6 +1628,12 @@ const maybeStartLinkedPayNote = async (input: {
     return;
   }
 
+  const requestingContract =
+    await context.deps.contractRepository.getContractBySessionId(
+      context.sessionId
+    );
+  const customerChannelKey = getString(requestingContract?.customerChannelKey);
+
   await context.deps.bootstrapContextRepository.saveContext({
     bootstrapSessionId: deliverySessionId,
     ...(getString(
@@ -1630,6 +1672,7 @@ const maybeStartLinkedPayNote = async (input: {
     ...(input.payeeAccountNumber
       ? { payeeAccountNumber: input.payeeAccountNumber }
       : {}),
+    ...(customerChannelKey ? { customerChannelKey } : {}),
     requestingSessionId: context.sessionId,
     ...(requestId ? { requestId } : {}),
     createdAt: context.deps.clock.now().toISOString(),
