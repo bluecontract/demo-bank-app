@@ -4506,9 +4506,8 @@ describe('handleWebhookEvent', () => {
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
     });
-    deps.bankingFacade.captureHold = vi.fn().mockResolvedValue({
+    deps.bankingFacade.reserveFunds = vi.fn().mockResolvedValue({
       holdId: 'paynote-card-charge:doc-1:event-1:0',
-      relatedTransactionId: 'txn-voucher-1',
     } as any);
     deps.myOsClient.bootstrapDocument = vi.fn().mockResolvedValue({
       ok: true,
@@ -4595,7 +4594,7 @@ describe('handleWebhookEvent', () => {
           },
           emitted: [
             toOfficialBlue({
-              type: 'PayNote/Reverse Card Charge and Capture Immediately Requested',
+              type: 'PayNote/Reverse Card Charge Requested',
               requestId: 'voucher-flow-1',
               amount: 1300,
               paymentMandateDocumentId: mandateDocumentId,
@@ -4649,10 +4648,12 @@ describe('handleWebhookEvent', () => {
       'PayNote/Card Charge Completed'
     );
     expect(chargeCompleted?.status).toBe('succeeded');
-    expect(deps.bankingFacade.captureHold).toHaveBeenCalledTimes(1);
-    expect(deps.bankingFacade.captureHold).toHaveBeenCalledWith(
+    expect(deps.bankingFacade.reserveFunds).toHaveBeenCalledTimes(1);
+    expect(deps.bankingFacade.captureHold).not.toHaveBeenCalled();
+    expect(deps.bankingFacade.reserveFunds).toHaveBeenCalledWith(
       expect.objectContaining({
         holdId: 'paynote-card-charge:doc-1:event-1:0',
+        amountMinor: 1300,
         payNoteDocumentId: 'doc-1',
       })
     );
