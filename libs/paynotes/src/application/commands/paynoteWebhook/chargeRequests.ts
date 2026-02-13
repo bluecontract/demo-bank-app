@@ -4,6 +4,7 @@ import {
   LinkedCardChargeAndCaptureImmediatelyRequestedSchema,
   LinkedCardChargeRequestedSchema,
   MerchantToCustomerPayNoteSchema,
+  PaymentMandateSchema,
   PayNoteSchema,
   ReverseCardChargeAndCaptureImmediatelyRequestedSchema,
   ReverseCardChargeRequestedSchema,
@@ -61,7 +62,7 @@ type ParsedChargeRequest = {
   amountMinor: number;
   requestId?: string;
   paymentMandateDocumentId?: string;
-  paynoteDocument?: Record<string, unknown>;
+  payNoteDocument?: Record<string, unknown>;
 };
 
 type ChargeRequestContext = {
@@ -179,7 +180,7 @@ const toPositiveInteger = (value: unknown): number | undefined => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-const extractPaynoteDocument = (
+const extractPayNoteDocument = (
   value: BlueNode | undefined
 ): Record<string, unknown> | undefined => {
   if (!value) {
@@ -214,6 +215,33 @@ type ParsedChargeRequestSchemaOutput = {
   paynote?: BlueNode;
 };
 
+type PaymentMandateSchemaOutput = {
+  amountLimit?: unknown;
+  allowLinkedPayNote?: unknown;
+  granteeType?: unknown;
+  granteeId?: unknown;
+  granterType?: unknown;
+  granterId?: unknown;
+  expiresAt?: unknown;
+  revokedAt?: unknown;
+  allowedPayNotes?: unknown;
+};
+
+type ParsedPaymentMandate = {
+  amountLimit?: number;
+  allowLinkedPayNote?: boolean;
+  granteeType?: string;
+  granteeId?: string;
+  granterType?: string;
+  granterId?: string;
+  expiresAt?: string;
+  revokedAt?: string;
+  allowedPayNotes?: Array<{
+    typeBlueId?: string;
+    documentBlueId?: string;
+  }>;
+};
+
 const buildParsedChargeRequest = (input: {
   output: ParsedChargeRequestSchemaOutput;
   fallbackAmount?: number;
@@ -230,7 +258,7 @@ const buildParsedChargeRequest = (input: {
     requestId:
       getString(input.output.requestId) ?? resolveChargeRequestId(input.event),
     paymentMandateDocumentId: getString(input.output.paymentMandateDocumentId),
-    paynoteDocument: extractPaynoteDocument(input.output.paynote),
+    payNoteDocument: extractPayNoteDocument(input.output.paynote),
   };
 };
 
@@ -260,6 +288,287 @@ const parseChargeRequest = (
   } catch {
     return null;
   }
+};
+
+const resolveDocumentTypeBlueId = (
+  document: Record<string, unknown>
+): string | undefined => {
+  try {
+    const simple = blue.nodeToJson(
+      blue.jsonValueToNode(document),
+      'simple'
+    ) as { type?: { blueId?: unknown } } | null;
+    return getString(simple?.type?.blueId);
+  } catch {
+    return undefined;
+  }
+};
+
+const resolveIsoTimestamp = (value: unknown): string | undefined => {
+  const direct = getString(value);
+  if (direct) {
+    return direct;
+  }
+
+  const record = toSimpleRecord(value);
+  return getString(record?.value);
+};
+
+const toNonNegativeInteger = (value: unknown): number | undefined => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined;
+  }
+  if (!Number.isInteger(value) || value < 0) {
+    return undefined;
+  }
+  return value;
+};
+
+const parsePaymentMandate = (value: unknown): ParsedPaymentMandate | null => {
+  try {
+    const node = blue.jsonValueToNode(value);
+    const output = blue.nodeToSchemaOutput(
+      node,
+      PaymentMandateSchema
+    ) as PaymentMandateSchemaOutput;
+
+    const allowedPayNotes = Array.isArray(output.allowedPayNotes)
+      ? output.allowedPayNotes.reduce<
+          Array<{ typeBlueId?: string; documentBlueId?: string }>
+        >((acc, item) => {
+          const record = toSimpleRecord(item);
+          if (!record) {
+            return acc;
+          }
+          const typeBlueId = getString(record.typeBlueId);
+          const documentBlueId = getString(record.documentBlueId);
+          if (!typeBlueId && !documentBlueId) {
+            return acc;
+          }
+          acc.push({ typeBlueId, documentBlueId });
+          return acc;
+        }, [])
+      : undefined;
+
+    return {
+      amountLimit: toNonNegativeInteger(output.amountLimit),
+      allowLinkedPayNote:
+        typeof output.allowLinkedPayNote === 'boolean'
+          ? output.allowLinkedPayNote
+          : undefined,
+      granteeType: getString(output.granteeType),
+      granteeId: getString(output.granteeId),
+      granterType: getString(output.granterType),
+      granterId: getString(output.granterId),
+      expiresAt: resolveIsoTimestamp(output.expiresAt),
+      revokedAt: resolveIsoTimestamp(output.revokedAt),
+      allowedPayNotes,
+    };
+  } catch {
+    return null;
+  }
+};
+
+const resolveContextMerchantId = (
+  context: ChargeRequestContext
+): string | undefined =>
+  getString(
+    context.deliveryRecord?.merchantId ?? context.updatedRecord.merchantId
+  );
+
+const resolveContextCustomerId = (
+  context: ChargeRequestContext
+): string | undefined =>
+  getString(context.deliveryRecord?.userId ?? context.updatedRecord.userId);
+
+const parseDateMs = (value: string | undefined): number | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : undefined;
+};
+
+const validatePaymentMandateScope = (input: {
+  mandate: ParsedPaymentMandate;
+  context: ChargeRequestContext;
+  request: ParsedChargeRequest;
+}): { ok: true } | { ok: false; reason: string } => {
+  const { mandate, context, request } = input;
+
+  if (mandate.revokedAt) {
+    return {
+      ok: false,
+      reason: 'Payment mandate is revoked.',
+    };
+  }
+
+  const expiresAtMs = parseDateMs(mandate.expiresAt);
+  if (mandate.expiresAt && expiresAtMs === undefined) {
+    return {
+      ok: false,
+      reason: 'Payment mandate has invalid expiresAt timestamp.',
+    };
+  }
+
+  if (
+    expiresAtMs !== undefined &&
+    expiresAtMs <= context.deps.clock.now().getTime()
+  ) {
+    return {
+      ok: false,
+      reason: 'Payment mandate is expired.',
+    };
+  }
+
+  if (
+    mandate.amountLimit !== undefined &&
+    request.amountMinor > mandate.amountLimit
+  ) {
+    return {
+      ok: false,
+      reason: 'Payment mandate amount limit exceeded.',
+    };
+  }
+
+  const merchantId = resolveContextMerchantId(context);
+  const customerId = resolveContextCustomerId(context);
+
+  if (mandate.granteeType) {
+    const expectedGranteeId =
+      mandate.granteeType === 'documentId'
+        ? context.payNoteDocumentId
+        : mandate.granteeType === 'merchantId'
+        ? merchantId
+        : mandate.granteeType === 'customerId'
+        ? customerId
+        : undefined;
+
+    if (!expectedGranteeId) {
+      return {
+        ok: false,
+        reason: 'Payment mandate grantee scope is not satisfied.',
+      };
+    }
+    if (!mandate.granteeId || mandate.granteeId !== expectedGranteeId) {
+      return {
+        ok: false,
+        reason:
+          'Payment mandate grantee does not match requesting contract context.',
+      };
+    }
+  }
+
+  if (mandate.granterType) {
+    const expectedGranterId =
+      mandate.granterType === 'merchant'
+        ? merchantId
+        : mandate.granterType === 'customer'
+        ? customerId
+        : undefined;
+    if (!expectedGranterId) {
+      return {
+        ok: false,
+        reason: 'Payment mandate granter scope is not satisfied.',
+      };
+    }
+    if (!mandate.granterId || mandate.granterId !== expectedGranterId) {
+      return {
+        ok: false,
+        reason:
+          'Payment mandate granter does not match requesting contract context.',
+      };
+    }
+  }
+
+  if (request.payNoteDocument) {
+    if (mandate.allowLinkedPayNote === false) {
+      return {
+        ok: false,
+        reason: 'Payment mandate does not allow linked PayNote startup.',
+      };
+    }
+
+    if (mandate.allowedPayNotes && mandate.allowedPayNotes.length > 0) {
+      const requestedTypeBlueId = resolveDocumentTypeBlueId(
+        request.payNoteDocument
+      );
+      if (!requestedTypeBlueId) {
+        return {
+          ok: false,
+          reason:
+            'Unable to resolve linked PayNote type for payment mandate validation.',
+        };
+      }
+      const allowed = mandate.allowedPayNotes.some(
+        item => item.typeBlueId === requestedTypeBlueId
+      );
+      if (!allowed) {
+        return {
+          ok: false,
+          reason: 'Linked PayNote type is not allowed by payment mandate.',
+        };
+      }
+    }
+  }
+
+  return { ok: true };
+};
+
+const validatePaymentMandate = async (input: {
+  context: ChargeRequestContext;
+  request: ParsedChargeRequest;
+}): Promise<{ ok: true } | { ok: false; reason: string }> => {
+  const mandateDocumentId = input.request.paymentMandateDocumentId;
+  if (!mandateDocumentId) {
+    return {
+      ok: false,
+      reason: 'Missing payment mandate document id.',
+    };
+  }
+
+  const mandateContract =
+    await input.context.deps.contractRepository.getContractByDocumentId(
+      mandateDocumentId
+    );
+  const mandateSessionId = getString(mandateContract?.sessionId);
+  if (!mandateSessionId) {
+    return {
+      ok: false,
+      reason: 'Unable to resolve payment mandate session id.',
+    };
+  }
+
+  const mandateDocumentResult =
+    await input.context.deps.myOsClient.fetchDocument(mandateSessionId);
+  if (mandateDocumentResult.kind !== 'success') {
+    return {
+      ok: false,
+      reason: 'Unable to load payment mandate document.',
+    };
+  }
+
+  const mandateDocument = mandateDocumentResult.document.document;
+  if (!mandateDocument) {
+    return {
+      ok: false,
+      reason: 'Payment mandate document payload is missing.',
+    };
+  }
+
+  const mandate = parsePaymentMandate(mandateDocument);
+  if (!mandate) {
+    return {
+      ok: false,
+      reason: 'Invalid payment mandate document payload.',
+    };
+  }
+
+  return validatePaymentMandateScope({
+    mandate,
+    context: input.context,
+    request: input.request,
+  });
 };
 
 const resolveSourcePayNoteType = (document: unknown): SourcePayNoteType => {
@@ -771,7 +1080,7 @@ const maybeStartLinkedPayNote = async (input: {
   context: ChargeRequestContext;
   eventType: ChargeRequestEventType;
   requestId?: string;
-  paynoteDocument: Record<string, unknown>;
+  payNoteDocument: Record<string, unknown>;
   holdId: string;
   transactionId?: string;
   payerAccountNumber: string;
@@ -825,7 +1134,7 @@ const maybeStartLinkedPayNote = async (input: {
     credentials,
     payload: {
       channelBindings: bindingsResult.channelBindings,
-      document: input.paynoteDocument,
+      document: input.payNoteDocument,
     },
   });
 
@@ -1034,6 +1343,31 @@ export const handleChargeRequestEvents = async (input: {
       },
     });
 
+    const mandateValidation = await validatePaymentMandate({
+      context,
+      request,
+    });
+    if (!mandateValidation.ok) {
+      await emitCardChargeResponded({
+        context,
+        eventType,
+        requestId,
+        status: 'rejected',
+        reason: mandateValidation.reason,
+      });
+      if (request.payNoteDocument) {
+        await emitLinkedPayNoteStartResponded({
+          context,
+          eventType,
+          requestId,
+          status: 'rejected',
+          reason:
+            'Linked PayNote start rejected because payment mandate validation failed.',
+        });
+      }
+      continue;
+    }
+
     const accounts = await resolveChargeAccounts({
       context,
       sourcePayNoteType,
@@ -1047,7 +1381,7 @@ export const handleChargeRequestEvents = async (input: {
         status: 'rejected',
         reason: 'Unable to resolve payer/payee account mapping.',
       });
-      if (request.paynoteDocument) {
+      if (request.payNoteDocument) {
         await emitLinkedPayNoteStartResponded({
           context,
           eventType,
@@ -1082,7 +1416,7 @@ export const handleChargeRequestEvents = async (input: {
         status: 'failed',
         reason: chargeResult.reason,
       });
-      if (request.paynoteDocument) {
+      if (request.payNoteDocument) {
         await emitLinkedPayNoteStartResponded({
           context,
           eventType,
@@ -1104,7 +1438,7 @@ export const handleChargeRequestEvents = async (input: {
       transactionId: chargeResult.transactionId,
     });
 
-    if (!request.paynoteDocument) {
+    if (!request.payNoteDocument) {
       continue;
     }
 
@@ -1112,7 +1446,7 @@ export const handleChargeRequestEvents = async (input: {
       context,
       eventType,
       requestId,
-      paynoteDocument: request.paynoteDocument,
+      payNoteDocument: request.payNoteDocument,
       holdId: chargeResult.holdId,
       transactionId: chargeResult.transactionId,
       payerAccountNumber: accounts.payerAccountNumber,
