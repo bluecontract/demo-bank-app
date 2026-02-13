@@ -1832,6 +1832,137 @@ describe('handleWebhookEvent', () => {
     );
   });
 
+  it.each([
+    {
+      eventType: 'PayNote/Linked Card Charge Requested',
+      requestId: 'charge-missing-mandate-linked-1',
+      direction: 'linked',
+      mode: 'authorize-only',
+    },
+    {
+      eventType: 'PayNote/Linked Card Charge and Capture Immediately Requested',
+      requestId: 'charge-missing-mandate-linked-capture-1',
+      direction: 'linked',
+      mode: 'authorize-and-capture',
+    },
+    {
+      eventType: 'PayNote/Reverse Card Charge Requested',
+      requestId: 'charge-missing-mandate-reverse-1',
+      direction: 'reverse',
+      mode: 'authorize-only',
+    },
+    {
+      eventType:
+        'PayNote/Reverse Card Charge and Capture Immediately Requested',
+      requestId: 'charge-missing-mandate-reverse-capture-1',
+      direction: 'reverse',
+      mode: 'authorize-and-capture',
+    },
+  ])(
+    'creates mandate pending action for $eventType when mandate id is missing',
+    async ({ eventType, requestId, direction, mode }) => {
+      const { deps, fetchEvent } = createDependencies();
+
+      deps.contractRepository.getContractBySessionId = vi
+        .fn()
+        .mockResolvedValue({
+          contractId: 'contract-1',
+          typeBlueId: 'paynote-type',
+          displayName: 'PayNote',
+          sessionId: 'session-1',
+          documentId: 'doc-1',
+          userId: 'user-123',
+          merchantId: 'merchant-123',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        });
+
+      deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+        payNoteDocumentId: 'doc-1',
+        deliveryId: 'delivery-1',
+        accountNumber: '1234567890',
+        userId: 'user-123',
+        merchantId: 'merchant-123',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+      (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue({
+        deliveryId: 'delivery-1',
+        accountNumber: '1234567890',
+        userId: 'user-123',
+        merchantId: 'merchant-123',
+        cardTransactionDetails: {
+          retrievalReferenceNumber: '123456789012',
+          systemTraceAuditNumber: '654321',
+          transmissionDateTime: '0101123456',
+          authorizationCode: 'ABC123',
+        },
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+
+      fetchEvent.mockResolvedValueOnce({
+        kind: 'success',
+        payload: {
+          object: {
+            sessionId: 'session-1',
+            document: {
+              type: 'PayNote/Card Transaction PayNote',
+            },
+            emitted: [
+              toOfficialBlue({
+                type: eventType,
+                requestId,
+                amount: 2500,
+              }),
+            ],
+          },
+        },
+      } as MyOsFetchEventResult);
+
+      const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+      expect(result.note).toBe('');
+      expect(deps.bankingFacade.reserveFunds).not.toHaveBeenCalled();
+
+      const runOperationCalls = (
+        deps.myOsClient.runDocumentOperation as unknown as {
+          mock: { calls: Array<Array<{ payload?: unknown }>> };
+        }
+      ).mock.calls;
+      const respondedEvent = findRunOperationEventByType(
+        runOperationCalls,
+        'PayNote/Card Charge Responded'
+      );
+      expect(respondedEvent).toBeDefined();
+      expect(respondedEvent?.status).toBe('pending');
+      expect(respondedEvent?.reason).toBe('Awaiting payment mandate approval.');
+
+      const saved = (
+        deps.contractRepository.saveContract as unknown as {
+          mock: { calls: Array<Array<Record<string, unknown>>> };
+        }
+      ).mock.calls.at(-1)?.[0] as
+        | { pendingActions?: Array<Record<string, unknown>> }
+        | undefined;
+      expect(saved).toBeDefined();
+      expect(saved?.pendingActions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'chargeMandateApproval',
+            status: 'pending',
+            requestId,
+            payload: expect.objectContaining({
+              eventType,
+              direction,
+              mode,
+            }),
+          }),
+        ])
+      );
+    }
+  );
+
   it('uses accepted local mandate snapshot when mandate contract projection lags', async () => {
     const { deps, fetchEvent } = createDependencies();
 
@@ -2319,6 +2450,96 @@ describe('handleWebhookEvent', () => {
       )
     ).toBe(false);
   });
+
+  it.each([
+    {
+      eventType: 'PayNote/Linked Card Charge Requested',
+      requestId: 'charge-chain-matrix-linked-1',
+    },
+    {
+      eventType: 'PayNote/Linked Card Charge and Capture Immediately Requested',
+      requestId: 'charge-chain-matrix-linked-capture-1',
+    },
+    {
+      eventType: 'PayNote/Reverse Card Charge Requested',
+      requestId: 'charge-chain-matrix-reverse-1',
+    },
+    {
+      eventType:
+        'PayNote/Reverse Card Charge and Capture Immediately Requested',
+      requestId: 'charge-chain-matrix-reverse-capture-1',
+    },
+  ])(
+    'rejects $eventType when PayNote has no card transaction chain context',
+    async ({ eventType, requestId }) => {
+      const { deps, fetchEvent, fetchDocument } = createDependencies();
+      const { mandateDocumentId } = attachPaymentMandate({
+        deps,
+        fetchDocument,
+        payNoteDocumentId: 'doc-1',
+      });
+
+      deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+        payNoteDocumentId: 'doc-1',
+        accountNumber: '1234567890',
+        userId: 'user-123',
+        merchantId: 'merchant-123',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+      (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue(
+        null
+      );
+
+      fetchEvent.mockResolvedValueOnce({
+        kind: 'success',
+        payload: {
+          object: {
+            sessionId: 'session-1',
+            document: {
+              type: 'PayNote/PayNote',
+            },
+            emitted: [
+              toOfficialBlue({
+                type: eventType,
+                requestId,
+                amount: 2500,
+                paymentMandateDocumentId: mandateDocumentId,
+              }),
+            ],
+          },
+        },
+      } as MyOsFetchEventResult);
+
+      const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+      expect(result.note).toBe('');
+      expect(deps.bankingFacade.reserveFunds).not.toHaveBeenCalled();
+
+      const runOperationCalls = (
+        deps.myOsClient.runDocumentOperation as unknown as {
+          mock: { calls: Array<Array<{ payload?: unknown }>> };
+        }
+      ).mock.calls;
+      const respondedEvent = findRunOperationEventByType(
+        runOperationCalls,
+        'PayNote/Card Charge Responded'
+      );
+      expect(respondedEvent).toBeDefined();
+      expect(respondedEvent?.status).toBe('rejected');
+      expect(respondedEvent?.reason).toBe(
+        'Card charge request requires PayNote rooted in a card transaction chain.'
+      );
+      expect(
+        runOperationCalls.some(call =>
+          runOperationPayloadContainsEventType(
+            call[0]?.payload,
+            'PayNote/Card Charge Completed'
+          )
+        )
+      ).toBe(false);
+    }
+  );
 
   it('emits linked paynote startup response events after successful charge', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
