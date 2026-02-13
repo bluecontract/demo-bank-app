@@ -1515,6 +1515,36 @@ const resolveRootCustomerAccountNumber = (
       context.updatedRecord.payerAccountNumber
   );
 
+const resolveLocalRoleAccountNumbers = async (input: {
+  context: ChargeRequestContext;
+  sourcePayNoteType: SourcePayNoteType;
+}): Promise<{
+  payerAccountNumber?: string;
+  payeeAccountNumber?: string;
+}> => {
+  const { context, sourcePayNoteType } = input;
+  const explicitPayer = getString(context.updatedRecord.payerAccountNumber);
+  const explicitPayee = getString(context.updatedRecord.payeeAccountNumber);
+  const rootCustomerAccountNumber = resolveRootCustomerAccountNumber(context);
+  const merchantFundingAccountNumber =
+    await resolveMerchantFundingAccountNumber({
+      context,
+      sourcePayNoteType,
+    });
+
+  if (sourcePayNoteType === 'merchant-to-customer-paynote') {
+    return {
+      payerAccountNumber: explicitPayer ?? merchantFundingAccountNumber,
+      payeeAccountNumber: explicitPayee ?? rootCustomerAccountNumber,
+    };
+  }
+
+  return {
+    payerAccountNumber: explicitPayer ?? rootCustomerAccountNumber,
+    payeeAccountNumber: explicitPayee ?? merchantFundingAccountNumber,
+  };
+};
+
 const resolveChargeAccounts = async (input: {
   context: ChargeRequestContext;
   sourcePayNoteType: SourcePayNoteType;
@@ -1523,21 +1553,19 @@ const resolveChargeAccounts = async (input: {
   const { context, sourcePayNoteType, direction } = input;
   const { deps, logs, eventId, payNoteDocumentId } = context;
 
-  const rootCustomerAccountNumber = resolveRootCustomerAccountNumber(context);
-  const merchantFundingAccountNumber =
-    await resolveMerchantFundingAccountNumber({
-      context,
-      sourcePayNoteType,
-    });
+  const localRoleAccounts = await resolveLocalRoleAccountNumbers({
+    context,
+    sourcePayNoteType,
+  });
 
   const payerAccountNumber =
     direction === 'linked'
-      ? rootCustomerAccountNumber
-      : merchantFundingAccountNumber;
+      ? localRoleAccounts.payerAccountNumber
+      : localRoleAccounts.payeeAccountNumber;
   const payeeAccountNumber =
     direction === 'linked'
-      ? merchantFundingAccountNumber
-      : rootCustomerAccountNumber;
+      ? localRoleAccounts.payeeAccountNumber
+      : localRoleAccounts.payerAccountNumber;
 
   if (!payerAccountNumber || !payeeAccountNumber) {
     logs.push({
@@ -1550,6 +1578,8 @@ const resolveChargeAccounts = async (input: {
         direction,
         payerAccountNumber: payerAccountNumber ?? null,
         payeeAccountNumber: payeeAccountNumber ?? null,
+        localPayerAccountNumber: localRoleAccounts.payerAccountNumber ?? null,
+        localPayeeAccountNumber: localRoleAccounts.payeeAccountNumber ?? null,
         sourcePayNoteType,
       },
     });
