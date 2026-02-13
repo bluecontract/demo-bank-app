@@ -1484,6 +1484,11 @@ export const handleBootstrapRequests = async (input: {
   const requestingPayeeAccountId = getString(
     requestingBindings.payeeChannel?.accountId
   );
+  const canHandleAllowListedFromDelivery = Boolean(
+    isRequestingDeliveryDoc &&
+      requestingPayerAccountId &&
+      requestingPayeeAccountId
+  );
   const isSynchronyMerchantDoc = Boolean(
     requestingContracts?.synchronyChannel && requestingContracts?.sendPayNote
   );
@@ -1633,19 +1638,43 @@ export const handleBootstrapRequests = async (input: {
       node: requestedDocumentNode,
       requestedDocumentPayload,
     });
-    if (allowedExistingDocType && !isRequestingDeliveryDoc) {
-      const existingDelivery = knownRequestingDelivery;
+    if (
+      allowedExistingDocType &&
+      (!isRequestingDeliveryDoc || canHandleAllowListedFromDelivery)
+    ) {
+      const existingDelivery = isRequestingDeliveryDoc
+        ? await getKnownDelivery()
+        : knownRequestingDelivery;
       if (!existingDelivery) {
-        log(
-          logs,
-          'info',
-          'Bootstrap request ignored (unknown or non-canonical requesting session)',
-          {
-            eventId,
-            bootstrapAssignee,
-            requestedTypeName: allowedExistingDocType,
-          }
-        );
+        if (isRequestingDeliveryDoc) {
+          log(
+            logs,
+            'warn',
+            'Bootstrap request rejected (unable to resolve delivery context for delivery-origin allow-listed bootstrap)',
+            {
+              eventId,
+              bootstrapAssignee,
+              requestedTypeName: allowedExistingDocType,
+              requestingSessionId: requestingSessionId ?? null,
+            }
+          );
+          await respondBootstrapDecision(responseContext, {
+            status: 'rejected',
+            reason:
+              'Unable to resolve requesting session for active PayNote bootstrap.',
+          });
+        } else {
+          log(
+            logs,
+            'info',
+            'Bootstrap request ignored (unknown or non-canonical requesting session)',
+            {
+              eventId,
+              bootstrapAssignee,
+              requestedTypeName: allowedExistingDocType,
+            }
+          );
+        }
         continue;
       }
 

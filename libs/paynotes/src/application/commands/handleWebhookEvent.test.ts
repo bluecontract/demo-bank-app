@@ -1560,6 +1560,12 @@ describe('handleWebhookEvent', () => {
       accountNumber: '1234567890',
       userId: 'user-123',
       merchantId: 'merchant-123',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '123456789012',
+        systemTraceAuditNumber: '654321',
+        transmissionDateTime: '0101123456',
+        authorizationCode: 'ABC123',
+      },
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
     });
@@ -1630,6 +1636,12 @@ describe('handleWebhookEvent', () => {
       accountNumber: '1234567890',
       userId: 'user-123',
       merchantId: 'merchant-123',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '123456789012',
+        systemTraceAuditNumber: '654321',
+        transmissionDateTime: '0101123456',
+        authorizationCode: 'ABC123',
+      },
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
     });
@@ -1705,6 +1717,12 @@ describe('handleWebhookEvent', () => {
       accountNumber: '1234567890',
       userId: 'user-123',
       merchantId: 'merchant-123',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '123456789012',
+        systemTraceAuditNumber: '654321',
+        transmissionDateTime: '0101123456',
+        authorizationCode: 'ABC123',
+      },
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
     });
@@ -1777,6 +1795,12 @@ describe('handleWebhookEvent', () => {
       accountNumber: '1234567890',
       userId: 'user-123',
       merchantId: 'merchant-123',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '123456789012',
+        systemTraceAuditNumber: '654321',
+        transmissionDateTime: '0101123456',
+        authorizationCode: 'ABC123',
+      },
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
     });
@@ -2155,6 +2179,12 @@ describe('handleWebhookEvent', () => {
       accountNumber: '1234567890',
       userId: 'user-123',
       merchantId: 'merchant-123',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '123456789012',
+        systemTraceAuditNumber: '654321',
+        transmissionDateTime: '0101123456',
+        authorizationCode: 'ABC123',
+      },
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
     });
@@ -2165,15 +2195,27 @@ describe('handleWebhookEvent', () => {
     deps.myOsClient.bootstrapDocument = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      body: { sessionId: 'bootstrap-session-1' },
+      body: { sessionId: 'delivery-session-1' },
     });
+    deps.myOsClient.runDocumentOperation = vi
+      .fn()
+      .mockImplementation(async input => {
+        if (input.operation === 'acceptPayNote') {
+          return {
+            ok: true,
+            status: 200,
+            body: { payNoteSessionId: 'linked-paynote-session-1' },
+          };
+        }
+        return { ok: true, status: 200 };
+      });
     fetchDocument.mockImplementation(async sessionId => {
-      if (sessionId === 'bootstrap-session-1') {
+      if (sessionId === 'linked-paynote-session-1') {
         return {
           kind: 'success',
           document: {
             documentId: 'child-doc-1',
-            sessionId: 'bootstrap-session-1',
+            sessionId: 'linked-paynote-session-1',
             document: { type: 'PayNote/PayNote' },
           },
         } as MyOsFetchDocumentResult;
@@ -2268,19 +2310,35 @@ describe('handleWebhookEvent', () => {
     expect(deps.myOsClient.bootstrapDocument).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
+          document: expect.objectContaining({
+            type: 'PayNote/PayNote Delivery',
+            payNoteBootstrapRequest: expect.objectContaining({
+              type: 'Conversation/Document Bootstrap Requested',
+              bootstrapAssignee: 'payNoteDeliverer',
+            }),
+          }),
           channelBindings: {
+            payNoteSender: { accountId: 'merchant-account-id' },
+            payNoteDeliverer: { accountId: 'account-id' },
             payerChannel: { accountId: 'customer-account-id' },
             payeeChannel: { accountId: 'merchant-account-id' },
-            guarantorChannel: { accountId: 'account-id' },
           },
         }),
       })
     );
+    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'delivery-session-1',
+        operation: 'acceptPayNote',
+      })
+    );
     expect(deps.bootstrapContextRepository.saveContext).toHaveBeenCalledWith(
       expect.objectContaining({
-        bootstrapSessionId: 'bootstrap-session-1',
+        bootstrapSessionId: 'delivery-session-1',
         holdId: 'paynote-card-charge:doc-1:event-1:0',
         transactionId: 'txn-1',
+        requestingSessionId: 'session-1',
+        requestId: 'charge-link-1',
       })
     );
 
@@ -2297,6 +2355,161 @@ describe('handleWebhookEvent', () => {
       runOperationCalls,
       'PayNote/Linked PayNote Started'
     );
+  });
+
+  it('starts linked paynote delivery without auto-accept when mandate policy disallows it', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      deliveryId: 'delivery-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue({
+      deliveryId: 'delivery-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '123456789012',
+        systemTraceAuditNumber: '654321',
+        transmissionDateTime: '0101123456',
+        authorizationCode: 'ABC123',
+      },
+    });
+    deps.bankingFacade.captureHold = vi.fn().mockResolvedValue({
+      holdId: 'paynote-card-charge:doc-1:event-1:0',
+      relatedTransactionId: 'txn-1',
+    } as any);
+    deps.myOsClient.bootstrapDocument = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: { sessionId: 'delivery-session-no-auto-accept' },
+    });
+    fetchDocument.mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/Card Transaction PayNote',
+          contracts: {
+            payerChannel: {
+              type: 'MyOS/MyOS Timeline Channel',
+              accountId: 'customer-account-id',
+            },
+            payeeChannel: {
+              type: 'MyOS/MyOS Timeline Channel',
+              accountId: 'merchant-account-id',
+            },
+            guarantorChannel: {
+              type: 'MyOS/MyOS Timeline Channel',
+              accountId: 'account-id',
+            },
+          },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    const { mandateDocumentId } = attachPaymentMandate({
+      deps,
+      fetchDocument,
+      payNoteDocumentId: 'doc-1',
+      mandateDocument: buildPaymentMandateDocument({
+        granteeId: 'doc-1',
+        allowLinkedPayNote: false,
+      }),
+    });
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/Card Transaction PayNote',
+            contracts: {
+              payerChannel: {
+                type: 'MyOS/MyOS Timeline Channel',
+                accountId: 'customer-account-id',
+              },
+              payeeChannel: {
+                type: 'MyOS/MyOS Timeline Channel',
+                accountId: 'merchant-account-id',
+              },
+              guarantorChannel: {
+                type: 'MyOS/MyOS Timeline Channel',
+                accountId: 'account-id',
+              },
+            },
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Linked Card Charge and Capture Immediately Requested',
+              requestId: 'charge-link-no-auto-accept-1',
+              amount: 1300,
+              paymentMandateDocumentId: mandateDocumentId,
+              paynote: {
+                type: 'PayNote/PayNote',
+                name: 'Linked voucher',
+                currency: 'USD',
+                amount: {
+                  total: 1,
+                },
+                contracts: {
+                  payerChannel: {
+                    type: 'MyOS/MyOS Timeline Channel',
+                  },
+                  payeeChannel: {
+                    type: 'MyOS/MyOS Timeline Channel',
+                  },
+                  guarantorChannel: {
+                    type: 'MyOS/MyOS Timeline Channel',
+                  },
+                },
+              },
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
+
+    expect(result.note).toBe('');
+    expect(deps.myOsClient.bootstrapDocument).toHaveBeenCalled();
+
+    const runDocumentOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: {
+          calls: Array<Array<{ operation?: string; payload?: unknown }>>;
+        };
+      }
+    ).mock.calls;
+    expect(
+      runDocumentOperationCalls.some(
+        call => call[0]?.operation === 'acceptPayNote'
+      )
+    ).toBe(false);
+
+    expectRunOperationIncludesEventType(
+      runDocumentOperationCalls,
+      'PayNote/Linked PayNote Start Responded'
+    );
+    expect(
+      runDocumentOperationCalls.some(call =>
+        runOperationPayloadContainsEventType(
+          call[0]?.payload,
+          'PayNote/Linked PayNote Started'
+        )
+      )
+    ).toBe(false);
   });
 
   it('rejects linked paynote startup when source document has no channel bindings', async () => {
