@@ -19,6 +19,7 @@ import {
   getProposalDescriptionFromDeliveryDocument,
   getPayNoteSummaryFromDocument,
 } from '../application/payNoteDelivery/blueUtils';
+import { toCompactBlueJsonValue } from '../application/blue/compactBlue';
 
 const ENTITY_TYPES = {
   DELIVERY: 'PAYNOTE_DELIVERY',
@@ -449,6 +450,19 @@ export class DynamoPayNoteDeliveryRepository
   }
 
   async saveDelivery(record: PayNoteDeliveryRecord): Promise<void> {
+    const compactDeliveryDocument = record.deliveryDocument
+      ? (toCompactBlueJsonValue(record.deliveryDocument) as Record<
+          string,
+          unknown
+        >)
+      : undefined;
+    const compactPayNoteDocument = record.payNoteDocument
+      ? (toCompactBlueJsonValue(record.payNoteDocument) as Record<
+          string,
+          unknown
+        >)
+      : undefined;
+
     const normalizedDeliverySessionIds =
       record.deliverySessionIds && record.deliverySessionIds.length
         ? record.deliverySessionIds
@@ -503,8 +517,8 @@ export class DynamoPayNoteDeliveryRepository
       ...(record.deliveryStatus
         ? { deliveryStatus: record.deliveryStatus }
         : {}),
-      ...(record.deliveryDocument
-        ? { deliveryDocument: record.deliveryDocument }
+      ...(compactDeliveryDocument
+        ? { deliveryDocument: compactDeliveryDocument }
         : {}),
       ...(record.deliveryUpdatedAt
         ? { deliveryUpdatedAt: record.deliveryUpdatedAt }
@@ -518,8 +532,8 @@ export class DynamoPayNoteDeliveryRepository
       ...(record.payNoteBootstrapSessionId
         ? { payNoteBootstrapSessionId: record.payNoteBootstrapSessionId }
         : {}),
-      ...(record.payNoteDocument
-        ? { payNoteDocument: record.payNoteDocument }
+      ...(compactPayNoteDocument
+        ? { payNoteDocument: compactPayNoteDocument }
         : {}),
       ...(record.payNoteUpdatedAt
         ? { payNoteUpdatedAt: record.payNoteUpdatedAt }

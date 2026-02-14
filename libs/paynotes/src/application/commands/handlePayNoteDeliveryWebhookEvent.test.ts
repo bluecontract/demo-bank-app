@@ -39,6 +39,9 @@ contracts:
   payNoteDeliverer:
     type: MyOS/MyOS Timeline Channel
     accountId: bank-account
+  cardProcessorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: processor-account
 `;
   const node = blue.yamlToNode(yaml);
   node.setType(blue.jsonValueToNode({ blueId: PAYNOTE_DELIVERY_BLUE_ID }));
@@ -68,6 +71,9 @@ contracts:
   payNoteDeliverer:
     type: MyOS/MyOS Timeline Channel
     accountId: bank-account
+  cardProcessorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: processor-account
 `;
   const node = blue.yamlToNode(yaml);
   node.setType(blue.jsonValueToNode({ blueId: PAYNOTE_DELIVERY_BLUE_ID }));
@@ -97,6 +103,9 @@ contracts:
   payNoteDeliverer:
     type: MyOS/MyOS Timeline Channel
     accountId: bank-account
+  cardProcessorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: processor-account
 `;
   const node = blue.yamlToNode(yaml);
   node.setType(blue.jsonValueToNode({ blueId: PAYNOTE_DELIVERY_BLUE_ID }));
@@ -268,6 +277,10 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
                 sendPayNote: {
                   type: 'Conversation/Operation',
                 },
+                cardProcessorChannel: {
+                  type: 'MyOS/MyOS Timeline Channel',
+                  accountId: 'processor-account',
+                },
               },
             },
             emitted: [
@@ -276,6 +289,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
                 bootstrapAssignee: 'synchronyChannel',
                 channelBindings: {
                   payNoteSender: { accountId: 'merchant-account' },
+                  cardProcessorChannel: { accountId: 'processor-account' },
                 },
                 document: deliveryDocument,
               },
@@ -307,6 +321,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           document: expect.any(Object),
           channelBindings: expect.objectContaining({
             payNoteSender: { accountId: 'merchant-account' },
+            cardProcessorChannel: { accountId: 'processor-account' },
             payNoteDeliverer: { accountId: 'bank-account' },
           }),
         }),
@@ -810,6 +825,10 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
                 sendPayNote: {
                   type: 'Conversation/Operation',
                 },
+                cardProcessorChannel: {
+                  type: 'MyOS/MyOS Timeline Channel',
+                  accountId: 'processor-account',
+                },
               },
             },
             emitted: [
@@ -818,6 +837,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
                 bootstrapAssignee: 'synchronyChannel',
                 channelBindings: {
                   payNoteSender: { accountId: 'merchant-account' },
+                  cardProcessorChannel: { accountId: 'processor-account' },
                 },
                 document: deliveryDocument,
               },
@@ -3332,6 +3352,10 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
                 sendPayNote: {
                   type: 'Conversation/Operation',
                 },
+                cardProcessorChannel: {
+                  type: 'MyOS/MyOS Timeline Channel',
+                  accountId: 'processor-account',
+                },
               },
             },
             emitted: [
@@ -3340,6 +3364,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
                 bootstrapAssignee: 'synchronyChannel',
                 channelBindings: {
                   payNoteSender: { accountId: 'merchant-account' },
+                  cardProcessorChannel: { accountId: 'processor-account' },
                 },
                 document: deliveryDocument,
               },
@@ -3716,13 +3741,11 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         accountId: 'bank-account',
         baseUrl: 'https://myos.example.com',
       }),
-      bootstrapDocument: vi
-        .fn()
-        .mockResolvedValue({
-          ok: true,
-          status: 200,
-          body: { sessionId: 'mandate-bootstrap-session-1' },
-        }),
+      bootstrapDocument: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { sessionId: 'mandate-bootstrap-session-1' },
+      }),
       runDocumentOperation: vi
         .fn()
         .mockResolvedValue({ ok: true, status: 200 }),

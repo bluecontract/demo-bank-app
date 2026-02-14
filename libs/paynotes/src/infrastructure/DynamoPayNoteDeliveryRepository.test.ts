@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DynamoPayNoteDeliveryRepository } from './DynamoPayNoteDeliveryRepository';
 import { buildCardTransactionDetailsKey } from '@demo-bank-app/banking';
 import { PAYNOTE_DELIVERY_BLUE_ID } from '../application/payNoteDelivery/schema';
+import { toCompactBlueJsonValue } from '../application/blue/compactBlue';
+import { blue } from '../blue';
 
 const mockSend = vi.fn();
 const mockDocumentClient = {
@@ -121,6 +123,68 @@ describe('DynamoPayNoteDeliveryRepository', () => {
       savedItems.find(item => item.PK === 'PAYNOTE_DELIVERY#delivery-1')
         ?.merchantId
     ).toBe('merchant-1');
+  });
+
+  it('compacts delivery and paynote documents before persistence', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+
+    const deliveryNode = blue.yamlToNode(`name: Delivery for Invoice
+type: PayNote/PayNote Delivery
+contracts:
+  payNoteSender:
+    type: MyOS/MyOS Timeline Channel
+    accountId: merchant-account
+  payNoteDeliverer:
+    type: MyOS/MyOS Timeline Channel
+    accountId: bank-account
+payNoteBootstrapRequest:
+  type: Conversation/Document Bootstrap Requested
+  bootstrapAssignee: payNoteDeliverer
+  document:
+    type: PayNote/Card Transaction PayNote
+    amount:
+      total: 1200`);
+    deliveryNode.setType(
+      blue.jsonValueToNode({ blueId: PAYNOTE_DELIVERY_BLUE_ID })
+    );
+    const expandedDeliveryDocument = blue.nodeToJson(
+      deliveryNode,
+      'official'
+    ) as Record<string, unknown>;
+
+    const payNoteNode = blue.yamlToNode(`type: PayNote/PayNote
+name: Voucher
+contracts:
+  payerChannel:
+    type: MyOS/MyOS Timeline Channel
+  payeeChannel:
+    type: MyOS/MyOS Timeline Channel
+  guarantorChannel:
+    type: MyOS/MyOS Timeline Channel`);
+    const expandedPayNoteDocument = blue.nodeToJson(
+      payNoteNode,
+      'official'
+    ) as Record<string, unknown>;
+
+    await repository.saveDelivery({
+      deliveryId: 'delivery-compact',
+      deliveryDocument: expandedDeliveryDocument,
+      payNoteDocument: expandedPayNoteDocument,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const deliveryItem = mockPutCommand.mock.calls
+      .map(call => call[0].Item)
+      .find(item => item?.PK === 'PAYNOTE_DELIVERY#delivery-compact');
+
+    expect(deliveryItem).toEqual(
+      expect.objectContaining({
+        deliveryDocument: toCompactBlueJsonValue(expandedDeliveryDocument),
+        payNoteDocument: toCompactBlueJsonValue(expandedPayNoteDocument),
+      })
+    );
   });
 
   it('lists deliveries by user with summary fields', async () => {
