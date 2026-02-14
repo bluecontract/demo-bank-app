@@ -247,6 +247,8 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
 
     const payNoteDeliveryRepository = {
       markEventProcessed: vi.fn().mockResolvedValue(true),
+      finalizeEventProcessing: vi.fn(),
+      releaseEventProcessing: vi.fn(),
       saveDelivery: vi.fn(),
       getDelivery: vi.fn().mockResolvedValue(null),
       getDeliveryByDocumentId: vi.fn(),
@@ -327,6 +329,12 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         }),
       })
     );
+    expect(
+      payNoteDeliveryRepository.finalizeEventProcessing
+    ).toHaveBeenCalledWith('event-1');
+    expect(
+      payNoteDeliveryRepository.releaseEventProcessing
+    ).not.toHaveBeenCalled();
   });
 
   it('attaches referenced payment mandate to bootstrapped paynote', async () => {
@@ -3210,6 +3218,160 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.getCredentials).not.toHaveBeenCalled();
     expect(payNoteDeliveryRepository.saveDelivery).not.toHaveBeenCalled();
+  });
+
+  it('skips idempotency claim when explicitly requested', async () => {
+    const deliveryDocument = buildDeliveryDocument();
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: 'api-key',
+        accountId: 'bank-account',
+        baseUrl: 'https://myos.example.com',
+      }),
+      bootstrapDocument: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+      runDocumentOperation: vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200 }),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn().mockResolvedValue({
+        kind: 'not-found',
+        status: 404,
+      } satisfies MyOsFetchDocumentResult),
+    };
+
+    const payNoteDeliveryRepository = {
+      markEventProcessed: vi.fn().mockResolvedValue(true),
+      finalizeEventProcessing: vi.fn(),
+      releaseEventProcessing: vi.fn(),
+      saveDelivery: vi.fn(),
+      getDelivery: vi.fn().mockResolvedValue(null),
+      getDeliveryByDocumentId: vi.fn(),
+      getDeliveryBySessionId: vi.fn(),
+      getDeliveryByBootstrapSessionId: vi.fn(),
+      getDeliveryByPayNoteDocumentId: vi.fn(),
+      getDeliveryByCardTransactionDetails: vi.fn(),
+      listDeliveriesByUserId: vi.fn(),
+    };
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
+      saveContract: vi.fn(),
+    };
+    const holdRepository = {
+      getHoldByCardTransactionDetails: vi.fn().mockResolvedValue(null),
+    };
+
+    const result = await handlePayNoteDeliveryWebhookEvent(
+      {
+        skipEventIdempotencyClaim: true,
+        payload: {
+          id: 'event-skip-claim',
+          type: 'DOCUMENT_EPOCH_ADVANCED',
+          object: {
+            sessionId: 'sync-session',
+            document: deliveryDocument,
+            emitted: [],
+          },
+        },
+      },
+      {
+        myOsClient: myOsClient as any,
+        payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+        contractRepository: contractRepository as any,
+        bankingRepository: {} as any,
+        holdRepository: holdRepository as any,
+        bootstrapContextRepository,
+        clock: { now: () => new Date('2024-01-04T00:00:00.000Z') },
+      }
+    );
+
+    expect(result.handled).toBe(true);
+    expect(payNoteDeliveryRepository.markEventProcessed).not.toHaveBeenCalled();
+    expect(
+      payNoteDeliveryRepository.finalizeEventProcessing
+    ).not.toHaveBeenCalled();
+    expect(
+      payNoteDeliveryRepository.releaseEventProcessing
+    ).not.toHaveBeenCalled();
+  });
+
+  it('releases event claim when delivery processing fails', async () => {
+    const deliveryDocument = buildDeliveryDocument();
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockRejectedValue(new Error('credentials-error')),
+      bootstrapDocument: vi.fn(),
+      runDocumentOperation: vi.fn(),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn(),
+    };
+
+    const payNoteDeliveryRepository = {
+      markEventProcessed: vi.fn().mockResolvedValue(true),
+      finalizeEventProcessing: vi.fn(),
+      releaseEventProcessing: vi.fn(),
+      saveDelivery: vi.fn(),
+      getDelivery: vi.fn().mockResolvedValue(null),
+      getDeliveryByDocumentId: vi.fn(),
+      getDeliveryBySessionId: vi.fn(),
+      getDeliveryByBootstrapSessionId: vi.fn(),
+      getDeliveryByPayNoteDocumentId: vi.fn(),
+      getDeliveryByCardTransactionDetails: vi.fn(),
+      listDeliveriesByUserId: vi.fn(),
+    };
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn(),
+      saveContract: vi.fn(),
+    };
+
+    await expect(
+      handlePayNoteDeliveryWebhookEvent(
+        {
+          payload: {
+            id: 'event-release-1',
+            object: {
+              sessionId: 'sync-session',
+              document: {
+                contracts: {
+                  synchronyChannel: {
+                    type: 'MyOS/MyOS Timeline Channel',
+                    accountId: 'bank-account',
+                  },
+                  sendPayNote: {
+                    type: 'Conversation/Operation',
+                  },
+                },
+              },
+              emitted: [
+                {
+                  type: 'Conversation/Document Bootstrap Requested',
+                  bootstrapAssignee: 'synchronyChannel',
+                  document: deliveryDocument,
+                },
+              ],
+            },
+          },
+        },
+        {
+          myOsClient: myOsClient as any,
+          payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+          contractRepository: contractRepository as any,
+          bankingRepository: {} as any,
+          holdRepository: {} as any,
+          bootstrapContextRepository,
+          clock: { now: () => new Date('2024-01-04T00:00:00.000Z') },
+        }
+      )
+    ).rejects.toThrow('credentials-error');
+
+    expect(
+      payNoteDeliveryRepository.releaseEventProcessing
+    ).toHaveBeenCalledWith('event-release-1');
+    expect(
+      payNoteDeliveryRepository.finalizeEventProcessing
+    ).not.toHaveBeenCalled();
   });
 
   it('reports identification failure when hold is missing', async () => {

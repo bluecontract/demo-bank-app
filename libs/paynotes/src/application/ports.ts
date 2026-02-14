@@ -185,6 +185,8 @@ export interface PayNoteDeliverySummary {
 
 export interface PayNoteDeliveryRepository {
   markEventProcessed(eventId: string): Promise<boolean>;
+  finalizeEventProcessing?(eventId: string): Promise<void>;
+  releaseEventProcessing?(eventId: string): Promise<void>;
   getDelivery(deliveryId: string): Promise<PayNoteDeliveryRecord | null>;
   getDeliveryByDocumentId(
     documentId: string

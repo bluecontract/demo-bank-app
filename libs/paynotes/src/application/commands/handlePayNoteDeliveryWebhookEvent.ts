@@ -45,41 +45,79 @@ export const handlePayNoteDeliveryWebhookEvent = async (
     return { handled: false, logs };
   }
 
-  const firstProcess = await deps.payNoteDeliveryRepository.markEventProcessed(
-    eventId
-  );
-  if (!firstProcess) {
-    log(logs, 'info', 'PayNote delivery webhook already processed', {
-      eventId,
-    });
-    return { handled: true, logs };
+  let claimedEvent = false;
+  if (!input.skipEventIdempotencyClaim) {
+    const firstProcess =
+      await deps.payNoteDeliveryRepository.markEventProcessed(eventId);
+    if (!firstProcess) {
+      log(logs, 'info', 'PayNote delivery webhook already processed', {
+        eventId,
+      });
+      return { handled: true, logs };
+    }
+    claimedEvent = true;
+  } else {
+    trace(logs, 'Delivery webhook idempotency claim skipped', { eventId });
   }
 
-  const now = deps.clock.now().toISOString();
+  let completed = false;
+  let processingError: unknown;
+  try {
+    const now = deps.clock.now().toISOString();
 
-  if (documentBootstrapRequests.length > 0) {
-    await handleBootstrapRequests({
-      requests: documentBootstrapRequests,
-      eventId,
-      eventObject,
-      documentPayload,
-      now,
-      deps,
-      logs,
-    });
+    if (documentBootstrapRequests.length > 0) {
+      await handleBootstrapRequests({
+        requests: documentBootstrapRequests,
+        eventId,
+        eventObject,
+        documentPayload,
+        now,
+        deps,
+        logs,
+      });
+    }
+
+    if (documentPayload && isDeliveryDoc) {
+      await handleDeliveryDocumentUpdate({
+        eventId,
+        eventType,
+        eventObject,
+        documentPayload,
+        emitted,
+        now,
+        deps,
+        logs,
+      });
+    }
+
+    completed = true;
+  } catch (error) {
+    processingError = error;
   }
 
-  if (documentPayload && isDeliveryDoc) {
-    await handleDeliveryDocumentUpdate({
-      eventId,
-      eventType,
-      eventObject,
-      documentPayload,
-      emitted,
-      now,
-      deps,
-      logs,
-    });
+  let lockError: unknown;
+  if (claimedEvent) {
+    try {
+      if (completed) {
+        await deps.payNoteDeliveryRepository.finalizeEventProcessing?.(eventId);
+      } else {
+        await deps.payNoteDeliveryRepository.releaseEventProcessing?.(eventId);
+      }
+    } catch (error) {
+      lockError = error;
+      log(logs, 'error', 'Failed to update delivery event processing lock', {
+        eventId,
+        completed,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (processingError) {
+    throw processingError;
+  }
+  if (lockError) {
+    throw lockError;
   }
 
   return { handled: true, logs };

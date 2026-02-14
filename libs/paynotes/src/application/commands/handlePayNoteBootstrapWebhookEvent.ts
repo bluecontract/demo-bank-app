@@ -356,7 +356,9 @@ export const handlePayNoteBootstrapWebhookEvent = async (
 
   const now = deps.clock.now().toISOString();
 
-  if (!input.skipEventIdempotencyClaim) {
+  const shouldClaimEvent = !input.skipEventIdempotencyClaim;
+  let claimedEvent = false;
+  if (shouldClaimEvent) {
     const firstProcess =
       await deps.payNoteDeliveryRepository.markEventProcessed(eventId);
     if (!firstProcess) {
@@ -365,245 +367,296 @@ export const handlePayNoteBootstrapWebhookEvent = async (
       });
       return { handled: true, logs };
     }
+    claimedEvent = true;
   }
 
-  const bootstrapSessionId =
-    typeof eventObject?.sessionId === 'string'
-      ? eventObject.sessionId
-      : undefined;
+  const processBootstrapEvent =
+    async (): Promise<HandlePayNoteBootstrapWebhookResult> => {
+      const bootstrapSessionId =
+        typeof eventObject?.sessionId === 'string'
+          ? eventObject.sessionId
+          : undefined;
 
-  const emittedEvents = Array.isArray(eventObject?.emitted)
-    ? eventObject.emitted
-    : undefined;
-  const emitted = emittedEvents ?? [];
-  const targetEvents = emitted
-    .map(event => ({ event, sessionIds: getTargetSessionIds(event) }))
-    .filter(
-      (item): item is { event: unknown; sessionIds: string[] } =>
-        item.sessionIds !== null
-    );
+      const emittedEvents = Array.isArray(eventObject?.emitted)
+        ? eventObject.emitted
+        : undefined;
+      const emitted = emittedEvents ?? [];
+      const targetEvents = emitted
+        .map(event => ({ event, sessionIds: getTargetSessionIds(event) }))
+        .filter(
+          (item): item is { event: unknown; sessionIds: string[] } =>
+            item.sessionIds !== null
+        );
 
-  if (!targetEvents.length) {
-    log(logs, 'info', 'No target session events found in bootstrap update', {
-      eventId,
-      bootstrapSessionId,
-    });
-    return { handled: true, logs };
-  }
-
-  const deliveryRecord = bootstrapSessionId
-    ? await deps.payNoteDeliveryRepository.getDeliveryByBootstrapSessionId(
-        bootstrapSessionId
-      )
-    : null;
-
-  const bootstrapRecord = bootstrapSessionId
-    ? await deps.payNoteBootstrapRepository.getBootstrapBySessionId(
-        bootstrapSessionId
-      )
-    : null;
-  const bootstrapContext = bootstrapSessionId
-    ? await deps.bootstrapContextRepository.getContextBySessionId(
-        bootstrapSessionId
-      )
-    : null;
-  const hasBootstrapContextLinkingData = Boolean(
-    bootstrapContext?.userId &&
-      (bootstrapContext.accountNumber ??
-        bootstrapContext.payerAccountNumber ??
-        bootstrapContext.payeeAccountNumber)
-  );
-
-  if (!deliveryRecord && !bootstrapRecord && !hasBootstrapContextLinkingData) {
-    if (bootstrapSessionId && !input.skipPendingBuffer) {
-      await bufferPendingBootstrapEvent({
-        eventId,
-        bootstrapSessionId,
-        now,
-        logs,
-        deps,
-      });
-      return {
-        handled: true,
-        note: 'Buffered waiting for bootstrap context',
-        logs,
-      };
-    }
-
-    log(logs, 'info', 'Bootstrap event deferred (no matching context)', {
-      eventId,
-      bootstrapSessionId,
-    });
-    return {
-      handled: true,
-      note: 'Deferred waiting for bootstrap context',
-      logs,
-    };
-  }
-
-  trace(logs, 'Bootstrap context resolved', {
-    eventId,
-    bootstrapSessionId,
-    hasDeliveryRecord: Boolean(deliveryRecord),
-    hasBootstrapRecord: Boolean(bootstrapRecord),
-    hasBootstrapContext: Boolean(bootstrapContext),
-    hasBootstrapContextLinkingData,
-  });
-
-  let completionReported = false;
-
-  for (const { sessionIds } of targetEvents) {
-    if (!sessionIds.length) {
-      log(logs, 'warn', 'Target session event missing session ids', {
-        eventId,
-      });
-      continue;
-    }
-
-    trace(logs, 'Bootstrap target session ids resolved', {
-      eventId,
-      bootstrapSessionId,
-      sessionIds,
-    });
-
-    for (const sessionId of sessionIds) {
-      const resolved = await resolvePayNoteDocument(sessionId, logs, deps);
-      if (!resolved) {
-        continue;
-      }
-
-      const isPayNote = resolved.document
-        ? isPayNoteDocument(resolved.document)
-        : true;
-
-      trace(logs, 'Resolved paynote document from session', {
-        eventId,
-        sessionId,
-        payNoteDocumentId: resolved.documentId,
-        isPayNote,
-      });
-
-      if (!isPayNote) {
-        log(logs, 'info', 'Bootstrap target is not a PayNote document', {
-          eventId,
-          sessionId,
-          documentId: resolved.documentId,
-        });
-
-        if (!completionReported && bootstrapContext?.requestingSessionId) {
-          completionReported = await reportBootstrapCompleted({
+      if (!targetEvents.length) {
+        log(
+          logs,
+          'info',
+          'No target session events found in bootstrap update',
+          {
             eventId,
             bootstrapSessionId,
-            documentId: resolved.documentId,
-            requestingSessionId: bootstrapContext.requestingSessionId,
-            requestId: bootstrapContext.requestId,
-            deps,
-            logs,
-          });
-        }
-        continue;
+          }
+        );
+        return { handled: true, logs };
       }
 
-      const payNoteDocumentId = resolved.documentId;
-      const existingPayNote = await deps.payNoteRepository.getPayNote(
-        payNoteDocumentId
+      const deliveryRecord = bootstrapSessionId
+        ? await deps.payNoteDeliveryRepository.getDeliveryByBootstrapSessionId(
+            bootstrapSessionId
+          )
+        : null;
+
+      const bootstrapRecord = bootstrapSessionId
+        ? await deps.payNoteBootstrapRepository.getBootstrapBySessionId(
+            bootstrapSessionId
+          )
+        : null;
+      const bootstrapContext = bootstrapSessionId
+        ? await deps.bootstrapContextRepository.getContextBySessionId(
+            bootstrapSessionId
+          )
+        : null;
+      const hasBootstrapContextLinkingData = Boolean(
+        bootstrapContext?.userId &&
+          (bootstrapContext.accountNumber ??
+            bootstrapContext.payerAccountNumber ??
+            bootstrapContext.payeeAccountNumber)
       );
 
-      const updatedRecord = mergePayNoteRecord(existingPayNote, {
-        payNoteDocumentId,
-        sessionIds: [sessionId],
-        deliveryId: deliveryRecord?.deliveryId,
-        accountNumber:
-          deliveryRecord?.accountNumber ??
-          bootstrapRecord?.accountNumber ??
-          bootstrapContext?.accountNumber,
-        userId:
-          deliveryRecord?.userId ??
-          bootstrapRecord?.userId ??
-          bootstrapContext?.userId,
-        holdId: deliveryRecord?.holdId ?? bootstrapContext?.holdId,
-        transactionId:
-          deliveryRecord?.transactionId ?? bootstrapContext?.transactionId,
-        merchantId: deliveryRecord?.merchantId ?? bootstrapContext?.merchantId,
-        payerAccountNumber:
-          bootstrapRecord?.payerAccountNumber ??
-          bootstrapContext?.payerAccountNumber ??
-          bootstrapContext?.accountNumber ??
-          deliveryRecord?.accountNumber ??
-          existingPayNote?.payerAccountNumber,
-        payeeAccountNumber:
-          bootstrapRecord?.payeeAccountNumber ??
-          bootstrapContext?.payeeAccountNumber ??
-          bootstrapContext?.accountNumber ??
-          existingPayNote?.payeeAccountNumber,
-        document: resolved.document,
-        createdAt: existingPayNote?.createdAt ?? now,
-        updatedAt: now,
-      });
+      if (
+        !deliveryRecord &&
+        !bootstrapRecord &&
+        !hasBootstrapContextLinkingData
+      ) {
+        if (bootstrapSessionId && !input.skipPendingBuffer) {
+          await bufferPendingBootstrapEvent({
+            eventId,
+            bootstrapSessionId,
+            now,
+            logs,
+            deps,
+          });
+          return {
+            handled: true,
+            note: 'Buffered waiting for bootstrap context',
+            logs,
+          };
+        }
 
-      await deps.payNoteRepository.savePayNote(updatedRecord);
-      await upsertPayNoteContractRecord({
-        contractRepository: deps.contractRepository,
-        updatedRecord,
-        sessionId,
-        documentId: payNoteDocumentId,
-        customerChannelKey: bootstrapContext?.customerChannelKey,
-        document: updatedRecord.document,
-        emittedEvents,
-        now,
-      });
-
-      if (deliveryRecord) {
-        const updatedDelivery = {
-          ...deliveryRecord,
-          payNoteDocumentId:
-            deliveryRecord.payNoteDocumentId ?? payNoteDocumentId,
-          payNoteSessionIds: mergeSessionIds(deliveryRecord.payNoteSessionIds, [
-            sessionId,
-          ]),
-          payNoteDocument: resolved.document ?? deliveryRecord.payNoteDocument,
-          payNoteUpdatedAt: eventObject?.created ?? now,
-          payNoteBootstrapSessionId:
-            deliveryRecord.payNoteBootstrapSessionId ?? bootstrapSessionId,
-          updatedAt: now,
-        };
-
-        await deps.payNoteDeliveryRepository.saveDelivery(updatedDelivery);
-      }
-
-      if (deliveryRecord?.holdId) {
-        await updateHoldPayNoteDocumentIdForBootstrap(
-          logs,
-          deliveryRecord.holdId,
-          payNoteDocumentId,
-          deps,
-          { eventId, deliveryId: deliveryRecord.deliveryId }
-        );
-      }
-
-      if (!completionReported && bootstrapContext?.requestingSessionId) {
-        completionReported = await reportBootstrapCompleted({
+        log(logs, 'info', 'Bootstrap event deferred (no matching context)', {
           eventId,
           bootstrapSessionId,
-          documentId: payNoteDocumentId,
-          requestingSessionId: bootstrapContext.requestingSessionId,
-          requestId: bootstrapContext.requestId,
-          deps,
-          logs,
         });
+        return {
+          handled: true,
+          note: 'Deferred waiting for bootstrap context',
+          logs,
+        };
       }
 
-      log(logs, 'info', 'PayNote bootstrap linked', {
+      trace(logs, 'Bootstrap context resolved', {
         eventId,
         bootstrapSessionId,
-        payNoteDocumentId,
-        sessionId,
-        deliveryId: deliveryRecord?.deliveryId,
+        hasDeliveryRecord: Boolean(deliveryRecord),
+        hasBootstrapRecord: Boolean(bootstrapRecord),
+        hasBootstrapContext: Boolean(bootstrapContext),
+        hasBootstrapContextLinkingData,
+      });
+
+      let completionReported = false;
+
+      for (const { sessionIds } of targetEvents) {
+        if (!sessionIds.length) {
+          log(logs, 'warn', 'Target session event missing session ids', {
+            eventId,
+          });
+          continue;
+        }
+
+        trace(logs, 'Bootstrap target session ids resolved', {
+          eventId,
+          bootstrapSessionId,
+          sessionIds,
+        });
+
+        for (const sessionId of sessionIds) {
+          const resolved = await resolvePayNoteDocument(sessionId, logs, deps);
+          if (!resolved) {
+            continue;
+          }
+
+          const isPayNote = resolved.document
+            ? isPayNoteDocument(resolved.document)
+            : true;
+
+          trace(logs, 'Resolved paynote document from session', {
+            eventId,
+            sessionId,
+            payNoteDocumentId: resolved.documentId,
+            isPayNote,
+          });
+
+          if (!isPayNote) {
+            log(logs, 'info', 'Bootstrap target is not a PayNote document', {
+              eventId,
+              sessionId,
+              documentId: resolved.documentId,
+            });
+
+            if (!completionReported && bootstrapContext?.requestingSessionId) {
+              completionReported = await reportBootstrapCompleted({
+                eventId,
+                bootstrapSessionId,
+                documentId: resolved.documentId,
+                requestingSessionId: bootstrapContext.requestingSessionId,
+                requestId: bootstrapContext.requestId,
+                deps,
+                logs,
+              });
+            }
+            continue;
+          }
+
+          const payNoteDocumentId = resolved.documentId;
+          const existingPayNote = await deps.payNoteRepository.getPayNote(
+            payNoteDocumentId
+          );
+
+          const updatedRecord = mergePayNoteRecord(existingPayNote, {
+            payNoteDocumentId,
+            sessionIds: [sessionId],
+            deliveryId: deliveryRecord?.deliveryId,
+            accountNumber:
+              deliveryRecord?.accountNumber ??
+              bootstrapRecord?.accountNumber ??
+              bootstrapContext?.accountNumber,
+            userId:
+              deliveryRecord?.userId ??
+              bootstrapRecord?.userId ??
+              bootstrapContext?.userId,
+            holdId: deliveryRecord?.holdId ?? bootstrapContext?.holdId,
+            transactionId:
+              deliveryRecord?.transactionId ?? bootstrapContext?.transactionId,
+            merchantId:
+              deliveryRecord?.merchantId ?? bootstrapContext?.merchantId,
+            payerAccountNumber:
+              bootstrapRecord?.payerAccountNumber ??
+              bootstrapContext?.payerAccountNumber ??
+              bootstrapContext?.accountNumber ??
+              deliveryRecord?.accountNumber ??
+              existingPayNote?.payerAccountNumber,
+            payeeAccountNumber:
+              bootstrapRecord?.payeeAccountNumber ??
+              bootstrapContext?.payeeAccountNumber ??
+              bootstrapContext?.accountNumber ??
+              existingPayNote?.payeeAccountNumber,
+            document: resolved.document,
+            createdAt: existingPayNote?.createdAt ?? now,
+            updatedAt: now,
+          });
+
+          await deps.payNoteRepository.savePayNote(updatedRecord);
+          await upsertPayNoteContractRecord({
+            contractRepository: deps.contractRepository,
+            updatedRecord,
+            sessionId,
+            documentId: payNoteDocumentId,
+            customerChannelKey: bootstrapContext?.customerChannelKey,
+            document: updatedRecord.document,
+            emittedEvents,
+            now,
+          });
+
+          if (deliveryRecord) {
+            const updatedDelivery = {
+              ...deliveryRecord,
+              payNoteDocumentId:
+                deliveryRecord.payNoteDocumentId ?? payNoteDocumentId,
+              payNoteSessionIds: mergeSessionIds(
+                deliveryRecord.payNoteSessionIds,
+                [sessionId]
+              ),
+              payNoteDocument:
+                resolved.document ?? deliveryRecord.payNoteDocument,
+              payNoteUpdatedAt: eventObject?.created ?? now,
+              payNoteBootstrapSessionId:
+                deliveryRecord.payNoteBootstrapSessionId ?? bootstrapSessionId,
+              updatedAt: now,
+            };
+
+            await deps.payNoteDeliveryRepository.saveDelivery(updatedDelivery);
+          }
+
+          if (deliveryRecord?.holdId) {
+            await updateHoldPayNoteDocumentIdForBootstrap(
+              logs,
+              deliveryRecord.holdId,
+              payNoteDocumentId,
+              deps,
+              { eventId, deliveryId: deliveryRecord.deliveryId }
+            );
+          }
+
+          if (!completionReported && bootstrapContext?.requestingSessionId) {
+            completionReported = await reportBootstrapCompleted({
+              eventId,
+              bootstrapSessionId,
+              documentId: payNoteDocumentId,
+              requestingSessionId: bootstrapContext.requestingSessionId,
+              requestId: bootstrapContext.requestId,
+              deps,
+              logs,
+            });
+          }
+
+          log(logs, 'info', 'PayNote bootstrap linked', {
+            eventId,
+            bootstrapSessionId,
+            payNoteDocumentId,
+            sessionId,
+            deliveryId: deliveryRecord?.deliveryId,
+          });
+        }
+      }
+
+      return { handled: true, logs };
+    };
+
+  let processingResult: HandlePayNoteBootstrapWebhookResult | undefined;
+  let processingError: unknown;
+  try {
+    processingResult = await processBootstrapEvent();
+  } catch (error) {
+    processingError = error;
+  }
+
+  let lockError: unknown;
+  if (claimedEvent) {
+    try {
+      if (processingError) {
+        await deps.payNoteDeliveryRepository.releaseEventProcessing?.(eventId);
+      } else {
+        await deps.payNoteDeliveryRepository.finalizeEventProcessing?.(eventId);
+      }
+    } catch (error) {
+      lockError = error;
+      log(logs, 'error', 'Failed to update bootstrap event processing lock', {
+        eventId,
+        processingError: Boolean(processingError),
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   }
 
-  return { handled: true, logs };
+  if (processingError) {
+    throw processingError;
+  }
+  if (lockError) {
+    throw lockError;
+  }
+
+  return processingResult ?? { handled: true, logs };
 };
 
 export const consumePendingPayNoteBootstrapEvents = async (

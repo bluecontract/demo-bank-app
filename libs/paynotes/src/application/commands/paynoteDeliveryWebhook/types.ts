@@ -11,6 +11,7 @@ import type {
 export interface HandlePayNoteDeliveryWebhookInput {
   payload: unknown;
   eventId?: string;
+  skipEventIdempotencyClaim?: boolean;
 }
 
 export interface HandlePayNoteDeliveryWebhookDependencies {

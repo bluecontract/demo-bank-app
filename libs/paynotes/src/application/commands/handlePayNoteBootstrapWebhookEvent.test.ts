@@ -91,6 +91,8 @@ const createDependencies = () => {
   const payNoteDeliveryRepository: HandlePayNoteBootstrapWebhookDependencies['payNoteDeliveryRepository'] =
     {
       markEventProcessed: vi.fn(),
+      finalizeEventProcessing: vi.fn(),
+      releaseEventProcessing: vi.fn(),
       getDelivery: vi.fn(),
       getDeliveryByDocumentId: vi.fn(),
       getDeliveryBySessionId: vi.fn(),
@@ -250,6 +252,42 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
       })
     );
     expect(pendingBootstrapEventRepository.addPending).not.toHaveBeenCalled();
+    expect(
+      payNoteDeliveryRepository.finalizeEventProcessing
+    ).toHaveBeenCalledWith('event-1');
+    expect(
+      payNoteDeliveryRepository.releaseEventProcessing
+    ).not.toHaveBeenCalled();
+  });
+
+  it('releases event claim when bootstrap processing fails', async () => {
+    const { deps, payNoteDeliveryRepository } = createDependencies();
+
+    payNoteDeliveryRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(true);
+    payNoteDeliveryRepository.getDeliveryByBootstrapSessionId = vi
+      .fn()
+      .mockRejectedValue(new Error('delivery-read-error'));
+
+    const payload: HandlePayNoteBootstrapWebhookInput['payload'] = {
+      id: 'event-failed-1',
+      object: {
+        sessionId: 'bootstrap-1',
+        document: buildBootstrapDocument(),
+        emitted: [buildTargetSessionStartedEvent('session-1')],
+      },
+    };
+
+    await expect(
+      handlePayNoteBootstrapWebhookEvent({ payload }, deps)
+    ).rejects.toThrow('delivery-read-error');
+    expect(
+      payNoteDeliveryRepository.releaseEventProcessing
+    ).toHaveBeenCalledWith('event-failed-1');
+    expect(
+      payNoteDeliveryRepository.finalizeEventProcessing
+    ).not.toHaveBeenCalled();
   });
 
   it('reports bootstrap completion to requesting session using bootstrapped paynote document id', async () => {

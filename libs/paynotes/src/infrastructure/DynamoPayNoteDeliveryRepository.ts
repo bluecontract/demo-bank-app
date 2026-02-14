@@ -1,5 +1,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
+  DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
@@ -165,7 +166,9 @@ interface PayNoteDeliveryEventItem {
   SK: typeof SORT_KEYS.META;
   entityType: typeof ENTITY_TYPES.EVENT;
   eventId: string;
+  status: 'processing' | 'completed';
   createdAt: string;
+  updatedAt?: string;
   ttl: number;
 }
 
@@ -286,6 +289,7 @@ export class DynamoPayNoteDeliveryRepository
       SK: SORT_KEYS.META,
       entityType: ENTITY_TYPES.EVENT,
       eventId,
+      status: 'processing',
       createdAt: now.toISOString(),
       ttl,
     };
@@ -305,6 +309,63 @@ export class DynamoPayNoteDeliveryRepository
         error.name === 'ConditionalCheckFailedException'
       ) {
         return false;
+      }
+      throw error;
+    }
+  }
+
+  async finalizeEventProcessing(eventId: string): Promise<void> {
+    const now = new Date();
+    const ttl = Math.floor(now.getTime() / 1000) + 7 * 24 * 60 * 60;
+
+    await this.client.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: this.buildEventPk(eventId),
+          SK: SORT_KEYS.META,
+        },
+        UpdateExpression:
+          'SET #status = :completed, #updatedAt = :updatedAt, #ttl = :ttl',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+          '#updatedAt': 'updatedAt',
+          '#ttl': 'ttl',
+        },
+        ExpressionAttributeValues: {
+          ':completed': 'completed',
+          ':updatedAt': now.toISOString(),
+          ':ttl': ttl,
+        },
+        ConditionExpression: 'attribute_exists(PK)',
+      })
+    );
+  }
+
+  async releaseEventProcessing(eventId: string): Promise<void> {
+    try {
+      await this.client.send(
+        new DeleteCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: this.buildEventPk(eventId),
+            SK: SORT_KEYS.META,
+          },
+          ConditionExpression: '#status = :processing',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+          },
+          ExpressionAttributeValues: {
+            ':processing': 'processing',
+          },
+        })
+      );
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.name === 'ConditionalCheckFailedException'
+      ) {
+        return;
       }
       throw error;
     }

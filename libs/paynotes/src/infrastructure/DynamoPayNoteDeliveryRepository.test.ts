@@ -21,14 +21,17 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
   PutCommand: vi.fn(payload => payload),
   GetCommand: vi.fn(payload => payload),
   QueryCommand: vi.fn(payload => payload),
+  UpdateCommand: vi.fn(payload => payload),
+  DeleteCommand: vi.fn(payload => payload),
 }));
 
-const { PutCommand, GetCommand, QueryCommand } = await import(
-  '@aws-sdk/lib-dynamodb'
-);
+const { PutCommand, GetCommand, QueryCommand, UpdateCommand, DeleteCommand } =
+  await import('@aws-sdk/lib-dynamodb');
 const mockPutCommand = vi.mocked(PutCommand);
 const mockGetCommand = vi.mocked(GetCommand);
 const mockQueryCommand = vi.mocked(QueryCommand);
+const mockUpdateCommand = vi.mocked(UpdateCommand);
+const mockDeleteCommand = vi.mocked(DeleteCommand);
 
 const createRepository = () =>
   new DynamoPayNoteDeliveryRepository({
@@ -54,6 +57,10 @@ describe('DynamoPayNoteDeliveryRepository', () => {
         ConditionExpression: 'attribute_not_exists(PK)',
       })
     );
+    const eventItem = mockPutCommand.mock.calls[0]?.[0]?.Item as
+      | { status?: string }
+      | undefined;
+    expect(eventItem?.status).toBe('processing');
   });
 
   it('returns false when event already processed', async () => {
@@ -67,6 +74,47 @@ describe('DynamoPayNoteDeliveryRepository', () => {
     const result = await repository.markEventProcessed('event-1');
 
     expect(result).toBe(false);
+  });
+
+  it('finalizes claimed event processing', async () => {
+    mockSend.mockResolvedValueOnce({});
+    const repository = createRepository();
+
+    await repository.finalizeEventProcessing?.('event-1');
+
+    expect(mockUpdateCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        ConditionExpression: 'attribute_exists(PK)',
+      })
+    );
+  });
+
+  it('releases claimed event processing lock', async () => {
+    mockSend.mockResolvedValueOnce({});
+    const repository = createRepository();
+
+    await repository.releaseEventProcessing?.('event-1');
+
+    expect(mockDeleteCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        ConditionExpression: '#status = :processing',
+      })
+    );
+  });
+
+  it('ignores release when lock is not in processing state', async () => {
+    mockSend.mockRejectedValueOnce(
+      Object.assign(new Error('ConditionalCheckFailedException'), {
+        name: 'ConditionalCheckFailedException',
+      })
+    );
+    const repository = createRepository();
+
+    await expect(
+      repository.releaseEventProcessing?.('event-1')
+    ).resolves.toBeUndefined();
   });
 
   it('persists delivery and mapping items', async () => {
