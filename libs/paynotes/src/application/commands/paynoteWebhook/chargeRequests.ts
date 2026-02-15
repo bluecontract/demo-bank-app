@@ -41,6 +41,8 @@ import { resolveWebhookContext } from './payload';
 import { getString, toSimpleRecord } from './utils';
 import { resolveDeliveryRecord, upsertPayNoteContract } from './records';
 import { trace } from './logging';
+import { resolveRuntimeContracts } from '../blueRuntime';
+import { isRecord } from '../typeGuards';
 
 const CARD_CHARGE_RESPONDED_EVENT_NAME = 'PayNote/Card Charge Responded';
 const CARD_CHARGE_COMPLETED_EVENT_NAME = 'PayNote/Card Charge Completed';
@@ -268,9 +270,6 @@ const parseChargeAttemptId = (
 
 const buildChargeAttemptProcessingKey = (chargeAttemptId: string) =>
   `paynote-card-charge-attempt-processed:${chargeAttemptId}`;
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 const toPendingMandateChargeAttempts = (
   value: unknown
@@ -2172,8 +2171,7 @@ const resolveLinkedPayNoteBindings = (input: {
       bindings: LinkedPayNoteParticipantBindings;
     }
   | { ok: false; reason: string } => {
-  const sourceDocumentRecord = toSimpleRecord(input.sourceDocument);
-  const contracts = toSimpleRecord(sourceDocumentRecord?.contracts);
+  const contracts = resolveRuntimeContracts(input.sourceDocument);
   if (!contracts) {
     return {
       ok: false,
@@ -3331,10 +3329,16 @@ export const handleChargeRequestEvents = async (input: {
         mandateDocumentId: authorization.mandateDocumentId,
         mandateSessionId: authorization.mandateSessionId,
       });
-
-      delete pendingAttempts[chargeAttemptId];
-      pendingAttemptsDirty = true;
       if (!immediate.handled) {
+        await enqueueRetry({
+          context: resolved.context,
+          eventType: resolved.eventType,
+          requestId: resolved.requestId,
+          chargeAttemptId,
+          mandateDocumentId: authorization.mandateDocumentId,
+          reason: 'Payment mandate authorization not yet confirmed.',
+          linkedPayNotePresent: Boolean(resolved.request.payNoteDocument),
+        });
         logs.push({
           level: 'info',
           message:
@@ -3348,7 +3352,11 @@ export const handleChargeRequestEvents = async (input: {
             requestId: resolved.requestId ?? null,
           },
         });
+        continue;
       }
+
+      delete pendingAttempts[chargeAttemptId];
+      pendingAttemptsDirty = true;
     }
   }
 
@@ -3508,6 +3516,15 @@ export const handleChargeRequestEvents = async (input: {
       mandateSessionId: authorization.mandateSessionId,
     });
     if (!immediate.handled) {
+      await enqueueRetry({
+        context,
+        eventType,
+        requestId,
+        chargeAttemptId,
+        mandateDocumentId: authorization.mandateDocumentId,
+        reason: 'Payment mandate authorization not yet confirmed.',
+        linkedPayNotePresent: Boolean(request.payNoteDocument),
+      });
       logs.push({
         level: 'info',
         message:

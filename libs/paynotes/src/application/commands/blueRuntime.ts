@@ -1,10 +1,8 @@
 import type { BlueNode } from '@blue-labs/language';
 import { PaymentMandateSchema } from '@blue-repository/types/packages/paynote/schemas';
 import { blue } from '../../blue';
+import { isRecord } from './typeGuards';
 import { toBlueNode } from './webhookUtils';
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 export type RuntimeDocumentResolution = {
   node: BlueNode;
@@ -51,3 +49,15 @@ export const isPaymentMandateDocumentNode = (node: BlueNode): boolean =>
   blue.isTypeOf(node, PaymentMandateSchema, {
     checkSchemaExtensions: true,
   });
+
+export const resolveRuntimeContracts = (
+  value: unknown
+): Record<string, unknown> | null => {
+  const runtimeDocument = resolveRuntimeDocument(value);
+  if (!runtimeDocument?.resolved) {
+    return null;
+  }
+
+  const contracts = runtimeDocument.record.contracts;
+  return isRecord(contracts) ? contracts : null;
+};

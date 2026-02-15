@@ -22,6 +22,8 @@ import {
 import { blue } from '../../../blue';
 import { log, trace } from '../paynoteWebhook/logging';
 import { getString, toSimpleRecord } from '../paynoteWebhook/utils';
+import { resolveRuntimeContracts } from '../blueRuntime';
+import { isRecord } from '../typeGuards';
 import { toBlueNode } from '../webhookUtils';
 import { mergeSessionIds } from '../payNoteSessionUtils';
 import type {
@@ -165,7 +167,7 @@ const validateBankControlledChannelBinding = (input: {
     };
   }
 
-  const contracts = toSimpleRecord(requestedDocumentPayload.contracts);
+  const contracts = resolveRuntimeContracts(requestedDocumentPayload);
   if (!contracts) {
     return { ok: true };
   }
@@ -194,7 +196,7 @@ const isBootstrapAssigneeMatch = (
   if (!requestingDocument || !bootstrapAssignee) {
     return false;
   }
-  const contracts = toSimpleRecord(requestingDocument.contracts);
+  const contracts = resolveRuntimeContracts(requestingDocument);
   if (!contracts) {
     return false;
   }
@@ -371,9 +373,6 @@ const normalizeBootstrapRequest = (
   initialMessages: toSimpleRecord(request.initialMessages) ?? undefined,
 });
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-
 const normalizeBootstrapDocument = (
   document: Record<string, unknown>
 ): Record<string, unknown> => {
@@ -409,7 +408,7 @@ const buildPayNoteBootstrapContext = (input: {
     ? buildCardTransactionDetailsKey(requestingDeliveryCardDetails)
     : undefined;
   const deliveryContracts = documentPayload
-    ? toSimpleRecord(documentPayload.contracts)
+    ? resolveRuntimeContracts(documentPayload)
     : null;
   const deliveryBindings = deliveryContracts
     ? buildChannelBindingsFromContracts(deliveryContracts)
@@ -1997,7 +1996,7 @@ export const handleBootstrapRequests = async (input: {
     requestingDocumentNode
   );
   const requestingContracts = documentPayload
-    ? toSimpleRecord(documentPayload.contracts)
+    ? resolveRuntimeContracts(documentPayload)
     : null;
   const requestingBindings = requestingContracts
     ? buildChannelBindingsFromContracts(requestingContracts)

@@ -7,10 +7,8 @@ import {
   isPaymentMandateDocumentNode,
   resolveRuntimeDocument,
 } from '../blueRuntime';
+import { isRecord } from '../typeGuards';
 import { toBlueNode } from '../webhookUtils';
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 export const toSimpleRecord = (
   value: unknown
