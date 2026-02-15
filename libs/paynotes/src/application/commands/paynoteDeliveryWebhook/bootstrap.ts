@@ -150,24 +150,28 @@ const getBindingIdentity = (binding?: {
   accountId?: string;
 }): string | undefined => binding?.accountId ?? binding?.email;
 
-const getContractsFromDocument = (
-  document: Record<string, unknown> | undefined
-): Record<string, unknown> | null => {
-  if (!document) {
+const getContractsFromDocument = (input: {
+  document?: Record<string, unknown>;
+  node?: BlueNode | null;
+}): Record<string, unknown> | null => {
+  const { document, node } = input;
+
+  if (document) {
+    const runtimeContracts = resolveRuntimeContracts(document);
+    if (runtimeContracts) {
+      return runtimeContracts;
+    }
+  }
+
+  if (!node) {
     return null;
   }
 
-  const runtimeContracts = resolveRuntimeContracts(document);
-  if (runtimeContracts) {
-    return runtimeContracts;
-  }
-
-  const simpleDocument = toSimpleRecord(document);
-  if (!simpleDocument || !isRecord(simpleDocument.contracts)) {
+  const original = blue.nodeToJson(node, 'original');
+  if (!isRecord(original) || !isRecord(original.contracts)) {
     return null;
   }
-
-  return simpleDocument.contracts as Record<string, unknown>;
+  return original.contracts as Record<string, unknown>;
 };
 
 const validateBankControlledChannelBinding = (input: {
@@ -187,7 +191,10 @@ const validateBankControlledChannelBinding = (input: {
     };
   }
 
-  const contracts = resolveRuntimeContracts(requestedDocumentPayload);
+  const contracts = getContractsFromDocument({
+    document: requestedDocumentPayload,
+    node: toBlueNode(requestedDocumentPayload),
+  });
   if (!contracts) {
     return { ok: true };
   }
@@ -206,23 +213,6 @@ const validateBankControlledChannelBinding = (input: {
   }
 
   return { ok: true };
-};
-
-const isBootstrapAssigneeMatch = (
-  requestingDocument: Record<string, unknown> | undefined,
-  bootstrapAssignee: string | undefined,
-  myOsAccountId: string
-): boolean => {
-  if (!requestingDocument || !bootstrapAssignee) {
-    return false;
-  }
-  const contracts = getContractsFromDocument(requestingDocument);
-  if (!contracts) {
-    return false;
-  }
-
-  const bindings = buildChannelBindingsFromContracts(contracts);
-  return bindings[bootstrapAssignee]?.accountId === myOsAccountId;
 };
 
 const extractBootstrapSessionId = (response: {
@@ -427,9 +417,10 @@ const buildPayNoteBootstrapContext = (input: {
   const deliveryId = requestingDeliveryCardDetails
     ? buildCardTransactionDetailsKey(requestingDeliveryCardDetails)
     : undefined;
-  const deliveryContracts = documentPayload
-    ? resolveRuntimeContracts(documentPayload)
-    : null;
+  const deliveryContracts = getContractsFromDocument({
+    document: documentPayload,
+    node: documentPayload ? toBlueNode(documentPayload) : null,
+  });
   const deliveryBindings = deliveryContracts
     ? buildChannelBindingsFromContracts(deliveryContracts)
     : {};
@@ -699,12 +690,8 @@ const isPaymentMandateDocumentNode = (node: BlueNode | null): boolean =>
 
 const isPaymentMandateDocumentPayload = (input: {
   node: BlueNode | null;
-  payload: Record<string, unknown>;
 }): boolean => {
-  if (isPaymentMandateDocumentNode(input.node)) {
-    return true;
-  }
-  return getString(input.payload.type) === 'PayNote/Payment Mandate';
+  return isPaymentMandateDocumentNode(input.node);
 };
 
 const resolveInitialMessageText = (input: {
@@ -998,9 +985,8 @@ const handlePaymentMandateBootstrapRequest = async (input: {
 
 const resolveExistingDocAllowedBootstrapType = (input: {
   node: BlueNode | null;
-  requestedDocumentPayload: Record<string, unknown>;
 }): string | null => {
-  const { node, requestedDocumentPayload } = input;
+  const { node } = input;
   if (
     node &&
     blue.isTypeOf(node, MerchantToCustomerPayNoteSchema, {
@@ -1012,14 +998,6 @@ const resolveExistingDocAllowedBootstrapType = (input: {
 
   if (node && blue.isTypeOfBlueId(node, payNoteBlueIds['PayNote/PayNote'])) {
     return 'PayNote/PayNote';
-  }
-
-  const requestedTypeName = getString(requestedDocumentPayload.type);
-  if (
-    requestedTypeName === 'PayNote/Merchant To Customer PayNote' ||
-    requestedTypeName === 'PayNote/PayNote'
-  ) {
-    return requestedTypeName;
   }
 
   return null;
@@ -2009,17 +1987,21 @@ export const handleBootstrapRequests = async (input: {
     input;
   const credentials = await deps.myOsClient.getCredentials();
   const requestingSessionId = getString(eventObject?.sessionId);
-  const requestingDocumentPayload =
-    documentPayload ?? toSimpleRecord(eventObject?.document) ?? undefined;
-  const requestingDocumentNode = eventObject?.document
-    ? toBlueNode(eventObject.document)
-    : null;
+  const requestingDocumentNode = toBlueNode(
+    eventObject?.document ?? documentPayload
+  );
+  const requestingDocumentPayload = requestingDocumentNode
+    ? (blue.nodeToJson(requestingDocumentNode, 'original') as
+        | Record<string, unknown>
+        | undefined)
+    : undefined;
   const isRequestingDeliveryDoc = isDeliveryDocumentNode(
     requestingDocumentNode
   );
-  const requestingContracts = getContractsFromDocument(
-    requestingDocumentPayload
-  );
+  const requestingContracts = getContractsFromDocument({
+    document: requestingDocumentPayload,
+    node: requestingDocumentNode,
+  });
   const requestingBindings = requestingContracts
     ? buildChannelBindingsFromContracts(requestingContracts)
     : {};
@@ -2028,11 +2010,6 @@ export const handleBootstrapRequests = async (input: {
   );
   const requestingPayeeAccountId = getString(
     requestingBindings.payeeChannel?.accountId
-  );
-  const canHandleAllowListedFromDelivery = Boolean(
-    isRequestingDeliveryDoc &&
-      requestingPayerAccountId &&
-      requestingPayeeAccountId
   );
   const isSynchronyMerchantDoc = Boolean(
     requestingContracts?.synchronyChannel && requestingContracts?.sendPayNote
@@ -2081,9 +2058,13 @@ export const handleBootstrapRequests = async (input: {
   );
   const knownRequestingDelivery = shouldRequireKnownRequestingSession
     ? canonicalRequestingDocumentId
-      ? await deps.payNoteDeliveryRepository.getDeliveryByPayNoteDocumentId(
-          canonicalRequestingDocumentId
-        )
+      ? isRequestingDeliveryDoc
+        ? await deps.payNoteDeliveryRepository.getDeliveryByDocumentId(
+            canonicalRequestingDocumentId
+          )
+        : await deps.payNoteDeliveryRepository.getDeliveryByPayNoteDocumentId(
+            canonicalRequestingDocumentId
+          )
       : await getKnownDelivery()
     : null;
   if (shouldRequireKnownRequestingSession && !knownRequestingDelivery) {
@@ -2120,11 +2101,7 @@ export const handleBootstrapRequests = async (input: {
     }
 
     if (
-      !isBootstrapAssigneeMatch(
-        requestingDocumentPayload,
-        bootstrapAssignee,
-        credentials.accountId
-      )
+      requestingBindings[bootstrapAssignee]?.accountId !== credentials.accountId
     ) {
       trace(logs, 'Bootstrap request ignored (not assigned)', {
         eventId,
@@ -2145,33 +2122,24 @@ export const handleBootstrapRequests = async (input: {
     }
 
     const requestedDocumentNode = request.documentNode;
-
-    if (
-      isPaymentMandateDocumentPayload({
-        node: requestedDocumentNode,
-        payload: requestedDocumentPayload,
-      })
-    ) {
-      await handlePaymentMandateBootstrapRequest({
-        request: normalized,
-        requestedDocumentPayload,
-        isRequestingDeliveryDoc,
-        responseContext,
+    if (!requestedDocumentNode) {
+      log(logs, 'warn', 'Bootstrap request rejected (missing typed document)', {
         eventId,
-        requestIndex,
-        now,
-        deps,
-        logs,
+        bootstrapAssignee,
+      });
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason: 'Unsupported document type for bootstrap.',
       });
       continue;
     }
 
-    if (isDeliveryDocumentNode(requestedDocumentNode)) {
-      if (!isSynchronyMerchantDoc) {
+    if (isSynchronyMerchantDoc) {
+      if (!isDeliveryDocumentNode(requestedDocumentNode)) {
         log(
           logs,
           'warn',
-          'Bootstrap request ignored (delivery bootstrap outside synchrony merchant)',
+          'Bootstrap request rejected (synchrony supports delivery bootstrap only)',
           {
             eventId,
             bootstrapAssignee,
@@ -2180,7 +2148,7 @@ export const handleBootstrapRequests = async (input: {
         await respondBootstrapDecision(responseContext, {
           status: 'rejected',
           reason:
-            'Delivery bootstrap is allowed only for synchrony merchant documents.',
+            'Synchrony bootstrap supports only PayNote/PayNote Delivery documents.',
         });
         continue;
       }
@@ -2199,74 +2167,48 @@ export const handleBootstrapRequests = async (input: {
       continue;
     }
 
-    const allowedExistingDocType = resolveExistingDocAllowedBootstrapType({
-      node: requestedDocumentNode,
-      requestedDocumentPayload,
-    });
-    if (
-      allowedExistingDocType &&
-      (!isRequestingDeliveryDoc || canHandleAllowListedFromDelivery)
-    ) {
-      const existingDelivery = isRequestingDeliveryDoc
-        ? await getKnownDelivery()
-        : knownRequestingDelivery;
-      if (!existingDelivery) {
-        if (isRequestingDeliveryDoc) {
-          log(
-            logs,
-            'warn',
-            'Bootstrap request rejected (unable to resolve delivery context for delivery-origin allow-listed bootstrap)',
-            {
-              eventId,
-              bootstrapAssignee,
-              requestedTypeName: allowedExistingDocType,
-              requestingSessionId: requestingSessionId ?? null,
-            }
-          );
-          await respondBootstrapDecision(responseContext, {
-            status: 'rejected',
-            reason:
-              'Unable to resolve requesting session for active PayNote bootstrap.',
-          });
-        } else {
-          log(
-            logs,
-            'info',
-            'Bootstrap request ignored (unknown or non-canonical requesting session)',
-            {
-              eventId,
-              bootstrapAssignee,
-              requestedTypeName: allowedExistingDocType,
-            }
-          );
-        }
+    if (isRequestingDeliveryDoc) {
+      const knownDeliveryRecord = await getKnownDelivery();
+      const canonicalDeliverySessionId = knownDeliveryRecord?.deliverySessionId;
+      if (
+        canonicalDeliverySessionId &&
+        requestingSessionId &&
+        canonicalDeliverySessionId !== requestingSessionId
+      ) {
+        log(
+          logs,
+          'info',
+          'Bootstrap request ignored (non-canonical delivery session)',
+          {
+            eventId,
+            bootstrapAssignee,
+            requestingSessionId,
+            canonicalDeliverySessionId,
+          }
+        );
         continue;
       }
 
-      await handleExistingDocBootstrapRequest({
-        request: normalized,
-        requestedTypeName: allowedExistingDocType,
-        requestedDocumentPayload,
-        existingDelivery,
-        requestingPayerAccountId,
-        requestingPayeeAccountId,
-        responseContext,
-        eventId,
-        bootstrapAssignee,
-        now,
-        credentials,
-        deps,
-        logs,
-      });
-      continue;
-    }
+      if (isPaymentMandateDocumentPayload({ node: requestedDocumentNode })) {
+        await handlePaymentMandateBootstrapRequest({
+          request: normalized,
+          requestedDocumentPayload,
+          isRequestingDeliveryDoc,
+          responseContext,
+          eventId,
+          requestIndex,
+          now,
+          deps,
+          logs,
+        });
+        continue;
+      }
 
-    if (isPayNoteDocumentNode(requestedDocumentNode)) {
-      if (!isRequestingDeliveryDoc) {
+      if (!isPayNoteDocumentNode(requestedDocumentNode)) {
         log(
           logs,
           'warn',
-          'Bootstrap request ignored (paynote bootstrap outside delivery document)',
+          'Bootstrap request rejected (delivery supports paynote bootstrap only)',
           {
             eventId,
             bootstrapAssignee,
@@ -2275,7 +2217,7 @@ export const handleBootstrapRequests = async (input: {
         await respondBootstrapDecision(responseContext, {
           status: 'rejected',
           reason:
-            'PayNote bootstrap is allowed only when requested from a delivery document.',
+            'Delivery bootstrap supports only PayNote and Payment Mandate documents.',
         });
         continue;
       }
@@ -2288,6 +2230,57 @@ export const handleBootstrapRequests = async (input: {
         eventId,
         eventObject,
         documentPayload,
+        now,
+        credentials,
+        deps,
+        logs,
+      });
+      continue;
+    }
+
+    if (isPaymentMandateDocumentPayload({ node: requestedDocumentNode })) {
+      await handlePaymentMandateBootstrapRequest({
+        request: normalized,
+        requestedDocumentPayload,
+        isRequestingDeliveryDoc,
+        responseContext,
+        eventId,
+        requestIndex,
+        now,
+        deps,
+        logs,
+      });
+      continue;
+    }
+
+    const allowedExistingDocType = resolveExistingDocAllowedBootstrapType({
+      node: requestedDocumentNode,
+    });
+    if (allowedExistingDocType) {
+      if (!knownRequestingDelivery) {
+        log(
+          logs,
+          'info',
+          'Bootstrap requests ignored (unknown or non-canonical requesting session)',
+          {
+            eventId,
+            bootstrapAssignee,
+            requestedTypeName: allowedExistingDocType,
+          }
+        );
+        continue;
+      }
+
+      await handleExistingDocBootstrapRequest({
+        request: normalized,
+        requestedTypeName: allowedExistingDocType,
+        requestedDocumentPayload,
+        existingDelivery: knownRequestingDelivery,
+        requestingPayerAccountId,
+        requestingPayeeAccountId,
+        responseContext,
+        eventId,
+        bootstrapAssignee,
         now,
         credentials,
         deps,

@@ -401,9 +401,8 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     ).not.toHaveBeenCalled();
   });
 
-  it('bootstraps delivery for unresolved synchrony document payloads', async () => {
+  it('ignores unresolved synchrony bootstrap requests when contracts are not resolved', async () => {
     const deliveryDocument = buildDeliveryDocument();
-    const deliveryId = buildCardTransactionDetailsKey(cardDetails);
 
     const myOsClient = {
       getCredentials: vi.fn().mockResolvedValue({
@@ -474,23 +473,8 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     );
 
     expect(result.handled).toBe(true);
-    expect(payNoteDeliveryRepository.saveDelivery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        deliveryId,
-        cardTransactionDetails: cardDetails,
-      })
-    );
-    expect(myOsClient.bootstrapDocument).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: expect.objectContaining({
-          channelBindings: expect.objectContaining({
-            payNoteSender: { accountId: 'merchant-account' },
-            cardProcessorChannel: { accountId: 'processor-account' },
-            payNoteDeliverer: { accountId: 'bank-account' },
-          }),
-        }),
-      })
-    );
+    expect(payNoteDeliveryRepository.saveDelivery).not.toHaveBeenCalled();
+    expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
   });
 
   it('attaches referenced payment mandate to bootstrapped paynote', async () => {
@@ -1164,7 +1148,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     });
   });
 
-  it('bootstraps allow-listed paynote from delivery-origin request when delivery carries payer/payee channels', async () => {
+  it('rejects non-card-transaction paynote bootstrap from delivery-origin request', async () => {
     const counterPayNoteDocument = buildPayNoteWithCounterDocument();
     bootstrapContextRepository.saveContext.mockClear();
 
@@ -1261,30 +1245,13 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     );
 
     expect(result.handled).toBe(true);
-    expect(myOsClient.bootstrapDocument).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: expect.objectContaining({
-          channelBindings: {
-            payerChannel: { accountId: 'customer-account-id' },
-            payeeChannel: { accountId: 'merchant-account-id' },
-            guarantorChannel: { accountId: 'bank-account' },
-          },
-          document: expect.objectContaining({
-            type: 'PayNote/PayNote',
-            name: 'PayNote with Counter',
-          }),
-        }),
-      })
+    expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
+    expect(bootstrapContextRepository.saveContext).not.toHaveBeenCalled();
+    const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
+    expect(guarantorUpdateCall).toBeDefined();
+    expect(JSON.stringify(guarantorUpdateCall?.payload)).toContain(
+      'Payer binding must not be provided by merchant.'
     );
-    expect(bootstrapContextRepository.saveContext).toHaveBeenCalledWith({
-      bootstrapSessionId: 'voucher-session-from-delivery',
-      merchantId: 'merchant-1',
-      accountNumber: '9559276001',
-      userId: 'customer-user-1',
-      customerChannelKey: 'payerChannel',
-      requestingSessionId: 'delivery-session-1',
-      createdAt: '2024-01-10T00:00:00.000Z',
-    });
   });
 
   it('rejects active paynote bootstrap when guarantor binding conflicts with bank account', async () => {
