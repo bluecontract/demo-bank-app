@@ -150,6 +150,26 @@ const getBindingIdentity = (binding?: {
   accountId?: string;
 }): string | undefined => binding?.accountId ?? binding?.email;
 
+const getContractsFromDocument = (
+  document: Record<string, unknown> | undefined
+): Record<string, unknown> | null => {
+  if (!document) {
+    return null;
+  }
+
+  const runtimeContracts = resolveRuntimeContracts(document);
+  if (runtimeContracts) {
+    return runtimeContracts;
+  }
+
+  const simpleDocument = toSimpleRecord(document);
+  if (!simpleDocument || !isRecord(simpleDocument.contracts)) {
+    return null;
+  }
+
+  return simpleDocument.contracts as Record<string, unknown>;
+};
+
 const validateBankControlledChannelBinding = (input: {
   request: NormalizedBootstrapRequest;
   requestedDocumentPayload: Record<string, unknown>;
@@ -196,7 +216,7 @@ const isBootstrapAssigneeMatch = (
   if (!requestingDocument || !bootstrapAssignee) {
     return false;
   }
-  const contracts = resolveRuntimeContracts(requestingDocument);
+  const contracts = getContractsFromDocument(requestingDocument);
   if (!contracts) {
     return false;
   }
@@ -1989,15 +2009,17 @@ export const handleBootstrapRequests = async (input: {
     input;
   const credentials = await deps.myOsClient.getCredentials();
   const requestingSessionId = getString(eventObject?.sessionId);
+  const requestingDocumentPayload =
+    documentPayload ?? toSimpleRecord(eventObject?.document) ?? undefined;
   const requestingDocumentNode = eventObject?.document
     ? toBlueNode(eventObject.document)
     : null;
   const isRequestingDeliveryDoc = isDeliveryDocumentNode(
     requestingDocumentNode
   );
-  const requestingContracts = documentPayload
-    ? resolveRuntimeContracts(documentPayload)
-    : null;
+  const requestingContracts = getContractsFromDocument(
+    requestingDocumentPayload
+  );
   const requestingBindings = requestingContracts
     ? buildChannelBindingsFromContracts(requestingContracts)
     : {};
@@ -2099,7 +2121,7 @@ export const handleBootstrapRequests = async (input: {
 
     if (
       !isBootstrapAssigneeMatch(
-        documentPayload,
+        requestingDocumentPayload,
         bootstrapAssignee,
         credentials.accountId
       )

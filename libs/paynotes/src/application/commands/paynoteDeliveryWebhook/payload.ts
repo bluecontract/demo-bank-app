@@ -3,6 +3,7 @@ import { getPayloadSummary } from '../webhookUtils';
 import { log, trace } from '../paynoteWebhook/logging';
 import { resolveRuntimeDocument } from '../blueRuntime';
 import { isPayNoteDeliveryDocument } from '../../payNoteDelivery/blueUtils';
+import { isRecord } from '../typeGuards';
 import type {
   HandlePayNoteDeliveryWebhookInput,
   HandlePayNoteDeliveryWebhookResult,
@@ -42,37 +43,28 @@ export const resolveDeliveryWebhookContext = (
 
   const eventObject = payload?.object;
   const rawDocument = eventObject?.document;
+  const isDeliveryDoc = rawDocument
+    ? isPayNoteDeliveryDocument(rawDocument)
+    : false;
   const runtimeDocument = resolveRuntimeDocument(rawDocument);
 
   if (rawDocument && !runtimeDocument) {
-    log(logs, 'warn', 'PayNote Delivery document payload is unresolvable', {
+    log(logs, 'warn', 'Document payload is unresolvable', {
       eventId,
+      isDeliveryDoc,
     });
-    return {
-      result: {
-        handled: false,
-        note: 'Unresolvable delivery document payload',
-        logs,
-      },
-    };
   }
 
   if (runtimeDocument && !runtimeDocument.resolved) {
-    log(logs, 'warn', 'PayNote Delivery document failed runtime resolution', {
+    log(logs, 'warn', 'Document failed runtime resolution', {
       eventId,
+      isDeliveryDoc,
     });
-    return {
-      result: {
-        handled: false,
-        note: 'Delivery document failed runtime resolution',
-        logs,
-      },
-    };
   }
 
-  const documentPayload = runtimeDocument?.resolved
-    ? runtimeDocument.record
-    : undefined;
+  const documentPayload =
+    runtimeDocument?.record ??
+    (isRecord(rawDocument) ? rawDocument : undefined);
 
   const emitted = Array.isArray(eventObject?.emitted)
     ? eventObject?.emitted
@@ -82,10 +74,6 @@ export const resolveDeliveryWebhookContext = (
     .filter(
       (request): request is NonNullable<typeof request> => request !== null
     );
-
-  const isDeliveryDoc = rawDocument
-    ? isPayNoteDeliveryDocument(rawDocument)
-    : false;
 
   trace(logs, 'PayNote Delivery webhook received', {
     eventId,

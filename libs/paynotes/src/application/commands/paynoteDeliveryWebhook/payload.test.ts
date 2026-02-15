@@ -46,7 +46,7 @@ describe('resolveDeliveryWebhookContext', () => {
     );
   });
 
-  it('fails closed for unresolved runtime documents', () => {
+  it('continues for unresolved runtime documents using raw payload fallback', () => {
     const logs: any[] = [];
     const result = resolveDeliveryWebhookContext(
       {
@@ -67,14 +67,58 @@ describe('resolveDeliveryWebhookContext', () => {
       logs
     );
 
-    expect('result' in result).toBe(true);
-    if (!('result' in result)) {
+    expect('context' in result).toBe(true);
+    if (!('context' in result)) {
       return;
     }
 
-    expect(result.result.handled).toBe(false);
-    expect(result.result.note).toBe(
-      'Delivery document failed runtime resolution'
+    expect(result.context.isDeliveryDoc).toBe(true);
+    expect(result.context.documentPayload?.deliveryStatus).toBe(true);
+  });
+
+  it('continues for unresolved non-delivery documents when emitted bootstrap request exists', () => {
+    const logs: any[] = [];
+    const result = resolveDeliveryWebhookContext(
+      {
+        eventId: 'event-3',
+        payload: {
+          id: 'event-3',
+          type: 'Core/Document Epoch Advanced',
+          object: {
+            sessionId: 'session-3',
+            document: {
+              type: 'Synchrony/Merchant',
+              contracts: {
+                synchronyChannel: {
+                  type: 'MyOS/MyOS Timeline Channel',
+                  accountId: 'bank-account',
+                },
+                sendPayNote: {
+                  type: 'Conversation/Operation',
+                },
+              },
+            },
+            emitted: [
+              {
+                type: 'Conversation/Document Bootstrap Requested',
+                bootstrapAssignee: 'synchronyChannel',
+                document: {
+                  type: 'PayNote/PayNote Delivery',
+                },
+              },
+            ],
+          },
+        },
+      },
+      logs
     );
+
+    expect('context' in result).toBe(true);
+    if (!('context' in result)) {
+      return;
+    }
+
+    expect(result.context.isDeliveryDoc).toBe(false);
+    expect(result.context.documentBootstrapRequests).toHaveLength(1);
   });
 });

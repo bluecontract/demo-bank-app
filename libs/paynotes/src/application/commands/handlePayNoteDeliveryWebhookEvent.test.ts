@@ -22,11 +22,25 @@ const buildDeliveryDocument = () => {
 payNoteBootstrapRequest:
   type: Conversation/Document Bootstrap Requested
   bootstrapAssignee: payNoteDeliverer
+  channelBindings:
+    payeeChannel:
+      accountId: merchant-account
+    cardProcessorChannel:
+      accountId: processor-account
   document:
     type: PayNote/Card Transaction PayNote
     currency: USD
     amount:
       total: 1200
+    contracts:
+      payerChannel:
+        type: MyOS/MyOS Timeline Channel
+      payeeChannel:
+        type: MyOS/MyOS Timeline Channel
+      cardProcessorChannel:
+        type: MyOS/MyOS Timeline Channel
+      guarantorChannel:
+        type: MyOS/MyOS Timeline Channel
 cardTransactionDetails:
   retrievalReferenceNumber: "${cardDetails.retrievalReferenceNumber}"
   systemTraceAuditNumber: "${cardDetails.systemTraceAuditNumber}"
@@ -54,11 +68,25 @@ deliveryError: "${deliveryError}"
 payNoteBootstrapRequest:
   type: Conversation/Document Bootstrap Requested
   bootstrapAssignee: payNoteDeliverer
+  channelBindings:
+    payeeChannel:
+      accountId: merchant-account
+    cardProcessorChannel:
+      accountId: processor-account
   document:
     type: PayNote/Card Transaction PayNote
     currency: USD
     amount:
       total: 1200
+    contracts:
+      payerChannel:
+        type: MyOS/MyOS Timeline Channel
+      payeeChannel:
+        type: MyOS/MyOS Timeline Channel
+      cardProcessorChannel:
+        type: MyOS/MyOS Timeline Channel
+      guarantorChannel:
+        type: MyOS/MyOS Timeline Channel
 cardTransactionDetails:
   retrievalReferenceNumber: "${cardDetails.retrievalReferenceNumber}"
   systemTraceAuditNumber: "${cardDetails.systemTraceAuditNumber}"
@@ -85,12 +113,26 @@ const buildDeliveryDocumentWithPayNoteMandate = (mandateDocumentId: string) => {
 payNoteBootstrapRequest:
   type: Conversation/Document Bootstrap Requested
   bootstrapAssignee: payNoteDeliverer
+  channelBindings:
+    payeeChannel:
+      accountId: merchant-account
+    cardProcessorChannel:
+      accountId: processor-account
   document:
     type: PayNote/Card Transaction PayNote
     currency: USD
     amount:
       total: 1200
     paymentMandateDocumentId: "${mandateDocumentId}"
+    contracts:
+      payerChannel:
+        type: MyOS/MyOS Timeline Channel
+      payeeChannel:
+        type: MyOS/MyOS Timeline Channel
+      cardProcessorChannel:
+        type: MyOS/MyOS Timeline Channel
+      guarantorChannel:
+        type: MyOS/MyOS Timeline Channel
 cardTransactionDetails:
   retrievalReferenceNumber: "${cardDetails.retrievalReferenceNumber}"
   systemTraceAuditNumber: "${cardDetails.systemTraceAuditNumber}"
@@ -194,6 +236,28 @@ const buildMerchantToCustomerPayNoteDocument = () => ({
     },
     guarantorChannel: {
       type: 'MyOS/MyOS Timeline Channel',
+    },
+  },
+});
+
+const buildSynchronyRequestingDocument = () => ({
+  type: 'Synchrony/Merchant',
+  contracts: {
+    merchantChannel: {
+      type: 'MyOS/MyOS Timeline Channel',
+      accountId: 'merchant-account',
+    },
+    synchronyChannel: {
+      type: 'MyOS/MyOS Timeline Channel',
+      accountId: 'bank-account',
+    },
+    sendPayNote: {
+      type: 'Conversation/Operation',
+      channel: 'merchantChannel',
+    },
+    cardProcessorChannel: {
+      type: 'MyOS/MyOS Timeline Channel',
+      accountId: 'processor-account',
     },
   },
 });
@@ -335,6 +399,98 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(
       payNoteDeliveryRepository.releaseEventProcessing
     ).not.toHaveBeenCalled();
+  });
+
+  it('bootstraps delivery for unresolved synchrony document payloads', async () => {
+    const deliveryDocument = buildDeliveryDocument();
+    const deliveryId = buildCardTransactionDetailsKey(cardDetails);
+
+    const myOsClient = {
+      getCredentials: vi.fn().mockResolvedValue({
+        apiKey: 'api-key',
+        accountId: 'bank-account',
+        baseUrl: 'https://myos.example.com',
+      }),
+      bootstrapDocument: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+      runDocumentOperation: vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 200 }),
+      fetchEvent: vi.fn(),
+      fetchDocument: vi.fn().mockResolvedValue({
+        kind: 'not-found',
+        status: 404,
+      } satisfies MyOsFetchDocumentResult),
+    };
+
+    const payNoteDeliveryRepository = {
+      markEventProcessed: vi.fn().mockResolvedValue(true),
+      finalizeEventProcessing: vi.fn(),
+      releaseEventProcessing: vi.fn(),
+      saveDelivery: vi.fn(),
+      getDelivery: vi.fn().mockResolvedValue(null),
+      getDeliveryByDocumentId: vi.fn(),
+      getDeliveryBySessionId: vi.fn(),
+      getDeliveryByBootstrapSessionId: vi.fn(),
+      getDeliveryByPayNoteDocumentId: vi.fn(),
+      getDeliveryByCardTransactionDetails: vi.fn(),
+      listDeliveriesByUserId: vi.fn(),
+    };
+    const contractRepository = {
+      getContract: vi.fn(),
+      getContractByDocumentId: vi.fn().mockResolvedValue(null),
+      saveContract: vi.fn(),
+    };
+
+    const result = await handlePayNoteDeliveryWebhookEvent(
+      {
+        payload: {
+          id: 'event-unresolved-sync',
+          object: {
+            sessionId: 'sync-session',
+            document: buildSynchronyRequestingDocument(),
+            emitted: [
+              {
+                type: 'Conversation/Document Bootstrap Requested',
+                bootstrapAssignee: 'synchronyChannel',
+                channelBindings: {
+                  payNoteSender: { accountId: 'merchant-account' },
+                  cardProcessorChannel: { accountId: 'processor-account' },
+                },
+                document: deliveryDocument,
+              },
+            ],
+          },
+        },
+      },
+      {
+        myOsClient: myOsClient as any,
+        payNoteDeliveryRepository: payNoteDeliveryRepository as any,
+        contractRepository: contractRepository as any,
+        bankingRepository: {} as any,
+        holdRepository: {} as any,
+        bootstrapContextRepository,
+        clock: { now: () => new Date('2024-01-01T00:00:00.000Z') },
+      }
+    );
+
+    expect(result.handled).toBe(true);
+    expect(payNoteDeliveryRepository.saveDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryId,
+        cardTransactionDetails: cardDetails,
+      })
+    );
+    expect(myOsClient.bootstrapDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          channelBindings: expect.objectContaining({
+            payNoteSender: { accountId: 'merchant-account' },
+            cardProcessorChannel: { accountId: 'processor-account' },
+            payNoteDeliverer: { accountId: 'bank-account' },
+          }),
+        }),
+      })
+    );
   });
 
   it('attaches referenced payment mandate to bootstrapped paynote', async () => {
