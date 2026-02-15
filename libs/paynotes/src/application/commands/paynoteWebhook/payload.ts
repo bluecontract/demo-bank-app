@@ -8,7 +8,8 @@ import type {
   WebhookContext,
   WebhookEventPayload,
 } from './types';
-import { getString, toSimpleRecord } from './utils';
+import { resolveRuntimeDocument } from '../blueRuntime';
+import { getString, parsePayNoteDocument } from './utils';
 
 const fetchEventMessages = {
   notFound: 'Failed to download PayNote event from MyOS',
@@ -55,13 +56,24 @@ export const resolveWebhookContext = (
 ): { context: WebhookContext } | { result: HandleWebhookEventResult } => {
   const eventObject = payload?.object;
   const eventType = payload?.type;
-  const document = toSimpleRecord(eventObject?.document);
+  const runtimeDocument = resolveRuntimeDocument(eventObject?.document);
+  const document = runtimeDocument?.record;
 
   if (!document) {
     const note = logAndReturn(
       logs,
       'error',
-      'PayNote event missing document payload',
+      'PayNote event missing or unresolvable document payload',
+      { eventId }
+    );
+    return { result: { note, logs } };
+  }
+
+  if (!parsePayNoteDocument(eventObject?.document)) {
+    const note = logAndReturn(
+      logs,
+      'error',
+      'PayNote event document payload failed PayNote type validation',
       { eventId }
     );
     return { result: { note, logs } };

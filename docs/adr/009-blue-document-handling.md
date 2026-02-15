@@ -63,6 +63,11 @@ We use one explicit model for Blue payload handling:
 - Parse/resolve/type-validation failures are fail-closed in runtime flows.
 - Technical failures are reported as technical reject reasons (not business
   declines).
+- Temporary exception: when `blue.resolve(...)` fails for a document that is
+  still positively typed as `PayNote/Payment Mandate` via `isTypeOf`, runtime
+  processing may continue on the parsed unresolved node for mandate-specific
+  flows. This exception is narrow and must not be applied to other document
+  types.
 
 ## Implementation Checklist
 

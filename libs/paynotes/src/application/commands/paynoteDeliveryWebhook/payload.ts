@@ -1,7 +1,7 @@
 import type { LogEntry } from '../../ports';
 import { getPayloadSummary } from '../webhookUtils';
 import { log, trace } from '../paynoteWebhook/logging';
-import { toSimpleRecord } from '../paynoteWebhook/utils';
+import { resolveRuntimeDocument } from '../blueRuntime';
 import { isPayNoteDeliveryDocument } from '../../payNoteDelivery/blueUtils';
 import type {
   HandlePayNoteDeliveryWebhookInput,
@@ -42,7 +42,37 @@ export const resolveDeliveryWebhookContext = (
 
   const eventObject = payload?.object;
   const rawDocument = eventObject?.document;
-  const documentPayload = toSimpleRecord(rawDocument) ?? undefined;
+  const runtimeDocument = resolveRuntimeDocument(rawDocument);
+
+  if (rawDocument && !runtimeDocument) {
+    log(logs, 'warn', 'PayNote Delivery document payload is unresolvable', {
+      eventId,
+    });
+    return {
+      result: {
+        handled: false,
+        note: 'Unresolvable delivery document payload',
+        logs,
+      },
+    };
+  }
+
+  if (runtimeDocument && !runtimeDocument.resolved) {
+    log(logs, 'warn', 'PayNote Delivery document failed runtime resolution', {
+      eventId,
+    });
+    return {
+      result: {
+        handled: false,
+        note: 'Delivery document failed runtime resolution',
+        logs,
+      },
+    };
+  }
+
+  const documentPayload = runtimeDocument?.resolved
+    ? runtimeDocument.record
+    : undefined;
 
   const emitted = Array.isArray(eventObject?.emitted)
     ? eventObject?.emitted
