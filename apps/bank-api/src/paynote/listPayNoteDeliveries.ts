@@ -27,8 +27,18 @@ export const listPayNoteDeliveriesHandler = async (
     userId
   );
 
+  const isProposalReady = (delivery: (typeof deliveries)[number]) => {
+    const status = delivery.paymentMandateStatus;
+    if (!status || status === 'not_required' || status === 'attached') {
+      return true;
+    }
+    return false;
+  };
+
   let visibleDeliveries = deliveries.filter(
-    delivery => delivery.transactionIdentificationStatus === 'identified'
+    delivery =>
+      delivery.transactionIdentificationStatus === 'identified' &&
+      isProposalReady(delivery)
   );
 
   if (clientDecisionStatus) {

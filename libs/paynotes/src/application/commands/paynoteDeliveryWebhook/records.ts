@@ -5,6 +5,7 @@ import {
   getSynchronySessionIdFromDocument,
 } from '../../payNoteDelivery/blueUtils';
 import { mergeSessionIds } from '../payNoteSessionUtils';
+import { getConcretePaymentMandateBootstrapRequest } from './paymentMandate';
 import type { HandlePayNoteDeliveryWebhookDependencies } from './types';
 
 export type DeliveryMatchType =
@@ -153,7 +154,8 @@ export const buildDeliveryRecord = (input: {
     synchronySessionId,
     cardTransactionDetails: cardDetails,
     cardTransactionDetailsKey: deliveryId,
-    deliveryDocument: documentPayload,
+    // Preserve authored delivery payload captured from bootstrap request when present.
+    deliveryDocument: existing?.deliveryDocument ?? documentPayload,
     deliveryUpdatedAt: eventObject?.created ?? now,
     deliveryStatus: deliveryStatus ?? existing?.deliveryStatus,
     transactionIdentificationStatus:
@@ -169,6 +171,10 @@ export const buildDeliveryRecord = (input: {
     identificationReportedAt: existing?.identificationReportedAt,
     decisionRecordedAt: existing?.decisionRecordedAt,
     payNoteBootstrapRequestedAt: existing?.payNoteBootstrapRequestedAt,
+    paymentMandateDocumentId: existing?.paymentMandateDocumentId,
+    paymentMandateBootstrapSessionId:
+      existing?.paymentMandateBootstrapSessionId,
+    paymentMandateStatus: existing?.paymentMandateStatus,
     accountNumber: existing?.accountNumber,
     userId: existing?.userId,
     holdId: existing?.holdId,
@@ -177,6 +183,14 @@ export const buildDeliveryRecord = (input: {
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
   };
+
+  const paymentMandateBootstrapRequest =
+    getConcretePaymentMandateBootstrapRequest(documentPayload);
+  if (!deliveryRecord.paymentMandateStatus) {
+    deliveryRecord.paymentMandateStatus = paymentMandateBootstrapRequest
+      ? 'pending'
+      : 'not_required';
+  }
 
   if (
     deliveryRecord.userId &&

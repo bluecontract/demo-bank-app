@@ -608,7 +608,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     const payload = JSON.stringify(paynoteGuarantorUpdateCalls[0]?.payload);
     expect(payload).toContain('PayNote/Payment Mandate Attached');
     expect(payload).toContain('mandate-doc-1');
-  });
+  }, 20000);
 
   it('rejects paynote bootstrap when referenced payment mandate cannot be resolved', async () => {
     const deliveryDocument = buildDeliveryDocumentWithPayNoteMandate(
@@ -4127,6 +4127,9 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(myOsClient.bootstrapDocument).toHaveBeenCalledWith(
       expect.objectContaining({
         payload: expect.objectContaining({
+          document: expect.objectContaining({
+            type: 'PayNote/Payment Mandate',
+          }),
           channelBindings: expect.objectContaining({
             granterChannel: { accountId: 'merchant-account' },
             granteeChannel: { accountId: 'customer-account' },

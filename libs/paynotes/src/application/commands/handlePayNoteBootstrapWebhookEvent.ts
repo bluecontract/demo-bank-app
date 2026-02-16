@@ -2,6 +2,10 @@ import {
   DocumentSessionBootstrapSchema,
   TargetDocumentSessionStartedSchema,
 } from '@blue-repository/types/packages/myos/schemas';
+import {
+  PaymentMandateSchema,
+  PayNoteDeliverySchema,
+} from '@blue-repository/types/packages/paynote/schemas';
 import type {
   BootstrapContextRepository,
   ClockPort,
@@ -128,6 +132,37 @@ const reportBootstrapCompleted = async (input: {
     return false;
   }
 
+  const requestingDocument = await deps.myOsClient.fetchDocument(
+    requestingSessionId
+  );
+  if (requestingDocument.kind === 'success') {
+    const requesterDocumentPayload = requestingDocument.document.document;
+    const requesterNode = requesterDocumentPayload
+      ? toBlueNode(requesterDocumentPayload)
+      : null;
+    const isDeliveryRequester = Boolean(
+      requesterNode &&
+        blue.isTypeOf(requesterNode, PayNoteDeliverySchema, {
+          checkSchemaExtensions: true,
+        })
+    );
+
+    if (isDeliveryRequester) {
+      log(
+        logs,
+        'info',
+        'Skipped bootstrap completion guarantorUpdate for delivery requester',
+        {
+          eventId,
+          bootstrapSessionId: bootstrapSessionId ?? null,
+          requestingSessionId,
+          documentId,
+        }
+      );
+      return true;
+    }
+  }
+
   const credentials = await deps.myOsClient.getCredentials();
   return runGuarantorUpdate({
     myOsClient: deps.myOsClient,
@@ -201,6 +236,16 @@ const isDocumentSessionBootstrap = (document: unknown): boolean => {
     return false;
   }
   return blue.isTypeOf(node, DocumentSessionBootstrapSchema, {
+    checkSchemaExtensions: true,
+  });
+};
+
+const isPaymentMandateDocument = (document: unknown): boolean => {
+  const node = toBlueNode(document);
+  if (!node) {
+    return false;
+  }
+  return blue.isTypeOf(node, PaymentMandateSchema, {
     checkSchemaExtensions: true,
   });
 };
@@ -401,7 +446,7 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         return { handled: true, logs };
       }
 
-      const deliveryRecord = bootstrapSessionId
+      const deliveryByBootstrapSession = bootstrapSessionId
         ? await deps.payNoteDeliveryRepository.getDeliveryByBootstrapSessionId(
             bootstrapSessionId
           )
@@ -418,11 +463,19 @@ export const handlePayNoteBootstrapWebhookEvent = async (
           )
         : null;
       const hasBootstrapContextLinkingData = Boolean(
-        bootstrapContext?.userId &&
+        (bootstrapContext?.userId &&
           (bootstrapContext.accountNumber ??
             bootstrapContext.payerAccountNumber ??
-            bootstrapContext.payeeAccountNumber)
+            bootstrapContext.payeeAccountNumber)) ||
+          bootstrapContext?.requestingSessionId
       );
+      const deliveryByRequestingSession = bootstrapContext?.requestingSessionId
+        ? await deps.payNoteDeliveryRepository.getDeliveryBySessionId(
+            bootstrapContext.requestingSessionId
+          )
+        : null;
+      const deliveryRecord =
+        deliveryByBootstrapSession ?? deliveryByRequestingSession;
 
       if (
         !deliveryRecord &&
@@ -489,15 +542,48 @@ export const handlePayNoteBootstrapWebhookEvent = async (
           const isPayNote = resolved.document
             ? isPayNoteDocument(resolved.document)
             : true;
+          const isPaymentMandate = resolved.document
+            ? isPaymentMandateDocument(resolved.document)
+            : false;
 
           trace(logs, 'Resolved paynote document from session', {
             eventId,
             sessionId,
             payNoteDocumentId: resolved.documentId,
             isPayNote,
+            isPaymentMandate,
           });
 
           if (!isPayNote) {
+            if (isPaymentMandate && deliveryRecord) {
+              const updatedDelivery = {
+                ...deliveryRecord,
+                paymentMandateDocumentId:
+                  deliveryRecord.paymentMandateDocumentId ??
+                  resolved.documentId,
+                paymentMandateBootstrapSessionId:
+                  deliveryRecord.paymentMandateBootstrapSessionId ??
+                  bootstrapSessionId,
+                paymentMandateStatus: 'attached' as const,
+                updatedAt: now,
+              };
+              await deps.payNoteDeliveryRepository.saveDelivery(
+                updatedDelivery
+              );
+              log(
+                logs,
+                'info',
+                'Payment mandate bootstrap linked to delivery',
+                {
+                  eventId,
+                  deliveryId: deliveryRecord.deliveryId,
+                  sessionId,
+                  paymentMandateDocumentId: resolved.documentId,
+                  bootstrapSessionId: bootstrapSessionId ?? null,
+                }
+              );
+            }
+
             log(logs, 'info', 'Bootstrap target is not a PayNote document', {
               eventId,
               sessionId,

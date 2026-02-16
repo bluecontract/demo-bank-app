@@ -34,7 +34,10 @@ export const getPayNoteDeliveryBySessionIdHandler = async (
     !record ||
     canonicalSessionId !== sessionId ||
     record.userId !== userId ||
-    record.transactionIdentificationStatus !== 'identified'
+    record.transactionIdentificationStatus !== 'identified' ||
+    (record.paymentMandateStatus &&
+      record.paymentMandateStatus !== 'not_required' &&
+      record.paymentMandateStatus !== 'attached')
   ) {
     return problemResponse({
       status: 404,

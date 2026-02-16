@@ -107,6 +107,9 @@ interface PayNoteDeliveryItem {
   identificationReportedAt?: string;
   decisionRecordedAt?: string;
   payNoteBootstrapRequestedAt?: string;
+  paymentMandateDocumentId?: string;
+  paymentMandateBootstrapSessionId?: string;
+  paymentMandateStatus?: 'not_required' | 'pending' | 'attached' | 'failed';
   summary?: Record<string, unknown>;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
@@ -268,6 +271,9 @@ export class DynamoPayNoteDeliveryRepository
       identificationReportedAt: item.identificationReportedAt,
       decisionRecordedAt: item.decisionRecordedAt,
       payNoteBootstrapRequestedAt: item.payNoteBootstrapRequestedAt,
+      paymentMandateDocumentId: item.paymentMandateDocumentId,
+      paymentMandateBootstrapSessionId: item.paymentMandateBootstrapSessionId,
+      paymentMandateStatus: item.paymentMandateStatus,
       summary: item.summary,
       summaryUpdatedAt: item.summaryUpdatedAt,
       summarySourceUpdatedAt: item.summarySourceUpdatedAt,
@@ -608,6 +614,18 @@ export class DynamoPayNoteDeliveryRepository
       ...(record.payNoteBootstrapRequestedAt
         ? { payNoteBootstrapRequestedAt: record.payNoteBootstrapRequestedAt }
         : {}),
+      ...(record.paymentMandateDocumentId
+        ? { paymentMandateDocumentId: record.paymentMandateDocumentId }
+        : {}),
+      ...(record.paymentMandateBootstrapSessionId
+        ? {
+            paymentMandateBootstrapSessionId:
+              record.paymentMandateBootstrapSessionId,
+          }
+        : {}),
+      ...(record.paymentMandateStatus
+        ? { paymentMandateStatus: record.paymentMandateStatus }
+        : {}),
       ...(record.summary ? { summary: record.summary } : {}),
       ...(record.summaryUpdatedAt
         ? { summaryUpdatedAt: record.summaryUpdatedAt }
@@ -707,6 +725,22 @@ export class DynamoPayNoteDeliveryRepository
         SK: SORT_KEYS.META,
         entityType: ENTITY_TYPES.BOOTSTRAP,
         bootstrapSessionId: record.payNoteBootstrapSessionId,
+        deliveryId: record.deliveryId,
+        createdAt: record.createdAt,
+      };
+      writes.push(
+        this.client.send(
+          new PutCommand({ TableName: this.tableName, Item: bootstrapItem })
+        )
+      );
+    }
+
+    if (record.paymentMandateBootstrapSessionId) {
+      const bootstrapItem: PayNoteDeliveryBootstrapItem = {
+        PK: this.buildBootstrapPk(record.paymentMandateBootstrapSessionId),
+        SK: SORT_KEYS.META,
+        entityType: ENTITY_TYPES.BOOTSTRAP,
+        bootstrapSessionId: record.paymentMandateBootstrapSessionId,
         deliveryId: record.deliveryId,
         createdAt: record.createdAt,
       };
@@ -908,6 +942,8 @@ export class DynamoPayNoteDeliveryRepository
           clientDecisionStatus: record.clientDecisionStatus,
           transactionId: record.transactionId,
           holdId: record.holdId,
+          paymentMandateDocumentId: record.paymentMandateDocumentId,
+          paymentMandateStatus: record.paymentMandateStatus,
           createdAt: record.createdAt,
           updatedAt: summaryUpdatedAt,
         };

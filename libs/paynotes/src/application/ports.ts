@@ -111,6 +111,7 @@ export interface MyOsClient {
   bootstrapDocument(input: {
     credentials: MyOsCredentials;
     payload: MyOsBootstrapPayload;
+    idempotencyKey?: string;
   }): Promise<MyOsBootstrapResponse>;
 
   runDocumentOperation(input: {
@@ -152,6 +153,9 @@ export interface PayNoteDeliveryRecord {
   identificationReportedAt?: string;
   decisionRecordedAt?: string;
   payNoteBootstrapRequestedAt?: string;
+  paymentMandateDocumentId?: string;
+  paymentMandateBootstrapSessionId?: string;
+  paymentMandateStatus?: 'not_required' | 'pending' | 'attached' | 'failed';
   summary?: Record<string, unknown>;
   summaryUpdatedAt?: string;
   summarySourceUpdatedAt?: string;
@@ -179,6 +183,8 @@ export interface PayNoteDeliverySummary {
   clientDecisionStatus?: string;
   transactionId?: string;
   holdId?: string;
+  paymentMandateDocumentId?: string;
+  paymentMandateStatus?: 'not_required' | 'pending' | 'attached' | 'failed';
   createdAt: string;
   updatedAt: string;
 }

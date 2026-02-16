@@ -9,6 +9,8 @@ import { upsertContractRecord } from '../../contracts';
 import { log, trace } from '../paynoteWebhook/logging';
 import { getString, toSimpleRecord } from '../paynoteWebhook/utils';
 import { mergeSessionIds } from '../payNoteSessionUtils';
+import { blue } from '../../../blue';
+import { toBlueNode } from '../webhookUtils';
 import type {
   HandlePayNoteDeliveryWebhookDependencies,
   WebhookEventObject,
@@ -20,6 +22,8 @@ import {
   reportIdentificationStatusIfNeeded,
 } from './identification';
 import { syncHoldPayNoteReference } from './holds';
+import { getConcretePaymentMandateBootstrapRequest } from './paymentMandate';
+import { isRecord } from '../typeGuards';
 
 const persistDeliveryRecord = async (input: {
   deliveryRecord: PayNoteDeliveryRecord;
@@ -128,6 +132,252 @@ const resolvePayNoteProposalDocument = (
     toSimpleRecord(deliveryRecord.payNoteDocument) ??
     null
   );
+};
+
+const extractBootstrapSessionId = (response: {
+  body?: unknown;
+}): string | undefined => {
+  const body = response.body as { sessionId?: unknown } | undefined;
+  return typeof body?.sessionId === 'string' ? body.sessionId : undefined;
+};
+
+const resolveBootstrapFailureReason = (input: {
+  status: number;
+  body?: unknown;
+}): string => {
+  const { status, body } = input;
+  const bodyRecord = toSimpleRecord(body);
+  const detail =
+    getString(bodyRecord?.detail) ??
+    getString(bodyRecord?.message) ??
+    getString(bodyRecord?.error);
+  return detail
+    ? `Payment Mandate bootstrap failed: ${detail}`
+    : `Payment Mandate bootstrap failed with status ${status}.`;
+};
+
+const normalizeChannelBindings = (
+  bindings: unknown
+): Record<string, { email?: string; accountId?: string }> => {
+  if (!bindings || typeof bindings !== 'object') {
+    return {};
+  }
+
+  const output: Record<string, { email?: string; accountId?: string }> = {};
+  Object.entries(bindings as Record<string, unknown>).forEach(
+    ([key, value]) => {
+      if (!key) {
+        return;
+      }
+      const binding = toSimpleRecord(value);
+      if (!binding) {
+        return;
+      }
+      const accountId = getString(binding.accountId);
+      const email = getString(binding.email);
+      if (accountId) {
+        output[key] = { accountId };
+      } else if (email) {
+        output[key] = { email };
+      }
+    }
+  );
+
+  return output;
+};
+
+const normalizeBootstrapDocument = (
+  document: Record<string, unknown>
+): Record<string, unknown> => {
+  const node = toBlueNode(document);
+  if (!node) {
+    return document;
+  }
+  const restored = blue.restoreInlineTypes(node);
+  const normalized = blue.nodeToJson(restored, 'original');
+  return normalized &&
+    typeof normalized === 'object' &&
+    !Array.isArray(normalized)
+    ? (normalized as Record<string, unknown>)
+    : document;
+};
+
+const maybeBootstrapDeliveryPaymentMandate = async (input: {
+  eventId: string;
+  deliveryRecord: PayNoteDeliveryRecord;
+  now: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<PayNoteDeliveryRecord> => {
+  const { eventId, deliveryRecord, now, deps, logs } = input;
+
+  if (deliveryRecord.transactionIdentificationStatus !== 'identified') {
+    return deliveryRecord;
+  }
+
+  const deliveryDocument = toSimpleRecord(deliveryRecord.deliveryDocument);
+  const mandateBootstrapRequest =
+    getConcretePaymentMandateBootstrapRequest(deliveryDocument);
+  if (!mandateBootstrapRequest) {
+    if (deliveryRecord.paymentMandateStatus !== 'not_required') {
+      return {
+        ...deliveryRecord,
+        paymentMandateStatus: 'not_required',
+        updatedAt: now,
+      };
+    }
+    return deliveryRecord;
+  }
+
+  if (
+    deliveryRecord.paymentMandateDocumentId ||
+    deliveryRecord.paymentMandateBootstrapSessionId ||
+    deliveryRecord.paymentMandateStatus === 'attached'
+  ) {
+    return deliveryRecord;
+  }
+
+  const mandateDocument = isRecord(mandateBootstrapRequest.document)
+    ? (mandateBootstrapRequest.document as Record<string, unknown>)
+    : null;
+  if (!mandateDocument) {
+    log(
+      logs,
+      'warn',
+      'Delivery payment mandate bootstrap skipped (invalid payload)',
+      {
+        eventId,
+        deliveryId: deliveryRecord.deliveryId,
+      }
+    );
+    return {
+      ...deliveryRecord,
+      paymentMandateStatus: 'failed',
+      updatedAt: now,
+    };
+  }
+
+  const credentials = await deps.myOsClient.getCredentials();
+  const requestBindings = normalizeChannelBindings(
+    mandateBootstrapRequest.channelBindings
+  );
+  const guarantorAccountId = getString(
+    toSimpleRecord(requestBindings.guarantorChannel)?.accountId
+  );
+  if (guarantorAccountId && guarantorAccountId !== credentials.accountId) {
+    log(
+      logs,
+      'warn',
+      'Delivery payment mandate bootstrap rejected (guarantor conflict)',
+      {
+        eventId,
+        deliveryId: deliveryRecord.deliveryId,
+        guarantorAccountId,
+        bankAccountId: credentials.accountId,
+      }
+    );
+    return {
+      ...deliveryRecord,
+      paymentMandateStatus: 'failed',
+      updatedAt: now,
+    };
+  }
+
+  const channelBindings = {
+    ...requestBindings,
+    guarantorChannel: { accountId: credentials.accountId },
+  };
+  const mandateBootstrapIdempotencyKey = [
+    'paynote-delivery-payment-mandate-bootstrap',
+    eventId,
+    deliveryRecord.deliveryId,
+  ].join(':');
+  const bootstrapResponse = await deps.myOsClient.bootstrapDocument({
+    credentials,
+    idempotencyKey: mandateBootstrapIdempotencyKey,
+    payload: {
+      channelBindings,
+      document: normalizeBootstrapDocument(mandateDocument),
+    },
+  });
+  if (!bootstrapResponse.ok) {
+    const reason = resolveBootstrapFailureReason({
+      status: bootstrapResponse.status,
+      body: bootstrapResponse.body,
+    });
+    log(logs, 'warn', 'Delivery payment mandate bootstrap failed', {
+      eventId,
+      deliveryId: deliveryRecord.deliveryId,
+      reason,
+    });
+    if (deliveryRecord.deliverySessionId) {
+      await deps.myOsClient.runDocumentOperation({
+        credentials,
+        sessionId: deliveryRecord.deliverySessionId,
+        operation: 'reportDeliveryError',
+        payload: reason,
+      });
+    }
+    return {
+      ...deliveryRecord,
+      paymentMandateStatus: 'failed',
+      updatedAt: now,
+    };
+  }
+
+  const bootstrapSessionId = extractBootstrapSessionId(bootstrapResponse);
+  if (!bootstrapSessionId) {
+    return {
+      ...deliveryRecord,
+      paymentMandateStatus: 'failed',
+      updatedAt: now,
+    };
+  }
+
+  await deps.bootstrapContextRepository.saveContext({
+    bootstrapSessionId,
+    ...(getString(mandateDocument.granterId)
+      ? { merchantId: getString(mandateDocument.granterId) }
+      : {}),
+    ...(deliveryRecord.deliverySessionId
+      ? { requestingSessionId: deliveryRecord.deliverySessionId }
+      : {}),
+    ...(getString(mandateBootstrapRequest.requestId)
+      ? { requestId: getString(mandateBootstrapRequest.requestId) }
+      : {}),
+    createdAt: now,
+  });
+
+  if (deps.consumePendingBootstrapEvents) {
+    try {
+      await deps.consumePendingBootstrapEvents(bootstrapSessionId);
+    } catch (error) {
+      log(
+        logs,
+        'error',
+        'Failed consuming pending bootstrap events for delivery payment mandate bootstrap',
+        {
+          eventId,
+          deliveryId: deliveryRecord.deliveryId,
+          bootstrapSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+    }
+  }
+
+  log(logs, 'info', 'Delivery payment mandate bootstrap requested', {
+    eventId,
+    deliveryId: deliveryRecord.deliveryId,
+    bootstrapSessionId,
+  });
+
+  return {
+    ...deliveryRecord,
+    paymentMandateBootstrapSessionId: bootstrapSessionId,
+    paymentMandateStatus: 'pending',
+    updatedAt: now,
+  };
 };
 
 export const handleDeliveryDocumentUpdate = async (input: {
@@ -258,16 +508,37 @@ export const handleDeliveryDocumentUpdate = async (input: {
     deps,
   });
 
+  const deliveryWithMandateStage = await maybeBootstrapDeliveryPaymentMandate({
+    eventId,
+    deliveryRecord: persistedDeliveryRecord,
+    now,
+    deps,
+    logs,
+  });
+  const effectiveDeliveryRecord =
+    deliveryWithMandateStage !== persistedDeliveryRecord
+      ? await persistDeliveryRecord({
+          deliveryRecord: deliveryWithMandateStage,
+          sessionId,
+          deliveryDocumentId,
+          eventType,
+          eventObject,
+          emitted,
+          now,
+          deps,
+        })
+      : persistedDeliveryRecord;
+
   const enqueuePayNoteDeliverySummary = deps.enqueuePayNoteDeliverySummary;
-  const canonicalSessionForSummary = persistedDeliveryRecord.deliverySessionId;
+  const canonicalSessionForSummary = effectiveDeliveryRecord.deliverySessionId;
   const shouldEnqueuePayNoteDeliverySummary =
     enqueuePayNoteDeliverySummary &&
     canonicalSessionForSummary &&
     sessionId === canonicalSessionForSummary &&
     (eventType === 'DOCUMENT_CREATED' ||
       eventType === 'DOCUMENT_EPOCH_ADVANCED') &&
-    persistedDeliveryRecord.transactionIdentificationStatus === 'identified' &&
-    Boolean(resolvePayNoteProposalDocument(persistedDeliveryRecord));
+    effectiveDeliveryRecord.transactionIdentificationStatus === 'identified' &&
+    Boolean(resolvePayNoteProposalDocument(effectiveDeliveryRecord));
 
   if (shouldEnqueuePayNoteDeliverySummary) {
     await enqueuePayNoteDeliverySummary({
@@ -287,10 +558,11 @@ export const handleDeliveryDocumentUpdate = async (input: {
     eventId,
     deliveryId,
     deliveryDocumentId,
-    deliveryStatus: persistedDeliveryRecord.deliveryStatus,
+    deliveryStatus: effectiveDeliveryRecord.deliveryStatus,
     transactionIdentificationStatus:
-      persistedDeliveryRecord.transactionIdentificationStatus,
-    clientDecisionStatus: persistedDeliveryRecord.clientDecisionStatus,
+      effectiveDeliveryRecord.transactionIdentificationStatus,
+    clientDecisionStatus: effectiveDeliveryRecord.clientDecisionStatus,
+    paymentMandateStatus: effectiveDeliveryRecord.paymentMandateStatus,
     deliveryName: getDeliveryNameFromDocument(documentPayload),
     payNoteName: payNoteSummary.name,
   });
