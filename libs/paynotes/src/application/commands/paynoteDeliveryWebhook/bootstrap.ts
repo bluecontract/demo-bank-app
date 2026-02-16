@@ -723,6 +723,18 @@ const buildPaymentMandateBootstrapPendingActionId = (input: {
   requestIndex: number;
 }) => `payment-mandate-bootstrap:${input.eventId}:${input.requestIndex}`;
 
+const buildDocumentBootstrapIdempotencyKey = (input: {
+  scope: 'payment-mandate' | 'existing-doc' | 'delivery-doc' | 'paynote-doc';
+  eventId: string;
+  requestIndex: number;
+}) =>
+  [
+    'paynote-bootstrap',
+    input.scope,
+    input.eventId,
+    String(input.requestIndex),
+  ].join(':');
+
 const queuePaymentMandateBootstrapPendingAction = async (input: {
   request: NormalizedBootstrapRequest;
   requestedDocumentPayload: Record<string, unknown>;
@@ -917,6 +929,11 @@ const handlePaymentMandateBootstrapRequest = async (input: {
   );
   const response = await deps.myOsClient.bootstrapDocument({
     credentials: responseContext.credentials,
+    idempotencyKey: buildDocumentBootstrapIdempotencyKey({
+      scope: 'payment-mandate',
+      eventId,
+      requestIndex,
+    }),
     payload: {
       channelBindings,
       document: bootstrapDocument,
@@ -1125,6 +1142,7 @@ const handleExistingDocBootstrapRequest = async (input: {
   requestedTypeName: string;
   requestedDocumentPayload: Record<string, unknown>;
   existingDelivery: PayNoteDeliveryRecord;
+  requestIndex: number;
   requestingPayerAccountId?: string;
   requestingPayeeAccountId?: string;
   responseContext: BootstrapResponseContext;
@@ -1140,6 +1158,7 @@ const handleExistingDocBootstrapRequest = async (input: {
     requestedTypeName,
     requestedDocumentPayload,
     existingDelivery,
+    requestIndex,
     requestingPayerAccountId,
     requestingPayeeAccountId,
     responseContext,
@@ -1323,6 +1342,11 @@ const handleExistingDocBootstrapRequest = async (input: {
 
   const response = await deps.myOsClient.bootstrapDocument({
     credentials,
+    idempotencyKey: buildDocumentBootstrapIdempotencyKey({
+      scope: 'existing-doc',
+      eventId,
+      requestIndex,
+    }),
     payload: {
       channelBindings,
       document: bootstrapDocument,
@@ -1447,6 +1471,7 @@ const resolveKnownDeliveryBySessionId = async (input: {
 const handleDeliveryBootstrapRequest = async (input: {
   request: NormalizedBootstrapRequest;
   deliveryDocument: Record<string, unknown>;
+  requestIndex: number;
   responseContext: BootstrapResponseContext;
   eventId: string;
   bootstrapAssignee: string;
@@ -1458,6 +1483,7 @@ const handleDeliveryBootstrapRequest = async (input: {
   const {
     request,
     deliveryDocument,
+    requestIndex,
     responseContext,
     eventId,
     bootstrapAssignee,
@@ -1555,6 +1581,11 @@ const handleDeliveryBootstrapRequest = async (input: {
   const bootstrapDocument = normalizeBootstrapDocument(deliveryDocument);
   const response = await deps.myOsClient.bootstrapDocument({
     credentials,
+    idempotencyKey: buildDocumentBootstrapIdempotencyKey({
+      scope: 'delivery-doc',
+      eventId,
+      requestIndex,
+    }),
     payload: {
       channelBindings,
       document: bootstrapDocument,
@@ -1676,6 +1707,7 @@ const handlePayNoteBootstrapRequest = async (input: {
   request: NormalizedBootstrapRequest;
   requestedDocumentNode: BlueNode | null;
   requestedDocumentPayload?: Record<string, unknown> | null;
+  requestIndex: number;
   responseContext: BootstrapResponseContext;
   eventId: string;
   eventObject?: WebhookEventObject;
@@ -1689,6 +1721,7 @@ const handlePayNoteBootstrapRequest = async (input: {
     request,
     requestedDocumentNode,
     requestedDocumentPayload,
+    requestIndex,
     responseContext,
     eventId,
     eventObject,
@@ -1845,6 +1878,11 @@ const handlePayNoteBootstrapRequest = async (input: {
   const bootstrapDocument = normalizeBootstrapDocument(payNoteDocument);
   const response = await deps.myOsClient.bootstrapDocument({
     credentials,
+    idempotencyKey: buildDocumentBootstrapIdempotencyKey({
+      scope: 'paynote-doc',
+      eventId,
+      requestIndex,
+    }),
     payload: {
       channelBindings,
       document: bootstrapDocument,
@@ -2156,6 +2194,7 @@ export const handleBootstrapRequests = async (input: {
       await handleDeliveryBootstrapRequest({
         request: normalized,
         deliveryDocument: requestedDocumentPayload,
+        requestIndex,
         responseContext,
         eventId,
         bootstrapAssignee,
@@ -2226,6 +2265,7 @@ export const handleBootstrapRequests = async (input: {
         request: normalized,
         requestedDocumentNode,
         requestedDocumentPayload,
+        requestIndex,
         responseContext,
         eventId,
         eventObject,
@@ -2276,6 +2316,7 @@ export const handleBootstrapRequests = async (input: {
         requestedTypeName: allowedExistingDocType,
         requestedDocumentPayload,
         existingDelivery: knownRequestingDelivery,
+        requestIndex,
         requestingPayerAccountId,
         requestingPayeeAccountId,
         responseContext,

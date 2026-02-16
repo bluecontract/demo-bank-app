@@ -61,6 +61,43 @@ describe('createHttpMyOsGateway', () => {
     );
   });
 
+  it('passes Idempotency-Key when bootstrapping a document', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ sessionId: 'bootstrap-1' }, { status: 200 })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const gateway = createHttpMyOsGateway(async () => ({
+      apiKey: 'api-key',
+      accountId: 'account-id',
+      baseUrl: 'http://myos.local',
+    }));
+
+    const credentials = await gateway.getCredentials();
+    await gateway.bootstrapDocument({
+      credentials,
+      idempotencyKey: 'idem-bootstrap-1',
+      payload: {
+        channelBindings: {},
+        document: { type: 'PayNote/PayNote' },
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://myos.local/documents/bootstrap',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'api-key',
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'idem-bootstrap-1',
+        }),
+      })
+    );
+  });
+
   it('returns not-found for missing events', async () => {
     const fetchMock = vi
       .fn()

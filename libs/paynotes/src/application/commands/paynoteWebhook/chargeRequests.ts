@@ -1424,6 +1424,7 @@ const finalizeAuthorizedChargeAttemptImmediately = async (input: {
   if (request.payNoteDocument) {
     await maybeStartLinkedPayNote({
       context,
+      eventIndex,
       eventType,
       requestId,
       payNoteDocument: request.payNoteDocument,
@@ -2362,6 +2363,7 @@ const maybeResolveBootstrappedDocumentId = async (input: {
 
 const maybeStartLinkedPayNote = async (input: {
   context: ChargeRequestContext;
+  eventIndex: number;
   eventType: ChargeRequestEventType;
   requestId?: string;
   payNoteDocument: Record<string, unknown>;
@@ -2371,7 +2373,7 @@ const maybeStartLinkedPayNote = async (input: {
   payeeAccountNumber?: string;
   autoAcceptLinkedPayNote: boolean;
 }): Promise<void> => {
-  const { context, eventType, requestId } = input;
+  const { context, eventIndex, eventType, requestId } = input;
 
   if (hasExplicitLinkedPayNoteAccountMapping(input.payNoteDocument)) {
     await emitLinkedPayNoteStartResponded({
@@ -2444,6 +2446,12 @@ const maybeStartLinkedPayNote = async (input: {
 
   const response = await context.deps.myOsClient.bootstrapDocument({
     credentials,
+    idempotencyKey: [
+      'paynote-card-charge',
+      'linked-paynote-bootstrap',
+      context.eventId,
+      String(eventIndex),
+    ].join(':'),
     payload: {
       channelBindings: bindingsResult.bindings.deliveryChannelBindings,
       document: deliveryDocument,
@@ -3085,6 +3093,7 @@ export const handleMandateResponseEvents = async (input: {
       });
       await maybeStartLinkedPayNote({
         context: resolved.context,
+        eventIndex: resolved.attempt.eventIndex,
         eventType: resolved.eventType,
         requestId: resolved.requestId,
         payNoteDocument: resolved.request.payNoteDocument,

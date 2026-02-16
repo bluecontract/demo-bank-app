@@ -12,12 +12,13 @@ export const createHttpMyOsGateway = (
 ): MyOsClient => ({
   getCredentials: resolveCredentials,
 
-  async bootstrapDocument({ credentials, payload }) {
+  async bootstrapDocument({ credentials, payload, idempotencyKey }) {
     const response = await fetch(`${credentials.baseUrl}/documents/bootstrap`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: credentials.apiKey,
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined),
       },
       body: JSON.stringify(payload),
     });
