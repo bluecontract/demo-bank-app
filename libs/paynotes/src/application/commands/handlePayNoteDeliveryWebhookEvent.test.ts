@@ -691,13 +691,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
-    expect(guarantorUpdateCall).toBeDefined();
-    const payload = JSON.stringify(guarantorUpdateCall?.payload);
-    expect(payload).toContain('Conversation/Document Bootstrap Responded');
-    expect(payload).toContain('rejected');
-    expect(payload).toContain(
-      'Unable to resolve payment mandate session for bootstrap.'
-    );
+    expect(guarantorUpdateCall).toBeUndefined();
   });
 
   it('rejects paynote bootstrap when referenced payment mandate is revoked', async () => {
@@ -800,11 +794,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
-    expect(guarantorUpdateCall).toBeDefined();
-    const payload = JSON.stringify(guarantorUpdateCall?.payload);
-    expect(payload).toContain('Conversation/Document Bootstrap Responded');
-    expect(payload).toContain('rejected');
-    expect(payload).toContain('Referenced payment mandate is revoked.');
+    expect(guarantorUpdateCall).toBeUndefined();
   });
 
   it('rejects paynote bootstrap when referenced payment mandate is expired', async () => {
@@ -907,11 +897,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
-    expect(guarantorUpdateCall).toBeDefined();
-    const payload = JSON.stringify(guarantorUpdateCall?.payload);
-    expect(payload).toContain('Conversation/Document Bootstrap Responded');
-    expect(payload).toContain('rejected');
-    expect(payload).toContain('Referenced payment mandate is expired.');
+    expect(guarantorUpdateCall).toBeUndefined();
   });
 
   it('reports delivery errors after bootstrap succeeds', async () => {
@@ -1022,15 +1008,8 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     const guarantorUpdatePayloads = getDocumentOperationCalls(myOsClient)
       .filter(call => call.operation === 'guarantorUpdate')
       .map(call => JSON.stringify(call.payload));
-    expect(
-      guarantorUpdatePayloads.some(payload => payload.includes('accepted'))
-    ).toBe(true);
-    expect(
-      guarantorUpdatePayloads.some(payload =>
-        payload.includes('Conversation/Document Bootstrap Responded')
-      )
-    ).toBe(true);
-    expect(myOsClient.runDocumentOperation).toHaveBeenCalledTimes(2);
+    expect(guarantorUpdatePayloads).toHaveLength(0);
+    expect(myOsClient.runDocumentOperation).toHaveBeenCalledTimes(1);
     expect(payNoteDeliveryRepository.saveDelivery).toHaveBeenCalledWith(
       expect.objectContaining({
         deliveryId,
@@ -1248,10 +1227,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     expect(bootstrapContextRepository.saveContext).not.toHaveBeenCalled();
     const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
-    expect(guarantorUpdateCall).toBeDefined();
-    expect(JSON.stringify(guarantorUpdateCall?.payload)).toContain(
-      'Payer binding must not be provided by merchant.'
-    );
+    expect(guarantorUpdateCall).toBeUndefined();
   });
 
   it('rejects active paynote bootstrap when guarantor binding conflicts with bank account', async () => {
@@ -1633,6 +1609,9 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
             },
           ]),
         } as any,
+        resolveMerchantOwnerUserId: vi
+          .fn()
+          .mockResolvedValue('merchant-user-1'),
         holdRepository: {} as any,
         bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-10T00:00:00.000Z') },
@@ -1741,6 +1720,9 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
             },
           ]),
         } as any,
+        resolveMerchantOwnerUserId: vi
+          .fn()
+          .mockResolvedValue('merchant-user-1'),
         holdRepository: {} as any,
         bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-10T00:00:00.000Z') },
@@ -1847,6 +1829,9 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
             },
           ]),
         } as any,
+        resolveMerchantOwnerUserId: vi
+          .fn()
+          .mockResolvedValue('merchant-user-1'),
         holdRepository: {} as any,
         bootstrapContextRepository,
         clock: { now: () => new Date('2024-01-10T00:00:00.000Z') },
@@ -2466,19 +2451,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
-    expect(guarantorUpdateCall).toBeDefined();
-    expect(guarantorUpdateCall).toEqual(
-      expect.objectContaining({
-        sessionId: 'delivery-session',
-        operation: 'guarantorUpdate',
-      })
-    );
-    const payload = JSON.stringify(guarantorUpdateCall?.payload);
-    expect(payload).toContain('Conversation/Document Bootstrap Responded');
-    expect(payload).toContain('rejected');
-    expect(payload).toContain(
-      'PayNote amount (1200) does not match transaction amount (1100)'
-    );
+    expect(guarantorUpdateCall).toBeUndefined();
     expect(payNoteDeliveryRepository.getDelivery).toHaveBeenCalledWith(
       deliveryId
     );
@@ -2562,19 +2535,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
-    expect(guarantorUpdateCall).toBeDefined();
-    expect(guarantorUpdateCall).toEqual(
-      expect.objectContaining({
-        sessionId: 'delivery-session',
-        operation: 'guarantorUpdate',
-      })
-    );
-    const payload = JSON.stringify(guarantorUpdateCall?.payload);
-    expect(payload).toContain('Conversation/Document Bootstrap Responded');
-    expect(payload).toContain('rejected');
-    expect(payload).toContain(
-      'Unsupported PayNote type. Expected PayNote/Card Transaction PayNote.'
-    );
+    expect(guarantorUpdateCall).toBeUndefined();
   });
 
   it('reports delivery errors when payer binding is supplied', async () => {
@@ -2654,19 +2615,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
-    expect(guarantorUpdateCall).toBeDefined();
-    expect(guarantorUpdateCall).toEqual(
-      expect.objectContaining({
-        sessionId: 'delivery-session',
-        operation: 'guarantorUpdate',
-      })
-    );
-    const payload = JSON.stringify(guarantorUpdateCall?.payload);
-    expect(payload).toContain('Conversation/Document Bootstrap Responded');
-    expect(payload).toContain('rejected');
-    expect(payload).toContain(
-      'Payer binding must not be provided by merchant.'
-    );
+    expect(guarantorUpdateCall).toBeUndefined();
   });
 
   it('reports delivery errors when payee does not match delivery sender', async () => {
@@ -2745,17 +2694,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
-    expect(guarantorUpdateCall).toBeDefined();
-    expect(guarantorUpdateCall).toEqual(
-      expect.objectContaining({
-        sessionId: 'delivery-session',
-        operation: 'guarantorUpdate',
-      })
-    );
-    const payload = JSON.stringify(guarantorUpdateCall?.payload);
-    expect(payload).toContain('Conversation/Document Bootstrap Responded');
-    expect(payload).toContain('rejected');
-    expect(payload).toContain('Payee binding must match the delivery sender.');
+    expect(guarantorUpdateCall).toBeUndefined();
   });
 
   it('reports delivery errors when paynote guarantor channel conflicts with bank account', async () => {
@@ -2840,19 +2779,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
-    expect(guarantorUpdateCall).toBeDefined();
-    expect(guarantorUpdateCall).toEqual(
-      expect.objectContaining({
-        sessionId: 'delivery-session',
-        operation: 'guarantorUpdate',
-      })
-    );
-    const payload = JSON.stringify(guarantorUpdateCall?.payload);
-    expect(payload).toContain('Conversation/Document Bootstrap Responded');
-    expect(payload).toContain('rejected');
-    expect(payload).toContain(
-      'guarantorChannel must be bound to the bank guarantor account for bootstrap.'
-    );
+    expect(guarantorUpdateCall).toBeUndefined();
   });
 
   it('reports delivery errors when paynote payer channel conflicts with bank account', async () => {
@@ -2937,19 +2864,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     const guarantorUpdateCall = getOperationCall(myOsClient, 'guarantorUpdate');
-    expect(guarantorUpdateCall).toBeDefined();
-    expect(guarantorUpdateCall).toEqual(
-      expect.objectContaining({
-        sessionId: 'delivery-session',
-        operation: 'guarantorUpdate',
-      })
-    );
-    const payload = JSON.stringify(guarantorUpdateCall?.payload);
-    expect(payload).toContain('Conversation/Document Bootstrap Responded');
-    expect(payload).toContain('rejected');
-    expect(payload).toContain(
-      'payerChannel must be bound to the bank payer account for bootstrap.'
-    );
+    expect(guarantorUpdateCall).toBeUndefined();
   });
 
   it('identifies delivery and reports status for delivery documents', async () => {
@@ -4145,10 +4060,8 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         requestId: 'delivery-merchant-mandate-bootstrap',
       })
     );
-    const payload = JSON.stringify(
-      getOperationCall(myOsClient as any, 'guarantorUpdate')?.payload
-    );
-    expect(payload).toContain('Conversation/Document Bootstrap Responded');
-    expect(payload).toContain('accepted');
+    expect(
+      getOperationCall(myOsClient as any, 'guarantorUpdate')
+    ).toBeUndefined();
   });
 });

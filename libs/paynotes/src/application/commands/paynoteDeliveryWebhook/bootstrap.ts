@@ -257,6 +257,7 @@ type BootstrapResponseContext = {
   bootstrapAssignee?: string;
   requestingSessionId?: string;
   requestId?: string;
+  allowGuarantorUpdateResponse: boolean;
   credentials: Awaited<ReturnType<MyOsClient['getCredentials']>>;
   deps: HandlePayNoteDeliveryWebhookDependencies;
   logs: LogEntry[];
@@ -281,10 +282,25 @@ const emitBootstrapGuarantorEvent = async (input: {
     bootstrapAssignee,
     requestingSessionId,
     requestId,
+    allowGuarantorUpdateResponse,
     credentials,
     deps,
     logs,
   } = context;
+  if (!allowGuarantorUpdateResponse) {
+    trace(
+      logs,
+      'Skipped document bootstrap response via guarantorUpdate (requesting document does not expose guarantorUpdate)',
+      {
+        eventId,
+        bootstrapAssignee,
+        requestingSessionId: requestingSessionId ?? null,
+        requestId: requestId ?? null,
+      }
+    );
+    return true;
+  }
+
   if (!requestingSessionId) {
     log(logs, 'error', missingSessionMessage, {
       eventId,
@@ -694,6 +710,17 @@ const isPaymentMandateDocumentPayload = (input: {
   return isPaymentMandateDocumentNode(input.node);
 };
 
+const supportsGuarantorUpdateResponses = (
+  contracts: Record<string, unknown> | null
+): boolean => {
+  if (!contracts) {
+    return false;
+  }
+  return (
+    isRecord(contracts.guarantorUpdate) && isRecord(contracts.guarantorChannel)
+  );
+};
+
 const resolveInitialMessageText = (input: {
   initialMessages?: Record<string, unknown>;
 }): string | undefined => {
@@ -1060,8 +1087,18 @@ const resolveMerchantCreditLineAccountNumber = async (input: {
   merchantId: string;
   deps: HandlePayNoteDeliveryWebhookDependencies;
 }): Promise<string | undefined> => {
+  const resolveMerchantOwnerUserId = input.deps.resolveMerchantOwnerUserId;
+  if (typeof resolveMerchantOwnerUserId !== 'function') {
+    return undefined;
+  }
+
+  const ownerUserId = await resolveMerchantOwnerUserId(input.merchantId);
+  if (!ownerUserId) {
+    return undefined;
+  }
+
   const accounts = await input.deps.bankingRepository.getAccountsByUserId(
-    input.merchantId
+    ownerUserId
   );
   const activeCreditLine = accounts.find(
     account => account.accountType === 'CREDIT_LINE' && isAccountActive(account)
@@ -2040,6 +2077,8 @@ export const handleBootstrapRequests = async (input: {
     document: requestingDocumentPayload,
     node: requestingDocumentNode,
   });
+  const allowGuarantorUpdateResponse =
+    supportsGuarantorUpdateResponses(requestingContracts);
   const requestingBindings = requestingContracts
     ? buildChannelBindingsFromContracts(requestingContracts)
     : {};
@@ -2126,6 +2165,7 @@ export const handleBootstrapRequests = async (input: {
       bootstrapAssignee,
       requestingSessionId,
       requestId: normalized.requestId,
+      allowGuarantorUpdateResponse,
       credentials,
       deps,
       logs,

@@ -82,7 +82,6 @@ export const resolveDeliveryWebhookContext = (
     hasDocument: Boolean(documentPayload),
     emittedCount: emitted.length,
     bootstrapRequestCount: documentBootstrapRequests.length,
-    documentBootstrapRequestCount: documentBootstrapRequests.length,
     isDeliveryDoc,
   });
 

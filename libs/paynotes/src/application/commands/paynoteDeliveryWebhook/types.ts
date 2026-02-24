@@ -21,6 +21,9 @@ export interface HandlePayNoteDeliveryWebhookDependencies {
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
   bootstrapContextRepository: BootstrapContextRepository;
+  resolveMerchantOwnerUserId?: (
+    merchantId: string
+  ) => Promise<string | undefined>;
   clock: ClockPort;
   enqueuePayNoteDeliverySummary?: (input: {
     sessionId: string;
