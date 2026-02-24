@@ -85,6 +85,7 @@ describe('handleSummaryJob (contract-summary)', () => {
       contractId: 'contract-1',
       summaryInputKey: 'SUMMARY_INPUT#2026-02-08T10:00:00.000Z',
       sourceUpdatedAt: '2026-02-08T10:00:00.000Z',
+      eventId: 'event-1',
       contractSnapshot: {
         contractId: 'contract-1',
         typeBlueId: 'PayNote/PayNote',
@@ -128,6 +129,7 @@ describe('handleSummaryJob (contract-summary)', () => {
 
     const summaryCallInput =
       hoistedSummary.generateContractSummaryForContractMock.mock.calls[0]?.[0];
+    expect(summaryCallInput.historyEventId).toBe('event-1');
     expect(summaryCallInput.contract.document).toEqual(snapshotDocument);
     expect(summaryCallInput.contract.updatedAt).toBe(
       '2026-02-08T10:00:00.000Z'

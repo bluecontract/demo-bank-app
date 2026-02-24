@@ -99,6 +99,7 @@ describe('payNoteWebhookHandler', () => {
       getContract: vi.fn(),
       getContractBySessionId: vi.fn(),
       getContractByDocumentId: vi.fn(),
+      markSummaryEventProcessed: vi.fn().mockResolvedValue(true),
       saveContract: vi.fn(),
       updateContractSummary: vi.fn(),
       listContractsByUserId: vi.fn(),
@@ -492,6 +493,9 @@ describe('payNoteWebhookHandler', () => {
     expect(
       hoistedRepositories.contractRepository.getContractBySessionId
     ).toHaveBeenCalledWith('session-canonical');
+    expect(
+      hoistedRepositories.contractRepository.markSummaryEventProcessed
+    ).toHaveBeenCalledWith('event-canonical');
     expect(hoistedRepositories.summaryInputStore.save).toHaveBeenCalledWith(
       expect.objectContaining({
         contractId: 'contract-1',
@@ -506,5 +510,46 @@ describe('payNoteWebhookHandler', () => {
     expect(Array.isArray(emittedEvents)).toBe(true);
     expect((emittedEvents as { items?: unknown })?.items).toBeUndefined();
     expect(emittedEvents).toHaveLength(1);
+  });
+
+  it('skips contract summary enqueue when webhook event was already processed', async () => {
+    hoistedRepositories.contractRepository.getContractBySessionId.mockResolvedValue(
+      {
+        contractId: 'contract-1',
+        sessionId: 'session-canonical',
+        documentId: 'document-1',
+        updatedAt: '2026-02-08T00:00:00.000Z',
+        document: { type: { blueId: PAYNOTE_DELIVERY_BLUE_ID } },
+      }
+    );
+    hoistedRepositories.contractRepository.markSummaryEventProcessed.mockResolvedValue(
+      false
+    );
+
+    const response = await payNoteWebhookHandler({
+      body: {
+        id: 'event-duplicate',
+        object: {
+          sessionId: 'session-canonical',
+          created: '2026-02-08T00:00:01.000Z',
+          epoch: 3,
+          document: { type: { blueId: PAYNOTE_DELIVERY_BLUE_ID } },
+        },
+      },
+    } as any);
+
+    expect(response.status).toBe(200);
+    expect(
+      hoistedRepositories.contractRepository.markSummaryEventProcessed
+    ).toHaveBeenCalledWith('event-duplicate');
+    expect(hoistedRepositories.summaryInputStore.save).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      'Skipping contract-summary enqueue (event already processed)',
+      expect.objectContaining({
+        eventId: 'event-duplicate',
+        sessionId: 'session-canonical',
+        contractId: 'contract-1',
+      })
+    );
   });
 });

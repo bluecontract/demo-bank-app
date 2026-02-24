@@ -548,6 +548,27 @@ export const payNoteWebhookHandler = async (
         }
       );
     } else {
+      const marked = await contractRepository.markSummaryEventProcessed(
+        eventId
+      );
+      if (!marked) {
+        logger.debug(
+          'Skipping contract-summary enqueue (event already processed)',
+          {
+            eventId,
+            sessionId,
+            contractId: contract.contractId,
+            canonicalSessionId: contract.sessionId ?? null,
+          }
+        );
+        return {
+          status: 200 as const,
+          body: note
+            ? ({ status: 'ok' as const, note } as const)
+            : ({ status: 'ok' as const } as const),
+        };
+      }
+
       const now = new Date().toISOString();
       const eventObject = (
         payload as { object?: { created?: unknown; epoch?: unknown } }

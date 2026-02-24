@@ -248,6 +248,7 @@ export const handleSummaryJob = async (
       await generateContractSummaryForContract({
         contract: contractForSummary,
         force: Boolean(force),
+        historyEventId: contractSummarySnapshot.eventId,
         contractRepository,
         getOpenAiApiKey,
         logger,

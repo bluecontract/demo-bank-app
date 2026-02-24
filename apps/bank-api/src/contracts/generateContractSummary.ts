@@ -146,6 +146,7 @@ type ContractSummaryGenerationResult = {
 const generateOrLoadContractSummary = async (input: {
   contract: ContractRecord;
   force: boolean;
+  historyEventId?: string;
   contractRepository: Pick<
     ContractRepository,
     'updateContractSummary' | 'addContractHistoryEntry' | 'listContractHistory'
@@ -199,7 +200,7 @@ const generateOrLoadContractSummary = async (input: {
 
     const historyShort = mockConfig.summary ?? mockSummary.listPreview;
     const historyMore = mockConfig.summary ?? mockSummary.listPreview;
-    const historyId = `mock:${contract.updatedAt}`;
+    const historyId = input.historyEventId ?? `mock:${contract.updatedAt}`;
     const historyEntries = await input.contractRepository.listContractHistory(
       contract.contractId
     );
@@ -404,6 +405,7 @@ const generateOrLoadContractSummary = async (input: {
     );
     const triggerMeta = triggerEventMeta ?? null;
     const historyId =
+      input.historyEventId ??
       triggerMeta?.blueId ??
       `init:${contract.documentId ?? contract.contractId}`;
     const historyCreatedAt = triggerMeta?.createdAt ?? contract.updatedAt;
@@ -596,6 +598,7 @@ export const generateContractSummaryHandler = async (
 export const generateContractSummaryForSessionId = async (input: {
   sessionId: string;
   force: boolean;
+  historyEventId?: string;
   contractRepository: ContractRepository;
   getOpenAiApiKey: () => Promise<string>;
   logger: PowertoolsLogger;
@@ -618,6 +621,7 @@ export const generateContractSummaryForSessionId = async (input: {
 export const generateContractSummaryForContract = async (input: {
   contract: ContractRecord;
   force: boolean;
+  historyEventId?: string;
   contractRepository: ContractRepository;
   getOpenAiApiKey: () => Promise<string>;
   logger: PowertoolsLogger;
@@ -637,6 +641,7 @@ export const generateContractSummaryForContract = async (input: {
     const result = await generateOrLoadContractSummary({
       contract,
       force,
+      historyEventId: input.historyEventId,
       contractRepository,
       getOpenAiApiKey,
       logger,
