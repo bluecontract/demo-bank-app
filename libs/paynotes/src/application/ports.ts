@@ -271,6 +271,11 @@ export interface PayNoteRepository {
   getPayNoteBySessionId(sessionId: string): Promise<PayNoteRecord | null>;
   savePayNote(record: PayNoteRecord): Promise<void>;
   markEventProcessed(eventId: string): Promise<boolean>;
+  getEventProcessingStatus?(
+    eventId: string
+  ): Promise<'processing' | 'completed' | null>;
+  finalizeEventProcessing?(eventId: string): Promise<void>;
+  releaseEventProcessing?(eventId: string): Promise<void>;
 }
 
 export interface PayNoteBootstrapRecord {

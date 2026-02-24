@@ -374,6 +374,8 @@ const createDependencies = () => {
       getPayNoteBySessionId: vi.fn().mockResolvedValue(null),
       savePayNote: vi.fn(),
       markEventProcessed: vi.fn().mockImplementation(async () => true),
+      finalizeEventProcessing: vi.fn().mockResolvedValue(undefined),
+      releaseEventProcessing: vi.fn().mockResolvedValue(undefined),
     };
 
   const bootstrapContextRepository: HandleWebhookEventDependencies['bootstrapContextRepository'] =
@@ -492,6 +494,74 @@ describe('handleWebhookEvent', () => {
         payerAccountNumber: '1234567890',
       })
     );
+    expect(deps.payNoteRepository.finalizeEventProcessing).toHaveBeenCalledWith(
+      'event-1'
+    );
+    expect(
+      deps.payNoteRepository.releaseEventProcessing
+    ).not.toHaveBeenCalled();
+  });
+
+  it('releases paynote event processing claim when handling fails', async () => {
+    const { deps } = createDependencies();
+    deps.payNoteRepository.savePayNote = vi
+      .fn()
+      .mockRejectedValue(new Error('save failed'));
+
+    await expect(
+      handleWebhookEvent({ eventId: 'event-release-on-error' }, deps)
+    ).rejects.toThrow('save failed');
+
+    expect(deps.payNoteRepository.releaseEventProcessing).toHaveBeenCalledWith(
+      'event-release-on-error'
+    );
+    expect(
+      deps.payNoteRepository.finalizeEventProcessing
+    ).not.toHaveBeenCalled();
+  });
+
+  it('returns early when paynote webhook idempotency entry is already completed', async () => {
+    const { deps } = createDependencies();
+    deps.payNoteRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(false);
+    deps.payNoteRepository.getEventProcessingStatus = vi
+      .fn()
+      .mockResolvedValue('completed');
+
+    const result = await handleWebhookEvent(
+      { eventId: 'event-completed' },
+      deps
+    );
+
+    expect(result.note).toBe('');
+    expect(
+      deps.payNoteRepository.finalizeEventProcessing
+    ).not.toHaveBeenCalled();
+    expect(
+      deps.payNoteRepository.releaseEventProcessing
+    ).not.toHaveBeenCalled();
+  });
+
+  it('throws when paynote webhook idempotency entry is still processing', async () => {
+    const { deps } = createDependencies();
+    deps.payNoteRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(false);
+    deps.payNoteRepository.getEventProcessingStatus = vi
+      .fn()
+      .mockResolvedValue('processing');
+
+    await expect(
+      handleWebhookEvent({ eventId: 'event-processing' }, deps)
+    ).rejects.toThrow('PayNote webhook event is already being processed');
+
+    expect(
+      deps.payNoteRepository.finalizeEventProcessing
+    ).not.toHaveBeenCalled();
+    expect(
+      deps.payNoteRepository.releaseEventProcessing
+    ).not.toHaveBeenCalled();
   });
 
   it('ignores paynote events from non-canonical session before dispatching handlers', async () => {

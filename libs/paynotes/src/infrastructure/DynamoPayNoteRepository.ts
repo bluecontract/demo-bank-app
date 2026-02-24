@@ -1,5 +1,6 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
+  DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
@@ -91,9 +92,14 @@ interface PayNoteEventItem {
   SK: typeof SORT_KEYS.META;
   entityType: typeof ENTITY_TYPES.EVENT;
   eventId: string;
+  status: 'processing' | 'completed';
   createdAt: string;
+  updatedAt?: string;
   ttl?: number;
 }
+
+const PROCESSING_EVENT_TTL_SECONDS = 60 * 10;
+const COMPLETED_EVENT_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 export class DynamoPayNoteRepository implements PayNoteRepository {
   private readonly tableName: string;
@@ -404,12 +410,13 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
 
   async markEventProcessed(eventId: string): Promise<boolean> {
     const createdAt = new Date().toISOString();
-    const ttl = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7;
+    const ttl = Math.floor(Date.now() / 1000) + PROCESSING_EVENT_TTL_SECONDS;
     const item: PayNoteEventItem = {
       PK: this.buildEventPk(eventId),
       SK: SORT_KEYS.META,
       entityType: ENTITY_TYPES.EVENT,
       eventId,
+      status: 'processing',
       createdAt,
       ttl,
     };
@@ -434,6 +441,99 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
         (error as { name?: string }).name === 'ConditionalCheckFailedException'
       ) {
         return false;
+      }
+      throw error;
+    }
+  }
+
+  async getEventProcessingStatus(
+    eventId: string
+  ): Promise<'processing' | 'completed' | null> {
+    const response = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: this.buildEventPk(eventId),
+          SK: SORT_KEYS.META,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const status = (response.Item as Partial<PayNoteEventItem> | undefined)
+      ?.status;
+    if (status === 'processing' || status === 'completed') {
+      return status;
+    }
+    return null;
+  }
+
+  async finalizeEventProcessing(eventId: string): Promise<void> {
+    const now = new Date();
+    const ttl = Math.floor(now.getTime() / 1000) + COMPLETED_EVENT_TTL_SECONDS;
+
+    try {
+      await this.client.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: this.buildEventPk(eventId),
+            SK: SORT_KEYS.META,
+          },
+          UpdateExpression:
+            'SET #status = :completed, #updatedAt = :updatedAt, #ttl = :ttl',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+            '#updatedAt': 'updatedAt',
+            '#ttl': 'ttl',
+          },
+          ExpressionAttributeValues: {
+            ':completed': 'completed',
+            ':updatedAt': now.toISOString(),
+            ':ttl': ttl,
+          },
+          ConditionExpression: 'attribute_exists(PK)',
+        })
+      );
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        (error as { name?: string }).name === 'ConditionalCheckFailedException'
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async releaseEventProcessing(eventId: string): Promise<void> {
+    try {
+      await this.client.send(
+        new DeleteCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: this.buildEventPk(eventId),
+            SK: SORT_KEYS.META,
+          },
+          ConditionExpression: '#status = :processing',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+          },
+          ExpressionAttributeValues: {
+            ':processing': 'processing',
+          },
+        })
+      );
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        (error as { name?: string }).name === 'ConditionalCheckFailedException'
+      ) {
+        return;
       }
       throw error;
     }

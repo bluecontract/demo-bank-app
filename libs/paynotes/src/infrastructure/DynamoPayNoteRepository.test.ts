@@ -18,10 +18,16 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
   PutCommand: vi.fn(payload => payload),
   GetCommand: vi.fn(payload => payload),
   UpdateCommand: vi.fn(payload => payload),
+  DeleteCommand: vi.fn(payload => payload),
 }));
 
-const { UpdateCommand } = await import('@aws-sdk/lib-dynamodb');
+const { PutCommand, GetCommand, UpdateCommand, DeleteCommand } = await import(
+  '@aws-sdk/lib-dynamodb'
+);
+const mockPutCommand = vi.mocked(PutCommand);
+const mockGetCommand = vi.mocked(GetCommand);
 const mockUpdateCommand = vi.mocked(UpdateCommand);
+const mockDeleteCommand = vi.mocked(DeleteCommand);
 
 const createRepository = () =>
   new DynamoPayNoteRepository({
@@ -214,5 +220,82 @@ describe('DynamoPayNoteRepository', () => {
     expect(
       (transactionRequest[0]?.type as Record<string, unknown>)?.blueId
     ).toBe('type-root');
+  });
+
+  it('marks paynote event idempotency claim as processing', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+    const nowSeconds = Math.floor(Date.now() / 1000);
+
+    const firstClaim = await repository.markEventProcessed('evt-1');
+
+    expect(firstClaim).toBe(true);
+    const putPayload = mockPutCommand.mock.calls[0]?.[0];
+    expect(putPayload?.Item?.status).toBe('processing');
+    expect(putPayload?.Item?.ttl).toBeGreaterThanOrEqual(nowSeconds + 9 * 60);
+    expect(putPayload?.Item?.ttl).toBeLessThanOrEqual(nowSeconds + 10 * 60 + 1);
+  });
+
+  it('finalizes paynote event processing by setting completed status', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+    const nowSeconds = Math.floor(Date.now() / 1000);
+
+    await repository.finalizeEventProcessing('evt-2');
+
+    const updatePayload = mockUpdateCommand.mock.calls[0]?.[0];
+    expect(updatePayload?.ExpressionAttributeValues?.[':completed']).toBe(
+      'completed'
+    );
+    expect(updatePayload?.ExpressionAttributeValues?.[':ttl']).toBeGreaterThan(
+      nowSeconds + 6 * 24 * 60 * 60
+    );
+  });
+
+  it('returns event processing status for existing idempotency entries', async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        PK: 'EVENT#evt-lookup',
+        SK: 'META',
+        entityType: 'EVENT',
+        eventId: 'evt-lookup',
+        status: 'processing',
+      },
+    });
+    const repository = createRepository();
+
+    const status = await repository.getEventProcessingStatus('evt-lookup');
+
+    expect(status).toBe('processing');
+    const getPayload = mockGetCommand.mock.calls[0]?.[0];
+    expect(getPayload?.ConsistentRead).toBe(true);
+  });
+
+  it('ignores finalize conditional failures for expired processing locks', async () => {
+    mockSend.mockRejectedValueOnce({ name: 'ConditionalCheckFailedException' });
+    const repository = createRepository();
+
+    await expect(
+      repository.finalizeEventProcessing('evt-expired')
+    ).resolves.toBeUndefined();
+  });
+
+  it('releases paynote event processing only when claim is still processing', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+
+    await repository.releaseEventProcessing('evt-3');
+
+    const deletePayload = mockDeleteCommand.mock.calls[0]?.[0];
+    expect(deletePayload?.ConditionExpression).toBe('#status = :processing');
+  });
+
+  it('ignores release conditional failures for already-finalized events', async () => {
+    mockSend.mockRejectedValueOnce({ name: 'ConditionalCheckFailedException' });
+    const repository = createRepository();
+
+    await expect(
+      repository.releaseEventProcessing('evt-4')
+    ).resolves.toBeUndefined();
   });
 });
