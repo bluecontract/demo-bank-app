@@ -47,6 +47,26 @@ export interface PartialCaptureHoldDependencies {
   transactionIdGenerator?: () => string;
 }
 
+const MAX_OPTIMISTIC_LOCK_ATTEMPTS = 3;
+const OPTIMISTIC_LOCK_ERROR_CODE = 'OPTIMISTIC_LOCK_ERROR';
+
+const isOptimisticLockError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const code = (error as { code?: unknown }).code;
+  if (code === OPTIMISTIC_LOCK_ERROR_CODE) {
+    return true;
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return error.message.includes('Optimistic lock failed');
+};
+
 export async function partialCaptureHold(
   cmd: PartialCaptureHoldCommand,
   deps: PartialCaptureHoldDependencies
@@ -74,213 +94,240 @@ export async function partialCaptureHold(
   });
 
   try {
-    const captureAmount = new Money(cmd.amountMinor);
-    if (!captureAmount.isPositive()) {
-      throw new InvalidMoneyAmountError(cmd.amountMinor);
-    }
+    let attempt = 0;
+    while (true) {
+      attempt += 1;
 
-    const existingHold = await holdRepository.getHold(cmd.holdId);
-    if (!existingHold) {
-      throw new HoldNotFoundError(cmd.holdId);
-    }
-
-    if (existingHold.status === 'CAPTURED') {
-      throw new HoldNotPendingError(cmd.holdId, existingHold.status);
-    }
-
-    if (
-      existingHold.status !== 'PENDING' &&
-      existingHold.status !== 'PARTIALLY_CAPTURED'
-    ) {
-      throw new HoldNotPendingError(cmd.holdId, existingHold.status);
-    }
-
-    if (
-      existingHold.captureDisabled &&
-      (existingHold.status === 'PENDING' ||
-        existingHold.status === 'PARTIALLY_CAPTURED')
-    ) {
-      throw new HoldCaptureDisabledError(cmd.holdId);
-    }
-
-    const existingCapturedAmount = existingHold.capturedAmountMinor ?? 0;
-    const remainingAmount = Math.max(
-      existingHold.amountMinor - existingCapturedAmount,
-      0
-    );
-
-    if (captureAmount.toCents() > remainingAmount) {
-      throw new IdempotencyConflictError(
-        'Capture amount exceeds remaining authorized amount'
-      );
-    }
-
-    if (
-      existingHold.counterpartyAccountNumber &&
-      cmd.counterpartyAccountNumber &&
-      existingHold.counterpartyAccountNumber !== cmd.counterpartyAccountNumber
-    ) {
-      throw new HoldCounterpartyMismatchError(
-        existingHold.holdId,
-        existingHold.counterpartyAccountNumber,
-        cmd.counterpartyAccountNumber
-      );
-    }
-
-    const resolvedCounterparty =
-      existingHold.counterpartyAccountNumber ?? cmd.counterpartyAccountNumber;
-    if (!resolvedCounterparty) {
-      throw new HoldCounterpartyRequiredError(existingHold.holdId);
-    }
-
-    const payerAccountId = await bankingRepository.getAccountIdByNumber(
-      existingHold.payerAccountNumber
-    );
-    if (!payerAccountId) {
-      throw new AccountNotFoundError(existingHold.payerAccountNumber);
-    }
-
-    const [payerAccount, counterpartyAccountId] = await Promise.all([
-      bankingRepository.getAccountById(payerAccountId),
-      bankingRepository.getAccountIdByNumber(resolvedCounterparty),
-    ]);
-
-    if (!payerAccount) {
-      throw new AccountNotFoundError(payerAccountId);
-    }
-
-    if (!payerAccount.isOwnedBy(cmd.userId)) {
-      throw new ForbiddenError('Access denied to payer account');
-    }
-
-    if (!counterpartyAccountId) {
-      throw new AccountNotFoundError(resolvedCounterparty);
-    }
-
-    const counterpartyAccount = await bankingRepository.getAccountById(
-      counterpartyAccountId
-    );
-    if (!counterpartyAccount) {
-      throw new AccountNotFoundError(counterpartyAccountId);
-    }
-
-    payerAccount.ensureActive();
-    counterpartyAccount.ensureActive();
-
-    const debitPosting = new Posting({
-      accountId: payerAccount.id,
-      amount: captureAmount,
-      side: 'DEBIT',
-      accountNumber: payerAccount.accountNumber,
-      counterpartyAccountNumber: counterpartyAccount.accountNumber,
-    });
-
-    const creditPosting = new Posting({
-      accountId: counterpartyAccount.id,
-      amount: captureAmount,
-      side: 'CREDIT',
-      accountNumber: counterpartyAccount.accountNumber,
-      counterpartyAccountNumber: payerAccount.accountNumber,
-    });
-
-    const capturedAt = clock();
-    const capturedAtIso = capturedAt.toISOString();
-
-    const transactionId = transactionIdGenerator();
-    const transaction = Transaction.createWithId(
-      [debitPosting, creditPosting],
-      {
-        idempotencyKey: cmd.idempotencyKey,
-        description:
-          existingHold.description ??
-          `Partially captured hold ${existingHold.holdId}`,
-        createdAt: capturedAt,
-        originHoldId: existingHold.holdId,
-        payNoteDocumentId:
-          cmd.payNoteDocumentId ?? existingHold.payNoteDocumentId,
-      },
-      transactionId
-    );
-
-    const updatedCapturedAmount =
-      existingCapturedAmount + captureAmount.toCents();
-    const remainingAfterCapture = Math.max(
-      existingHold.amountMinor - updatedCapturedAmount,
-      0
-    );
-    const isFullyCaptured = updatedCapturedAmount >= existingHold.amountMinor;
-
-    const updatedHold: Hold = {
-      ...existingHold,
-      status: isFullyCaptured ? 'CAPTURED' : 'PARTIALLY_CAPTURED',
-      capturedAmountMinor: updatedCapturedAmount,
-      counterpartyAccountNumber: resolvedCounterparty,
-      relatedTransactionId: transaction.id,
-    };
-
-    const idempotencyKeyHash = hashIdempotencyKey(cmd.idempotencyKey);
-
-    const holdEvent = isFullyCaptured
-      ? {
-          at: capturedAtIso,
-          type: 'CAPTURED' as const,
-          transactionId: transaction.id,
-          counterpartyAccountNumber: resolvedCounterparty,
-          amountMinor: captureAmount.toCents(),
-          remainingAmountMinor: remainingAfterCapture,
-          payNoteDocumentId: cmd.payNoteDocumentId,
+      try {
+        const captureAmount = new Money(cmd.amountMinor);
+        if (!captureAmount.isPositive()) {
+          throw new InvalidMoneyAmountError(cmd.amountMinor);
         }
-      : {
-          at: capturedAtIso,
-          type: 'CAPTURED_PARTIAL' as const,
-          transactionId: transaction.id,
+
+        const existingHold = await holdRepository.getHold(cmd.holdId);
+        if (!existingHold) {
+          throw new HoldNotFoundError(cmd.holdId);
+        }
+
+        if (existingHold.status === 'CAPTURED') {
+          throw new HoldNotPendingError(cmd.holdId, existingHold.status);
+        }
+
+        if (
+          existingHold.status !== 'PENDING' &&
+          existingHold.status !== 'PARTIALLY_CAPTURED'
+        ) {
+          throw new HoldNotPendingError(cmd.holdId, existingHold.status);
+        }
+
+        if (
+          existingHold.captureDisabled &&
+          (existingHold.status === 'PENDING' ||
+            existingHold.status === 'PARTIALLY_CAPTURED')
+        ) {
+          throw new HoldCaptureDisabledError(cmd.holdId);
+        }
+
+        const existingCapturedAmount = existingHold.capturedAmountMinor ?? 0;
+        const remainingAmount = Math.max(
+          existingHold.amountMinor - existingCapturedAmount,
+          0
+        );
+
+        if (captureAmount.toCents() > remainingAmount) {
+          throw new IdempotencyConflictError(
+            'Capture amount exceeds remaining authorized amount'
+          );
+        }
+
+        if (
+          existingHold.counterpartyAccountNumber &&
+          cmd.counterpartyAccountNumber &&
+          existingHold.counterpartyAccountNumber !==
+            cmd.counterpartyAccountNumber
+        ) {
+          throw new HoldCounterpartyMismatchError(
+            existingHold.holdId,
+            existingHold.counterpartyAccountNumber,
+            cmd.counterpartyAccountNumber
+          );
+        }
+
+        const resolvedCounterparty =
+          existingHold.counterpartyAccountNumber ??
+          cmd.counterpartyAccountNumber;
+        if (!resolvedCounterparty) {
+          throw new HoldCounterpartyRequiredError(existingHold.holdId);
+        }
+
+        const payerAccountId = await bankingRepository.getAccountIdByNumber(
+          existingHold.payerAccountNumber
+        );
+        if (!payerAccountId) {
+          throw new AccountNotFoundError(existingHold.payerAccountNumber);
+        }
+
+        const [payerAccount, counterpartyAccountId] = await Promise.all([
+          bankingRepository.getAccountById(payerAccountId),
+          bankingRepository.getAccountIdByNumber(resolvedCounterparty),
+        ]);
+
+        if (!payerAccount) {
+          throw new AccountNotFoundError(payerAccountId);
+        }
+
+        if (!payerAccount.isOwnedBy(cmd.userId)) {
+          throw new ForbiddenError('Access denied to payer account');
+        }
+
+        if (!counterpartyAccountId) {
+          throw new AccountNotFoundError(resolvedCounterparty);
+        }
+
+        const counterpartyAccount = await bankingRepository.getAccountById(
+          counterpartyAccountId
+        );
+        if (!counterpartyAccount) {
+          throw new AccountNotFoundError(counterpartyAccountId);
+        }
+
+        payerAccount.ensureActive();
+        counterpartyAccount.ensureActive();
+
+        const debitPosting = new Posting({
+          accountId: payerAccount.id,
+          amount: captureAmount,
+          side: 'DEBIT',
+          accountNumber: payerAccount.accountNumber,
+          counterpartyAccountNumber: counterpartyAccount.accountNumber,
+        });
+
+        const creditPosting = new Posting({
+          accountId: counterpartyAccount.id,
+          amount: captureAmount,
+          side: 'CREDIT',
+          accountNumber: counterpartyAccount.accountNumber,
+          counterpartyAccountNumber: payerAccount.accountNumber,
+        });
+
+        const capturedAt = clock();
+        const capturedAtIso = capturedAt.toISOString();
+
+        const transactionId = transactionIdGenerator();
+        const transaction = Transaction.createWithId(
+          [debitPosting, creditPosting],
+          {
+            idempotencyKey: cmd.idempotencyKey,
+            description:
+              existingHold.description ??
+              `Partially captured hold ${existingHold.holdId}`,
+            createdAt: capturedAt,
+            originHoldId: existingHold.holdId,
+            payNoteDocumentId:
+              cmd.payNoteDocumentId ?? existingHold.payNoteDocumentId,
+          },
+          transactionId
+        );
+
+        const updatedCapturedAmount =
+          existingCapturedAmount + captureAmount.toCents();
+        const remainingAfterCapture = Math.max(
+          existingHold.amountMinor - updatedCapturedAmount,
+          0
+        );
+        const isFullyCaptured =
+          updatedCapturedAmount >= existingHold.amountMinor;
+
+        const updatedHold: Hold = {
+          ...existingHold,
+          status: isFullyCaptured ? 'CAPTURED' : 'PARTIALLY_CAPTURED',
+          capturedAmountMinor: updatedCapturedAmount,
           counterpartyAccountNumber: resolvedCounterparty,
-          amountMinor: captureAmount.toCents(),
-          remainingAmountMinor: remainingAfterCapture,
-          payNoteDocumentId: cmd.payNoteDocumentId,
+          relatedTransactionId: transaction.id,
         };
 
-    const captureRequest: PartialCaptureHoldRequest = {
-      payerAccountId: payerAccount.id,
-      payerAccountBalanceVersion: payerAccount.balanceVersion,
-      counterpartyAccountId: counterpartyAccount.id,
-      counterpartyAccountBalanceVersion: counterpartyAccount.balanceVersion,
-      hold: updatedHold,
-      holdEvent,
-      transaction,
-      captureAmountMinor: captureAmount.toCents(),
-      idempotencyKey: cmd.idempotencyKey,
-      idempotencyKeyHash,
-      userId: cmd.userId,
-    };
+        const idempotencyKeyHash = hashIdempotencyKey(cmd.idempotencyKey);
 
-    const result = await holdRepository.partialCaptureHold(captureRequest);
+        const holdEvent = isFullyCaptured
+          ? {
+              at: capturedAtIso,
+              type: 'CAPTURED' as const,
+              transactionId: transaction.id,
+              counterpartyAccountNumber: resolvedCounterparty,
+              amountMinor: captureAmount.toCents(),
+              remainingAmountMinor: remainingAfterCapture,
+              payNoteDocumentId: cmd.payNoteDocumentId,
+            }
+          : {
+              at: capturedAtIso,
+              type: 'CAPTURED_PARTIAL' as const,
+              transactionId: transaction.id,
+              counterpartyAccountNumber: resolvedCounterparty,
+              amountMinor: captureAmount.toCents(),
+              remainingAmountMinor: remainingAfterCapture,
+              payNoteDocumentId: cmd.payNoteDocumentId,
+            };
 
-    const completedTiming = TimingUtils.endTiming(timing);
+        const captureRequest: PartialCaptureHoldRequest = {
+          payerAccountId: payerAccount.id,
+          payerAccountBalanceVersion: payerAccount.balanceVersion,
+          counterpartyAccountId: counterpartyAccount.id,
+          counterpartyAccountBalanceVersion: counterpartyAccount.balanceVersion,
+          hold: updatedHold,
+          holdEvent,
+          transaction,
+          captureAmountMinor: captureAmount.toCents(),
+          idempotencyKey: cmd.idempotencyKey,
+          idempotencyKeyHash,
+          userId: cmd.userId,
+        };
 
-    metrics?.addMetric(
-      METRIC_NAMES.BANKING?.CAPTURE_HOLD_SUCCESS ?? 'CaptureHoldSuccess',
-      METRIC_UNITS.COUNT,
-      1
-    );
-    metrics?.addMetric(
-      METRIC_NAMES.BANKING?.CAPTURE_HOLD_DURATION ?? 'CaptureHoldDuration',
-      METRIC_UNITS.MILLISECONDS,
-      completedTiming.duration ?? 0
-    );
+        const result = await holdRepository.partialCaptureHold(captureRequest);
 
-    logger?.info('Partial capture hold completed', {
-      holdId: result.hold.holdId,
-      userId: cmd.userId,
-      idempotencyKey: cmd.idempotencyKey,
-      transactionId: result.transactionId,
-      counterpartyAccountNumber: resolvedCounterparty,
-      capturedAmountMinor: captureAmount.toCents(),
-      created: result.created,
-      ...TimingUtils.createTimingMetadata(completedTiming),
-    });
+        const completedTiming = TimingUtils.endTiming(timing);
 
-    return result;
+        metrics?.addMetric(
+          METRIC_NAMES.BANKING?.CAPTURE_HOLD_SUCCESS ?? 'CaptureHoldSuccess',
+          METRIC_UNITS.COUNT,
+          1
+        );
+        metrics?.addMetric(
+          METRIC_NAMES.BANKING?.CAPTURE_HOLD_DURATION ?? 'CaptureHoldDuration',
+          METRIC_UNITS.MILLISECONDS,
+          completedTiming.duration ?? 0
+        );
+
+        logger?.info('Partial capture hold completed', {
+          holdId: result.hold.holdId,
+          userId: cmd.userId,
+          idempotencyKey: cmd.idempotencyKey,
+          transactionId: result.transactionId,
+          counterpartyAccountNumber: resolvedCounterparty,
+          capturedAmountMinor: captureAmount.toCents(),
+          created: result.created,
+          attemptNumber: attempt,
+          ...TimingUtils.createTimingMetadata(completedTiming),
+        });
+
+        return result;
+      } catch (error) {
+        const shouldRetry =
+          isOptimisticLockError(error) &&
+          attempt < MAX_OPTIMISTIC_LOCK_ATTEMPTS;
+        if (!shouldRetry) {
+          throw error;
+        }
+
+        logger?.warn('Partial capture optimistic lock conflict, retrying', {
+          holdId: cmd.holdId,
+          userId: cmd.userId,
+          idempotencyKey: cmd.idempotencyKey,
+          attemptNumber: attempt,
+          maxAttemptCount: MAX_OPTIMISTIC_LOCK_ATTEMPTS,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   } catch (error) {
     const failedTiming = TimingUtils.endTiming(timing);
 

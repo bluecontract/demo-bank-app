@@ -224,6 +224,174 @@ describe('partialCaptureHold', () => {
     expect(request.holdEvent.remainingAmountMinor).toBe(0);
   });
 
+  it('retries on optimistic lock and succeeds with the same idempotency key', async () => {
+    const { holdRepositoryMock, bankingRepositoryMock, ...deps } =
+      createDependencies();
+    const payerAccount = createAccount();
+    const counterpartyAccount = createCounterpartyAccount();
+
+    vi.mocked(holdRepositoryMock.getHold!).mockResolvedValue(baseHold);
+    vi.mocked(bankingRepositoryMock.getAccountIdByNumber!).mockImplementation(
+      async accountNumber => {
+        if (accountNumber === payerAccount.accountNumber) {
+          return payerAccount.id;
+        }
+        if (accountNumber === counterpartyAccount.accountNumber) {
+          return counterpartyAccount.id;
+        }
+        return null;
+      }
+    );
+    vi.mocked(bankingRepositoryMock.getAccountById!).mockImplementation(
+      async accountId => {
+        if (accountId === payerAccount.id) {
+          return payerAccount;
+        }
+        if (accountId === counterpartyAccount.id) {
+          return counterpartyAccount;
+        }
+        return null;
+      }
+    );
+
+    const optimisticError = Object.assign(
+      new Error(
+        `Optimistic lock failed for hold_capture_partial_${baseHold.holdId}`
+      ),
+      { code: 'OPTIMISTIC_LOCK_ERROR' }
+    );
+
+    vi.mocked(holdRepositoryMock.partialCaptureHold!)
+      .mockRejectedValueOnce(optimisticError)
+      .mockImplementation(async request => ({
+        hold: request.hold,
+        transactionId: request.transaction.id,
+        created: true,
+      }));
+
+    const result = await partialCaptureHold(command, {
+      ...deps,
+      holdRepository: holdRepositoryMock as HoldRepository,
+      bankingRepository: bankingRepositoryMock as BankingRepository,
+      transactionIdGenerator: () => 'txn-retry',
+    });
+
+    expect(result.hold.status).toBe('PARTIALLY_CAPTURED');
+    expect(holdRepositoryMock.partialCaptureHold).toHaveBeenCalledTimes(2);
+
+    const firstRequest = vi.mocked(holdRepositoryMock.partialCaptureHold!).mock
+      .calls[0][0];
+    const secondRequest = vi.mocked(holdRepositoryMock.partialCaptureHold!).mock
+      .calls[1][0];
+
+    expect(firstRequest.idempotencyKey).toBe(command.idempotencyKey);
+    expect(secondRequest.idempotencyKey).toBe(command.idempotencyKey);
+    expect(firstRequest.captureAmountMinor).toBe(command.amountMinor);
+    expect(secondRequest.captureAmountMinor).toBe(command.amountMinor);
+  });
+
+  it('throws after exhausting optimistic lock retry attempts', async () => {
+    const { holdRepositoryMock, bankingRepositoryMock, ...deps } =
+      createDependencies();
+    const payerAccount = createAccount();
+    const counterpartyAccount = createCounterpartyAccount();
+
+    vi.mocked(holdRepositoryMock.getHold!).mockResolvedValue(baseHold);
+    vi.mocked(bankingRepositoryMock.getAccountIdByNumber!).mockImplementation(
+      async accountNumber => {
+        if (accountNumber === payerAccount.accountNumber) {
+          return payerAccount.id;
+        }
+        if (accountNumber === counterpartyAccount.accountNumber) {
+          return counterpartyAccount.id;
+        }
+        return null;
+      }
+    );
+    vi.mocked(bankingRepositoryMock.getAccountById!).mockImplementation(
+      async accountId => {
+        if (accountId === payerAccount.id) {
+          return payerAccount;
+        }
+        if (accountId === counterpartyAccount.id) {
+          return counterpartyAccount;
+        }
+        return null;
+      }
+    );
+
+    const optimisticError = Object.assign(
+      new Error(
+        `Optimistic lock failed for hold_capture_partial_${baseHold.holdId}`
+      ),
+      { code: 'OPTIMISTIC_LOCK_ERROR' }
+    );
+
+    vi.mocked(holdRepositoryMock.partialCaptureHold!).mockRejectedValue(
+      optimisticError
+    );
+
+    await expect(
+      partialCaptureHold(command, {
+        ...deps,
+        holdRepository: holdRepositoryMock as HoldRepository,
+        bankingRepository: bankingRepositoryMock as BankingRepository,
+        transactionIdGenerator: () => 'txn-retry-exhausted',
+      })
+    ).rejects.toBe(optimisticError);
+
+    expect(holdRepositoryMock.partialCaptureHold).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry when repository error is not optimistic lock conflict', async () => {
+    const { holdRepositoryMock, bankingRepositoryMock, ...deps } =
+      createDependencies();
+    const payerAccount = createAccount();
+    const counterpartyAccount = createCounterpartyAccount();
+
+    vi.mocked(holdRepositoryMock.getHold!).mockResolvedValue(baseHold);
+    vi.mocked(bankingRepositoryMock.getAccountIdByNumber!).mockImplementation(
+      async accountNumber => {
+        if (accountNumber === payerAccount.accountNumber) {
+          return payerAccount.id;
+        }
+        if (accountNumber === counterpartyAccount.accountNumber) {
+          return counterpartyAccount.id;
+        }
+        return null;
+      }
+    );
+    vi.mocked(bankingRepositoryMock.getAccountById!).mockImplementation(
+      async accountId => {
+        if (accountId === payerAccount.id) {
+          return payerAccount;
+        }
+        if (accountId === counterpartyAccount.id) {
+          return counterpartyAccount;
+        }
+        return null;
+      }
+    );
+
+    const unexpectedRepositoryError = Object.assign(
+      new Error('Repository unavailable'),
+      { code: 'DATABASE_ERROR' }
+    );
+    vi.mocked(holdRepositoryMock.partialCaptureHold!).mockRejectedValue(
+      unexpectedRepositoryError
+    );
+
+    await expect(
+      partialCaptureHold(command, {
+        ...deps,
+        holdRepository: holdRepositoryMock as HoldRepository,
+        bankingRepository: bankingRepositoryMock as BankingRepository,
+      })
+    ).rejects.toBe(unexpectedRepositoryError);
+
+    expect(holdRepositoryMock.partialCaptureHold).toHaveBeenCalledTimes(1);
+  });
+
   it('throws when hold is missing', async () => {
     const { holdRepositoryMock, ...deps } = createDependencies();
     vi.mocked(holdRepositoryMock.getHold!).mockResolvedValue(null);
