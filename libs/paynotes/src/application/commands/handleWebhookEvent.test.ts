@@ -4625,20 +4625,8 @@ describe('handleWebhookEvent', () => {
     deps.myOsClient.bootstrapDocument = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      body: { sessionId: 'delivery-session-1' },
+      body: { sessionId: 'linked-paynote-session-1' },
     });
-    deps.myOsClient.runDocumentOperation = vi
-      .fn()
-      .mockImplementation(async input => {
-        if (input.operation === 'acceptPayNote') {
-          return {
-            ok: true,
-            status: 200,
-            body: { payNoteSessionId: 'linked-paynote-session-1' },
-          };
-        }
-        return { ok: true, status: 200 };
-      });
     fetchDocument.mockImplementation(async sessionId => {
       if (sessionId === 'linked-paynote-session-1') {
         return {
@@ -4751,30 +4739,19 @@ describe('handleWebhookEvent', () => {
       expect.objectContaining({
         payload: expect.objectContaining({
           document: expect.objectContaining({
-            type: 'PayNote/PayNote Delivery',
-            payNoteBootstrapRequest: expect.objectContaining({
-              type: 'Conversation/Document Bootstrap Requested',
-              bootstrapAssignee: 'payNoteDeliverer',
-            }),
+            type: 'PayNote/PayNote',
           }),
           channelBindings: {
-            payNoteSender: { accountId: 'merchant-account-id' },
-            payNoteDeliverer: { accountId: 'account-id' },
             payerChannel: { accountId: 'customer-account-id' },
             payeeChannel: { accountId: 'merchant-account-id' },
+            guarantorChannel: { accountId: 'account-id' },
           },
         }),
       })
     );
-    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionId: 'delivery-session-1',
-        operation: 'acceptPayNote',
-      })
-    );
     expect(deps.bootstrapContextRepository.saveContext).toHaveBeenCalledWith(
       expect.objectContaining({
-        bootstrapSessionId: 'delivery-session-1',
+        bootstrapSessionId: 'linked-paynote-session-1',
         holdId: 'paynote-card-charge:doc-1:event-1:0',
         transactionId: 'txn-1',
         customerChannelKey: 'payerChannel',
@@ -4828,20 +4805,8 @@ describe('handleWebhookEvent', () => {
     deps.myOsClient.bootstrapDocument = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      body: { sessionId: 'delivery-session-chain-1' },
+      body: { sessionId: 'linked-paynote-chain-session-1' },
     });
-    deps.myOsClient.runDocumentOperation = vi
-      .fn()
-      .mockImplementation(async input => {
-        if (input.operation === 'acceptPayNote') {
-          return {
-            ok: true,
-            status: 200,
-            body: { payNoteSessionId: 'linked-paynote-chain-session-1' },
-          };
-        }
-        return { ok: true, status: 200 };
-      });
     fetchDocument.mockImplementation(async sessionId => {
       if (sessionId === 'linked-paynote-chain-session-1') {
         return {
@@ -4955,7 +4920,7 @@ describe('handleWebhookEvent', () => {
       expect.objectContaining({
         payload: expect.objectContaining({
           document: expect.objectContaining({
-            type: 'PayNote/PayNote Delivery',
+            type: 'PayNote/PayNote',
           }),
         }),
       })
@@ -5121,7 +5086,7 @@ describe('handleWebhookEvent', () => {
     ).toBe(false);
   });
 
-  it('starts linked paynote delivery without auto-accept when mandate policy disallows it', async () => {
+  it('rejects linked paynote startup when mandate policy disallows auto-start', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
 
     deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
@@ -5247,7 +5212,7 @@ describe('handleWebhookEvent', () => {
     const result = await handleWebhookEvent({ eventId: 'event-1' }, deps);
 
     expect(result.note).toBe('');
-    expect(deps.myOsClient.bootstrapDocument).toHaveBeenCalled();
+    expect(deps.myOsClient.bootstrapDocument).not.toHaveBeenCalled();
 
     const runDocumentOperationCalls = (
       deps.myOsClient.runDocumentOperation as unknown as {
@@ -5256,15 +5221,13 @@ describe('handleWebhookEvent', () => {
         };
       }
     ).mock.calls;
-    expect(
-      runDocumentOperationCalls.some(
-        call => call[0]?.operation === 'acceptPayNote'
-      )
-    ).toBe(false);
-
-    expectRunOperationIncludesEventType(
+    const linkedResponded = findRunOperationEventByType(
       runDocumentOperationCalls,
       'PayNote/Linked PayNote Start Responded'
+    );
+    expect(linkedResponded?.status).toBe('rejected');
+    expect(linkedResponded?.reason).toBe(
+      'Linked PayNote auto-start is not allowed by payment mandate policy.'
     );
     expect(
       runDocumentOperationCalls.some(call =>
@@ -5420,20 +5383,8 @@ describe('handleWebhookEvent', () => {
     deps.myOsClient.bootstrapDocument = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      body: { sessionId: 'voucher-delivery-session-1' },
+      body: { sessionId: 'voucher-paynote-session-1' },
     });
-    deps.myOsClient.runDocumentOperation = vi
-      .fn()
-      .mockImplementation(async input => {
-        if (input.operation === 'acceptPayNote') {
-          return {
-            ok: true,
-            status: 200,
-            body: { payNoteSessionId: 'voucher-paynote-session-1' },
-          };
-        }
-        return { ok: true, status: 200 };
-      });
 
     fetchDocument.mockImplementation(async sessionId => {
       if (sessionId === 'voucher-paynote-session-1') {

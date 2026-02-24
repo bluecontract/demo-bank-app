@@ -49,8 +49,6 @@ const CARD_CHARGE_COMPLETED_EVENT_NAME = 'PayNote/Card Charge Completed';
 const LINKED_PAYNOTE_START_RESPONDED_EVENT_NAME =
   'PayNote/Linked PayNote Start Responded';
 const LINKED_PAYNOTE_STARTED_EVENT_NAME = 'PayNote/Linked PayNote Started';
-const LINKED_PAYNOTE_START_FAILED_EVENT_NAME =
-  'PayNote/Linked PayNote Start Failed';
 const CHARGE_MANDATE_PENDING_ACTION_TYPE = 'chargeMandateApproval';
 const MAX_MANDATE_LINKAGE_RETRY_ATTEMPTS = 5;
 const MANDATE_RETRY_BASE_DELAY_MS = 1_000;
@@ -1784,31 +1782,6 @@ const emitLinkedPayNoteStarted = async (input: {
       'Skipped linked PayNote startup response (missing MyOS credentials)',
   });
 
-const emitLinkedPayNoteStartFailed = async (input: {
-  context: ChargeRequestContext;
-  eventType: ChargeRequestEventType;
-  requestId?: string;
-  reason: string;
-}) =>
-  emitGuarantorResponseEvent({
-    context: input.context,
-    eventType: input.eventType,
-    requestId: input.requestId,
-    responseEvent: withInResponseTo(
-      {
-        type: LINKED_PAYNOTE_START_FAILED_EVENT_NAME,
-        reason: input.reason,
-      },
-      input.requestId
-    ),
-    successMessage:
-      'Reported linked PayNote startup failure via guarantorUpdate',
-    failureMessage:
-      'Failed to report linked PayNote startup failure via guarantorUpdate',
-    missingCredentialsMessage:
-      'Skipped linked PayNote startup failure response (missing MyOS credentials)',
-  });
-
 const resolveAccountWithOwner = async (input: {
   accountNumber: string;
   deps: HandleWebhookEventDependencies;
@@ -2147,13 +2120,12 @@ const resolveBootstrapFailureReason = (input: {
     getString(bodyRecord?.message) ??
     getString(bodyRecord?.error);
   return detail
-    ? `Linked PayNote startup failed: ${detail}`
-    : `Linked PayNote startup failed with status ${input.status}.`;
+    ? `Linked PayNote bootstrap failed: ${detail}`
+    : `Linked PayNote bootstrap failed with status ${input.status}.`;
 };
 
 type LinkedPayNoteParticipantBindings = {
   payNoteChannelBindings: Record<string, { accountId: string }>;
-  deliveryChannelBindings: Record<string, { accountId: string }>;
 };
 
 type CardTransactionDetailsPayload = {
@@ -2184,19 +2156,11 @@ const resolveLinkedPayNoteBindings = (input: {
   const bindings = buildChannelBindingsFromContracts(contracts);
   const payerAccountId = getString(bindings.payerChannel?.accountId);
   const payeeAccountId = getString(bindings.payeeChannel?.accountId);
-  const payNoteSenderAccountId = payeeAccountId;
   if (!payerAccountId || !payeeAccountId) {
     return {
       ok: false,
       reason:
         'Linked PayNote startup requires payerChannel and payeeChannel account bindings.',
-    };
-  }
-  if (!payNoteSenderAccountId) {
-    return {
-      ok: false,
-      reason:
-        'Linked PayNote startup requires payNoteSender binding derived from source document.',
     };
   }
 
@@ -2207,12 +2171,6 @@ const resolveLinkedPayNoteBindings = (input: {
         payerChannel: { accountId: payerAccountId },
         payeeChannel: { accountId: payeeAccountId },
         guarantorChannel: { accountId: input.guarantorAccountId },
-      },
-      deliveryChannelBindings: {
-        payerChannel: { accountId: payerAccountId },
-        payeeChannel: { accountId: payeeAccountId },
-        payNoteSender: { accountId: payNoteSenderAccountId },
-        payNoteDeliverer: { accountId: input.guarantorAccountId },
       },
     },
   };
@@ -2282,38 +2240,6 @@ const resolveLinkedPayNoteCardTransactionDetails = async (input: {
   }
 };
 
-const buildLinkedPayNoteDeliveryDocument = (input: {
-  payNoteDocument: Record<string, unknown>;
-  requestId?: string;
-  cardTransactionDetails: CardTransactionDetailsPayload;
-  payNoteChannelBindings: Record<string, { accountId: string }>;
-}) => ({
-  type: 'PayNote/PayNote Delivery',
-  name: 'Linked PayNote Delivery',
-  payNoteBootstrapRequest: {
-    type: 'Conversation/Document Bootstrap Requested',
-    bootstrapAssignee: 'payNoteDeliverer',
-    ...(input.requestId ? { requestId: input.requestId } : {}),
-    channelBindings: input.payNoteChannelBindings,
-    document: input.payNoteDocument,
-  },
-  cardTransactionDetails: input.cardTransactionDetails,
-  contracts: {
-    payNoteSender: {
-      type: 'MyOS/MyOS Timeline Channel',
-    },
-    payNoteDeliverer: {
-      type: 'MyOS/MyOS Timeline Channel',
-    },
-    payerChannel: {
-      type: 'MyOS/MyOS Timeline Channel',
-    },
-    payeeChannel: {
-      type: 'MyOS/MyOS Timeline Channel',
-    },
-  },
-});
-
 const resolveOperationFailureReason = (input: {
   status: number;
   body?: unknown;
@@ -2327,24 +2253,6 @@ const resolveOperationFailureReason = (input: {
   return detail
     ? `${input.fallbackPrefix}: ${detail}`
     : `${input.fallbackPrefix} with status ${input.status}.`;
-};
-
-const resolveLinkedPayNoteSessionIdFromAcceptResponse = (
-  body: unknown
-): string | undefined => {
-  const bodyRecord = toSimpleRecord(body);
-  const direct =
-    getString(bodyRecord?.payNoteSessionId) ??
-    getString(bodyRecord?.startedPayNoteSessionId);
-  if (direct) {
-    return direct;
-  }
-
-  const resultRecord = toSimpleRecord(bodyRecord?.result);
-  return (
-    getString(resultRecord?.payNoteSessionId) ??
-    getString(resultRecord?.startedPayNoteSessionId)
-  );
 };
 
 const maybeResolveBootstrappedDocumentId = async (input: {
@@ -2437,12 +2345,27 @@ const maybeStartLinkedPayNote = async (input: {
     return;
   }
 
-  const deliveryDocument = buildLinkedPayNoteDeliveryDocument({
-    payNoteDocument: input.payNoteDocument,
-    requestId,
-    cardTransactionDetails,
-    payNoteChannelBindings: bindingsResult.bindings.payNoteChannelBindings,
-  });
+  if (!input.autoAcceptLinkedPayNote) {
+    await emitLinkedPayNoteStartResponded({
+      context,
+      eventType,
+      requestId,
+      status: 'rejected',
+      reason:
+        'Linked PayNote auto-start is not allowed by payment mandate policy.',
+    });
+    context.logs.push({
+      level: 'info',
+      message:
+        'Linked PayNote startup rejected because auto-start is disabled by mandate/policy',
+      context: {
+        eventId: context.eventId,
+        payNoteDocumentId: context.payNoteDocumentId,
+        requestId: requestId ?? null,
+      },
+    });
+    return;
+  }
 
   const response = await context.deps.myOsClient.bootstrapDocument({
     credentials,
@@ -2453,8 +2376,8 @@ const maybeStartLinkedPayNote = async (input: {
       String(eventIndex),
     ].join(':'),
     payload: {
-      channelBindings: bindingsResult.bindings.deliveryChannelBindings,
-      document: deliveryDocument,
+      channelBindings: bindingsResult.bindings.payNoteChannelBindings,
+      document: input.payNoteDocument,
     },
   });
 
@@ -2472,14 +2395,14 @@ const maybeStartLinkedPayNote = async (input: {
     return;
   }
 
-  const deliverySessionId = getString(toSimpleRecord(response.body)?.sessionId);
-  if (!deliverySessionId) {
+  const payNoteSessionId = getString(toSimpleRecord(response.body)?.sessionId);
+  if (!payNoteSessionId) {
     await emitLinkedPayNoteStartResponded({
       context,
       eventType,
       requestId,
       status: 'rejected',
-      reason: 'Linked PayNote delivery startup did not return session id.',
+      reason: 'Linked PayNote bootstrap did not return session id.',
     });
     return;
   }
@@ -2491,7 +2414,7 @@ const maybeStartLinkedPayNote = async (input: {
   const customerChannelKey = getString(requestingContract?.customerChannelKey);
 
   await context.deps.bootstrapContextRepository.saveContext({
-    bootstrapSessionId: deliverySessionId,
+    bootstrapSessionId: payNoteSessionId,
     ...(getString(
       context.deliveryRecord?.merchantId ?? context.updatedRecord.merchantId
     )
@@ -2540,71 +2463,6 @@ const maybeStartLinkedPayNote = async (input: {
     requestId,
     status: 'accepted',
   });
-
-  if (!input.autoAcceptLinkedPayNote) {
-    context.logs.push({
-      level: 'info',
-      message:
-        'Linked PayNote delivery started without auto-accept (mandate/policy)',
-      context: {
-        eventId: context.eventId,
-        payNoteDocumentId: context.payNoteDocumentId,
-        deliverySessionId,
-        requestId: requestId ?? null,
-      },
-    });
-    return;
-  }
-
-  const acceptResponse = await context.deps.myOsClient.runDocumentOperation({
-    credentials,
-    sessionId: deliverySessionId,
-    operation: 'acceptPayNote',
-    payload: {
-      acceptedAt: context.deps.clock.now().toISOString(),
-    },
-  });
-
-  if (!acceptResponse.ok) {
-    await emitLinkedPayNoteStartFailed({
-      context,
-      eventType,
-      requestId,
-      reason: resolveOperationFailureReason({
-        status: acceptResponse.status,
-        body: acceptResponse.body,
-        fallbackPrefix: 'Linked PayNote delivery auto-accept failed',
-      }),
-    });
-    return;
-  }
-
-  let payNoteSessionId = resolveLinkedPayNoteSessionIdFromAcceptResponse(
-    acceptResponse.body
-  );
-  if (!payNoteSessionId) {
-    const resolvedDelivery =
-      await context.deps.payNoteDeliveryRepository.getDeliveryBySessionId(
-        deliverySessionId
-      );
-    const latestSessionId = resolvedDelivery?.payNoteSessionIds?.at(-1);
-    payNoteSessionId = getString(latestSessionId);
-  }
-
-  if (!payNoteSessionId) {
-    context.logs.push({
-      level: 'info',
-      message:
-        'Linked PayNote auto-accept completed; waiting for PayNote bootstrap webhook',
-      context: {
-        eventId: context.eventId,
-        payNoteDocumentId: context.payNoteDocumentId,
-        deliverySessionId,
-        requestId: requestId ?? null,
-      },
-    });
-    return;
-  }
 
   const payNoteDocumentId = await maybeResolveBootstrappedDocumentId({
     context,
