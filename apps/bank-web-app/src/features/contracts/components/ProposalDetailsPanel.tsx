@@ -85,7 +85,7 @@ export function ProposalDetailsPanel({
     () => activityQuery.data?.items ?? [],
     [activityQuery.data?.items]
   );
-  const { groupedRelatedItems, missingTransactionIds, missingHoldIds } =
+  const { groupedRelatedItems, missingTransactionIds } =
     useRelatedActivityItems({
       activityItems,
       relatedTransactionIds: relatedTransactions,
@@ -289,31 +289,6 @@ export function ProposalDetailsPanel({
                       size="sm"
                       disabled={!proposal.accountNumber}
                       onClick={() => handleFallbackActivityOpen(`TXN#${txnId}`)}
-                    >
-                      View details
-                    </Button>
-                  </div>
-                ))}
-                {missingHoldIds.map(holdId => (
-                  <div
-                    key={holdId}
-                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
-                  >
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        Hold {holdId}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Details pending in activity feed.
-                      </p>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={!proposal.accountNumber}
-                      onClick={() =>
-                        handleFallbackActivityOpen(`HOLD#${holdId}`)
-                      }
                     >
                       View details
                     </Button>

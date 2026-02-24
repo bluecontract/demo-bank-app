@@ -68,6 +68,6 @@ describe('ProposalDetailsPanel', () => {
 
     expect(screen.getByText('Related activity')).toBeInTheDocument();
     expect(screen.getByText('Transaction txn-123')).toBeInTheDocument();
-    expect(screen.getByText('Hold hold-55')).toBeInTheDocument();
+    expect(screen.queryByText('Hold hold-55')).not.toBeInTheDocument();
   });
 });
