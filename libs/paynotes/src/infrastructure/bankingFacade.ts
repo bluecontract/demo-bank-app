@@ -18,6 +18,9 @@ interface BankingFacadeDependencies {
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
   logger: PowertoolsLogger;
+  resolveMerchantOwnerUserId?: (
+    merchantId: string
+  ) => Promise<string | undefined>;
 }
 
 const mapMoney = (amountMinor: number) => new Money(amountMinor);
@@ -79,56 +82,14 @@ const buildPartialCaptureRequest = (
 
 export const createBankingFacade = (
   deps: BankingFacadeDependencies
-): BankingFacade => ({
-  async getAccountByNumber(accountNumber) {
-    const accountId = await deps.bankingRepository.getAccountIdByNumber(
-      accountNumber
-    );
-    if (!accountId) {
-      return null;
-    }
-
-    const account = await deps.bankingRepository.getAccountById(accountId);
-    if (!account) {
-      return null;
-    }
-
-    const ownerUserId = (account as { ownerUserId?: string }).ownerUserId;
-
-    return {
-      id: account.id,
-      accountNumber: account.accountNumber,
-      ownerUserId,
-    };
-  },
-
-  async getAccountForUser(accountNumber, userId) {
-    const accountId = await deps.bankingRepository.getAccountIdByNumber(
-      accountNumber
-    );
-    if (!accountId) {
-      return null;
-    }
-
-    const account = await deps.bankingRepository.getAccountById(accountId);
-    if (
-      !account ||
-      typeof account.isOwnedBy !== 'function' ||
-      !account.isOwnedBy(userId)
-    ) {
-      return null;
-    }
-
-    const ownerUserId = (account as { ownerUserId?: string }).ownerUserId;
-
-    return {
-      id: account.id,
-      accountNumber: account.accountNumber,
-      ownerUserId,
-    };
-  },
-
-  async getActiveCreditLineAccountByUserId(userId) {
+): BankingFacade => {
+  const resolveActiveCreditLineAccountByUserId = async (
+    userId: string
+  ): Promise<{
+    id: string;
+    accountNumber: string;
+    ownerUserId?: string;
+  } | null> => {
     const accounts = await deps.bankingRepository.getAccountsByUserId(userId);
     const activeCreditLine = accounts.find(
       account =>
@@ -146,43 +107,106 @@ export const createBankingFacade = (
       accountNumber: activeCreditLine.accountNumber,
       ownerUserId,
     };
-  },
+  };
 
-  async transferFunds(request) {
-    await transferMoney(buildTransferRequest(request), {
-      repository: deps.bankingRepository,
-      logger: deps.logger,
-    });
-  },
-
-  async reserveFunds(request) {
-    await reserveFunds(buildReserveRequest(request), {
-      bankingRepository: deps.bankingRepository,
-      holdRepository: deps.holdRepository,
-      logger: deps.logger,
-    });
-  },
-
-  async captureHold(request) {
-    if (typeof request.amountMinor === 'number') {
-      const requestWithAmount = request as CaptureHoldRequest & {
-        amountMinor: number;
-      };
-      const partialResult = await partialCaptureHold(
-        buildPartialCaptureRequest(requestWithAmount),
-        {
-          bankingRepository: deps.bankingRepository,
-          holdRepository: deps.holdRepository,
-          logger: deps.logger,
-        }
+  return {
+    async getAccountByNumber(accountNumber) {
+      const accountId = await deps.bankingRepository.getAccountIdByNumber(
+        accountNumber
       );
-      return partialResult.hold;
-    }
+      if (!accountId) {
+        return null;
+      }
 
-    return captureHold(buildCaptureRequest(request), {
-      bankingRepository: deps.bankingRepository,
-      holdRepository: deps.holdRepository,
-      logger: deps.logger,
-    });
-  },
-});
+      const account = await deps.bankingRepository.getAccountById(accountId);
+      if (!account) {
+        return null;
+      }
+
+      const ownerUserId = (account as { ownerUserId?: string }).ownerUserId;
+
+      return {
+        id: account.id,
+        accountNumber: account.accountNumber,
+        ownerUserId,
+      };
+    },
+
+    async getAccountForUser(accountNumber, userId) {
+      const accountId = await deps.bankingRepository.getAccountIdByNumber(
+        accountNumber
+      );
+      if (!accountId) {
+        return null;
+      }
+
+      const account = await deps.bankingRepository.getAccountById(accountId);
+      if (
+        !account ||
+        typeof account.isOwnedBy !== 'function' ||
+        !account.isOwnedBy(userId)
+      ) {
+        return null;
+      }
+
+      const ownerUserId = (account as { ownerUserId?: string }).ownerUserId;
+
+      return {
+        id: account.id,
+        accountNumber: account.accountNumber,
+        ownerUserId,
+      };
+    },
+
+    async getActiveCreditLineAccountByMerchantId(merchantId) {
+      if (typeof deps.resolveMerchantOwnerUserId !== 'function') {
+        return null;
+      }
+
+      const ownerUserId = await deps.resolveMerchantOwnerUserId(merchantId);
+      if (!ownerUserId) {
+        return null;
+      }
+
+      return resolveActiveCreditLineAccountByUserId(ownerUserId);
+    },
+
+    async transferFunds(request) {
+      await transferMoney(buildTransferRequest(request), {
+        repository: deps.bankingRepository,
+        logger: deps.logger,
+      });
+    },
+
+    async reserveFunds(request) {
+      await reserveFunds(buildReserveRequest(request), {
+        bankingRepository: deps.bankingRepository,
+        holdRepository: deps.holdRepository,
+        logger: deps.logger,
+      });
+    },
+
+    async captureHold(request) {
+      if (typeof request.amountMinor === 'number') {
+        const requestWithAmount = request as CaptureHoldRequest & {
+          amountMinor: number;
+        };
+        const partialResult = await partialCaptureHold(
+          buildPartialCaptureRequest(requestWithAmount),
+          {
+            bankingRepository: deps.bankingRepository,
+            holdRepository: deps.holdRepository,
+            logger: deps.logger,
+          }
+        );
+        return partialResult.hold;
+      }
+
+      return captureHold(buildCaptureRequest(request), {
+        bankingRepository: deps.bankingRepository,
+        holdRepository: deps.holdRepository,
+        logger: deps.logger,
+      });
+    },
+  };
+};

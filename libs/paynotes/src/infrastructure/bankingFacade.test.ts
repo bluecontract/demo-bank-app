@@ -33,6 +33,7 @@ const createDependencies = () => {
     bankingRepository,
     holdRepository,
     logger,
+    resolveMerchantOwnerUserId: vi.fn(),
   };
 };
 
@@ -118,32 +119,37 @@ describe('createBankingFacade - capture branch routing', () => {
     const facade = createBankingFacade(deps);
 
     (
+      deps.resolveMerchantOwnerUserId as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce('merchant-user-1');
+
+    (
       deps.bankingRepository.getAccountsByUserId as ReturnType<typeof vi.fn>
     ).mockResolvedValueOnce([
       {
         id: 'deposit-1',
         accountNumber: '1111111111',
         accountType: 'DEPOSIT',
-        ownerUserId: 'merchant-1',
+        ownerUserId: 'merchant-user-1',
         isActive: () => true,
       },
       {
         id: 'credit-line-1',
         accountNumber: '2222222222',
         accountType: 'CREDIT_LINE',
-        ownerUserId: 'merchant-1',
+        ownerUserId: 'merchant-user-1',
         isActive: () => true,
       },
     ]);
 
-    const result = await facade.getActiveCreditLineAccountByUserId?.(
+    const result = await facade.getActiveCreditLineAccountByMerchantId?.(
       'merchant-1'
     );
 
+    expect(deps.resolveMerchantOwnerUserId).toHaveBeenCalledWith('merchant-1');
     expect(result).toEqual({
       id: 'credit-line-1',
       accountNumber: '2222222222',
-      ownerUserId: 'merchant-1',
+      ownerUserId: 'merchant-user-1',
     });
   });
 
@@ -152,18 +158,22 @@ describe('createBankingFacade - capture branch routing', () => {
     const facade = createBankingFacade(deps);
 
     (
+      deps.resolveMerchantOwnerUserId as ReturnType<typeof vi.fn>
+    ).mockResolvedValueOnce('merchant-user-1');
+
+    (
       deps.bankingRepository.getAccountsByUserId as ReturnType<typeof vi.fn>
     ).mockResolvedValueOnce([
       {
         id: 'credit-line-1',
         accountNumber: '2222222222',
         accountType: 'CREDIT_LINE',
-        ownerUserId: 'merchant-1',
+        ownerUserId: 'merchant-user-1',
         isActive: () => false,
       },
     ]);
 
-    const result = await facade.getActiveCreditLineAccountByUserId?.(
+    const result = await facade.getActiveCreditLineAccountByMerchantId?.(
       'merchant-1'
     );
 

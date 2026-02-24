@@ -348,7 +348,7 @@ const createDependencies = () => {
       ownerUserId: 'user-123',
     }),
     getAccountForUser: vi.fn(),
-    getActiveCreditLineAccountByUserId: vi.fn().mockResolvedValue({
+    getActiveCreditLineAccountByMerchantId: vi.fn().mockResolvedValue({
       id: 'merchant-credit-line-id',
       accountNumber: '4444444444',
       ownerUserId: 'merchant-123',

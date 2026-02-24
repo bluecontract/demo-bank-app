@@ -76,6 +76,18 @@ export type PaynoteDependencies = {
 
 let cachedDependencies: PaynoteDependencies | null = null;
 
+export const createResolveMerchantOwnerUserId = (
+  merchantDirectoryRepository: MerchantDirectoryRepository
+) => {
+  return async (merchantId: string): Promise<string | undefined> => {
+    const entries = await merchantDirectoryRepository.getMerchantsByIds([
+      merchantId,
+    ]);
+    const entry = entries.find(item => item.merchantId === merchantId);
+    return entry?.ownerUserId;
+  };
+};
+
 const initializeDependencies = async (): Promise<PaynoteDependencies> => {
   const logger = getLogger();
   const awsRegion = process.env.AWS_REGION || 'eu-west-1';
@@ -183,6 +195,9 @@ const initializeDependencies = async (): Promise<PaynoteDependencies> => {
     region: awsRegion,
     ...(awsEndpoint && { endpoint: awsEndpoint }),
   });
+  const resolveMerchantOwnerUserId = createResolveMerchantOwnerUserId(
+    merchantDirectoryRepository
+  );
 
   const myOsClient = createHttpMyOsGateway(getMyOsCredentials);
 
@@ -190,6 +205,7 @@ const initializeDependencies = async (): Promise<PaynoteDependencies> => {
     bankingRepository,
     holdRepository,
     logger,
+    resolveMerchantOwnerUserId,
   });
 
   const blueIdCalculator = createBlueIdCalculator();

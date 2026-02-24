@@ -5,6 +5,7 @@ import { payNoteWebhookHandler } from './webhook';
 
 const hoistedDeps = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
+  createResolveMerchantOwnerUserIdMock: vi.fn(),
 }));
 
 const hoistedPaynotes = vi.hoisted(() => ({
@@ -28,6 +29,8 @@ const hoistedAdapters = vi.hoisted(() => ({
 
 vi.mock('./dependencies', () => ({
   getDependencies: hoistedDeps.getDependenciesMock,
+  createResolveMerchantOwnerUserId:
+    hoistedDeps.createResolveMerchantOwnerUserIdMock,
 }));
 
 vi.mock('@demo-bank-app/paynotes', async () => {
@@ -54,6 +57,21 @@ describe('payNoteWebhookHandler', () => {
     delete process.env.SUMMARY_LAMBDA_NAME;
 
     hoistedDeps.getDependenciesMock.mockReset();
+    hoistedDeps.createResolveMerchantOwnerUserIdMock.mockReset();
+    hoistedDeps.createResolveMerchantOwnerUserIdMock.mockImplementation(
+      (merchantDirectoryRepository: {
+          getMerchantsByIds: (
+            merchantIds: string[]
+          ) => Promise<Array<{ merchantId: string; ownerUserId?: string }>>;
+        }) =>
+        async (merchantId: string): Promise<string | undefined> => {
+          const entries = await merchantDirectoryRepository.getMerchantsByIds([
+            merchantId,
+          ]);
+          const entry = entries.find(item => item.merchantId === merchantId);
+          return entry?.ownerUserId;
+        }
+    );
     logger.info.mockReset();
     logger.error.mockReset();
     logger.warn.mockReset();
@@ -90,6 +108,7 @@ describe('payNoteWebhookHandler', () => {
       getAccountByNumber: (accountNumber: string) =>
         hoistedAdapters.getAccountByNumberImpl(accountNumber),
       getAccountForUser: vi.fn(),
+      getActiveCreditLineAccountByMerchantId: vi.fn().mockResolvedValue(null),
       transferFunds: hoistedAdapters.transferFundsMock,
       reserveFunds: hoistedAdapters.reserveFundsMock,
       captureHold: hoistedAdapters.captureHoldMock,
@@ -151,6 +170,7 @@ describe('payNoteWebhookHandler', () => {
       bankingRepository: {
         getAccountIdByNumber: vi.fn(),
         getAccountById: vi.fn(),
+        getAccountsByUserId: vi.fn().mockResolvedValue([]),
       },
       holdRepository: {
         getHoldByCardTransactionDetails: vi.fn(),

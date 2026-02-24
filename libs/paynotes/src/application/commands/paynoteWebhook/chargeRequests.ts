@@ -1819,7 +1819,7 @@ const resolveMerchantFundingAccountNumber = async (input: {
     return undefined;
   }
 
-  const resolver = deps.bankingFacade.getActiveCreditLineAccountByUserId;
+  const resolver = deps.bankingFacade.getActiveCreditLineAccountByMerchantId;
   if (typeof resolver !== 'function') {
     return undefined;
   }

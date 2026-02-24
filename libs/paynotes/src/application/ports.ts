@@ -381,8 +381,8 @@ export interface BankingFacade {
   /**
    * Resolves an active merchant credit line account when available.
    */
-  getActiveCreditLineAccountByUserId?(
-    userId: string
+  getActiveCreditLineAccountByMerchantId?(
+    merchantId: string
   ): Promise<BankingAccount | null>;
 
   /**
