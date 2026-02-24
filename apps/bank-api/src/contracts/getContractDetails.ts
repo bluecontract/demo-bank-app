@@ -11,6 +11,7 @@ import {
   buildMerchantDirectoryMap,
   resolveMerchantFrom,
 } from '../shared/merchantDirectory';
+import { isContractHiddenFromCustomer } from './contractVisibility';
 
 export const getContractDetailsHandler = async (
   request: ServerInferRequest<
@@ -27,7 +28,11 @@ export const getContractDetailsHandler = async (
 
   const contract = await contractRepository.getContractBySessionId(sessionId);
 
-  if (!contract || contract.userId !== userId) {
+  if (
+    !contract ||
+    contract.userId !== userId ||
+    isContractHiddenFromCustomer(contract)
+  ) {
     return problemResponse({
       status: 404,
       code: ERROR_CODES.CONTRACT_NOT_FOUND,

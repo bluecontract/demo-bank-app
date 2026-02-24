@@ -23,6 +23,12 @@ describe('contractVisibility', () => {
 
     expect(
       isContractHiddenFromCustomer({
+        typeBlueId: paynoteBlueIds['PayNote/Payment Mandate'],
+      })
+    ).toBe(true);
+
+    expect(
+      isContractHiddenFromCustomer({
         typeBlueId: paynoteBlueIds['PayNote/PayNote'],
       })
     ).toBe(false);

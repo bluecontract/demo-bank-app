@@ -5,6 +5,7 @@ import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 import {
   CardTransactionPayNoteSchema,
   MerchantToCustomerPayNoteSchema,
+  PaymentMandateSchema,
   PayNoteDeliverySchema,
   PayNoteSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
@@ -57,6 +58,14 @@ const supportedContractDefinitions: SupportedContractDefinition[] = [
     operationsChannelKey: 'payeeChannel',
     userChannelKey: 'payerChannel',
     schema: PayNoteSchema,
+  },
+  {
+    typeBlueId: paynoteBlueIds['PayNote/Payment Mandate'],
+    typeName: 'PayNote/Payment Mandate',
+    displayName: buildDisplayName('PayNote/Payment Mandate'),
+    operationsChannelKey: 'guarantorChannel',
+    userChannelKey: 'granterChannel',
+    schema: PaymentMandateSchema,
   },
 ];
 

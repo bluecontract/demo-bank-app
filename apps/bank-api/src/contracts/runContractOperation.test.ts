@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runContractOperationHandler } from './runContractOperation';
 import { ERROR_CODES } from '../shared/errors';
 import { blue, PAYNOTE_DELIVERY_BLUE_ID } from '@demo-bank-app/paynotes';
+import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 
 const hoisted = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
@@ -193,6 +194,33 @@ describe('runContractOperationHandler', () => {
     expect(response.body.error).toBe(
       ERROR_CODES.PAYNOTE_DELIVERY_DECISION_ALREADY_RECORDED
     );
+    expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for hidden contract types', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: paynoteBlueIds['PayNote/Payment Mandate'],
+      displayName: 'Payment Mandate',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      createdAt: '2024-02-01T10:00:00.000Z',
+      updatedAt: '2024-02-01T10:00:00.000Z',
+    });
+
+    const response = await runContractOperationHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          operation: 'authorizeSpend',
+        },
+        body: {},
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe(ERROR_CODES.CONTRACT_NOT_FOUND);
     expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
   });
 });

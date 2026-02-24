@@ -4,6 +4,7 @@ import type { ContractSummary } from '@demo-bank-app/contracts';
 
 const hiddenContractTypeBlueIds = new Set<string>([
   paynoteBlueIds['PayNote/PayNote Delivery'],
+  paynoteBlueIds['PayNote/Payment Mandate'],
   conversationBlueIds['Conversation/Customer Consent'],
 ]);
 

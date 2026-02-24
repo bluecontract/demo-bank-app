@@ -6,6 +6,7 @@ import {
   getSupportedContractByTypeBlueId,
   resolveContractChannelKeys,
 } from '@demo-bank-app/shared-bank-api-contract';
+import { PAYNOTE_DELIVERY_BLUE_ID } from '@demo-bank-app/paynotes';
 import {
   extractAuthInfo,
   type MaybeAuthenticatedTsRestRequestContext,
@@ -13,6 +14,7 @@ import {
 import { getDependencies } from '../paynote/dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 import { runPayNoteDeliveryDecision } from '../paynote/runPayNoteDeliveryDecision';
+import { isContractHiddenFromCustomer } from './contractVisibility';
 
 export const runContractOperationHandler = async (
   request: ServerInferRequest<
@@ -43,6 +45,15 @@ export const runContractOperationHandler = async (
   }
 
   if (contract.userId !== userId) {
+    return problemResponse({
+      status: 404,
+      code: ERROR_CODES.CONTRACT_NOT_FOUND,
+      message: 'Contract not found',
+    });
+  }
+
+  const isDeliveryContract = contract.typeBlueId === PAYNOTE_DELIVERY_BLUE_ID;
+  if (isContractHiddenFromCustomer(contract) && !isDeliveryContract) {
     return problemResponse({
       status: 404,
       code: ERROR_CODES.CONTRACT_NOT_FOUND,

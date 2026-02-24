@@ -14,9 +14,13 @@ describe('supported contract registry', () => {
     const delivery = getSupportedContractByTypeBlueId(
       paynoteBlueIds['PayNote/PayNote Delivery']
     );
+    const paymentMandate = getSupportedContractByTypeBlueId(
+      paynoteBlueIds['PayNote/Payment Mandate']
+    );
 
     expect(payNote?.typeName).toBe('PayNote/PayNote');
     expect(delivery?.typeName).toBe('PayNote/PayNote Delivery');
+    expect(paymentMandate?.typeName).toBe('PayNote/Payment Mandate');
     expect(getSupportedContractByTypeBlueId('unknown')).toBeNull();
   });
 
@@ -29,9 +33,14 @@ describe('supported contract registry', () => {
       type: 'PayNote/PayNote Delivery',
       name: 'Delivery',
     });
+    const paymentMandate = getSupportedContractForDocument({
+      type: 'PayNote/Payment Mandate',
+      name: 'Mandate',
+    });
 
     expect(payNote?.displayName).toBe('PayNote');
     expect(delivery?.displayName).toBe('PayNote Delivery');
+    expect(paymentMandate?.displayName).toBe('Payment Mandate');
   });
 
   it('resolves PayNote customer channel from accountNumber and document', () => {

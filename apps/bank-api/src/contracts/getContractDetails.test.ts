@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 import { getContractDetailsHandler } from './getContractDetails';
 import { ERROR_CODES } from '../shared/errors';
 
@@ -70,6 +71,28 @@ describe('getContractDetailsHandler', () => {
       displayName: 'PayNote',
       sessionId: 'session-1',
       userId: 'user-2',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-02T00:00:00.000Z',
+    });
+
+    const response = await getContractDetailsHandler(
+      {
+        params: { sessionId: 'session-1' },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe(ERROR_CODES.CONTRACT_NOT_FOUND);
+  });
+
+  it('returns 404 when contract type is hidden from customer', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: paynoteBlueIds['PayNote/Payment Mandate'],
+      displayName: 'Payment Mandate',
+      sessionId: 'session-1',
+      userId: 'user-1',
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-02T00:00:00.000Z',
     });
