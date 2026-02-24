@@ -196,6 +196,14 @@ export interface ContractRepository {
   getContract(contractId: string): Promise<ContractRecord | null>;
   getContractBySessionId(sessionId: string): Promise<ContractRecord | null>;
   getContractByDocumentId(documentId: string): Promise<ContractRecord | null>;
+  claimCanonicalSessionByDocumentId?(input: {
+    documentId: string;
+    sessionId: string;
+    createdAt: string;
+  }): Promise<{
+    canonicalContractId: string;
+    isCanonicalOwner: boolean;
+  }>;
   linkSessionToContract?(input: {
     sessionId: string;
     contractId: string;

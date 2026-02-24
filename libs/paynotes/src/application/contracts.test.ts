@@ -18,6 +18,12 @@ const payNoteDocument = {
 const createContractRepository = () => {
   const repository = {
     getContractByDocumentId: vi.fn().mockResolvedValue(null),
+    claimCanonicalSessionByDocumentId: vi
+      .fn()
+      .mockImplementation(async ({ sessionId }: { sessionId: string }) => ({
+        canonicalContractId: sessionId,
+        isCanonicalOwner: true,
+      })),
     linkSessionToContract: vi.fn().mockResolvedValue(undefined),
     getContract: vi.fn().mockResolvedValue(null),
     saveContract: vi.fn().mockResolvedValue(undefined),
@@ -79,6 +85,11 @@ describe('upsertContractRecord', () => {
 
     expect(result).toBe('session-1');
     expect(mocks.saveContract).toHaveBeenCalledTimes(1);
+    expect(mocks.claimCanonicalSessionByDocumentId).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      sessionId: 'session-1',
+      createdAt: now,
+    });
   });
 
   it('creates a contract for DOCUMENT_EPOCH_ADVANCED when epoch is 0', async () => {
@@ -96,6 +107,11 @@ describe('upsertContractRecord', () => {
 
     expect(result).toBe('session-1');
     expect(mocks.saveContract).toHaveBeenCalledTimes(1);
+    expect(mocks.claimCanonicalSessionByDocumentId).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      sessionId: 'session-1',
+      createdAt: now,
+    });
   });
 
   it('skips create for DOCUMENT_EPOCH_ADVANCED when epoch is greater than 0', async () => {
@@ -113,6 +129,7 @@ describe('upsertContractRecord', () => {
 
     expect(result).toBeNull();
     expect(mocks.saveContract).not.toHaveBeenCalled();
+    expect(mocks.claimCanonicalSessionByDocumentId).not.toHaveBeenCalled();
   });
 
   it('updates an existing contract for DOCUMENT_EPOCH_ADVANCED even when epoch is greater than 0', async () => {
@@ -171,6 +188,33 @@ describe('upsertContractRecord', () => {
       createdAt: now,
     });
     expect(mocks.saveContract).not.toHaveBeenCalled();
+    expect(mocks.claimCanonicalSessionByDocumentId).not.toHaveBeenCalled();
+  });
+
+  it('links session and skips save when canonical claim lost', async () => {
+    const { repository, mocks } = createContractRepository();
+    mocks.claimCanonicalSessionByDocumentId.mockResolvedValue({
+      canonicalContractId: 'session-1',
+      isCanonicalOwner: false,
+    });
+
+    const result = await upsertContractRecord({
+      contractRepository: repository,
+      document: payNoteDocument,
+      sessionId: 'session-2',
+      documentId: 'doc-1',
+      eventType: 'DOCUMENT_EPOCH_ADVANCED',
+      eventEpoch: 0,
+      now,
+    });
+
+    expect(result).toBe('session-1');
+    expect(mocks.saveContract).not.toHaveBeenCalled();
+    expect(mocks.linkSessionToContract).toHaveBeenCalledWith({
+      sessionId: 'session-2',
+      contractId: 'session-1',
+      createdAt: now,
+    });
   });
 
   it('stores contract payload fields in compact format', async () => {

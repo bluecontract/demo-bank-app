@@ -146,6 +146,35 @@ export const upsertContractRecord = async (input: {
   const existingByDocumentId = input.documentId
     ? await input.contractRepository.getContractByDocumentId(input.documentId)
     : null;
+
+  let claimedCanonicalContractId: string | undefined;
+  if (
+    !existingByDocumentId &&
+    input.documentId &&
+    input.sessionId &&
+    ((input.eventType === 'DOCUMENT_EPOCH_ADVANCED' &&
+      input.eventEpoch === 0) ||
+      input.eventType === 'DOCUMENT_CREATED') &&
+    input.contractRepository.claimCanonicalSessionByDocumentId
+  ) {
+    const claimResult =
+      await input.contractRepository.claimCanonicalSessionByDocumentId({
+        documentId: input.documentId,
+        sessionId: input.sessionId,
+        createdAt: input.now,
+      });
+    claimedCanonicalContractId = claimResult.canonicalContractId;
+
+    if (!claimResult.isCanonicalOwner) {
+      await input.contractRepository.linkSessionToContract?.({
+        sessionId: input.sessionId,
+        contractId: claimResult.canonicalContractId,
+        createdAt: input.now,
+      });
+      return claimResult.canonicalContractId;
+    }
+  }
+
   if (
     existingByDocumentId &&
     input.sessionId &&
@@ -161,7 +190,10 @@ export const upsertContractRecord = async (input: {
   }
 
   const contractId =
-    existingByDocumentId?.contractId ?? input.sessionId ?? input.documentId;
+    existingByDocumentId?.contractId ??
+    claimedCanonicalContractId ??
+    input.sessionId ??
+    input.documentId;
   if (!contractId) {
     return null;
   }

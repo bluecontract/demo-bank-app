@@ -522,6 +522,70 @@ export class DynamoContractRepository implements ContractRepository {
     return this.getContract(contractId);
   }
 
+  async claimCanonicalSessionByDocumentId(input: {
+    documentId: string;
+    sessionId: string;
+    createdAt: string;
+  }): Promise<{
+    canonicalContractId: string;
+    isCanonicalOwner: boolean;
+  }> {
+    const item: ContractDocumentItem = {
+      PK: this.buildDocumentPk(input.documentId),
+      SK: SORT_KEYS.META,
+      entityType: ENTITY_TYPES.DOCUMENT,
+      documentId: input.documentId,
+      contractId: input.sessionId,
+      createdAt: input.createdAt,
+    };
+
+    try {
+      await this.client.send(
+        new PutCommand({
+          TableName: this.tableName,
+          Item: item,
+          ConditionExpression: 'attribute_not_exists(PK) OR contractId = :cid',
+          ExpressionAttributeValues: {
+            ':cid': input.sessionId,
+          },
+        })
+      );
+
+      return {
+        canonicalContractId: input.sessionId,
+        isCanonicalOwner: true,
+      };
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.name === 'ConditionalCheckFailedException'
+      ) {
+        const existing = await this.client.send(
+          new GetCommand({
+            TableName: this.tableName,
+            Key: {
+              PK: this.buildDocumentPk(input.documentId),
+              SK: SORT_KEYS.META,
+            },
+            ConsistentRead: true,
+          })
+        );
+
+        const canonicalContractId = (
+          existing.Item as ContractDocumentItem | undefined
+        )?.contractId;
+        if (canonicalContractId) {
+          return {
+            canonicalContractId,
+            isCanonicalOwner: canonicalContractId === input.sessionId,
+          };
+        }
+      }
+
+      throw error;
+    }
+  }
+
   async linkSessionToContract(input: {
     sessionId: string;
     contractId: string;
@@ -675,7 +739,15 @@ export class DynamoContractRepository implements ContractRepository {
       };
       writes.push(
         this.client.send(
-          new PutCommand({ TableName: this.tableName, Item: documentItem })
+          new PutCommand({
+            TableName: this.tableName,
+            Item: documentItem,
+            ConditionExpression:
+              'attribute_not_exists(PK) OR contractId = :cid',
+            ExpressionAttributeValues: {
+              ':cid': record.contractId,
+            },
+          })
         )
       );
     }

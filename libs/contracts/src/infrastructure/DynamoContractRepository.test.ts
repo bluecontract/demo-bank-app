@@ -233,6 +233,77 @@ describe('DynamoContractRepository', () => {
     );
   });
 
+  it('claims canonical session by document id when mapping is missing', async () => {
+    mockSend.mockResolvedValueOnce({});
+    const repository = createRepository();
+
+    const result = await repository.claimCanonicalSessionByDocumentId({
+      documentId: 'doc-1',
+      sessionId: 'session-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    expect(result).toEqual({
+      canonicalContractId: 'session-1',
+      isCanonicalOwner: true,
+    });
+    expect(mockPutCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Item: expect.objectContaining({
+          PK: 'CONTRACT_DOCUMENT#doc-1',
+          SK: 'META',
+          contractId: 'session-1',
+        }),
+        ConditionExpression: 'attribute_not_exists(PK) OR contractId = :cid',
+        ExpressionAttributeValues: {
+          ':cid': 'session-1',
+        },
+      })
+    );
+  });
+
+  it('returns canonical owner when claim loses race', async () => {
+    mockSend
+      .mockRejectedValueOnce(
+        Object.assign(new Error('conditional failed'), {
+          name: 'ConditionalCheckFailedException',
+        })
+      )
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'CONTRACT_DOCUMENT#doc-1',
+          SK: 'META',
+          entityType: 'CONTRACT_DOCUMENT',
+          documentId: 'doc-1',
+          contractId: 'session-canonical',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      });
+    const repository = createRepository();
+
+    const result = await repository.claimCanonicalSessionByDocumentId({
+      documentId: 'doc-1',
+      sessionId: 'session-shadow',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    expect(result).toEqual({
+      canonicalContractId: 'session-canonical',
+      isCanonicalOwner: false,
+    });
+    expect(mockGetCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Key: {
+          PK: 'CONTRACT_DOCUMENT#doc-1',
+          SK: 'META',
+        },
+        ConsistentRead: true,
+      })
+    );
+  });
+
   it('prefers summary headline when persisting summaryPreview', async () => {
     mockSend.mockResolvedValue({});
     const repository = createRepository();
