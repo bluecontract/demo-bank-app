@@ -1,5 +1,8 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { randomUUID } from 'crypto';
+import { Blue, BlueNode } from '@blue-labs/language';
+import { repository as blueRepository } from '@blue-repository/types';
+import { createDefaultMergingProcessor } from '@blue-labs/document-processor';
 import {
   DynamoDBDocumentClient,
   GetCommand,
@@ -74,6 +77,92 @@ const resolveSummaryPreview = (
   normalizeSummaryText(summary?.lastChange?.short) ??
   normalizeSummaryText(summary?.listPreview) ??
   normalizeSummaryText(fallbackPreview);
+
+const compactBlue = new Blue({
+  repositories: [blueRepository],
+  mergingProcessor: createDefaultMergingProcessor(),
+});
+
+const stripResolvedTypeRefsToBlueId = (node: BlueNode): BlueNode => {
+  const stripType = (typeNode: BlueNode | undefined): BlueNode | undefined => {
+    if (!typeNode) {
+      return undefined;
+    }
+    const blueId = typeNode.getBlueId();
+    if (!blueId) {
+      return typeNode;
+    }
+    return new BlueNode().setBlueId(blueId);
+  };
+
+  const visit = (current: BlueNode) => {
+    current.setType(stripType(current.getType()));
+    current.setItemType(stripType(current.getItemType()));
+    current.setKeyType(stripType(current.getKeyType()));
+    current.setValueType(stripType(current.getValueType()));
+
+    const properties = current.getProperties();
+    if (properties) {
+      Object.values(properties).forEach(visit);
+    }
+
+    const items = current.getItems();
+    if (items) {
+      items.forEach(visit);
+    }
+  };
+
+  const cloned = node.clone();
+  visit(cloned);
+  return cloned;
+};
+
+const toCompactBlueJsonValue = (value: unknown): unknown => {
+  if (value === undefined || value === null) {
+    return value;
+  }
+
+  try {
+    const node = compactBlue.jsonValueToNode(value);
+    return compactBlue.nodeToJson(
+      stripResolvedTypeRefsToBlueId(node),
+      'official'
+    );
+  } catch {
+    return value;
+  }
+};
+
+const toCompactBlueRecord = (
+  value: Record<string, unknown> | null | undefined
+): Record<string, unknown> | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const compact = toCompactBlueJsonValue(value);
+  if (!compact || typeof compact !== 'object' || Array.isArray(compact)) {
+    return value;
+  }
+  return compact as Record<string, unknown>;
+};
+
+const toCompactBlueEventArray = (value: unknown[] | null | undefined) => {
+  if (!value) {
+    return undefined;
+  }
+  const compact = toCompactBlueJsonValue(value);
+  if (Array.isArray(compact)) {
+    return compact;
+  }
+  if (
+    compact &&
+    typeof compact === 'object' &&
+    Array.isArray((compact as { items?: unknown[] }).items)
+  ) {
+    return (compact as { items: unknown[] }).items;
+  }
+  return value;
+};
 
 type DynamoContractRepositoryConfig = {
   tableName: string;
@@ -493,6 +582,16 @@ export class DynamoContractRepository implements ContractRepository {
   }
 
   async saveContract(record: ContractRecord): Promise<void> {
+    const compactDocument = toCompactBlueRecord(record.document);
+    const compactTriggerEvent = toCompactBlueJsonValue(record.triggerEvent);
+    const compactEmittedEvents = toCompactBlueEventArray(record.emittedEvents);
+    const compactSummaryTriggerEvent = toCompactBlueJsonValue(
+      record.summaryTriggerEvent
+    );
+    const compactSummaryEmittedEvents = toCompactBlueEventArray(
+      record.summaryEmittedEvents
+    );
+
     const item: ContractItem = {
       PK: this.buildContractPk(record.contractId),
       SK: SORT_KEYS.META,
@@ -509,8 +608,8 @@ export class DynamoContractRepository implements ContractRepository {
       archivedAt: record.archivedAt,
       statusUpdatedAt: record.statusUpdatedAt,
       statusTimestamps: record.statusTimestamps,
-      triggerEvent: record.triggerEvent,
-      emittedEvents: record.emittedEvents,
+      triggerEvent: compactTriggerEvent,
+      emittedEvents: compactEmittedEvents,
       relatedTransactionIds: record.relatedTransactionIds,
       relatedHoldIds: record.relatedHoldIds,
       accountNumber: record.accountNumber,
@@ -532,8 +631,8 @@ export class DynamoContractRepository implements ContractRepository {
       summaryStatus: record.summaryStatus,
       summaryStatusUpdatedAt: record.summaryStatusUpdatedAt,
       summaryStatusTimestamps: record.summaryStatusTimestamps,
-      summaryTriggerEvent: record.summaryTriggerEvent,
-      summaryEmittedEvents: record.summaryEmittedEvents,
+      summaryTriggerEvent: compactSummaryTriggerEvent,
+      summaryEmittedEvents: compactSummaryEmittedEvents,
       pendingActions: record.pendingActions,
       monitoringSubscriptions: record.monitoringSubscriptions,
       createdAt: record.createdAt,
@@ -587,7 +686,7 @@ export class DynamoContractRepository implements ContractRepository {
         SK: SORT_KEYS.DOCUMENT,
         entityType: ENTITY_TYPES.CONTRACT_DOCUMENT,
         contractId: record.contractId,
-        document: record.document,
+        document: compactDocument,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
       };
@@ -690,17 +789,26 @@ export class DynamoContractRepository implements ContractRepository {
     snapshot: ContractSummarySnapshot
   ): Promise<void> {
     const now = new Date().toISOString();
+    const compactSummaryDocument = toCompactBlueRecord(
+      snapshot.summaryDocument
+    );
+    const compactSummaryTriggerEvent = toCompactBlueJsonValue(
+      snapshot.summaryTriggerEvent
+    );
+    const compactSummaryEmittedEvents = toCompactBlueEventArray(
+      snapshot.summaryEmittedEvents
+    );
     const item: ContractSummarySnapshotItem = {
       PK: this.buildSummarySnapshotPk(snapshot.contractId),
       SK: SORT_KEYS.SUMMARY,
       entityType: ENTITY_TYPES.SUMMARY_SNAPSHOT,
       contractId: snapshot.contractId,
-      summaryDocument: undefined,
+      summaryDocument: compactSummaryDocument,
       summaryStatus: snapshot.summaryStatus ?? undefined,
       summaryStatusUpdatedAt: snapshot.summaryStatusUpdatedAt ?? undefined,
       summaryStatusTimestamps: snapshot.summaryStatusTimestamps ?? undefined,
-      summaryTriggerEvent: undefined,
-      summaryEmittedEvents: undefined,
+      summaryTriggerEvent: compactSummaryTriggerEvent,
+      summaryEmittedEvents: compactSummaryEmittedEvents,
       summarySourceUpdatedAt: snapshot.summarySourceUpdatedAt ?? undefined,
       summarySourceEpoch: snapshot.summarySourceEpoch ?? undefined,
       summaryUpdatedAt: snapshot.summaryUpdatedAt ?? undefined,

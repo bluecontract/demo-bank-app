@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
+import { BlueNode } from '@blue-labs/language';
+import { blueIds } from '@blue-repository/types/packages/paynote/blue-ids';
 import type {
   ContractRecord,
   ContractRepository,
 } from '@demo-bank-app/contracts';
+import { blue } from '../blue';
 import { upsertContractRecord } from './contracts';
+import { toCompactBlueJsonValue } from './blue/compactBlue';
 
 const now = '2024-01-01T00:00:00.000Z';
 const payNoteDocument = {
@@ -167,5 +171,60 @@ describe('upsertContractRecord', () => {
       createdAt: now,
     });
     expect(mocks.saveContract).not.toHaveBeenCalled();
+  });
+
+  it('stores contract payload fields in compact format', async () => {
+    const { repository, mocks } = createContractRepository();
+    const resolvedType = new BlueNode()
+      .setBlueId(blueIds['PayNote/PayNote'])
+      .setName('Resolved PayNote Type')
+      .addProperty('details', new BlueNode().setValue('expanded'));
+    const expandedPayload = blue.nodeToJson(
+      new BlueNode()
+        .setType(resolvedType)
+        .addProperty('marker', new BlueNode().setValue('value')),
+      'official'
+    ) as Record<string, unknown>;
+
+    const document = {
+      ...payNoteDocument,
+      debugPayload: expandedPayload,
+    };
+    const triggerEvent = {
+      ...expandedPayload,
+      type: 'PayNote/Linked Card Charge Requested',
+    };
+    const emittedEvents = [triggerEvent];
+    const compactEmittedEventsRaw = toCompactBlueJsonValue(emittedEvents);
+    const compactEmittedEvents = Array.isArray(compactEmittedEventsRaw)
+      ? compactEmittedEventsRaw
+      : typeof compactEmittedEventsRaw === 'object' &&
+        compactEmittedEventsRaw !== null &&
+        Array.isArray(
+          (compactEmittedEventsRaw as Record<string, unknown>).items
+        )
+      ? ((compactEmittedEventsRaw as Record<string, unknown>)
+          .items as unknown[])
+      : emittedEvents;
+
+    const result = await upsertContractRecord({
+      contractRepository: repository,
+      document,
+      sessionId: 'session-compact',
+      documentId: 'doc-compact',
+      eventType: 'DOCUMENT_CREATED',
+      triggerEvent,
+      emittedEvents,
+      now,
+    });
+
+    expect(result).toBe('session-compact');
+    expect(mocks.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        document: toCompactBlueJsonValue(document),
+        triggerEvent: toCompactBlueJsonValue(triggerEvent),
+        emittedEvents: compactEmittedEvents,
+      })
+    );
   });
 });

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Blue, BlueNode } from '@blue-labs/language';
 import { DynamoPayNoteRepository } from './DynamoPayNoteRepository';
 
 const mockSend = vi.fn();
@@ -27,6 +28,17 @@ const createRepository = () =>
     tableName: 'test-table',
     region: 'us-east-1',
   });
+
+const buildResolvedPayload = () => {
+  const typeNode = new BlueNode()
+    .setBlueId('type-root')
+    .setName('TypeRoot')
+    .setDescription('Resolved type metadata should not be persisted');
+  const node = new BlueNode().setType(typeNode).setProperties({
+    nested: new BlueNode().setType(typeNode.clone()).setValue('payload'),
+  });
+  return new Blue().nodeToJson(node, 'official');
+};
 
 describe('DynamoPayNoteRepository', () => {
   beforeEach(() => {
@@ -113,5 +125,51 @@ describe('DynamoPayNoteRepository', () => {
     expect(updatePayload?.ExpressionAttributeNames).not.toHaveProperty(
       '#lastCaptureUnlockEventId'
     );
+  });
+
+  it('stores compact blue payloads for document and events', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+    const expandedPayload = buildResolvedPayload();
+
+    await repository.savePayNote({
+      payNoteDocumentId: 'paynote-doc-compact',
+      sessionIds: ['session-compact'],
+      document: expandedPayload as Record<string, unknown>,
+      transactionRequest: [expandedPayload],
+      triggerEvent: expandedPayload,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const updatePayload = mockUpdateCommand.mock.calls[0]?.[0];
+    const document = updatePayload?.ExpressionAttributeValues?.[
+      ':document'
+    ] as Record<string, unknown>;
+    const triggerEvent = updatePayload?.ExpressionAttributeValues?.[
+      ':triggerEvent'
+    ] as Record<string, unknown>;
+    const transactionRequestRaw = updatePayload?.ExpressionAttributeValues?.[
+      ':transactionRequest'
+    ] as unknown;
+    const transactionRequest = Array.isArray(transactionRequestRaw)
+      ? (transactionRequestRaw as Array<Record<string, unknown>>)
+      : Array.isArray(
+          (transactionRequestRaw as { items?: unknown[] } | undefined)?.items
+        )
+      ? ((transactionRequestRaw as { items: unknown[] }).items as Array<
+          Record<string, unknown>
+        >)
+      : [];
+
+    expect((document.type as Record<string, unknown>)?.blueId).toBe(
+      'type-root'
+    );
+    expect((triggerEvent.type as Record<string, unknown>)?.blueId).toBe(
+      'type-root'
+    );
+    expect(
+      (transactionRequest[0]?.type as Record<string, unknown>)?.blueId
+    ).toBe('type-root');
   });
 });

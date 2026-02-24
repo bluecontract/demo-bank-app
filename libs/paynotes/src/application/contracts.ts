@@ -3,6 +3,7 @@ import type {
   ContractStatusTimestamps,
 } from '@demo-bank-app/contracts';
 import { getSupportedContractForDocument } from '@demo-bank-app/shared-bank-api-contract';
+import { toCompactBlueJsonValue } from './blue/compactBlue';
 
 const mergeUnique = (existing?: string[], incoming?: string[]) => {
   const set = new Set<string>(existing ?? []);
@@ -48,6 +49,35 @@ const getDocumentName = (document?: Record<string, unknown>) => {
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const toCompactRecord = (
+  value: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const compact = toCompactBlueJsonValue(value);
+  return isPlainObject(compact) ? compact : value;
+};
+
+const toCompactUnknown = (value: unknown): unknown =>
+  value === undefined ? undefined : toCompactBlueJsonValue(value);
+
+const toCompactArray = (
+  value: unknown[] | undefined
+): unknown[] | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const compact = toCompactUnknown(value);
+  if (Array.isArray(compact)) {
+    return compact;
+  }
+  if (isPlainObject(compact) && Array.isArray(compact.items)) {
+    return compact.items;
+  }
+  return value;
+};
 
 const areJsonValuesEqual = (left: unknown, right: unknown): boolean => {
   if (left === right) {
@@ -181,16 +211,19 @@ export const upsertContractRecord = async (input: {
   const nextMerchantId = input.merchantId ?? existing?.merchantId;
   const nextCustomerChannelKey =
     input.customerChannelKey ?? existing?.customerChannelKey;
+  const compactDocument = toCompactRecord(nextDocument);
+  const compactTriggerEvent = toCompactUnknown(nextTriggerEvent);
+  const compactEmittedEvents = toCompactArray(nextEmittedEvents);
 
   const summaryInputsChanged =
-    !areJsonValuesEqual(nextDocument, existing?.document) ||
+    !areJsonValuesEqual(compactDocument, existing?.document) ||
     nextDocumentId !== existing?.documentId ||
     nextSessionId !== existing?.sessionId ||
     status !== existing?.status ||
     statusUpdatedAt !== existing?.statusUpdatedAt ||
     !areJsonValuesEqual(nextStatusTimestamps, existing?.statusTimestamps) ||
-    !areJsonValuesEqual(nextTriggerEvent, existing?.triggerEvent) ||
-    !areJsonValuesEqual(nextEmittedEvents, existing?.emittedEvents);
+    !areJsonValuesEqual(compactTriggerEvent, existing?.triggerEvent) ||
+    !areJsonValuesEqual(compactEmittedEvents, existing?.emittedEvents);
   const updatedAt =
     existing?.updatedAt && !summaryInputsChanged
       ? existing.updatedAt
@@ -204,12 +237,12 @@ export const upsertContractRecord = async (input: {
     customerChannelKey: nextCustomerChannelKey,
     sessionId: nextSessionId,
     documentId: nextDocumentId,
-    document: nextDocument,
+    document: compactDocument,
     status,
     statusUpdatedAt,
     statusTimestamps: nextStatusTimestamps,
-    triggerEvent: nextTriggerEvent,
-    emittedEvents: nextEmittedEvents,
+    triggerEvent: compactTriggerEvent,
+    emittedEvents: compactEmittedEvents,
     relatedTransactionIds: nextRelatedTransactionIds,
     relatedHoldIds: nextRelatedHoldIds,
     accountNumber: nextAccountNumber,

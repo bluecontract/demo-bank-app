@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 import type { PayNoteRecord, PayNoteRepository } from '../application/ports';
+import { toCompactBlueJsonValue } from '../application/blue/compactBlue';
 
 const ENTITY_TYPES = {
   PAYNOTE: 'PAYNOTE',
@@ -184,6 +185,19 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
   }
 
   async savePayNote(record: PayNoteRecord): Promise<void> {
+    const compactDocument =
+      record.document === undefined
+        ? undefined
+        : (toCompactBlueJsonValue(record.document) as Record<string, unknown>);
+    const compactTransactionRequest =
+      record.transactionRequest === undefined
+        ? undefined
+        : toCompactBlueJsonValue(record.transactionRequest);
+    const compactTriggerEvent =
+      record.triggerEvent === undefined
+        ? undefined
+        : toCompactBlueJsonValue(record.triggerEvent);
+
     const expressionAttributeNames: Record<string, string> = {
       '#entityType': 'entityType',
       '#payNoteDocumentId': 'payNoteDocumentId',
@@ -300,19 +314,19 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       nameKey: '#document',
       valueKey: ':document',
       attributeName: 'document',
-      value: record.document,
+      value: compactDocument,
     });
     addOptionalAttribute({
       nameKey: '#transactionRequest',
       valueKey: ':transactionRequest',
       attributeName: 'transactionRequest',
-      value: record.transactionRequest,
+      value: compactTransactionRequest,
     });
     addOptionalAttribute({
       nameKey: '#triggerEvent',
       valueKey: ':triggerEvent',
       attributeName: 'triggerEvent',
-      value: record.triggerEvent,
+      value: compactTriggerEvent,
     });
     addOptionalAttribute({
       nameKey: '#pendingMandateChargeAttempts',

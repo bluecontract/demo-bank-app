@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Blue, BlueNode } from '@blue-labs/language';
 import { DynamoContractRepository } from './DynamoContractRepository';
 
 const mockSend = vi.fn();
@@ -29,6 +30,19 @@ const createRepository = () =>
     tableName: 'test-table',
     region: 'us-east-1',
   });
+
+const buildResolvedPayload = () => {
+  const typeNode = new BlueNode()
+    .setBlueId('type-root')
+    .setName('TypeRoot')
+    .setDescription('Resolved type metadata should not be persisted');
+
+  const node = new BlueNode().setType(typeNode).setProperties({
+    nested: new BlueNode().setType(typeNode.clone()).setValue('payload'),
+  });
+
+  return new Blue().nodeToJson(node, 'official') as Record<string, unknown>;
+};
 
 describe('DynamoContractRepository', () => {
   beforeEach(() => {
@@ -261,5 +275,61 @@ describe('DynamoContractRepository', () => {
 
     const userItem = savedItems.find(item => item.PK === 'USER#user-1');
     expect(userItem?.summaryPreview).toBe('Bank confirmed lock');
+  });
+
+  it('stores compact snapshots for document and events', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+    const expandedPayload = buildResolvedPayload();
+
+    await repository.saveContract({
+      contractId: 'contract-compact',
+      typeBlueId: 'type-1',
+      displayName: 'PayNote',
+      sessionId: 'session-compact',
+      documentId: 'doc-compact',
+      document: expandedPayload,
+      triggerEvent: expandedPayload,
+      emittedEvents: [expandedPayload],
+      summaryTriggerEvent: expandedPayload,
+      summaryEmittedEvents: [expandedPayload],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const savedItems = mockPutCommand.mock.calls
+      .map(call => call[0].Item)
+      .filter(
+        (
+          item
+        ): item is {
+          PK: string;
+          SK: string;
+          triggerEvent?: Record<string, unknown>;
+          emittedEvents?: Array<Record<string, unknown>>;
+          summaryTriggerEvent?: Record<string, unknown>;
+          summaryEmittedEvents?: Array<Record<string, unknown>>;
+          document?: Record<string, unknown>;
+        } => Boolean(item)
+      );
+
+    const contractItem = savedItems.find(
+      item => item.PK === 'CONTRACT#contract-compact' && item.SK === 'META'
+    );
+    expect(contractItem?.triggerEvent?.type).toEqual({ blueId: 'type-root' });
+    expect(contractItem?.emittedEvents?.[0]?.type).toEqual({
+      blueId: 'type-root',
+    });
+    expect(contractItem?.summaryTriggerEvent?.type).toEqual({
+      blueId: 'type-root',
+    });
+    expect(contractItem?.summaryEmittedEvents?.[0]?.type).toEqual({
+      blueId: 'type-root',
+    });
+
+    const documentSnapshot = savedItems.find(
+      item => item.PK === 'CONTRACT#contract-compact' && item.SK === 'DOCUMENT'
+    );
+    expect(documentSnapshot?.document?.type).toEqual({ blueId: 'type-root' });
   });
 });
