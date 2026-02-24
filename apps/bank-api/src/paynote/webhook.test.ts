@@ -10,6 +10,7 @@ const hoistedDeps = vi.hoisted(() => ({
 
 const hoistedPaynotes = vi.hoisted(() => ({
   handlePayNoteDeliveryWebhookEventMock: vi.fn(),
+  handleWebhookEventMock: vi.fn(),
 }));
 
 const hoistedRepositories = vi.hoisted(() => ({
@@ -37,10 +38,12 @@ vi.mock('@demo-bank-app/paynotes', async () => {
   const actual = await vi.importActual<
     typeof import('@demo-bank-app/paynotes')
   >('@demo-bank-app/paynotes');
+  hoistedPaynotes.handleWebhookEventMock = vi.fn(actual.handleWebhookEvent);
   return {
     ...actual,
     handlePayNoteDeliveryWebhookEvent:
       hoistedPaynotes.handlePayNoteDeliveryWebhookEventMock,
+    handleWebhookEvent: hoistedPaynotes.handleWebhookEventMock,
   };
 });
 
@@ -84,6 +87,7 @@ describe('payNoteWebhookHandler', () => {
     hoistedAdapters.reserveFundsMock.mockReset();
     hoistedAdapters.captureHoldMock.mockReset();
     hoistedPaynotes.handlePayNoteDeliveryWebhookEventMock.mockReset();
+    hoistedPaynotes.handleWebhookEventMock.mockClear();
     hoistedPaynotes.handlePayNoteDeliveryWebhookEventMock.mockResolvedValue({
       handled: false,
       logs: [],
@@ -269,13 +273,15 @@ describe('payNoteWebhookHandler', () => {
       amountMinor: 15000,
       description: 'Invoice Q3',
       userId: 'user-456',
-      idempotencyKey: 'paynote-transfer:capture-immediately:event-123:0',
+      idempotencyKey:
+        'paynote-transfer:capture-immediately:doc-123:event:event-123:0',
       payNoteDocumentId: 'doc-123',
     });
     expect(hoistedAdapters.captureHoldMock).toHaveBeenCalledWith({
       holdId: 'hold-1',
       userId: 'user-456',
-      idempotencyKey: 'paynote-transfer:capture-funds:event-123:1',
+      idempotencyKey:
+        'paynote-transfer:capture-funds:doc-123:event:event-123:1',
       amountMinor: 15000,
       counterpartyAccountNumber: '9595234002',
       payNoteDocumentId: 'doc-123',
@@ -286,7 +292,8 @@ describe('payNoteWebhookHandler', () => {
       amountMinor: 15000,
       counterpartyAccountNumber: '9595234002',
       userId: 'user-456',
-      idempotencyKey: 'paynote-transfer:reserve-funds:event-123:2',
+      idempotencyKey:
+        'paynote-transfer:reserve-funds:doc-123:event:event-123:2',
       payNoteDocumentId: 'doc-123',
     });
     expect(logger.debug).toHaveBeenCalledWith(
@@ -411,6 +418,44 @@ describe('payNoteWebhookHandler', () => {
       hoistedPaynotes.handlePayNoteDeliveryWebhookEventMock
     ).toHaveBeenCalledWith(
       { eventId: 'event-bootstrap', payload },
+      expect.any(Object)
+    );
+  });
+
+  it('routes Payment Mandate webhook events to paynote webhook use case', async () => {
+    const payload = {
+      id: 'event-mandate-webhook',
+      object: {
+        sessionId: 'session-mandate-webhook',
+        document: {
+          type: {
+            blueId: paynoteBlueIds['PayNote/Payment Mandate'],
+          },
+        },
+        emitted: [
+          {
+            type: {
+              name: 'PayNote/Payment Mandate Spend Authorization Responded',
+              blueId:
+                paynoteBlueIds[
+                  'PayNote/Payment Mandate Spend Authorization Responded'
+                ],
+            },
+            status: 'approved',
+            chargeAttemptId: 'attempt-1',
+          },
+        ],
+      },
+    };
+
+    const response = await payNoteWebhookHandler({ body: payload } as any);
+
+    expect(response.status).toBe(200);
+    expect(hoistedPaynotes.handleWebhookEventMock).toHaveBeenCalledWith(
+      {
+        eventId: 'event-mandate-webhook',
+        eventPayload: payload,
+      },
       expect.any(Object)
     );
   });

@@ -42,6 +42,10 @@ export const MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME =
 export const MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME =
   'PayNote/Payment Mandate Spend Settlement Responded';
 
+export const CHARGE_ATTEMPT_ID_PREFIX = 'paynote-card-charge-attempt:';
+export const TRANSFER_MANDATE_CHARGE_ATTEMPT_ID_PREFIX =
+  'paynote-transfer-mandate-attempt:';
+
 const resolveEventTypeLabel = (event: unknown): string | undefined => {
   if (!event || typeof event !== 'object') {
     return undefined;

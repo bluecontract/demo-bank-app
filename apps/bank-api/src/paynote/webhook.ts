@@ -184,9 +184,12 @@ const classifyDocumentType = (
     const node = blue.jsonValueToNode(document);
     const resolvedContract =
       supportedContract ?? getSupportedContractForDocument(document);
+    const resolvedTypeName = resolvedContract?.typeName;
     return {
-      isPayNote: resolvedContract?.typeName === 'PayNote/PayNote',
-      isDelivery: resolvedContract?.typeName === 'PayNote/PayNote Delivery',
+      isPayNote:
+        resolvedTypeName === 'PayNote/PayNote' ||
+        resolvedTypeName === 'PayNote/Payment Mandate',
+      isDelivery: resolvedTypeName === 'PayNote/PayNote Delivery',
       isBootstrap: blue.isTypeOf(node, DocumentSessionBootstrapSchema, {
         checkSchemaExtensions: true,
       }),

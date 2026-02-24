@@ -138,6 +138,7 @@ export const buildPayNoteRecord = (input: {
   document: Record<string, unknown>;
   resolvedDocument?: Record<string, unknown>;
   eventObject?: WebhookEventObject;
+  eventCreatedAt?: string;
   payNoteParsed: NonNullable<ReturnType<typeof parsePayNoteDocument>>;
   now: string;
 }): {
@@ -156,6 +157,7 @@ export const buildPayNoteRecord = (input: {
     document,
     resolvedDocument,
     eventObject,
+    eventCreatedAt,
     payNoteParsed,
     now,
   } = input;
@@ -190,6 +192,8 @@ export const buildPayNoteRecord = (input: {
       existingRecord?.merchantId ??
       deliveryRecord?.merchantId ??
       bootstrapMerchantId,
+    lastSourceEventCreatedAt:
+      eventCreatedAt ?? existingRecord?.lastSourceEventCreatedAt,
     lastCaptureLockEventId: existingRecord?.lastCaptureLockEventId,
     lastCaptureUnlockEventId: existingRecord?.lastCaptureUnlockEventId,
     payerAccountNumber,
@@ -200,6 +204,8 @@ export const buildPayNoteRecord = (input: {
     triggerEvent:
       eventObject?.triggeredBy ?? existingRecord?.triggerEvent ?? null,
     pendingMandateChargeAttempts: existingRecord?.pendingMandateChargeAttempts,
+    transferMandateAttemptsByHoldId:
+      existingRecord?.transferMandateAttemptsByHoldId,
     createdAt: existingRecord?.createdAt ?? now,
     updatedAt: now,
   };

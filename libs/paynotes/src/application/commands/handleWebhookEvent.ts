@@ -15,7 +15,10 @@ import {
   resolvePayNoteParsed,
 } from './paynoteWebhook/records';
 import { handleCaptureRequestEvents } from './paynoteWebhook/captureRequests';
-import { handleTransferEvents } from './paynoteWebhook/transfers';
+import {
+  handleTransferEvents,
+  handleTransferMandateResponseEvents,
+} from './paynoteWebhook/transfers';
 import { dispatchPayNoteEvents } from './paynoteWebhook/eventDispatcher';
 import { handleMonitoringRequestEvents } from './paynoteWebhook/monitoring';
 import {
@@ -25,6 +28,21 @@ import {
 import { trace } from './paynoteWebhook/logging';
 import { getString } from './paynoteWebhook/utils';
 import { toCompactBlueJsonValue } from '../blue/compactBlue';
+
+const asRecord = (value: unknown): Record<string, unknown> | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+};
+
+const parseIsoTimestamp = (value: string): number | null => {
+  if (!value.includes('T')) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
 
 export type {
   HandleWebhookEventDependencies,
@@ -36,13 +54,6 @@ export const handleWebhookEvent = async (
   input: HandleWebhookEventInput,
   deps: HandleWebhookEventDependencies
 ): Promise<HandleWebhookEventResult> => {
-  const asRecord = (value: unknown): Record<string, unknown> | undefined => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      return undefined;
-    }
-    return value as Record<string, unknown>;
-  };
-
   const logs: HandleWebhookEventResult['logs'] = [];
   trace(logs, 'PayNote webhook processing', {
     eventId: input.eventId,
@@ -63,8 +74,15 @@ export const handleWebhookEvent = async (
     return contextResolution.result;
   }
 
-  const { eventObject, eventType, document, emittedEvents, events, sessionId } =
-    contextResolution.context;
+  const {
+    eventPayload,
+    eventObject,
+    eventType,
+    document,
+    emittedEvents,
+    events,
+    sessionId,
+  } = contextResolution.context;
 
   const firstProcess = await deps.payNoteRepository.markEventProcessed(
     input.eventId
@@ -100,6 +118,49 @@ export const handleWebhookEvent = async (
   const { payNoteDocumentId, resolvedDocument, resolvedDocumentRaw } =
     documentResolution.resolution;
 
+  const existingPayNoteByDocumentId =
+    payNoteRecord ??
+    (await deps.payNoteRepository.getPayNote(payNoteDocumentId));
+  const incomingEventCreatedAt = getString(
+    (eventPayload as { created?: unknown })?.created
+  );
+  const lastSourceEventCreatedAt = getString(
+    existingPayNoteByDocumentId?.lastSourceEventCreatedAt
+  );
+  const incomingEventCreatedAtMs = incomingEventCreatedAt
+    ? parseIsoTimestamp(incomingEventCreatedAt)
+    : null;
+  const lastSourceEventCreatedAtMs = lastSourceEventCreatedAt
+    ? parseIsoTimestamp(lastSourceEventCreatedAt)
+    : null;
+  if (
+    incomingEventCreatedAt &&
+    lastSourceEventCreatedAt &&
+    incomingEventCreatedAtMs !== null &&
+    lastSourceEventCreatedAtMs !== null &&
+    incomingEventCreatedAtMs < lastSourceEventCreatedAtMs
+  ) {
+    logs.push({
+      level: 'info',
+      message:
+        'PayNote webhook event ignored (older than last processed source event)',
+      context: {
+        eventId: input.eventId,
+        payNoteDocumentId,
+        sessionId,
+        incomingEventCreatedAt,
+        lastSourceEventCreatedAt,
+      },
+    });
+    return { note: '', logs };
+  }
+  const knownSessionIds = (
+    existingPayNoteByDocumentId?.sessionIds ?? []
+  ).filter(
+    (candidate): candidate is string =>
+      typeof candidate === 'string' && candidate.trim().length > 0
+  );
+
   const canonicalContract =
     await deps.contractRepository.getContractByDocumentId(payNoteDocumentId);
   const canonicalSessionId = getString(canonicalContract?.sessionId);
@@ -116,11 +177,39 @@ export const handleWebhookEvent = async (
     });
     return { note: '', logs };
   }
+  const eventEpoch = eventObject?.epoch;
+  const isEpochAdvancedWithoutCanonicalSession =
+    eventType === 'DOCUMENT_EPOCH_ADVANCED' &&
+    typeof eventEpoch === 'number' &&
+    eventEpoch > 0 &&
+    !canonicalSessionId &&
+    knownSessionIds.length === 0;
+  if (isEpochAdvancedWithoutCanonicalSession) {
+    logs.push({
+      level: 'info',
+      message:
+        'PayNote webhook event ignored (canonical session not established yet)',
+      context: {
+        eventId: input.eventId,
+        payNoteDocumentId,
+        sessionId,
+        eventType,
+        eventEpoch,
+      },
+    });
+    return { note: '', logs };
+  }
 
   const now = deps.clock.now().toISOString();
-  const existingRecord =
-    payNoteRecord ??
-    (await deps.payNoteRepository.getPayNote(payNoteDocumentId));
+  const existingRecord = existingPayNoteByDocumentId;
+  const nextSourceEventCreatedAt =
+    incomingEventCreatedAt &&
+    incomingEventCreatedAtMs !== null &&
+    (!lastSourceEventCreatedAt ||
+      lastSourceEventCreatedAtMs === null ||
+      incomingEventCreatedAtMs >= lastSourceEventCreatedAtMs)
+      ? incomingEventCreatedAt
+      : lastSourceEventCreatedAt;
 
   const deliveryRecord = await resolveDeliveryRecord(
     existingRecord,
@@ -162,6 +251,7 @@ export const handleWebhookEvent = async (
       document,
       resolvedDocument,
       eventObject,
+      eventCreatedAt: nextSourceEventCreatedAt,
       payNoteParsed,
       now,
     });
@@ -256,6 +346,20 @@ export const handleWebhookEvent = async (
 
   if (mandateResponseResult) {
     return mandateResponseResult;
+  }
+
+  const transferMandateResponseResult =
+    await handleTransferMandateResponseEvents({
+      events: mandateResponseEvents,
+      eventId: input.eventId,
+      payNoteDocumentId,
+      sessionId,
+      deps,
+      logs,
+    });
+
+  if (transferMandateResponseResult) {
+    return transferMandateResponseResult;
   }
 
   const transferDescription =

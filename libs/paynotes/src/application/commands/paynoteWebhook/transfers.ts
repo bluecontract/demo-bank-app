@@ -1,6 +1,6 @@
 import {
   MerchantToCustomerPayNoteSchema,
-  PaymentMandateSchema,
+  PaymentMandateSpendAuthorizationRespondedSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
 import type {
   BankingAccount,
@@ -19,17 +19,26 @@ import {
   CAPTURE_IMMEDIATELY_EVENT_NAME,
   CAPTURE_LOCK_REQUESTED_EVENT_NAME,
   CAPTURE_UNLOCK_REQUESTED_EVENT_NAME,
+  MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME,
   RESERVE_FUNDS_EVENT_NAME,
   resolveEmittedEventType,
   resolveTransferPaymentMandateDocumentId,
   resolveTransferRequestId,
 } from './events';
 import { logAndReturn } from './logging';
-import { upsertPayNoteContract } from './records';
+import { resolveDeliveryRecord, upsertPayNoteContract } from './records';
 import { runGuarantorUpdate } from '../documentOperations';
 import type { DispatchedTransferEvent } from './eventDispatcher';
 import { blue } from '../../../blue';
-import { getString, toSimpleRecord } from './utils';
+import {
+  getString,
+  toSimpleRecord,
+  resolveOperationFailureReason,
+  resolveCredentials,
+  parseChargeAttemptId,
+} from './utils';
+import { resolveRuntimeDocument } from '../blueRuntime';
+import { resolveWebhookContext } from './payload';
 
 const FUNDS_RESERVED_EVENT_NAME = 'PayNote/Funds Reserved';
 const RESERVATION_DECLINED_EVENT_NAME = 'PayNote/Reservation Declined';
@@ -44,15 +53,17 @@ const MANDATE_SPEND_SETTLED_EVENT_NAME =
   'PayNote/Payment Mandate Spend Settled';
 
 type TransferMandateChargeMode = 'authorize_only' | 'authorize_and_capture';
-type TransferMandateOperation =
-  | 'reserve-funds'
-  | 'capture-funds'
-  | 'capture-immediately';
 
 type TransferMandateAuthorization = {
   chargeAttemptId: string;
   mandateDocumentId: string;
   mandateSessionId: string;
+};
+
+type TransferMandateAuthorizationResponse = {
+  chargeAttemptId: string;
+  status: 'approved' | 'rejected';
+  reason?: string;
 };
 
 type ParsedTransferPaymentMandate = {
@@ -121,34 +132,43 @@ const isDeliveryVoucherTransferContext = (
 const parseTransferPaymentMandate = (
   value: unknown
 ): ParsedTransferPaymentMandate | null => {
-  try {
-    const node = blue.jsonValueToNode(value);
-    const output = blue.nodeToSchemaOutput(node, PaymentMandateSchema) as
-      | Record<string, unknown>
-      | undefined;
-    const simple = blue.nodeToJson(node, 'simple') as Record<
-      string,
-      unknown
-    > | null;
-    if (!simple) {
-      return null;
+  const parseChargeAttempts = (
+    candidate: unknown
+  ): Record<string, unknown> | undefined => {
+    const attempts = toSimpleRecord(candidate);
+    if (!attempts) {
+      return undefined;
     }
 
-    return {
-      revokedAt: getString(output?.revokedAt) ?? getString(simple.revokedAt),
-      expiresAt: getString(output?.expiresAt) ?? getString(simple.expiresAt),
-      sourceAccount:
-        getString(output?.sourceAccount) ?? getString(simple.sourceAccount),
-      granterType:
-        getString(output?.granterType) ?? getString(simple.granterType),
-      chargeAttempts:
-        toSimpleRecord(output?.chargeAttempts) ??
-        toSimpleRecord(simple.chargeAttempts) ??
-        undefined,
-    };
-  } catch {
+    const normalized = Object.entries(attempts).reduce<Record<string, unknown>>(
+      (acc, [chargeAttemptId, attempt]) => {
+        const attemptRecord = toSimpleRecord(attempt);
+        if (!attemptRecord) {
+          return acc;
+        }
+
+        acc[chargeAttemptId] = { ...attemptRecord };
+        return acc;
+      },
+      {}
+    );
+
+    return Object.keys(normalized).length > 0 ? normalized : {};
+  };
+
+  const runtimeDocument = resolveRuntimeDocument(value);
+  if (!runtimeDocument) {
     return null;
   }
+
+  const output = runtimeDocument.record;
+  return {
+    revokedAt: getString(output.revokedAt),
+    expiresAt: getString(output.expiresAt),
+    sourceAccount: getString(output.sourceAccount),
+    granterType: getString(output.granterType),
+    chargeAttempts: parseChargeAttempts(output.chargeAttempts),
+  };
 };
 
 const parseIsoTimestampMs = (value: string | undefined): number | undefined => {
@@ -223,34 +243,52 @@ const resolveTransferMandateCounterparty = (input: {
   return null;
 };
 
-const resolveOperationFailureReason = (input: {
-  status: number;
-  body?: unknown;
-  fallbackPrefix: string;
-}): string => {
-  const bodyRecord = toSimpleRecord(input.body);
-  const detail =
-    getString(bodyRecord?.detail) ??
-    getString(bodyRecord?.message) ??
-    getString(bodyRecord?.error);
-  return detail
-    ? `${input.fallbackPrefix}: ${detail}`
-    : `${input.fallbackPrefix} with status ${input.status}.`;
-};
-
 const buildTransferMandateChargeAttemptId = (input: {
-  operation: TransferMandateOperation;
   payNoteDocumentId: string;
   eventId: string;
   eventIndex: number;
 }) =>
-  [
-    'paynote-transfer-mandate-attempt',
-    input.operation,
-    input.payNoteDocumentId,
-    input.eventId,
-    String(input.eventIndex),
-  ].join(':');
+  [input.payNoteDocumentId, input.eventId, String(input.eventIndex)].join(':');
+
+const parseTransferMandateAuthorizationResponse = (
+  event: WebhookEmittedEvent
+): TransferMandateAuthorizationResponse | null => {
+  try {
+    const node = blue.jsonValueToNode(event);
+    if (
+      !blue.isTypeOf(node, PaymentMandateSpendAuthorizationRespondedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
+      return null;
+    }
+
+    const output = blue.nodeToSchemaOutput(
+      node,
+      PaymentMandateSpendAuthorizationRespondedSchema
+    ) as {
+      chargeAttemptId?: unknown;
+      status?: unknown;
+      reason?: unknown;
+    };
+    const chargeAttemptId = getString(output.chargeAttemptId);
+    const status = getString(output.status);
+    if (!chargeAttemptId || (status !== 'approved' && status !== 'rejected')) {
+      return null;
+    }
+
+    return {
+      chargeAttemptId,
+      status,
+      reason: getString(output.reason),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const buildTransferMandateAttemptProcessingKey = (chargeAttemptId: string) =>
+  `paynote-transfer-mandate-attempt-processed:${chargeAttemptId}`;
 
 const resolveStoredTransferMandateAuthorization = (input: {
   updatedRecord: PayNoteRecord;
@@ -338,20 +376,18 @@ const authorizeTransferViaMandateIfRequired = async (input: {
     | typeof CAPTURE_FUNDS_EVENT_NAME
     | typeof CAPTURE_IMMEDIATELY_EVENT_NAME;
   eventIndex: number;
-  operation: TransferMandateOperation;
   amountMinor: number;
   payerAccountNumber: string;
   payeeAccountNumber?: string;
 }): Promise<
   | { ok: true; authorization?: TransferMandateAuthorization }
-  | { ok: false; reason: string }
+  | { ok: false; reason: string; pending?: boolean }
 > => {
   const {
     context,
     event,
     eventType,
     eventIndex,
-    operation,
     amountMinor,
     payerAccountNumber,
     payeeAccountNumber,
@@ -454,6 +490,8 @@ const authorizeTransferViaMandateIfRequired = async (input: {
     eventId: context.eventId,
     payNoteDocumentId: context.payNoteDocumentId,
     sessionId: context.sessionId,
+    errorMessage:
+      'Failed to resolve MyOS credentials for PayNote guarantor update',
   });
   if (!credentials) {
     return {
@@ -463,7 +501,6 @@ const authorizeTransferViaMandateIfRequired = async (input: {
   }
 
   const chargeAttemptId = buildTransferMandateChargeAttemptId({
-    operation,
     payNoteDocumentId: context.payNoteDocumentId,
     eventId: context.eventId,
     eventIndex,
@@ -532,7 +569,8 @@ const authorizeTransferViaMandateIfRequired = async (input: {
   if (authorizationStatus !== 'approved') {
     return {
       ok: false,
-      reason: 'Payment mandate authorization was not confirmed.',
+      pending: true,
+      reason: 'Payment mandate authorization is pending confirmation.',
     };
   }
 
@@ -544,6 +582,40 @@ const authorizeTransferViaMandateIfRequired = async (input: {
       mandateSessionId,
     },
   };
+};
+
+const reserveTransferMandateAttemptProcessing = async (input: {
+  context: TransferContext;
+  eventType:
+    | typeof RESERVE_FUNDS_EVENT_NAME
+    | typeof CAPTURE_FUNDS_EVENT_NAME
+    | typeof CAPTURE_IMMEDIATELY_EVENT_NAME;
+  eventIndex: number;
+  requestId?: string;
+  authorization: TransferMandateAuthorization;
+}): Promise<boolean> => {
+  const key = buildTransferMandateAttemptProcessingKey(
+    input.authorization.chargeAttemptId
+  );
+  const firstProcess =
+    await input.context.deps.payNoteRepository.markEventProcessed(key);
+  if (!firstProcess) {
+    input.context.logs.push({
+      level: 'info',
+      message: 'Skipped duplicate transfer mandate authorization response',
+      context: {
+        eventId: input.context.eventId,
+        payNoteDocumentId: input.context.payNoteDocumentId,
+        sessionId: input.context.sessionId,
+        eventType: input.eventType,
+        eventIndex: input.eventIndex,
+        requestId: input.requestId ?? null,
+        chargeAttemptId: input.authorization.chargeAttemptId,
+        dedupeKey: key,
+      },
+    });
+  }
+  return firstProcess;
 };
 
 const runTransferMandateSettlement = async (input: {
@@ -578,6 +650,8 @@ const runTransferMandateSettlement = async (input: {
     eventId: context.eventId,
     payNoteDocumentId: context.payNoteDocumentId,
     sessionId: context.sessionId,
+    errorMessage:
+      'Failed to resolve MyOS credentials for PayNote guarantor update',
   });
   if (!credentials) {
     return;
@@ -730,13 +804,17 @@ const isTransferEventType = (
   eventType === CAPTURE_IMMEDIATELY_EVENT_NAME;
 
 const buildTransferOperationIdempotencyKey = (input: {
+  payNoteDocumentId: string;
   eventId: string;
   eventIndex: number;
   operation: 'capture-immediately' | 'reserve-funds' | 'capture-funds';
+  requestId?: string;
 }): string =>
   [
     'paynote-transfer',
     input.operation,
+    input.payNoteDocumentId,
+    'event',
     input.eventId,
     String(input.eventIndex),
   ].join(':');
@@ -749,15 +827,25 @@ const reserveTransferRequestProcessing = async (input: {
     | typeof CAPTURE_IMMEDIATELY_EVENT_NAME;
   eventId: string;
   eventIndex: number;
+  requestId?: string;
   deps: HandleWebhookEventDependencies;
   logs: LogEntry[];
 }): Promise<boolean> => {
-  const { payNoteDocumentId, eventType, eventId, eventIndex, deps, logs } =
-    input;
+  const {
+    payNoteDocumentId,
+    eventType,
+    eventId,
+    eventIndex,
+    requestId,
+    deps,
+    logs,
+  } = input;
 
   const dedupeEventId = [
     'paynote-transfer-request',
     payNoteDocumentId,
+    eventType,
+    'event',
     eventId,
     String(eventIndex),
   ].join(':');
@@ -774,6 +862,7 @@ const reserveTransferRequestProcessing = async (input: {
         payNoteDocumentId,
         eventIndex,
         eventType,
+        requestId: requestId ?? null,
         dedupeEventId,
       },
     });
@@ -809,35 +898,6 @@ const buildResponseEvent = (input: {
   }
 
   return event;
-};
-
-const resolveCredentials = async (
-  deps: HandleWebhookEventDependencies,
-  logs: LogEntry[],
-  context: {
-    eventId: string;
-    payNoteDocumentId: string;
-    sessionId: string;
-  }
-): Promise<Awaited<
-  ReturnType<HandleWebhookEventDependencies['myOsClient']['getCredentials']>
-> | null> => {
-  try {
-    return await deps.myOsClient.getCredentials();
-  } catch (error) {
-    logs.push({
-      level: 'error',
-      message:
-        'Failed to resolve MyOS credentials for PayNote guarantor update',
-      context: {
-        eventId: context.eventId,
-        payNoteDocumentId: context.payNoteDocumentId,
-        sessionId: context.sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-    return null;
-  }
 };
 
 const emitGuarantorResponseEvent = async (input: {
@@ -1014,6 +1074,7 @@ const handleCaptureImmediately = async (input: {
   event: WebhookEmittedEvent;
   eventIndex: number;
   transferAmountMinor: number;
+  authorizedMandate?: TransferMandateAuthorization;
 }): Promise<void> => {
   const {
     context: {
@@ -1032,9 +1093,11 @@ const handleCaptureImmediately = async (input: {
   } = input;
   const requestId = resolveRequestId(event);
   const idempotencyKey = buildTransferOperationIdempotencyKey({
+    payNoteDocumentId,
     eventId,
     eventIndex,
     operation: 'capture-immediately',
+    requestId,
   });
   const eventType = CAPTURE_IMMEDIATELY_EVENT_NAME;
 
@@ -1069,17 +1132,35 @@ const handleCaptureImmediately = async (input: {
     return;
   }
 
-  const mandateAuthorization = await authorizeTransferViaMandateIfRequired({
-    context: input.context,
-    event,
-    eventType,
-    eventIndex,
-    operation: 'capture-immediately',
-    amountMinor: transferAmountMinor,
-    payerAccountNumber: account.accountNumber,
-    payeeAccountNumber,
-  });
+  const mandateAuthorization = input.authorizedMandate
+    ? ({
+        ok: true,
+        authorization: input.authorizedMandate,
+      } as const)
+    : await authorizeTransferViaMandateIfRequired({
+        context: input.context,
+        event,
+        eventType,
+        eventIndex,
+        amountMinor: transferAmountMinor,
+        payerAccountNumber: account.accountNumber,
+        payeeAccountNumber,
+      });
   if (!mandateAuthorization.ok) {
+    if (mandateAuthorization.pending) {
+      logs.push({
+        level: 'info',
+        message:
+          'Deferred PayNote capture immediately request until payment mandate authorization response',
+        context: {
+          eventId,
+          payNoteDocumentId,
+          requestId: requestId ?? null,
+          eventIndex,
+        },
+      });
+      return;
+    }
     await emitDeclinedDueToMandate({
       context: input.context,
       eventType,
@@ -1087,6 +1168,19 @@ const handleCaptureImmediately = async (input: {
       reason: mandateAuthorization.reason,
     });
     return;
+  }
+
+  if (mandateAuthorization.authorization) {
+    const firstProcess = await reserveTransferMandateAttemptProcessing({
+      context: input.context,
+      eventType,
+      eventIndex,
+      requestId,
+      authorization: mandateAuthorization.authorization,
+    });
+    if (!firstProcess) {
+      return;
+    }
   }
 
   logs.push({
@@ -1204,6 +1298,7 @@ const handleReserveFundsRequest = async (input: {
   event: WebhookEmittedEvent;
   eventIndex: number;
   transferAmountMinor: number;
+  authorizedMandate?: TransferMandateAuthorization;
 }): Promise<void> => {
   const {
     context: {
@@ -1227,9 +1322,11 @@ const handleReserveFundsRequest = async (input: {
 
   const requestId = resolveRequestId(event);
   const idempotencyKey = buildTransferOperationIdempotencyKey({
+    payNoteDocumentId,
     eventId,
     eventIndex,
     operation: 'reserve-funds',
+    requestId,
   });
   const eventType = RESERVE_FUNDS_EVENT_NAME;
   const reserveHoldId = updatedRecord.holdId ?? payNoteDocumentId;
@@ -1253,17 +1350,35 @@ const handleReserveFundsRequest = async (input: {
     throw new Error('Missing payer account number');
   }
 
-  const mandateAuthorization = await authorizeTransferViaMandateIfRequired({
-    context: input.context,
-    event,
-    eventType,
-    eventIndex,
-    operation: 'reserve-funds',
-    amountMinor: transferAmountMinor,
-    payerAccountNumber,
-    payeeAccountNumber,
-  });
+  const mandateAuthorization = input.authorizedMandate
+    ? ({
+        ok: true,
+        authorization: input.authorizedMandate,
+      } as const)
+    : await authorizeTransferViaMandateIfRequired({
+        context: input.context,
+        event,
+        eventType,
+        eventIndex,
+        amountMinor: transferAmountMinor,
+        payerAccountNumber,
+        payeeAccountNumber,
+      });
   if (!mandateAuthorization.ok) {
+    if (mandateAuthorization.pending) {
+      logs.push({
+        level: 'info',
+        message:
+          'Deferred PayNote reserve funds request until payment mandate authorization response',
+        context: {
+          eventId,
+          payNoteDocumentId,
+          requestId: requestId ?? null,
+          eventIndex,
+        },
+      });
+      return;
+    }
     await emitDeclinedDueToMandate({
       context: input.context,
       eventType,
@@ -1271,6 +1386,19 @@ const handleReserveFundsRequest = async (input: {
       reason: mandateAuthorization.reason,
     });
     return;
+  }
+
+  if (mandateAuthorization.authorization) {
+    const firstProcess = await reserveTransferMandateAttemptProcessing({
+      context: input.context,
+      eventType,
+      eventIndex,
+      requestId,
+      authorization: mandateAuthorization.authorization,
+    });
+    if (!firstProcess) {
+      return;
+    }
   }
 
   try {
@@ -1419,6 +1547,7 @@ const handleCaptureFundsRequest = async (input: {
   event: WebhookEmittedEvent;
   eventIndex: number;
   transferAmountMinor: number;
+  authorizedMandate?: TransferMandateAuthorization;
 }): Promise<void> => {
   const {
     context: {
@@ -1441,9 +1570,11 @@ const handleCaptureFundsRequest = async (input: {
 
   const requestId = resolveRequestId(event);
   const idempotencyKey = buildTransferOperationIdempotencyKey({
+    payNoteDocumentId,
     eventId,
     eventIndex,
     operation: 'capture-funds',
+    requestId,
   });
   const eventType = CAPTURE_FUNDS_EVENT_NAME;
 
@@ -1511,23 +1642,41 @@ const handleCaptureFundsRequest = async (input: {
     return;
   }
 
-  const mandateAuthorization =
-    storedMandateAuthorization && storedMandateAuthorization.ok
-      ? ({
-          ok: true,
-          authorization: storedMandateAuthorization.authorization,
-        } as const)
-      : await authorizeTransferViaMandateIfRequired({
-          context: input.context,
-          event,
-          eventType,
-          eventIndex,
-          operation: 'capture-funds',
-          amountMinor: transferAmountMinor,
-          payerAccountNumber: account.accountNumber,
-          payeeAccountNumber,
-        });
+  const mandateAuthorization = input.authorizedMandate
+    ? ({
+        ok: true,
+        authorization: input.authorizedMandate,
+      } as const)
+    : storedMandateAuthorization && storedMandateAuthorization.ok
+    ? ({
+        ok: true,
+        authorization: storedMandateAuthorization.authorization,
+      } as const)
+    : await authorizeTransferViaMandateIfRequired({
+        context: input.context,
+        event,
+        eventType,
+        eventIndex,
+        amountMinor: transferAmountMinor,
+        payerAccountNumber: account.accountNumber,
+        payeeAccountNumber,
+      });
   if (!mandateAuthorization.ok) {
+    if (mandateAuthorization.pending) {
+      logs.push({
+        level: 'info',
+        message:
+          'Deferred PayNote capture funds request until payment mandate authorization response',
+        context: {
+          eventId,
+          payNoteDocumentId,
+          requestId: requestId ?? null,
+          eventIndex,
+          holdId: captureHoldId,
+        },
+      });
+      return;
+    }
     await emitDeclinedDueToMandate({
       context: input.context,
       eventType,
@@ -1535,6 +1684,19 @@ const handleCaptureFundsRequest = async (input: {
       reason: mandateAuthorization.reason,
     });
     return;
+  }
+
+  if (mandateAuthorization.authorization) {
+    const firstProcess = await reserveTransferMandateAttemptProcessing({
+      context: input.context,
+      eventType,
+      eventIndex,
+      requestId,
+      authorization: mandateAuthorization.authorization,
+    });
+    if (!firstProcess) {
+      return;
+    }
   }
 
   try {
@@ -1735,6 +1897,299 @@ const emitDeclinedDueToMissingPayer = async (input: {
   });
 };
 
+type ResolvedTransferFromMandateAttempt = {
+  context: TransferContext;
+  account: BankingAccount & { ownerUserId: string };
+  event: WebhookEmittedEvent;
+  eventType:
+    | typeof RESERVE_FUNDS_EVENT_NAME
+    | typeof CAPTURE_FUNDS_EVENT_NAME
+    | typeof CAPTURE_IMMEDIATELY_EVENT_NAME;
+  eventIndex: number;
+  transferAmountMinor: number;
+};
+
+const resolveTransferFromMandateAttempt = async (input: {
+  chargeAttemptId: string;
+  deps: HandleWebhookEventDependencies;
+  logs: LogEntry[];
+}): Promise<ResolvedTransferFromMandateAttempt | null> => {
+  const attempt = parseChargeAttemptId(input.chargeAttemptId);
+  if (!attempt) {
+    input.logs.push({
+      level: 'warn',
+      message: 'Ignored transfer mandate response (invalid chargeAttemptId)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+      },
+    });
+    return null;
+  }
+
+  const fetchedEvent = await input.deps.myOsClient.fetchEvent(attempt.eventId);
+  if (fetchedEvent.kind !== 'success') {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored transfer mandate response (unable to load originating event)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        originatingEventId: attempt.eventId,
+        reason: fetchedEvent.kind,
+      },
+    });
+    return null;
+  }
+
+  const contextResolution = resolveWebhookContext(
+    fetchedEvent.payload as Record<string, unknown>,
+    attempt.eventId,
+    []
+  );
+  if ('result' in contextResolution) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored transfer mandate response (invalid originating payload)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        originatingEventId: attempt.eventId,
+      },
+    });
+    return null;
+  }
+
+  const originatingContext = contextResolution.context;
+  const originatingEvent = originatingContext.events.at(attempt.eventIndex);
+  if (!originatingEvent) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored transfer mandate response (originating emitted event not found)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        originatingEventId: attempt.eventId,
+        originatingEventIndex: attempt.eventIndex,
+      },
+    });
+    return null;
+  }
+
+  const originatingEventType = resolveEmittedEventType(originatingEvent);
+  if (!isTransferEventType(originatingEventType)) {
+    return null;
+  }
+
+  const payNoteRecord =
+    (await input.deps.payNoteRepository.getPayNote(
+      attempt.payNoteDocumentId
+    )) ??
+    (await input.deps.payNoteRepository.getPayNoteBySessionId(
+      originatingContext.sessionId
+    ));
+  if (!payNoteRecord) {
+    input.logs.push({
+      level: 'warn',
+      message: 'Ignored transfer mandate response (missing PayNote record)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        payNoteDocumentId: attempt.payNoteDocumentId,
+      },
+    });
+    return null;
+  }
+
+  const canonicalContract =
+    await input.deps.contractRepository.getContractByDocumentId(
+      attempt.payNoteDocumentId
+    );
+  const canonicalSessionId = getString(canonicalContract?.sessionId);
+  if (
+    canonicalSessionId &&
+    originatingContext.sessionId !== canonicalSessionId
+  ) {
+    input.logs.push({
+      level: 'warn',
+      message:
+        'Ignored transfer mandate response (originating event from non-canonical session)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        payNoteDocumentId: attempt.payNoteDocumentId,
+        originatingSessionId: originatingContext.sessionId,
+        canonicalSessionId,
+      },
+    });
+    return null;
+  }
+
+  const resolvedSessionId = canonicalSessionId ?? originatingContext.sessionId;
+  const deliveryRecord = await resolveDeliveryRecord(
+    payNoteRecord,
+    attempt.payNoteDocumentId,
+    input.deps
+  );
+  const payerAccountNumber =
+    payNoteRecord.payerAccountNumber ??
+    payNoteRecord.accountNumber ??
+    deliveryRecord?.accountNumber;
+  if (!payerAccountNumber) {
+    input.logs.push({
+      level: 'warn',
+      message: 'Ignored transfer mandate response (missing payer account)',
+      context: {
+        chargeAttemptId: input.chargeAttemptId,
+        payNoteDocumentId: attempt.payNoteDocumentId,
+      },
+    });
+    return null;
+  }
+
+  const accountResolution = await resolvePayerAccount({
+    payerAccountNumber,
+    eventId: attempt.eventId,
+    deps: input.deps,
+    logs: input.logs,
+  });
+  if ('result' in accountResolution) {
+    return null;
+  }
+
+  const documentRecord = toSimpleRecord(originatingContext.document);
+  const transferContext: TransferContext = {
+    eventId: attempt.eventId,
+    payNoteDocumentId: attempt.payNoteDocumentId,
+    sessionId: resolvedSessionId,
+    eventObject: originatingContext.eventObject,
+    emittedEvents: originatingContext.emittedEvents,
+    payerAccountNumber,
+    payeeAccountNumber: payNoteRecord.payeeAccountNumber,
+    transferDescription: getString(documentRecord?.name) ?? 'PayNote transfer',
+    updatedRecord: { ...payNoteRecord },
+    deliveryRecord,
+    deps: input.deps,
+    logs: input.logs,
+  };
+
+  return {
+    context: transferContext,
+    account: accountResolution.account,
+    event: originatingEvent,
+    eventType: originatingEventType,
+    eventIndex: attempt.eventIndex,
+    transferAmountMinor:
+      typeof originatingEvent.amount?.value === 'number'
+        ? originatingEvent.amount.value
+        : 0,
+  };
+};
+
+export const handleTransferMandateResponseEvents = async (input: {
+  events: DispatchedTransferEvent[];
+  eventId: string;
+  payNoteDocumentId: string;
+  sessionId: string;
+  deps: HandleWebhookEventDependencies;
+  logs: LogEntry[];
+}): Promise<HandleWebhookEventResult | null> => {
+  const { events, eventId, payNoteDocumentId, sessionId, deps, logs } = input;
+
+  for (const item of events) {
+    if (item.eventType !== MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME) {
+      continue;
+    }
+
+    const response = parseTransferMandateAuthorizationResponse(item.event);
+    if (!response) {
+      logs.push({
+        level: 'warn',
+        message: 'Ignored transfer mandate response (invalid payload)',
+        context: {
+          eventId,
+          mandateDocumentId: payNoteDocumentId,
+          mandateSessionId: sessionId,
+          eventIndex: item.eventIndex,
+        },
+      });
+      continue;
+    }
+
+    const resolved = await resolveTransferFromMandateAttempt({
+      chargeAttemptId: response.chargeAttemptId,
+      deps,
+      logs,
+    });
+    if (!resolved) {
+      continue;
+    }
+
+    const authorization: TransferMandateAuthorization = {
+      chargeAttemptId: response.chargeAttemptId,
+      mandateDocumentId: payNoteDocumentId,
+      mandateSessionId: sessionId,
+    };
+    const requestId = resolveRequestId(resolved.event);
+
+    if (response.status === 'rejected') {
+      const firstProcess = await reserveTransferMandateAttemptProcessing({
+        context: resolved.context,
+        eventType: resolved.eventType,
+        eventIndex: resolved.eventIndex,
+        requestId,
+        authorization,
+      });
+      if (!firstProcess) {
+        continue;
+      }
+
+      await emitDeclinedDueToMandate({
+        context: resolved.context,
+        eventType: resolved.eventType,
+        requestId,
+        reason:
+          response.reason ?? 'Payment mandate rejected transfer authorization.',
+      });
+      continue;
+    }
+
+    if (resolved.eventType === CAPTURE_IMMEDIATELY_EVENT_NAME) {
+      await handleCaptureImmediately({
+        context: resolved.context,
+        account: resolved.account,
+        event: resolved.event,
+        eventIndex: resolved.eventIndex,
+        transferAmountMinor: resolved.transferAmountMinor,
+        authorizedMandate: authorization,
+      });
+      continue;
+    }
+
+    if (resolved.eventType === RESERVE_FUNDS_EVENT_NAME) {
+      await handleReserveFundsRequest({
+        context: resolved.context,
+        account: resolved.account,
+        event: resolved.event,
+        eventIndex: resolved.eventIndex,
+        transferAmountMinor: resolved.transferAmountMinor,
+        authorizedMandate: authorization,
+      });
+      continue;
+    }
+
+    if (resolved.eventType === CAPTURE_FUNDS_EVENT_NAME) {
+      await handleCaptureFundsRequest({
+        context: resolved.context,
+        account: resolved.account,
+        event: resolved.event,
+        eventIndex: resolved.eventIndex,
+        transferAmountMinor: resolved.transferAmountMinor,
+        authorizedMandate: authorization,
+      });
+    }
+  }
+
+  return null;
+};
+
 const logIgnoredTransferEvent = (
   context: TransferContext,
   eventIndex: number,
@@ -1834,6 +2289,7 @@ export const handleTransferEvents = async (input: {
             eventType,
             eventId,
             eventIndex: transferEvent.eventIndex,
+            requestId: resolveRequestId(transferEvent.event),
             deps,
             logs,
           });
@@ -1878,6 +2334,7 @@ export const handleTransferEvents = async (input: {
           eventType,
           eventId,
           eventIndex,
+          requestId: resolveRequestId(event),
           deps,
           logs,
         });

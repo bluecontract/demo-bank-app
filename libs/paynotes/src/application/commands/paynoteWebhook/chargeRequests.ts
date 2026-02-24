@@ -13,7 +13,6 @@ import {
 import type {
   BankingAccount,
   LogEntry,
-  MyOsCredentials,
   PayNoteDeliveryRecord,
   PayNoteRecord,
 } from '../../ports';
@@ -38,7 +37,13 @@ import type {
   WebhookEventObject,
 } from './types';
 import { resolveWebhookContext } from './payload';
-import { getString, toSimpleRecord } from './utils';
+import {
+  getString,
+  toSimpleRecord,
+  resolveOperationFailureReason,
+  resolveCredentials,
+  parseChargeAttemptId,
+} from './utils';
 import { resolveDeliveryRecord, upsertPayNoteContract } from './records';
 import { trace } from './logging';
 import { resolveRuntimeContracts } from '../blueRuntime';
@@ -221,50 +226,7 @@ const buildChargeAttemptId = (input: {
   eventId: string;
   eventIndex: number;
 }) =>
-  [
-    'paynote-card-charge-attempt',
-    input.payNoteDocumentId,
-    input.eventId,
-    String(input.eventIndex),
-  ].join(':');
-
-const CHARGE_ATTEMPT_ID_PREFIX = 'paynote-card-charge-attempt:';
-
-const parseChargeAttemptId = (
-  value: string
-): {
-  payNoteDocumentId: string;
-  eventId: string;
-  eventIndex: number;
-} | null => {
-  if (!value.startsWith(CHARGE_ATTEMPT_ID_PREFIX)) {
-    return null;
-  }
-
-  const payload = value.slice(CHARGE_ATTEMPT_ID_PREFIX.length);
-  const parts = payload.split(':');
-  if (parts.length < 3) {
-    return null;
-  }
-
-  const eventIndexRaw = parts.pop();
-  const eventId = parts.pop();
-  const payNoteDocumentId = parts.join(':');
-  if (!eventIndexRaw || !eventId || !payNoteDocumentId) {
-    return null;
-  }
-
-  const eventIndex = Number.parseInt(eventIndexRaw, 10);
-  if (!Number.isInteger(eventIndex) || eventIndex < 0) {
-    return null;
-  }
-
-  return {
-    payNoteDocumentId,
-    eventId,
-    eventIndex,
-  };
-};
+  [input.payNoteDocumentId, input.eventId, String(input.eventIndex)].join(':');
 
 const buildChargeAttemptProcessingKey = (chargeAttemptId: string) =>
   `paynote-card-charge-attempt-processed:${chargeAttemptId}`;
@@ -517,13 +479,7 @@ const resolveDocumentTypeBlueId = (
 };
 
 const resolveIsoTimestamp = (value: unknown): string | undefined => {
-  const direct = getString(value);
-  if (direct) {
-    return direct;
-  }
-
-  const record = toSimpleRecord(value);
-  return getString(record?.value);
+  return getString(value);
 };
 
 const toNonNegativeInteger = (value: unknown): number | undefined => {
@@ -1060,12 +1016,12 @@ const runMandateAuthorization = async (input: {
     };
   }
 
-  const credentials = await resolveCredentials({
-    deps: context.deps,
-    logs: context.logs,
+  const credentials = await resolveCredentials(context.deps, context.logs, {
     eventId: context.eventId,
     payNoteDocumentId: context.payNoteDocumentId,
     sessionId: context.sessionId,
+    errorMessage:
+      'Failed to resolve MyOS credentials for PayNote card charge responses',
   });
   if (!credentials) {
     return { ok: false, reason: 'Missing MyOS credentials.', retryable: true };
@@ -1503,12 +1459,12 @@ const runMandateSettlement = async (
     return;
   }
 
-  const credentials = await resolveCredentials({
-    deps: context.deps,
-    logs: context.logs,
+  const credentials = await resolveCredentials(context.deps, context.logs, {
     eventId: context.eventId,
     payNoteDocumentId: context.payNoteDocumentId,
     sessionId: context.sessionId,
+    errorMessage:
+      'Failed to resolve MyOS credentials for PayNote card charge responses',
   });
   if (!credentials) {
     return;
@@ -1613,31 +1569,6 @@ const resolveSourcePayNoteType = (document: unknown): SourcePayNoteType => {
   return 'unknown';
 };
 
-const resolveCredentials = async (input: {
-  deps: HandleWebhookEventDependencies;
-  logs: LogEntry[];
-  eventId: string;
-  payNoteDocumentId: string;
-  sessionId: string;
-}): Promise<MyOsCredentials | null> => {
-  try {
-    return await input.deps.myOsClient.getCredentials();
-  } catch (error) {
-    input.logs.push({
-      level: 'error',
-      message:
-        'Failed to resolve MyOS credentials for PayNote card charge responses',
-      context: {
-        eventId: input.eventId,
-        payNoteDocumentId: input.payNoteDocumentId,
-        sessionId: input.sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-    return null;
-  }
-};
-
 const emitGuarantorResponseEvent = async (input: {
   context: ChargeRequestContext;
   eventType: ChargeRequestEventType;
@@ -1648,12 +1579,12 @@ const emitGuarantorResponseEvent = async (input: {
   missingCredentialsMessage: string;
 }): Promise<boolean> => {
   const { context } = input;
-  const credentials = await resolveCredentials({
-    deps: context.deps,
-    logs: context.logs,
+  const credentials = await resolveCredentials(context.deps, context.logs, {
     eventId: context.eventId,
     payNoteDocumentId: context.payNoteDocumentId,
     sessionId: context.sessionId,
+    errorMessage:
+      'Failed to resolve MyOS credentials for PayNote card charge responses',
   });
 
   return runGuarantorUpdate({
@@ -1902,6 +1833,23 @@ const resolveChargeAccounts = async (input: {
         payeeAccountNumber: payeeAccountNumber ?? null,
         localPayerAccountNumber: localRoleAccounts.payerAccountNumber ?? null,
         localPayeeAccountNumber: localRoleAccounts.payeeAccountNumber ?? null,
+        sourcePayNoteType,
+      },
+    });
+    return null;
+  }
+
+  if (payerAccountNumber === payeeAccountNumber) {
+    logs.push({
+      level: 'warn',
+      message:
+        'Card charge request rejected (payer and payee account mapping collide)',
+      context: {
+        eventId,
+        payNoteDocumentId,
+        direction,
+        payerAccountNumber,
+        payeeAccountNumber,
         sourcePayNoteType,
       },
     });
@@ -2240,21 +2188,6 @@ const resolveLinkedPayNoteCardTransactionDetails = async (input: {
   }
 };
 
-const resolveOperationFailureReason = (input: {
-  status: number;
-  body?: unknown;
-  fallbackPrefix: string;
-}): string => {
-  const bodyRecord = toSimpleRecord(input.body);
-  const detail =
-    getString(bodyRecord?.detail) ??
-    getString(bodyRecord?.message) ??
-    getString(bodyRecord?.error);
-  return detail
-    ? `${input.fallbackPrefix}: ${detail}`
-    : `${input.fallbackPrefix} with status ${input.status}.`;
-};
-
 const maybeResolveBootstrappedDocumentId = async (input: {
   context: ChargeRequestContext;
   bootstrapSessionId: string;
@@ -2295,12 +2228,12 @@ const maybeStartLinkedPayNote = async (input: {
     return;
   }
 
-  const credentials = await resolveCredentials({
-    deps: context.deps,
-    logs: context.logs,
+  const credentials = await resolveCredentials(context.deps, context.logs, {
     eventId: context.eventId,
     payNoteDocumentId: context.payNoteDocumentId,
     sessionId: context.sessionId,
+    errorMessage:
+      'Failed to resolve MyOS credentials for PayNote card charge responses',
   });
 
   if (!credentials) {
