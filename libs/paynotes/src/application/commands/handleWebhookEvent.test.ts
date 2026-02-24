@@ -554,6 +554,62 @@ describe('handleWebhookEvent', () => {
     ).toBe(true);
   });
 
+  it('ignores document created events after canonical session is established', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        type: 'DOCUMENT_CREATED',
+        object: {
+          sessionId: 'session-canonical',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+          },
+          emitted: [],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-canonical',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+    deps.contractRepository.getContractByDocumentId = vi
+      .fn()
+      .mockResolvedValue({
+        contractId: 'contract-1',
+        typeBlueId: 'type-1',
+        displayName: 'PayNote',
+        sessionId: 'session-canonical',
+        documentId: 'doc-1',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+
+    const result = await handleWebhookEvent(
+      { eventId: 'event-document-created-late' },
+      deps
+    );
+
+    expect(result.note).toBe('');
+    expect(deps.payNoteRepository.savePayNote).not.toHaveBeenCalled();
+    expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(
+      result.logs.some(
+        entry =>
+          entry.message ===
+          'PayNote webhook event ignored (document created after canonical session established)'
+      )
+    ).toBe(true);
+  });
+
   it('ignores epoch-advanced paynote events when canonical session is not resolved even if paynote has known sessions', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     fetchEvent.mockResolvedValueOnce({
@@ -721,6 +777,62 @@ describe('handleWebhookEvent', () => {
         entry =>
           entry.message ===
           'PayNote webhook event ignored (older than last processed source event)'
+      )
+    ).toBe(true);
+  });
+
+  it('ignores source events with lower epoch order than already persisted state', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        id: 'event-created-after-epoch',
+        type: 'DOCUMENT_CREATED',
+        created: '2026-02-24T11:50:00.000Z',
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+          },
+          emitted: [],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+        },
+      },
+    } as MyOsFetchDocumentResult);
+    deps.payNoteRepository.getPayNote = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      sessionIds: ['session-1'],
+      lastSourceEventEpoch: 2,
+      lastSourceEventCreatedAt: '2026-02-24T11:45:00.000Z',
+      document: {
+        type: 'PayNote/PayNote',
+      },
+      createdAt: '2026-02-24T11:40:00.000Z',
+      updatedAt: '2026-02-24T11:45:00.000Z',
+    });
+
+    const result = await handleWebhookEvent(
+      { eventId: 'event-created-after-epoch' },
+      deps
+    );
+
+    expect(result.note).toBe('');
+    expect(deps.payNoteRepository.savePayNote).not.toHaveBeenCalled();
+    expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(
+      result.logs.some(
+        entry =>
+          entry.message ===
+          'PayNote webhook event ignored (older than last processed source epoch)'
       )
     ).toBe(true);
   });

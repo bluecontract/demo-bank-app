@@ -63,6 +63,24 @@ describe('DynamoPayNoteRepository', () => {
     );
   });
 
+  it('persists last source event epoch when provided', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+
+    await repository.savePayNote({
+      payNoteDocumentId: 'paynote-doc-epoch',
+      sessionIds: ['session-epoch'],
+      lastSourceEventEpoch: 3,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const updatePayload = mockUpdateCommand.mock.calls[0]?.[0];
+    expect(
+      updatePayload?.ExpressionAttributeValues?.[':lastSourceEventEpoch']
+    ).toBe(3);
+  });
+
   it('maps merchantId on get', async () => {
     mockSend.mockResolvedValueOnce({
       Item: {
@@ -105,6 +123,31 @@ describe('DynamoPayNoteRepository', () => {
     const updateExpression = String(secondUpdatePayload?.UpdateExpression);
     expect(updateExpression).not.toContain('#lastCaptureLockEventId');
     expect(updateExpression).not.toContain('REMOVE #lastCaptureLockEventId');
+  });
+
+  it('does not remove last source event epoch when omitted in subsequent save', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+
+    await repository.savePayNote({
+      payNoteDocumentId: 'paynote-doc-epoch-2',
+      sessionIds: ['session-epoch-2'],
+      lastSourceEventEpoch: 5,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    await repository.savePayNote({
+      payNoteDocumentId: 'paynote-doc-epoch-2',
+      sessionIds: ['session-epoch-2'],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:01.000Z',
+    });
+
+    const secondUpdatePayload = mockUpdateCommand.mock.calls[1]?.[0];
+    const updateExpression = String(secondUpdatePayload?.UpdateExpression);
+    expect(updateExpression).not.toContain('#lastSourceEventEpoch');
+    expect(updateExpression).not.toContain('REMOVE #lastSourceEventEpoch');
   });
 
   it('does not send unused capture lock placeholders when values are omitted', async () => {

@@ -44,6 +44,24 @@ const parseIsoTimestamp = (value: string): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const resolveEventEpochOrder = (input: {
+  eventType?: string;
+  eventEpoch?: unknown;
+}): number | undefined => {
+  const { eventType, eventEpoch } = input;
+  if (eventType === 'DOCUMENT_CREATED') {
+    return -1;
+  }
+  if (
+    eventType === 'DOCUMENT_EPOCH_ADVANCED' &&
+    typeof eventEpoch === 'number' &&
+    Number.isFinite(eventEpoch)
+  ) {
+    return eventEpoch;
+  }
+  return undefined;
+};
+
 export type {
   HandleWebhookEventDependencies,
   HandleWebhookEventInput,
@@ -157,6 +175,20 @@ export const handleWebhookEvent = async (
   const canonicalContract =
     await deps.contractRepository.getContractByDocumentId(payNoteDocumentId);
   const canonicalSessionId = getString(canonicalContract?.sessionId);
+  if (canonicalSessionId && eventType === 'DOCUMENT_CREATED') {
+    logs.push({
+      level: 'info',
+      message:
+        'PayNote webhook event ignored (document created after canonical session established)',
+      context: {
+        eventId: input.eventId,
+        payNoteDocumentId,
+        sessionId,
+        canonicalSessionId,
+      },
+    });
+    return { note: '', logs };
+  }
   if (canonicalSessionId && canonicalSessionId !== sessionId) {
     logs.push({
       level: 'info',
@@ -187,6 +219,31 @@ export const handleWebhookEvent = async (
         sessionId,
         eventType,
         eventEpoch,
+      },
+    });
+    return { note: '', logs };
+  }
+  const incomingEventEpochOrder = resolveEventEpochOrder({
+    eventType,
+    eventEpoch,
+  });
+  const existingEventEpochOrder =
+    existingPayNoteByDocumentId?.lastSourceEventEpoch;
+  if (
+    incomingEventEpochOrder !== undefined &&
+    existingEventEpochOrder !== undefined &&
+    incomingEventEpochOrder < existingEventEpochOrder
+  ) {
+    logs.push({
+      level: 'info',
+      message:
+        'PayNote webhook event ignored (older than last processed source epoch)',
+      context: {
+        eventId: input.eventId,
+        payNoteDocumentId,
+        sessionId,
+        incomingEventEpochOrder,
+        existingEventEpochOrder,
       },
     });
     return { note: '', logs };
@@ -244,6 +301,10 @@ export const handleWebhookEvent = async (
       resolvedDocument,
       eventObject,
       eventCreatedAt: nextSourceEventCreatedAt,
+      eventEpochOrder:
+        incomingEventEpochOrder !== undefined
+          ? incomingEventEpochOrder
+          : existingEventEpochOrder,
       payNoteParsed,
       now,
     });

@@ -44,6 +44,7 @@ interface PayNoteItem {
   transactionId?: string;
   merchantId?: string;
   lastSourceEventCreatedAt?: string;
+  lastSourceEventEpoch?: number;
   lastCaptureLockEventId?: string;
   lastCaptureUnlockEventId?: string;
   payerAccountNumber?: string;
@@ -132,6 +133,7 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       transactionId: item.transactionId,
       merchantId: item.merchantId,
       lastSourceEventCreatedAt: item.lastSourceEventCreatedAt,
+      lastSourceEventEpoch: item.lastSourceEventEpoch,
       lastCaptureLockEventId: item.lastCaptureLockEventId,
       lastCaptureUnlockEventId: item.lastCaptureUnlockEventId,
       payerAccountNumber: item.payerAccountNumber,
@@ -291,6 +293,13 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       valueKey: ':lastSourceEventCreatedAt',
       attributeName: 'lastSourceEventCreatedAt',
       value: record.lastSourceEventCreatedAt,
+      preserveOnUndefined: true,
+    });
+    addOptionalAttribute({
+      nameKey: '#lastSourceEventEpoch',
+      valueKey: ':lastSourceEventEpoch',
+      attributeName: 'lastSourceEventEpoch',
+      value: record.lastSourceEventEpoch,
       preserveOnUndefined: true,
     });
     addOptionalAttribute({

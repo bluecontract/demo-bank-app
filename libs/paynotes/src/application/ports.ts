@@ -233,6 +233,7 @@ export interface PayNoteRecord {
   transactionId?: string;
   merchantId?: string;
   lastSourceEventCreatedAt?: string;
+  lastSourceEventEpoch?: number;
   lastCaptureLockEventId?: string;
   lastCaptureUnlockEventId?: string;
   payerAccountNumber?: string;
