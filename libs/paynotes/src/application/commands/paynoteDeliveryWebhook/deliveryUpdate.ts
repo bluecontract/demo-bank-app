@@ -16,7 +16,11 @@ import type {
   WebhookEventObject,
 } from './types';
 import { resolveDeliveryDocumentId } from './documents';
-import { buildDeliveryRecord, resolveExistingDelivery } from './records';
+import {
+  type DeliveryMatchType,
+  buildDeliveryRecord,
+  resolveExistingDelivery,
+} from './records';
 import {
   identifyDeliveryTransaction,
   reportIdentificationStatusIfNeeded,
@@ -109,6 +113,49 @@ const persistDeliveryRecord = async (input: {
 
   await deps.payNoteDeliveryRepository.saveDelivery(nextDeliveryRecord);
   return nextDeliveryRecord;
+};
+
+const buildLinkedDeliveryId = (input: {
+  baseDeliveryId: string;
+  deliveryDocumentId: string;
+}): string => `${input.baseDeliveryId}#delivery:${input.deliveryDocumentId}`;
+
+export const resolveDeliveryStorageIdentity = (input: {
+  baseDeliveryId: string;
+  deliveryDocumentId?: string;
+  existing: PayNoteDeliveryRecord | null;
+  matchedBy: DeliveryMatchType;
+}): {
+  deliveryId: string;
+  existing: PayNoteDeliveryRecord | null;
+  matchedBy: DeliveryMatchType;
+  collidedByCardDetails: boolean;
+} => {
+  const { baseDeliveryId, deliveryDocumentId, existing, matchedBy } = input;
+  if (
+    matchedBy === 'cardDetails' &&
+    existing &&
+    deliveryDocumentId &&
+    existing.deliveryDocumentId &&
+    existing.deliveryDocumentId !== deliveryDocumentId
+  ) {
+    return {
+      deliveryId: buildLinkedDeliveryId({
+        baseDeliveryId,
+        deliveryDocumentId,
+      }),
+      existing: null,
+      matchedBy: 'new',
+      collidedByCardDetails: true,
+    };
+  }
+
+  return {
+    deliveryId: existing?.deliveryId ?? baseDeliveryId,
+    existing,
+    matchedBy,
+    collidedByCardDetails: false,
+  };
 };
 
 const getPayNoteBootstrapDocument = (
@@ -409,7 +456,7 @@ export const handleDeliveryDocumentUpdate = async (input: {
     return;
   }
 
-  const deliveryId = buildCardTransactionDetailsKey(cardDetails);
+  const baseDeliveryId = buildCardTransactionDetailsKey(cardDetails);
   const sessionId = getString(eventObject?.sessionId);
 
   const deliveryDocumentId = await resolveDeliveryDocumentId(
@@ -433,19 +480,38 @@ export const handleDeliveryDocumentUpdate = async (input: {
   ) {
     log(logs, 'info', 'Delivery event ignored (non-canonical session)', {
       eventId,
-      deliveryId,
+      deliveryId: baseDeliveryId,
       sessionId,
       canonicalDeliverySessionId,
     });
     return;
   }
 
-  const { existing, matchedBy } = await resolveExistingDelivery({
+  const existingResolution = await resolveExistingDelivery({
     deliveryDocumentId,
     sessionId,
     cardDetails,
     deps,
   });
+  const { deliveryId, existing, matchedBy, collidedByCardDetails } =
+    resolveDeliveryStorageIdentity({
+      baseDeliveryId,
+      deliveryDocumentId,
+      existing: existingResolution.existing,
+      matchedBy: existingResolution.matchedBy,
+    });
+  if (collidedByCardDetails) {
+    log(logs, 'info', 'Detected delivery id collision by card details', {
+      eventId,
+      sessionId: sessionId ?? null,
+      deliveryDocumentId: deliveryDocumentId ?? null,
+      baseDeliveryId,
+      resolvedDeliveryId: deliveryId,
+      existingDeliveryId: existingResolution.existing?.deliveryId ?? null,
+      existingDeliveryDocumentId:
+        existingResolution.existing?.deliveryDocumentId ?? null,
+    });
+  }
 
   const deliveryRecord = buildDeliveryRecord({
     existing,
