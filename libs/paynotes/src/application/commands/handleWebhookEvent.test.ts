@@ -554,7 +554,7 @@ describe('handleWebhookEvent', () => {
     ).toBe(true);
   });
 
-  it('processes paynote events from new sessions when canonical session is not resolved', async () => {
+  it('ignores epoch-advanced paynote events when canonical session is not resolved even if paynote has known sessions', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     fetchEvent.mockResolvedValueOnce({
       kind: 'success',
@@ -604,15 +604,15 @@ describe('handleWebhookEvent', () => {
     );
 
     expect(result.note).toBe('');
-    expect(deps.payNoteRepository.savePayNote).toHaveBeenCalled();
-    expect(deps.myOsClient.runDocumentOperation).toHaveBeenCalled();
+    expect(deps.payNoteRepository.savePayNote).not.toHaveBeenCalled();
+    expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
     expect(
       result.logs.some(
         entry =>
           entry.message ===
-          'PayNote webhook event ignored (unknown session for document)'
+          'PayNote webhook event ignored (canonical session not established yet)'
       )
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('ignores epoch-advanced paynote events when canonical session is not established', async () => {

@@ -154,13 +154,6 @@ export const handleWebhookEvent = async (
     });
     return { note: '', logs };
   }
-  const knownSessionIds = (
-    existingPayNoteByDocumentId?.sessionIds ?? []
-  ).filter(
-    (candidate): candidate is string =>
-      typeof candidate === 'string' && candidate.trim().length > 0
-  );
-
   const canonicalContract =
     await deps.contractRepository.getContractByDocumentId(payNoteDocumentId);
   const canonicalSessionId = getString(canonicalContract?.sessionId);
@@ -182,8 +175,7 @@ export const handleWebhookEvent = async (
     eventType === 'DOCUMENT_EPOCH_ADVANCED' &&
     typeof eventEpoch === 'number' &&
     eventEpoch > 0 &&
-    !canonicalSessionId &&
-    knownSessionIds.length === 0;
+    !canonicalSessionId;
   if (isEpochAdvancedWithoutCanonicalSession) {
     logs.push({
       level: 'info',
