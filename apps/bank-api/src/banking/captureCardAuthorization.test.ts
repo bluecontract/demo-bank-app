@@ -53,7 +53,9 @@ describe('captureCardAuthorizationHandler', () => {
         getContract: vi.fn(),
         saveContract: vi.fn(),
       } as any,
-      holdRepository: {} as any,
+      holdRepository: {
+        getHold: vi.fn().mockResolvedValue(null),
+      } as any,
       cardRepository: {} as any,
       cardHasher: {} as any,
       accountNumberGenerator: {} as any,

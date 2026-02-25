@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Button } from '../../../ui/Button';
 import { Spinner } from '../../../ui/Spinner';
 import type { ContractDetails } from '../../../types/api';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
@@ -53,12 +52,11 @@ export function ContractRelatedActivitySection({
     [activityQuery.data?.items]
   );
 
-  const { groupedRelatedItems, missingTransactionIds } =
-    useRelatedActivityItems({
-      activityItems,
-      relatedTransactionIds: relatedTransactions,
-      relatedHoldIds: relatedHolds,
-    });
+  const { groupedRelatedItems } = useRelatedActivityItems({
+    activityItems,
+    relatedTransactionIds: relatedTransactions,
+    relatedHoldIds: relatedHolds,
+  });
 
   const hasRelatedItems =
     relatedTransactions.length > 0 || relatedHolds.length > 0;
@@ -86,17 +84,7 @@ export function ContractRelatedActivitySection({
     );
   };
 
-  const handleFallbackActivityOpen = (activityId: string) => {
-    if (!contract.accountNumber || !account?.accountId) {
-      return;
-    }
-
-    navigate(buildTransactionDetailsPath(account.accountId, activityId), {
-      state: {
-        from: `${location.pathname}${location.search}`,
-      },
-    });
-  };
+  const hasVisibleRelatedItems = groupedRelatedItems.length > 0;
 
   if (hideWhenEmpty && !hasRelatedItems) {
     return null;
@@ -128,7 +116,16 @@ export function ContractRelatedActivitySection({
         </div>
       )}
 
-      {!isActivityLoading && hasRelatedItems && (
+      {!isActivityLoading &&
+        hasRelatedItems &&
+        !hasVisibleRelatedItems &&
+        !hideWhenEmpty && (
+          <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
+            No linked activity available for this account.
+          </div>
+        )}
+
+      {!isActivityLoading && hasVisibleRelatedItems && (
         <div className="mt-4 space-y-4">
           <div>
             <div className="mt-2 rounded-xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
@@ -139,29 +136,6 @@ export function ContractRelatedActivitySection({
                   onActivitySelect={handleActivitySelect}
                   variant="linked"
                 />
-              ))}
-              {missingTransactionIds.map(txnId => (
-                <div
-                  key={txnId}
-                  className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
-                >
-                  <div>
-                    <p className="font-semibold text-slate-900">
-                      Transaction {txnId}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Details pending in activity feed.
-                    </p>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={!contract.accountNumber}
-                    onClick={() => handleFallbackActivityOpen(`TXN#${txnId}`)}
-                  >
-                    View details
-                  </Button>
-                </div>
               ))}
             </div>
           </div>
