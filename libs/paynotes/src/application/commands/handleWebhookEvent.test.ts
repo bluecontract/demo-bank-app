@@ -4241,6 +4241,7 @@ describe('handleWebhookEvent', () => {
     expect(deferredAttempt?.lastReason).toBe(
       'Payment mandate authorization not yet confirmed.'
     );
+    expect(deferredAttempt?.requiresAuthorizeDispatch).toBe(false);
   });
 
   it('keeps deferred charge attempt queued when mandate is still pending during retry', async () => {
@@ -4347,7 +4348,7 @@ describe('handleWebhookEvent', () => {
     const authorizeCalls = runOperationCalls.filter(
       call => call[0]?.operation === 'authorizeSpend'
     );
-    expect(authorizeCalls).toHaveLength(1);
+    expect(authorizeCalls).toHaveLength(0);
     expect(deps.bankingFacade.reserveFunds).not.toHaveBeenCalled();
 
     const savedPayNotes = (
@@ -4605,6 +4606,213 @@ describe('handleWebhookEvent', () => {
       'PayNote/Card Charge Responded'
     );
     expect(respondedEvents.map(event => event.status)).toEqual(['accepted']);
+    const completedEvent = findRunOperationEventByType(
+      runOperationCalls,
+      'PayNote/Card Charge Completed'
+    );
+    expect(completedEvent?.status).toBe('succeeded');
+  });
+
+  it('retries mandate authorization response after transient processing failure', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    const { mandateDocumentId, mandateSessionId } = attachPaymentMandate({
+      deps,
+      fetchDocument,
+      payNoteDocumentId: 'doc-1',
+      autoApproveAuthorization: false,
+    });
+
+    const processingMarkers = new Set<string>();
+    const completedMarkers = new Set<string>();
+    deps.payNoteRepository.markEventProcessed = vi
+      .fn()
+      .mockImplementation(async (marker: string) => {
+        if (processingMarkers.has(marker) || completedMarkers.has(marker)) {
+          return false;
+        }
+        processingMarkers.add(marker);
+        return true;
+      });
+    deps.payNoteRepository.getEventProcessingStatus = vi
+      .fn()
+      .mockImplementation(async (marker: string) => {
+        if (processingMarkers.has(marker)) {
+          return 'processing';
+        }
+        if (completedMarkers.has(marker)) {
+          return 'completed';
+        }
+        return null;
+      });
+    deps.payNoteRepository.finalizeEventProcessing = vi
+      .fn()
+      .mockImplementation(async (marker: string) => {
+        if (processingMarkers.delete(marker)) {
+          completedMarkers.add(marker);
+        }
+      });
+    deps.payNoteRepository.releaseEventProcessing = vi
+      .fn()
+      .mockImplementation(async (marker: string) => {
+        processingMarkers.delete(marker);
+      });
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi
+      .fn()
+      .mockImplementation(async (sessionId: string) =>
+        sessionId === 'session-1'
+          ? {
+              payNoteDocumentId: 'doc-1',
+              deliveryId: 'delivery-1',
+              accountNumber: '1234567890',
+              userId: 'user-123',
+              merchantId: 'merchant-123',
+              createdAt: '2024-01-01T00:00:00.000Z',
+              updatedAt: '2024-01-01T00:00:00.000Z',
+            }
+          : null
+      );
+    (deps.payNoteDeliveryRepository.getDelivery as any).mockResolvedValue({
+      deliveryId: 'delivery-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      cardTransactionDetails: {
+        retrievalReferenceNumber: '123456789012',
+        systemTraceAuditNumber: '654321',
+        transmissionDateTime: '0101123456',
+        authorizationCode: 'ABC123',
+      },
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const originatingPayload = {
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/Card Transaction PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Linked Card Charge Requested',
+              requestId: 'charge-retry-1',
+              amount: 2500,
+              paymentMandateDocumentId: mandateDocumentId,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult;
+
+    fetchEvent.mockResolvedValueOnce(originatingPayload);
+    const initial = await handleWebhookEvent({ eventId: 'event-origin' }, deps);
+    expect(initial.note).toBe('');
+    expect(deps.bankingFacade.reserveFunds).not.toHaveBeenCalled();
+
+    const runDocumentOperationMock = deps.myOsClient.runDocumentOperation as
+      | ReturnType<typeof vi.fn>
+      | undefined;
+    const previousRunDocumentOperationImpl =
+      runDocumentOperationMock?.getMockImplementation();
+    let failGuarantorUpdateOnce = true;
+    runDocumentOperationMock?.mockImplementation(async args => {
+      if (
+        failGuarantorUpdateOnce &&
+        args.sessionId === 'session-1' &&
+        args.operation === 'guarantorUpdate'
+      ) {
+        failGuarantorUpdateOnce = false;
+        throw new Error('Temporary guarantor update failure');
+      }
+
+      if (previousRunDocumentOperationImpl) {
+        const result = await previousRunDocumentOperationImpl(args);
+        return result as Awaited<
+          ReturnType<
+            HandleWebhookEventDependencies['myOsClient']['runDocumentOperation']
+          >
+        >;
+      }
+
+      return {
+        ok: true,
+        status: 200,
+      };
+    });
+
+    const mandateResponsePayload = {
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: mandateSessionId,
+          document: {
+            ...buildPaymentMandateDocument({
+              granteeId: 'doc-1',
+            }),
+            amount: { total: 1 },
+            currency: 'USD',
+            contracts: {
+              granterChannel: { type: 'MyOS/MyOS Timeline Channel' },
+              granteeChannel: { type: 'MyOS/MyOS Timeline Channel' },
+              guarantorChannel: { type: 'MyOS/MyOS Timeline Channel' },
+            },
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Payment Mandate Spend Authorization Responded',
+              chargeAttemptId: 'doc-1:event-origin:0',
+              status: 'approved',
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult;
+
+    fetchEvent.mockResolvedValueOnce(mandateResponsePayload);
+    fetchEvent.mockResolvedValueOnce(originatingPayload);
+    await expect(
+      handleWebhookEvent({ eventId: 'event-mandate-1' }, deps)
+    ).rejects.toThrow('Temporary guarantor update failure');
+
+    fetchEvent.mockResolvedValueOnce(mandateResponsePayload);
+    fetchEvent.mockResolvedValueOnce(originatingPayload);
+    const retried = await handleWebhookEvent(
+      { eventId: 'event-mandate-2' },
+      deps
+    );
+    expect(retried.note).toBe('');
+
+    expect(deps.bankingFacade.reserveFunds).toHaveBeenCalledTimes(1);
+    const attemptProcessingKey =
+      'paynote-card-charge-attempt-processed:doc-1:event-origin:0';
+    expect(
+      (
+        deps.payNoteRepository.releaseEventProcessing as ReturnType<
+          typeof vi.fn
+        >
+      ).mock.calls.some(call => call[0] === attemptProcessingKey)
+    ).toBe(true);
+    expect(
+      (
+        deps.payNoteRepository.finalizeEventProcessing as ReturnType<
+          typeof vi.fn
+        >
+      ).mock.calls.some(call => call[0] === attemptProcessingKey)
+    ).toBe(true);
+
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls;
+    const respondedEvent = findRunOperationEventByType(
+      runOperationCalls,
+      'PayNote/Card Charge Responded'
+    );
+    expect(respondedEvent?.status).toBe('accepted');
     const completedEvent = findRunOperationEventByType(
       runOperationCalls,
       'PayNote/Card Charge Completed'
