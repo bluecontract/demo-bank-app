@@ -3,6 +3,7 @@ import {
   TargetDocumentSessionStartedSchema,
 } from '@blue-repository/types/packages/myos/schemas';
 import { PaymentMandateSchema } from '@blue-repository/types/packages/paynote/schemas';
+import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 import type {
   BootstrapContextRepository,
   ClockPort,
@@ -109,6 +110,10 @@ const withInResponseTo = (
 };
 
 const supportsGuarantorUpdateResponses = (document: unknown): boolean => {
+  if (isPayNoteDocument(document)) {
+    return true;
+  }
+
   const node = toBlueNode(document);
   if (!node) {
     return false;
@@ -127,6 +132,32 @@ const supportsGuarantorUpdateResponses = (document: unknown): boolean => {
   return Boolean(
     contractsRecord.guarantorUpdate && contractsRecord.guarantorChannel
   );
+};
+
+const supportsGuarantorUpdateByContractType = async (input: {
+  deps: HandlePayNoteBootstrapWebhookDependencies;
+  requestingSessionId: string;
+}): Promise<boolean | null> => {
+  const contract = await input.deps.contractRepository.getContractBySessionId(
+    input.requestingSessionId
+  );
+  if (!contract) {
+    return null;
+  }
+
+  if (contract.typeBlueId === paynoteBlueIds['PayNote/PayNote']) {
+    return true;
+  }
+
+  if (contract.typeBlueId === paynoteBlueIds['PayNote/Payment Mandate']) {
+    return true;
+  }
+
+  if (contract.typeBlueId === paynoteBlueIds['PayNote/PayNote Delivery']) {
+    return false;
+  }
+
+  return null;
 };
 
 const reportBootstrapCompleted = async (input: {
@@ -150,6 +181,57 @@ const reportBootstrapCompleted = async (input: {
 
   if (!requestingSessionId) {
     return false;
+  }
+
+  const supportsByContractType = await supportsGuarantorUpdateByContractType({
+    deps,
+    requestingSessionId,
+  });
+  if (supportsByContractType === false) {
+    log(
+      logs,
+      'info',
+      'Skipped bootstrap completion guarantorUpdate for requester without guarantorUpdate contract',
+      {
+        eventId,
+        bootstrapSessionId: bootstrapSessionId ?? null,
+        requestingSessionId,
+        documentId,
+      }
+    );
+    return true;
+  }
+
+  if (supportsByContractType === true) {
+    const credentials = await deps.myOsClient.getCredentials();
+    return runGuarantorUpdate({
+      myOsClient: deps.myOsClient,
+      credentials,
+      sessionId: requestingSessionId,
+      request: [
+        withInResponseTo(
+          {
+            type: 'Conversation/Document Bootstrap Completed',
+            documentId,
+          },
+          requestId
+        ),
+      ],
+      logs,
+      logContext: {
+        eventId,
+        bootstrapSessionId: bootstrapSessionId ?? null,
+        requestId: requestId ?? null,
+        requestingSessionId,
+        documentId,
+      },
+      successMessage:
+        'Reported document bootstrap completion via guarantorUpdate',
+      failureMessage:
+        'Failed to report document bootstrap completion via guarantorUpdate',
+      missingCredentialsMessage:
+        'Skipped document bootstrap completion (missing MyOS credentials)',
+    });
   }
 
   const requestingDocument = await deps.myOsClient.fetchDocument(
@@ -660,233 +742,249 @@ export const handlePayNoteBootstrapWebhookEvent = async (
 
       let completionReported = false;
       const reportedMandateAttachmentSessionIds = new Set<string>();
-
-      for (const { sessionIds } of targetEvents) {
-        if (!sessionIds.length) {
-          log(logs, 'warn', 'Target session event missing session ids', {
-            eventId,
-          });
-          continue;
-        }
-
-        trace(logs, 'Bootstrap target session ids resolved', {
-          eventId,
-          bootstrapSessionId,
-          sessionIds,
-        });
-
-        for (const sessionId of sessionIds) {
-          await deps.bootstrapContextRepository.saveTargetSessionBootstrapLink?.(
-            {
-              targetSessionId: sessionId,
-              bootstrapSessionId,
-              createdAt: now,
-            }
-          );
-          const resolved = await resolvePayNoteDocument(sessionId, logs, deps);
-          if (!resolved) {
-            continue;
-          }
-
-          const isPayNote = resolved.document
-            ? isPayNoteDocument(resolved.document)
-            : true;
-          const isPaymentMandate = resolved.document
-            ? isPaymentMandateDocument(resolved.document)
-            : false;
-
-          trace(logs, 'Resolved paynote document from session', {
-            eventId,
-            sessionId,
-            payNoteDocumentId: resolved.documentId,
-            isPayNote,
-            isPaymentMandate,
-          });
-
-          if (!isPayNote) {
-            if (isPaymentMandate) {
-              await upsertContractRecord({
-                contractRepository: deps.contractRepository,
-                document: resolved.document,
-                sessionId,
-                documentId: resolved.documentId,
-                userId:
-                  deliveryRecord?.userId ??
-                  bootstrapRecord?.userId ??
-                  bootstrapContext?.userId,
-                accountNumber:
-                  deliveryRecord?.accountNumber ??
-                  bootstrapRecord?.accountNumber ??
-                  bootstrapContext?.accountNumber,
-                merchantId:
-                  deliveryRecord?.merchantId ?? bootstrapContext?.merchantId,
-                now,
+      const targetSessionIds = Array.from(
+        new Set(
+          targetEvents.flatMap(({ sessionIds }) => {
+            if (!sessionIds.length) {
+              log(logs, 'warn', 'Target session event missing session ids', {
+                eventId,
               });
-
-              if (deliveryRecord) {
-                const updatedDelivery = {
-                  ...deliveryRecord,
-                  paymentMandateDocumentId:
-                    deliveryRecord.paymentMandateDocumentId ??
-                    resolved.documentId,
-                  paymentMandateBootstrapSessionId:
-                    deliveryRecord.paymentMandateBootstrapSessionId ??
-                    bootstrapSessionId,
-                  paymentMandateStatus: 'attached' as const,
-                  updatedAt: now,
-                };
-                await deps.payNoteDeliveryRepository.saveDelivery(
-                  updatedDelivery
-                );
-                await reportDeliveryMandateAttachmentToPayNotes({
-                  eventId,
-                  bootstrapSessionId,
-                  deliveryRecord: updatedDelivery,
-                  deps,
-                  logs,
-                  reportedSessionIds: reportedMandateAttachmentSessionIds,
-                });
-                log(
-                  logs,
-                  'info',
-                  'Payment mandate bootstrap linked to delivery',
-                  {
-                    eventId,
-                    deliveryId: deliveryRecord.deliveryId,
-                    sessionId,
-                    paymentMandateDocumentId: resolved.documentId,
-                    bootstrapSessionId: bootstrapSessionId ?? null,
-                  }
-                );
-              }
+              return [];
             }
+            return sessionIds;
+          })
+        )
+      );
 
-            log(logs, 'info', 'Bootstrap target is not a PayNote document', {
-              eventId,
+      if (!targetSessionIds.length) {
+        return { handled: true, logs };
+      }
+
+      trace(logs, 'Bootstrap target session ids resolved', {
+        eventId,
+        bootstrapSessionId,
+        sessionIds: targetSessionIds,
+      });
+
+      for (const sessionId of targetSessionIds) {
+        await deps.bootstrapContextRepository.saveTargetSessionBootstrapLink?.({
+          targetSessionId: sessionId,
+          bootstrapSessionId,
+          createdAt: now,
+        });
+      }
+
+      const primaryTargetSessionId = targetSessionIds[0];
+      const resolvedPrimary = await resolvePayNoteDocument(
+        primaryTargetSessionId,
+        logs,
+        deps
+      );
+      if (!resolvedPrimary) {
+        throw new Error(
+          `Failed to resolve bootstrap target document for session ${primaryTargetSessionId}`
+        );
+      }
+
+      const isPayNote = resolvedPrimary.document
+        ? isPayNoteDocument(resolvedPrimary.document)
+        : true;
+      const isPaymentMandate = resolvedPrimary.document
+        ? isPaymentMandateDocument(resolvedPrimary.document)
+        : false;
+
+      trace(logs, 'Resolved paynote document from primary target session', {
+        eventId,
+        sessionId: primaryTargetSessionId,
+        payNoteDocumentId: resolvedPrimary.documentId,
+        isPayNote,
+        isPaymentMandate,
+      });
+
+      for (const sessionId of targetSessionIds) {
+        if (!isPayNote) {
+          if (isPaymentMandate) {
+            await upsertContractRecord({
+              contractRepository: deps.contractRepository,
+              document: resolvedPrimary.document,
               sessionId,
-              documentId: resolved.documentId,
+              documentId: resolvedPrimary.documentId,
+              userId:
+                deliveryRecord?.userId ??
+                bootstrapRecord?.userId ??
+                bootstrapContext?.userId,
+              accountNumber:
+                deliveryRecord?.accountNumber ??
+                bootstrapRecord?.accountNumber ??
+                bootstrapContext?.accountNumber,
+              merchantId:
+                deliveryRecord?.merchantId ?? bootstrapContext?.merchantId,
+              now,
             });
 
-            if (!completionReported && bootstrapContext?.requestingSessionId) {
-              completionReported = await reportBootstrapCompleted({
+            if (deliveryRecord) {
+              const updatedDelivery = {
+                ...deliveryRecord,
+                paymentMandateDocumentId:
+                  deliveryRecord.paymentMandateDocumentId ??
+                  resolvedPrimary.documentId,
+                paymentMandateBootstrapSessionId:
+                  deliveryRecord.paymentMandateBootstrapSessionId ??
+                  bootstrapSessionId,
+                paymentMandateStatus: 'attached' as const,
+                updatedAt: now,
+              };
+              await deps.payNoteDeliveryRepository.saveDelivery(
+                updatedDelivery
+              );
+              await reportDeliveryMandateAttachmentToPayNotes({
                 eventId,
                 bootstrapSessionId,
-                documentId: resolved.documentId,
-                requestingSessionId: bootstrapContext.requestingSessionId,
-                requestId: bootstrapContext.requestId,
+                deliveryRecord: updatedDelivery,
                 deps,
                 logs,
+                reportedSessionIds: reportedMandateAttachmentSessionIds,
               });
+              log(
+                logs,
+                'info',
+                'Payment mandate bootstrap linked to delivery',
+                {
+                  eventId,
+                  deliveryId: deliveryRecord.deliveryId,
+                  sessionId,
+                  paymentMandateDocumentId: resolvedPrimary.documentId,
+                  bootstrapSessionId: bootstrapSessionId ?? null,
+                }
+              );
             }
-            continue;
           }
 
-          const payNoteDocumentId = resolved.documentId;
-          const existingPayNote = await deps.payNoteRepository.getPayNote(
-            payNoteDocumentId
-          );
-
-          const updatedRecord = mergePayNoteRecord(existingPayNote, {
-            payNoteDocumentId,
-            sessionIds: [sessionId],
-            deliveryId: deliveryRecord?.deliveryId,
-            accountNumber:
-              deliveryRecord?.accountNumber ??
-              bootstrapRecord?.accountNumber ??
-              bootstrapContext?.accountNumber,
-            userId:
-              deliveryRecord?.userId ??
-              bootstrapRecord?.userId ??
-              bootstrapContext?.userId,
-            holdId: deliveryRecord?.holdId ?? bootstrapContext?.holdId,
-            transactionId:
-              deliveryRecord?.transactionId ?? bootstrapContext?.transactionId,
-            merchantId:
-              deliveryRecord?.merchantId ?? bootstrapContext?.merchantId,
-            payerAccountNumber:
-              bootstrapRecord?.payerAccountNumber ??
-              bootstrapContext?.payerAccountNumber ??
-              existingPayNote?.payerAccountNumber,
-            payeeAccountNumber:
-              bootstrapRecord?.payeeAccountNumber ??
-              bootstrapContext?.payeeAccountNumber ??
-              existingPayNote?.payeeAccountNumber,
-            document: resolved.document,
-            createdAt: existingPayNote?.createdAt ?? now,
-            updatedAt: now,
-          });
-
-          await deps.payNoteRepository.savePayNote(updatedRecord);
-          await upsertPayNoteContractRecord({
-            contractRepository: deps.contractRepository,
-            updatedRecord,
+          log(logs, 'info', 'Bootstrap target is not a PayNote document', {
+            eventId,
             sessionId,
-            documentId: payNoteDocumentId,
-            customerChannelKey: bootstrapContext?.customerChannelKey,
-            document: updatedRecord.document,
-            emittedEvents,
-            now,
+            documentId: resolvedPrimary.documentId,
           });
-
-          if (deliveryRecord) {
-            const updatedDelivery = {
-              ...deliveryRecord,
-              payNoteDocumentId:
-                deliveryRecord.payNoteDocumentId ?? payNoteDocumentId,
-              payNoteSessionIds: mergeSessionIds(
-                deliveryRecord.payNoteSessionIds,
-                [sessionId]
-              ),
-              payNoteDocument:
-                resolved.document ?? deliveryRecord.payNoteDocument,
-              payNoteUpdatedAt: eventObject?.created ?? now,
-              payNoteBootstrapSessionId:
-                deliveryRecord.payNoteBootstrapSessionId ?? bootstrapSessionId,
-              updatedAt: now,
-            };
-
-            await deps.payNoteDeliveryRepository.saveDelivery(updatedDelivery);
-            await reportDeliveryMandateAttachmentToPayNotes({
-              eventId,
-              bootstrapSessionId,
-              deliveryRecord: updatedDelivery,
-              payNoteSessionIdHint: sessionId,
-              deps,
-              logs,
-              reportedSessionIds: reportedMandateAttachmentSessionIds,
-            });
-          }
-
-          if (deliveryRecord?.holdId) {
-            await updateHoldPayNoteDocumentIdForBootstrap(
-              logs,
-              deliveryRecord.holdId,
-              payNoteDocumentId,
-              deps,
-              { eventId, deliveryId: deliveryRecord.deliveryId }
-            );
-          }
 
           if (!completionReported && bootstrapContext?.requestingSessionId) {
             completionReported = await reportBootstrapCompleted({
               eventId,
               bootstrapSessionId,
-              documentId: payNoteDocumentId,
+              documentId: resolvedPrimary.documentId,
               requestingSessionId: bootstrapContext.requestingSessionId,
               requestId: bootstrapContext.requestId,
               deps,
               logs,
             });
           }
+          continue;
+        }
 
-          log(logs, 'info', 'PayNote bootstrap linked', {
+        const payNoteDocumentId = resolvedPrimary.documentId;
+        const existingPayNote = await deps.payNoteRepository.getPayNote(
+          payNoteDocumentId
+        );
+
+        const updatedRecord = mergePayNoteRecord(existingPayNote, {
+          payNoteDocumentId,
+          sessionIds: [sessionId],
+          deliveryId: deliveryRecord?.deliveryId,
+          accountNumber:
+            deliveryRecord?.accountNumber ??
+            bootstrapRecord?.accountNumber ??
+            bootstrapContext?.accountNumber,
+          userId:
+            deliveryRecord?.userId ??
+            bootstrapRecord?.userId ??
+            bootstrapContext?.userId,
+          holdId: deliveryRecord?.holdId ?? bootstrapContext?.holdId,
+          transactionId:
+            deliveryRecord?.transactionId ?? bootstrapContext?.transactionId,
+          merchantId:
+            deliveryRecord?.merchantId ?? bootstrapContext?.merchantId,
+          payerAccountNumber:
+            bootstrapRecord?.payerAccountNumber ??
+            bootstrapContext?.payerAccountNumber ??
+            existingPayNote?.payerAccountNumber,
+          payeeAccountNumber:
+            bootstrapRecord?.payeeAccountNumber ??
+            bootstrapContext?.payeeAccountNumber ??
+            existingPayNote?.payeeAccountNumber,
+          document: resolvedPrimary.document,
+          createdAt: existingPayNote?.createdAt ?? now,
+          updatedAt: now,
+        });
+
+        await deps.payNoteRepository.savePayNote(updatedRecord);
+        await upsertPayNoteContractRecord({
+          contractRepository: deps.contractRepository,
+          updatedRecord,
+          sessionId,
+          documentId: payNoteDocumentId,
+          customerChannelKey: bootstrapContext?.customerChannelKey,
+          document: updatedRecord.document,
+          emittedEvents,
+          now,
+        });
+
+        if (deliveryRecord) {
+          const updatedDelivery = {
+            ...deliveryRecord,
+            payNoteDocumentId:
+              deliveryRecord.payNoteDocumentId ?? payNoteDocumentId,
+            payNoteSessionIds: mergeSessionIds(
+              deliveryRecord.payNoteSessionIds,
+              [sessionId]
+            ),
+            payNoteDocument:
+              resolvedPrimary.document ?? deliveryRecord.payNoteDocument,
+            payNoteUpdatedAt: eventObject?.created ?? now,
+            payNoteBootstrapSessionId:
+              deliveryRecord.payNoteBootstrapSessionId ?? bootstrapSessionId,
+            updatedAt: now,
+          };
+
+          await deps.payNoteDeliveryRepository.saveDelivery(updatedDelivery);
+          await reportDeliveryMandateAttachmentToPayNotes({
             eventId,
             bootstrapSessionId,
-            payNoteDocumentId,
-            sessionId,
-            deliveryId: deliveryRecord?.deliveryId,
+            deliveryRecord: updatedDelivery,
+            payNoteSessionIdHint: sessionId,
+            deps,
+            logs,
+            reportedSessionIds: reportedMandateAttachmentSessionIds,
           });
         }
+
+        if (deliveryRecord?.holdId) {
+          await updateHoldPayNoteDocumentIdForBootstrap(
+            logs,
+            deliveryRecord.holdId,
+            payNoteDocumentId,
+            deps,
+            { eventId, deliveryId: deliveryRecord.deliveryId }
+          );
+        }
+
+        if (!completionReported && bootstrapContext?.requestingSessionId) {
+          completionReported = await reportBootstrapCompleted({
+            eventId,
+            bootstrapSessionId,
+            documentId: payNoteDocumentId,
+            requestingSessionId: bootstrapContext.requestingSessionId,
+            requestId: bootstrapContext.requestId,
+            deps,
+            logs,
+          });
+        }
+
+        log(logs, 'info', 'PayNote bootstrap linked', {
+          eventId,
+          bootstrapSessionId,
+          payNoteDocumentId,
+          sessionId,
+          deliveryId: deliveryRecord?.deliveryId,
+        });
       }
 
       return { handled: true, logs };

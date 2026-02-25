@@ -471,7 +471,8 @@ export const payNoteWebhookHandler = async (
   const shouldSkipSessionGate =
     !documentPayload ||
     isSynchronyMerchantDocument(documentPayload) ||
-    documentType.isBootstrap;
+    documentType.isBootstrap ||
+    documentType.isDelivery;
 
   if (sessionId && !shouldSkipSessionGate) {
     const directBootstrapContext =

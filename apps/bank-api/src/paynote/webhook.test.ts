@@ -470,7 +470,7 @@ describe('payNoteWebhookHandler', () => {
     );
   });
 
-  it('throws for unknown non-synchrony session to trigger retry', async () => {
+  it('throws for unknown non-synchrony paynote session to trigger retry', async () => {
     hoistedRepositories.bootstrapContextRepository.getContextBySessionId.mockResolvedValue(
       null
     );
@@ -486,7 +486,7 @@ describe('payNoteWebhookHandler', () => {
             sessionId: 'unknown-session-1',
             document: {
               name: 'Unknown Document',
-              type: { blueId: PAYNOTE_DELIVERY_BLUE_ID },
+              type: { blueId: paynoteBlueIds['PayNote/PayNote'] },
             },
           },
         },
@@ -494,6 +494,30 @@ describe('payNoteWebhookHandler', () => {
     ).rejects.toThrow(
       'Unknown webhook session "unknown-session-1" (no bootstrap context mapping)'
     );
+  });
+
+  it('allows unknown paynote delivery session through gate', async () => {
+    hoistedRepositories.bootstrapContextRepository.getContextBySessionId.mockResolvedValue(
+      null
+    );
+    hoistedRepositories.bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId.mockResolvedValue(
+      null
+    );
+
+    const response = await payNoteWebhookHandler({
+      body: {
+        id: 'event-delivery-unknown-session',
+        object: {
+          sessionId: 'delivery-unknown-1',
+          document: {
+            name: 'Delivery',
+            type: { blueId: PAYNOTE_DELIVERY_BLUE_ID },
+          },
+        },
+      },
+    } as any);
+
+    expect(response.status).toBe(200);
   });
 
   it('allows unknown bootstrap session through gate to enable buffering flow', async () => {
