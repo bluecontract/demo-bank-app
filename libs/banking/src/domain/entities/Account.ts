@@ -123,13 +123,6 @@ export class Account {
         );
       }
 
-      if (props.ledgerBalanceMinor.isGreaterThan(props.creditLimitMinor)) {
-        throw new InvalidAccountError(
-          'ledgerBalanceMinor',
-          'Ledger balance cannot exceed credit limit'
-        );
-      }
-
       if (props.availableBalanceMinor.isGreaterThan(props.ledgerBalanceMinor)) {
         throw new InvalidAccountError(
           'availableBalanceMinor',
@@ -241,8 +234,14 @@ export class Account {
 
     const oldLimitMinor = this.creditLimitMinor.toCents();
     const newLimitMinor = newLimit.toCents();
-    const usedPosted = oldLimitMinor - this.ledgerBalanceMinor.toCents();
-    const usedReserved = oldLimitMinor - this.availableBalanceMinor.toCents();
+    const usedPosted = Math.max(
+      0,
+      oldLimitMinor - this.ledgerBalanceMinor.toCents()
+    );
+    const usedReserved = Math.max(
+      0,
+      oldLimitMinor - this.availableBalanceMinor.toCents()
+    );
 
     if (newLimitMinor < usedPosted || newLimitMinor < usedReserved) {
       throw new InvalidAccountError(

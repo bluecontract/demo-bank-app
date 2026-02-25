@@ -122,4 +122,27 @@ describe('setCreditLimit', () => {
       )
     ).rejects.toThrow(InvalidAccountError);
   });
+
+  it('allows lowering limit when balance is above current limit', async () => {
+    const account = buildCreditLineAccount({
+      creditLimitMinor: new Money(1000),
+      ledgerBalanceMinor: new Money(1300),
+      availableBalanceMinor: new Money(1200),
+    });
+    vi.mocked(repository.getAccountById).mockResolvedValue(account);
+    vi.mocked(repository.updateAccountBalance).mockResolvedValue(account);
+
+    const result = await setCreditLimit(
+      {
+        accountId: account.id,
+        userId: 'user-123',
+        creditLimitMinor: 900,
+      },
+      { repository }
+    );
+
+    expect(result.creditLimitMinor?.toCents()).toBe(900);
+    expect(result.ledgerBalanceMinor.toCents()).toBe(1200);
+    expect(result.availableBalanceMinor.toCents()).toBe(1100);
+  });
 });
