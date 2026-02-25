@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
+import myosBlueIds from '@blue-repository/types/packages/myos/blue-ids';
 import { PAYNOTE_DELIVERY_BLUE_ID } from '@demo-bank-app/paynotes';
 import { payNoteWebhookHandler } from './webhook';
 
@@ -16,6 +17,7 @@ const hoistedPaynotes = vi.hoisted(() => ({
 const hoistedRepositories = vi.hoisted(() => ({
   contractRepository: null as any,
   summaryInputStore: null as any,
+  bootstrapContextRepository: null as any,
 }));
 
 const hoistedAdapters = vi.hoisted(() => ({
@@ -131,8 +133,18 @@ describe('payNoteWebhookHandler', () => {
       save: vi.fn(),
       get: vi.fn(),
     };
+    const bootstrapContextRepository = {
+      getContextBySessionId: vi.fn().mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-context-default',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      }),
+      getBootstrapSessionIdByTargetSessionId: vi.fn().mockResolvedValue(null),
+      saveContext: vi.fn(),
+      saveTargetSessionBootstrapLink: vi.fn(),
+    };
     hoistedRepositories.contractRepository = contractRepository;
     hoistedRepositories.summaryInputStore = summaryInputStore;
+    hoistedRepositories.bootstrapContextRepository = bootstrapContextRepository;
 
     hoistedDeps.getDependenciesMock.mockResolvedValue({
       logger,
@@ -160,10 +172,7 @@ describe('payNoteWebhookHandler', () => {
         getBootstrapBySessionId: vi.fn(),
         saveBootstrap: vi.fn(),
       },
-      bootstrapContextRepository: {
-        getContextBySessionId: vi.fn(),
-        saveContext: vi.fn(),
-      },
+      bootstrapContextRepository,
       pendingBootstrapEventRepository: {
         addPending: vi.fn(),
         listPending: vi.fn(),
@@ -398,6 +407,7 @@ describe('payNoteWebhookHandler', () => {
       object: {
         sessionId: 'sync-session',
         document: {
+          name: 'Synchrony Merchant',
           type: { blueId: 'SynchronyMerchant' },
         },
         emitted: [
@@ -458,6 +468,58 @@ describe('payNoteWebhookHandler', () => {
       },
       expect.any(Object)
     );
+  });
+
+  it('throws for unknown non-synchrony session to trigger retry', async () => {
+    hoistedRepositories.bootstrapContextRepository.getContextBySessionId.mockResolvedValue(
+      null
+    );
+    hoistedRepositories.bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId.mockResolvedValue(
+      null
+    );
+
+    await expect(
+      payNoteWebhookHandler({
+        body: {
+          id: 'event-unknown-session',
+          object: {
+            sessionId: 'unknown-session-1',
+            document: {
+              name: 'Unknown Document',
+              type: { blueId: PAYNOTE_DELIVERY_BLUE_ID },
+            },
+          },
+        },
+      } as any)
+    ).rejects.toThrow(
+      'Unknown webhook session "unknown-session-1" (no bootstrap context mapping)'
+    );
+  });
+
+  it('allows unknown bootstrap session through gate to enable buffering flow', async () => {
+    hoistedRepositories.bootstrapContextRepository.getContextBySessionId.mockResolvedValue(
+      null
+    );
+    hoistedRepositories.bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId.mockResolvedValue(
+      null
+    );
+
+    const response = await payNoteWebhookHandler({
+      body: {
+        id: 'event-bootstrap-unknown-session',
+        object: {
+          sessionId: 'bootstrap-unknown-1',
+          document: {
+            name: 'Bootstrap',
+            type: {
+              blueId: myosBlueIds['MyOS/Document Session Bootstrap'],
+            },
+          },
+        },
+      },
+    } as any);
+
+    expect(response.status).toBe(200);
   });
 
   it('skips contract summary enqueue for non-canonical sessions', async () => {

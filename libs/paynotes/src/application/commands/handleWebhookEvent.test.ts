@@ -381,7 +381,9 @@ const createDependencies = () => {
   const bootstrapContextRepository: HandleWebhookEventDependencies['bootstrapContextRepository'] =
     {
       getContextBySessionId: vi.fn().mockResolvedValue(null),
+      getBootstrapSessionIdByTargetSessionId: vi.fn().mockResolvedValue(null),
       saveContext: vi.fn(),
+      saveTargetSessionBootstrapLink: vi.fn(),
     };
 
   const holdRepository: HandleWebhookEventDependencies['holdRepository'] = {
@@ -500,6 +502,70 @@ describe('handleWebhookEvent', () => {
     expect(
       deps.payNoteRepository.releaseEventProcessing
     ).not.toHaveBeenCalled();
+  });
+
+  it('resolves bootstrap context via target-session link when direct context is missing', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    deps.bootstrapContextRepository.getContextBySessionId = vi
+      .fn()
+      .mockImplementation(async (sessionId: string) =>
+        sessionId === 'bootstrap-ctx-1'
+          ? {
+              bootstrapSessionId: 'bootstrap-ctx-1',
+              merchantId: 'merchant-ctx-1',
+              accountNumber: '9559276001',
+              userId: 'user-ctx-1',
+              createdAt: '2024-01-01T00:00:00.000Z',
+            }
+          : null
+      );
+    deps.bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId = vi
+      .fn()
+      .mockResolvedValue('bootstrap-ctx-1');
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'target-session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            payeeAccountNumber: { value: '9876543210' },
+            name: 'Linked Context PayNote',
+          },
+          emitted: [],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'target-session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    const result = await handleWebhookEvent(
+      { eventId: 'event-linked-context' },
+      deps
+    );
+
+    expect(result.note).toBe('');
+    expect(
+      deps.bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId
+    ).toHaveBeenCalledWith('target-session-1');
+    expect(deps.payNoteRepository.savePayNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accountNumber: '9559276001',
+        userId: 'user-ctx-1',
+        merchantId: 'merchant-ctx-1',
+      })
+    );
   });
 
   it('releases paynote event processing claim when handling fails', async () => {

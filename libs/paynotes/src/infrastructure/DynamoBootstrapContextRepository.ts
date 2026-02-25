@@ -12,10 +12,12 @@ import type {
 
 const ENTITY_TYPES = {
   BOOTSTRAP_CONTEXT: 'BOOTSTRAP_CONTEXT',
+  TARGET_SESSION_BOOTSTRAP_LINK: 'TARGET_SESSION_BOOTSTRAP_LINK',
 } as const;
 
 const TABLE_PREFIXES = {
   BOOTSTRAP: 'BOOTSTRAP#',
+  TARGET_SESSION: 'TARGET_SESSION#',
 } as const;
 
 const SORT_KEYS = {
@@ -46,6 +48,15 @@ interface BootstrapContextItem {
   createdAt: string;
 }
 
+interface TargetSessionBootstrapLinkItem {
+  PK: string;
+  SK: typeof SORT_KEYS.META;
+  entityType: typeof ENTITY_TYPES.TARGET_SESSION_BOOTSTRAP_LINK;
+  targetSessionId: string;
+  bootstrapSessionId: string;
+  createdAt: string;
+}
+
 export class DynamoBootstrapContextRepository
   implements BootstrapContextRepository
 {
@@ -65,6 +76,10 @@ export class DynamoBootstrapContextRepository
 
   private buildBootstrapPk(bootstrapSessionId: string) {
     return `${TABLE_PREFIXES.BOOTSTRAP}${bootstrapSessionId}`;
+  }
+
+  private buildTargetSessionPk(targetSessionId: string) {
+    return `${TABLE_PREFIXES.TARGET_SESSION}${targetSessionId}`;
   }
 
   async getContextBySessionId(
@@ -101,6 +116,27 @@ export class DynamoBootstrapContextRepository
     };
   }
 
+  async getBootstrapSessionIdByTargetSessionId(
+    targetSessionId: string
+  ): Promise<string | null> {
+    const response = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: this.buildTargetSessionPk(targetSessionId),
+          SK: SORT_KEYS.META,
+        },
+      })
+    );
+
+    if (!response.Item) {
+      return null;
+    }
+
+    const item = response.Item as TargetSessionBootstrapLinkItem;
+    return item.bootstrapSessionId;
+  }
+
   async saveContext(record: BootstrapContextRecord): Promise<void> {
     const item: BootstrapContextItem = {
       PK: this.buildBootstrapPk(record.bootstrapSessionId),
@@ -132,6 +168,33 @@ export class DynamoBootstrapContextRepository
       new PutCommand({
         TableName: this.tableName,
         Item: item,
+      })
+    );
+  }
+
+  async saveTargetSessionBootstrapLink(input: {
+    targetSessionId: string;
+    bootstrapSessionId: string;
+    createdAt: string;
+  }): Promise<void> {
+    const item: TargetSessionBootstrapLinkItem = {
+      PK: this.buildTargetSessionPk(input.targetSessionId),
+      SK: SORT_KEYS.META,
+      entityType: ENTITY_TYPES.TARGET_SESSION_BOOTSTRAP_LINK,
+      targetSessionId: input.targetSessionId,
+      bootstrapSessionId: input.bootstrapSessionId,
+      createdAt: input.createdAt,
+    };
+
+    await this.client.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: item,
+        ConditionExpression:
+          'attribute_not_exists(PK) OR bootstrapSessionId = :bootstrapSessionId',
+        ExpressionAttributeValues: {
+          ':bootstrapSessionId': input.bootstrapSessionId,
+        },
       })
     );
   }

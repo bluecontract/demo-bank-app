@@ -216,6 +216,42 @@ const hasDocumentBootstrapRequest = (payload: unknown): boolean => {
   );
 };
 
+const getStringValue = (value: unknown): string | undefined => {
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const wrapped = (value as { value?: unknown }).value;
+  return typeof wrapped === 'string' && wrapped.length > 0
+    ? wrapped
+    : undefined;
+};
+
+const resolveDocumentName = (document: unknown): string | undefined => {
+  if (!document || typeof document !== 'object' || Array.isArray(document)) {
+    return undefined;
+  }
+  const record = document as Record<string, unknown>;
+  const directName = getStringValue(record.name);
+  if (directName) {
+    return directName;
+  }
+  try {
+    const node = blue.jsonValueToNode(document);
+    const simple = blue.nodeToJson(node, 'simple') as
+      | Record<string, unknown>
+      | undefined;
+    return getStringValue(simple?.name);
+  } catch {
+    return undefined;
+  }
+};
+
+const isSynchronyMerchantDocument = (document: unknown): boolean =>
+  resolveDocumentName(document) === 'Synchrony Merchant';
+
 const toCompactBlueEventArray = (value: unknown): unknown[] | undefined => {
   if (value === undefined) {
     return undefined;
@@ -428,6 +464,41 @@ export const payNoteWebhookHandler = async (
   const shouldHandleDelivery =
     documentType.isDelivery || hasDocumentBootstrapRequest(payload);
 
+  const payloadSessionId = (payload as { object?: { sessionId?: unknown } })
+    ?.object?.sessionId;
+  const sessionId =
+    typeof payloadSessionId === 'string' ? payloadSessionId : undefined;
+  const shouldSkipSessionGate =
+    !documentPayload ||
+    isSynchronyMerchantDocument(documentPayload) ||
+    documentType.isBootstrap;
+
+  if (sessionId && !shouldSkipSessionGate) {
+    const directBootstrapContext =
+      await bootstrapContextRepository.getContextBySessionId(sessionId);
+    const linkedBootstrapSessionId =
+      await bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId?.(
+        sessionId
+      );
+    const linkedBootstrapContext = linkedBootstrapSessionId
+      ? await bootstrapContextRepository.getContextBySessionId(
+          linkedBootstrapSessionId
+        )
+      : null;
+
+    if (!directBootstrapContext && !linkedBootstrapContext) {
+      logger.warn('Rejected webhook for unknown bootstrap/target session', {
+        eventId,
+        sessionId,
+        documentName: resolveDocumentName(documentPayload) ?? null,
+        linkedBootstrapSessionId: linkedBootstrapSessionId ?? null,
+      });
+      throw new Error(
+        `Unknown webhook session "${sessionId}" (no bootstrap context mapping)`
+      );
+    }
+  }
+
   trace('PayNote webhook classification', {
     eventId,
     documentType,
@@ -437,8 +508,7 @@ export const payNoteWebhookHandler = async (
     documentTypeName: documentPayload
       ? getEventTypeName(documentPayload)
       : undefined,
-    sessionId: (payload as { object?: { sessionId?: string } })?.object
-      ?.sessionId,
+    sessionId,
     emittedCount: Array.isArray(
       (payload as { object?: { emitted?: unknown[] } })?.object?.emitted
     )
@@ -536,9 +606,7 @@ export const payNoteWebhookHandler = async (
   const note =
     payNoteResult?.note ?? bootstrapResult?.note ?? deliveryResult?.note;
 
-  const sessionId = (payload as { object?: { sessionId?: unknown } })?.object
-    ?.sessionId;
-  if (typeof sessionId === 'string' && documentType.isSupportedContract) {
+  if (sessionId && documentType.isSupportedContract) {
     const contract = await contractRepository.getContractBySessionId(sessionId);
     if (!contract) {
       logger.debug(

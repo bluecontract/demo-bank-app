@@ -95,6 +95,46 @@ describe('DynamoBootstrapContextRepository', () => {
     });
   });
 
+  it('returns null when target session bootstrap link does not exist', async () => {
+    mockSend.mockResolvedValueOnce({});
+    const repository = createRepository();
+
+    const result = await repository.getBootstrapSessionIdByTargetSessionId(
+      'target-session-1'
+    );
+
+    expect(result).toBeNull();
+    expect(mockGetCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Key: {
+          PK: 'TARGET_SESSION#target-session-1',
+          SK: 'META',
+        },
+      })
+    );
+  });
+
+  it('returns bootstrap session id for linked target session', async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        PK: 'TARGET_SESSION#target-session-1',
+        SK: 'META',
+        entityType: 'TARGET_SESSION_BOOTSTRAP_LINK',
+        targetSessionId: 'target-session-1',
+        bootstrapSessionId: 'bootstrap-session-1',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      },
+    });
+    const repository = createRepository();
+
+    const result = await repository.getBootstrapSessionIdByTargetSessionId(
+      'target-session-1'
+    );
+
+    expect(result).toBe('bootstrap-session-1');
+  });
+
   it('does not include optional fields in put when omitted', async () => {
     mockSend.mockResolvedValueOnce({});
     const repository = createRepository();
@@ -161,5 +201,36 @@ describe('DynamoBootstrapContextRepository', () => {
       requestId: 'bootstrap-request-1',
       createdAt: '2024-01-01T00:00:00.000Z',
     });
+  });
+
+  it('saves target session bootstrap links as first-writer-wins', async () => {
+    mockSend.mockResolvedValueOnce({});
+    const repository = createRepository();
+
+    await repository.saveTargetSessionBootstrapLink({
+      targetSessionId: 'target-session-1',
+      bootstrapSessionId: 'bootstrap-session-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const putPayload = mockPutCommand.mock.calls[0]?.[0];
+    expect(putPayload).toEqual(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Item: {
+          PK: 'TARGET_SESSION#target-session-1',
+          SK: 'META',
+          entityType: 'TARGET_SESSION_BOOTSTRAP_LINK',
+          targetSessionId: 'target-session-1',
+          bootstrapSessionId: 'bootstrap-session-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+        ConditionExpression:
+          'attribute_not_exists(PK) OR bootstrapSessionId = :bootstrapSessionId',
+        ExpressionAttributeValues: {
+          ':bootstrapSessionId': 'bootstrap-session-1',
+        },
+      })
+    );
   });
 });

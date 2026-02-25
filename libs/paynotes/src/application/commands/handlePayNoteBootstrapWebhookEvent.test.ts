@@ -138,7 +138,9 @@ const createDependencies = () => {
   const bootstrapContextRepository: HandlePayNoteBootstrapWebhookDependencies['bootstrapContextRepository'] =
     {
       getContextBySessionId: vi.fn(),
+      getBootstrapSessionIdByTargetSessionId: vi.fn(),
       saveContext: vi.fn(),
+      saveTargetSessionBootstrapLink: vi.fn(),
     };
   const pendingBootstrapEventRepository: HandlePayNoteBootstrapWebhookDependencies['pendingBootstrapEventRepository'] =
     {
@@ -277,6 +279,13 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
         customerChannelKey: 'payerChannel',
       })
     );
+    expect(
+      bootstrapContextRepository.saveTargetSessionBootstrapLink
+    ).toHaveBeenCalledWith({
+      targetSessionId: 'session-1',
+      bootstrapSessionId: 'bootstrap-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
     expect(pendingBootstrapEventRepository.addPending).not.toHaveBeenCalled();
     expect(
       payNoteDeliveryRepository.finalizeEventProcessing
@@ -921,7 +930,7 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
     ).not.toHaveBeenCalled();
   });
 
-  it('buffers when no matching bootstrap context is found', async () => {
+  it('buffers event when no matching bootstrap context is found', async () => {
     const {
       deps,
       myOsClient,
@@ -950,7 +959,6 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
     };
 
     const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
-
     expect(result.handled).toBe(true);
     expect(result.note).toBe('Buffered waiting for bootstrap context');
     expect(myOsClient.fetchDocument).not.toHaveBeenCalled();
@@ -958,11 +966,12 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
       expect.objectContaining({
         bootstrapSessionId: 'bootstrap-4',
         eventId: 'event-4',
+        createdAt: '2024-01-01T00:00:00.000Z',
       })
     );
   });
 
-  it('buffers when bootstrap context exists but linking data is missing', async () => {
+  it('buffers event when bootstrap context exists but linking data is missing', async () => {
     const {
       deps,
       myOsClient,
@@ -999,7 +1008,6 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
     };
 
     const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
-
     expect(result.handled).toBe(true);
     expect(result.note).toBe('Buffered waiting for bootstrap context');
     expect(myOsClient.fetchDocument).not.toHaveBeenCalled();
@@ -1007,6 +1015,7 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
       expect.objectContaining({
         bootstrapSessionId: 'bootstrap-5',
         eventId: 'event-5',
+        createdAt: '2024-01-01T00:00:00.000Z',
       })
     );
   });

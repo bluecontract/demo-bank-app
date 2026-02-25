@@ -289,8 +289,26 @@ export const handleWebhookEvent = async (
         payNoteDocumentId,
         deps
       );
-      const bootstrapContext =
+      let bootstrapContext =
         await deps.bootstrapContextRepository.getContextBySessionId(sessionId);
+      if (!bootstrapContext) {
+        const bootstrapSessionId =
+          await deps.bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId?.(
+            sessionId
+          );
+        if (bootstrapSessionId) {
+          bootstrapContext =
+            await deps.bootstrapContextRepository.getContextBySessionId(
+              bootstrapSessionId
+            );
+          trace(logs, 'Resolved bootstrap context via target session link', {
+            eventId: input.eventId,
+            sessionId,
+            bootstrapSessionId,
+            hasBootstrapContext: Boolean(bootstrapContext),
+          });
+        }
+      }
 
       trace(logs, 'Resolved PayNote delivery linkage', {
         eventId: input.eventId,

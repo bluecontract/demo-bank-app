@@ -313,7 +313,15 @@ export interface BootstrapContextRepository {
   getContextBySessionId(
     bootstrapSessionId: string
   ): Promise<BootstrapContextRecord | null>;
+  getBootstrapSessionIdByTargetSessionId?(
+    targetSessionId: string
+  ): Promise<string | null>;
   saveContext(record: BootstrapContextRecord): Promise<void>;
+  saveTargetSessionBootstrapLink?(input: {
+    targetSessionId: string;
+    bootstrapSessionId: string;
+    createdAt: string;
+  }): Promise<void>;
 }
 
 export interface PendingBootstrapEventRecord {

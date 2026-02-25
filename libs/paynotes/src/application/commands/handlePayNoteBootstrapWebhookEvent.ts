@@ -473,7 +473,6 @@ const bufferPendingBootstrapEvent = async (input: {
       createdAt: now,
       ttl,
     });
-
     log(logs, 'info', 'Buffered bootstrap event (missing context)', {
       eventId,
       bootstrapSessionId,
@@ -489,7 +488,6 @@ const bufferPendingBootstrapEvent = async (input: {
       });
       return;
     }
-
     throw error;
   }
 };
@@ -584,6 +582,12 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         return { handled: true, logs };
       }
 
+      if (!bootstrapSessionId) {
+        throw new Error(
+          'Bootstrap webhook target session event is missing bootstrap session id'
+        );
+      }
+
       const deliveryByBootstrapSession = bootstrapSessionId
         ? await deps.payNoteDeliveryRepository.getDeliveryByBootstrapSessionId(
             bootstrapSessionId
@@ -620,28 +624,27 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         !bootstrapRecord &&
         !hasBootstrapContextLinkingData
       ) {
-        if (bootstrapSessionId && !input.skipPendingBuffer) {
-          await bufferPendingBootstrapEvent({
-            eventId,
-            bootstrapSessionId,
-            now,
-            logs,
-            deps,
-          });
-          return {
-            handled: true,
-            note: 'Buffered waiting for bootstrap context',
-            logs,
-          };
-        }
-
-        log(logs, 'info', 'Bootstrap event deferred (no matching context)', {
+        log(logs, 'warn', 'Bootstrap event rejected (no matching context)', {
           eventId,
           bootstrapSessionId,
         });
+        if (input.skipPendingBuffer) {
+          return {
+            handled: true,
+            note: 'Deferred waiting for bootstrap context',
+            logs,
+          };
+        }
+        await bufferPendingBootstrapEvent({
+          eventId,
+          bootstrapSessionId,
+          now,
+          logs,
+          deps,
+        });
         return {
           handled: true,
-          note: 'Deferred waiting for bootstrap context',
+          note: 'Buffered waiting for bootstrap context',
           logs,
         };
       }
@@ -673,6 +676,13 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         });
 
         for (const sessionId of sessionIds) {
+          await deps.bootstrapContextRepository.saveTargetSessionBootstrapLink?.(
+            {
+              targetSessionId: sessionId,
+              bootstrapSessionId,
+              createdAt: now,
+            }
+          );
           const resolved = await resolvePayNoteDocument(sessionId, logs, deps);
           if (!resolved) {
             continue;
