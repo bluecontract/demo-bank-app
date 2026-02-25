@@ -710,6 +710,35 @@ const isPaymentMandateDocumentPayload = (input: {
   return isPaymentMandateDocumentNode(input.node);
 };
 
+const readNonEmptyString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const resolvePaymentMandateBootstrapFields = (
+  node: BlueNode | null
+): { granterType?: string; granterId?: string } | null => {
+  if (!node || !isPaymentMandateDocumentNode(node)) {
+    return null;
+  }
+
+  try {
+    const output = blue.nodeToSchemaOutput(
+      node,
+      PaymentMandateSchema
+    ) as Record<string, unknown>;
+    return {
+      granterType: readNonEmptyString(output.granterType),
+      granterId: readNonEmptyString(output.granterId),
+    };
+  } catch {
+    return null;
+  }
+};
+
 const supportsGuarantorUpdateResponses = (
   contracts: Record<string, unknown> | null
 ): boolean => {
@@ -873,6 +902,7 @@ const queuePaymentMandateBootstrapPendingAction = async (input: {
 
 const handlePaymentMandateBootstrapRequest = async (input: {
   request: NormalizedBootstrapRequest;
+  requestedDocumentNode: BlueNode | null;
   requestedDocumentPayload: Record<string, unknown>;
   isRequestingDeliveryDoc: boolean;
   responseContext: BootstrapResponseContext;
@@ -884,6 +914,7 @@ const handlePaymentMandateBootstrapRequest = async (input: {
 }): Promise<boolean> => {
   const {
     request,
+    requestedDocumentNode,
     requestedDocumentPayload,
     isRequestingDeliveryDoc,
     responseContext,
@@ -894,7 +925,10 @@ const handlePaymentMandateBootstrapRequest = async (input: {
     logs,
   } = input;
 
-  const granterType = getString(requestedDocumentPayload.granterType);
+  const mandateFields = resolvePaymentMandateBootstrapFields(
+    requestedDocumentNode
+  );
+  const granterType = mandateFields?.granterType;
   if (granterType === 'customer') {
     const queued = await queuePaymentMandateBootstrapPendingAction({
       request,
@@ -980,11 +1014,10 @@ const handlePaymentMandateBootstrapRequest = async (input: {
 
   const bootstrapSessionId = extractBootstrapSessionId(response);
   if (bootstrapSessionId) {
+    const granterId = mandateFields?.granterId;
     await deps.bootstrapContextRepository.saveContext({
       bootstrapSessionId,
-      ...(getString(requestedDocumentPayload.granterId)
-        ? { merchantId: getString(requestedDocumentPayload.granterId) }
-        : {}),
+      ...(granterId ? { merchantId: granterId } : {}),
       ...(responseContext.requestingSessionId
         ? { requestingSessionId: responseContext.requestingSessionId }
         : {}),
@@ -2271,6 +2304,7 @@ export const handleBootstrapRequests = async (input: {
       if (isPaymentMandateDocumentPayload({ node: requestedDocumentNode })) {
         await handlePaymentMandateBootstrapRequest({
           request: normalized,
+          requestedDocumentNode,
           requestedDocumentPayload,
           isRequestingDeliveryDoc,
           responseContext,
@@ -2321,6 +2355,7 @@ export const handleBootstrapRequests = async (input: {
     if (isPaymentMandateDocumentPayload({ node: requestedDocumentNode })) {
       await handlePaymentMandateBootstrapRequest({
         request: normalized,
+        requestedDocumentNode,
         requestedDocumentPayload,
         isRequestingDeliveryDoc,
         responseContext,

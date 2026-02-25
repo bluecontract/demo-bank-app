@@ -70,6 +70,7 @@ type ChargeMandateDecisionOutcome = {
   contract: ContractRecord;
   responseEvents: Record<string, unknown>[];
   requestId?: string;
+  paymentMandateBootstrapSessionId?: string;
   historyShort: string;
   historyMore: string;
 };
@@ -79,6 +80,7 @@ type PaymentMandateBootstrapDecisionOutcome = {
   contract: ContractRecord;
   responseEvents: Record<string, unknown>[];
   requestId?: string;
+  paymentMandateBootstrapSessionId?: string;
   historyShort: string;
   historyMore: string;
 };
@@ -233,6 +235,117 @@ const parsePaymentMandateBootstrapPayload = (
   return {
     requestId: getString(payload.requestId) ?? action.requestId,
     channelBindings: normalizeChannelBindings(payload.channelBindings),
+    paymentMandateDocument,
+  };
+};
+
+const ensurePaymentMandateGuarantorBootstrapInput = (input: {
+  paymentMandateDocument: Record<string, unknown>;
+  channelBindings?: Record<string, { accountId?: string; email?: string }>;
+  guarantorAccountId: string;
+}): {
+  paymentMandateDocument: Record<string, unknown>;
+  channelBindings: Record<string, { accountId?: string; email?: string }>;
+} => {
+  const contracts = toRecord(input.paymentMandateDocument.contracts) ?? {};
+  const guarantorContract = toRecord(contracts.guarantorChannel) ?? {};
+
+  const paymentMandateDocument: Record<string, unknown> = {
+    ...input.paymentMandateDocument,
+    contracts: {
+      ...contracts,
+      guarantorChannel: {
+        ...guarantorContract,
+        type: getString(guarantorContract.type) ?? 'MyOS/MyOS Timeline Channel',
+      },
+    },
+  };
+
+  const channelBindings = {
+    ...(input.channelBindings ?? {}),
+    guarantorChannel: { accountId: input.guarantorAccountId },
+  };
+
+  return {
+    paymentMandateDocument,
+    channelBindings,
+  };
+};
+
+const readText = (value: unknown): string | undefined => {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim();
+  }
+  const record = toRecord(value);
+  const wrappedValue = record?.value;
+  if (typeof wrappedValue === 'string' && wrappedValue.trim().length > 0) {
+    return wrappedValue.trim();
+  }
+  return undefined;
+};
+
+const materializePaymentMandateIdentityFromContract = (input: {
+  contract: ContractRecord;
+  paymentMandateDocument: Record<string, unknown>;
+}):
+  | { ok: true; paymentMandateDocument: Record<string, unknown> }
+  | { ok: false; reason: string } => {
+  const { contract } = input;
+  const paymentMandateDocument = { ...input.paymentMandateDocument };
+
+  const granterType = readText(paymentMandateDocument.granterType);
+  if (granterType === 'customer') {
+    const customerId = getString(contract.userId);
+    if (!customerId) {
+      return {
+        ok: false,
+        reason: 'Unable to resolve customer granter from contract context.',
+      };
+    }
+    paymentMandateDocument.granterId = customerId;
+  } else if (granterType === 'merchant') {
+    const merchantId = getString(contract.merchantId);
+    if (!merchantId) {
+      return {
+        ok: false,
+        reason: 'Unable to resolve merchant granter from contract context.',
+      };
+    }
+    paymentMandateDocument.granterId = merchantId;
+  }
+
+  const granteeType = readText(paymentMandateDocument.granteeType);
+  if (granteeType === 'customerId') {
+    const customerId = getString(contract.userId);
+    if (!customerId) {
+      return {
+        ok: false,
+        reason: 'Unable to resolve customer grantee from contract context.',
+      };
+    }
+    paymentMandateDocument.granteeId = customerId;
+  } else if (granteeType === 'merchantId') {
+    const merchantId = getString(contract.merchantId);
+    if (!merchantId) {
+      return {
+        ok: false,
+        reason: 'Unable to resolve merchant grantee from contract context.',
+      };
+    }
+    paymentMandateDocument.granteeId = merchantId;
+  } else if (granteeType === 'documentId') {
+    const documentId = getString(contract.documentId);
+    if (!documentId) {
+      return {
+        ok: false,
+        reason: 'Unable to resolve document grantee from contract context.',
+      };
+    }
+    paymentMandateDocument.granteeId = documentId;
+  }
+
+  return {
+    ok: true,
     paymentMandateDocument,
   };
 };
@@ -525,29 +638,6 @@ const buildPaymentMandateSnapshot = (
   };
 };
 
-const resolveMandateDocumentIdFromBootstrap = async (input: {
-  myOsClient: Awaited<ReturnType<typeof getDependencies>>['myOsClient'];
-  bootstrapBody?: unknown;
-}): Promise<string | undefined> => {
-  const bootstrapBody = toRecord(input.bootstrapBody);
-  const directDocumentId = getString(bootstrapBody?.documentId);
-  if (directDocumentId) {
-    return directDocumentId;
-  }
-
-  const sessionId = getString(bootstrapBody?.sessionId);
-  if (!sessionId) {
-    return undefined;
-  }
-
-  const fetchResult = await input.myOsClient.fetchDocument(sessionId);
-  if (fetchResult.kind !== 'success') {
-    return undefined;
-  }
-
-  return getString(fetchResult.document.documentId);
-};
-
 const resolveDecisionOutcome = async (input: {
   contract: ContractRecord;
   actionId: string;
@@ -668,11 +758,17 @@ const resolveDecisionOutcome = async (input: {
         };
       }
 
+      const mandateBootstrapPayload =
+        ensurePaymentMandateGuarantorBootstrapInput({
+          paymentMandateDocument: mandateDocumentResult.document,
+          guarantorAccountId: input.credentials.accountId,
+        });
+
       const bootstrapResponse = await input.myOsClient.bootstrapDocument({
         credentials: input.credentials,
         payload: {
-          channelBindings: {},
-          document: mandateDocumentResult.document,
+          channelBindings: mandateBootstrapPayload.channelBindings,
+          document: mandateBootstrapPayload.paymentMandateDocument,
         },
       });
       if (!bootstrapResponse.ok) {
@@ -691,20 +787,8 @@ const resolveDecisionOutcome = async (input: {
       paymentMandateSessionId = getString(
         toRecord(bootstrapResponse.body)?.sessionId
       );
-      paymentMandateDocumentId = await resolveMandateDocumentIdFromBootstrap({
-        myOsClient: input.myOsClient,
-        bootstrapBody: bootstrapResponse.body,
-      });
-      if (!paymentMandateDocumentId) {
-        return {
-          ok: false,
-          status: 500,
-          message: 'Failed to bootstrap payment mandate document',
-          detail: 'Payment mandate bootstrap did not return document identity.',
-        };
-      }
       paymentMandateSnapshot = buildPaymentMandateSnapshot(
-        mandateDocumentResult.document
+        mandateBootstrapPayload.paymentMandateDocument
       );
     }
 
@@ -752,6 +836,11 @@ const resolveDecisionOutcome = async (input: {
         kind: 'charge-mandate',
         contract: decisionResult.contract,
         requestId: decisionResult.action.requestId,
+        ...(input.decision === 'accepted' && paymentMandateSessionId
+          ? {
+              paymentMandateBootstrapSessionId: paymentMandateSessionId,
+            }
+          : {}),
         responseEvents: [responseEvent],
         historyShort:
           input.decision === 'accepted'
@@ -779,11 +868,33 @@ const resolveDecisionOutcome = async (input: {
     let paymentMandateDocumentId: string | undefined;
     let paymentMandateSessionId: string | undefined;
     if (input.decision === 'accepted') {
+      const mandateIdentityMaterialization =
+        materializePaymentMandateIdentityFromContract({
+          contract: input.contract,
+          paymentMandateDocument: payload.paymentMandateDocument,
+        });
+      if (!mandateIdentityMaterialization.ok) {
+        return {
+          ok: false,
+          status: 409,
+          message: 'Pending action cannot be decided: invalid mandate context',
+          detail: mandateIdentityMaterialization.reason,
+        };
+      }
+
+      const mandateBootstrapPayload =
+        ensurePaymentMandateGuarantorBootstrapInput({
+          paymentMandateDocument:
+            mandateIdentityMaterialization.paymentMandateDocument,
+          channelBindings: payload.channelBindings,
+          guarantorAccountId: input.credentials.accountId,
+        });
+
       const bootstrapResponse = await input.myOsClient.bootstrapDocument({
         credentials: input.credentials,
         payload: {
-          channelBindings: payload.channelBindings ?? {},
-          document: payload.paymentMandateDocument,
+          channelBindings: mandateBootstrapPayload.channelBindings,
+          document: mandateBootstrapPayload.paymentMandateDocument,
         },
       });
       if (!bootstrapResponse.ok) {
@@ -802,18 +913,6 @@ const resolveDecisionOutcome = async (input: {
       paymentMandateSessionId = getString(
         toRecord(bootstrapResponse.body)?.sessionId
       );
-      paymentMandateDocumentId = await resolveMandateDocumentIdFromBootstrap({
-        myOsClient: input.myOsClient,
-        bootstrapBody: bootstrapResponse.body,
-      });
-      if (!paymentMandateDocumentId) {
-        return {
-          ok: false,
-          status: 500,
-          message: 'Failed to bootstrap payment mandate document',
-          detail: 'Payment mandate bootstrap did not return document identity.',
-        };
-      }
     }
 
     const decisionResult = applyPaymentMandateBootstrapDecisionToContract({
@@ -844,24 +943,6 @@ const resolveDecisionOutcome = async (input: {
           requestId,
         })
       );
-      responseEvents.push(
-        toEventWithRequestId({
-          event: {
-            type: 'Conversation/Document Bootstrap Completed',
-            documentId: paymentMandateDocumentId,
-          },
-          requestId,
-        })
-      );
-      responseEvents.push(
-        toEventWithRequestId({
-          event: {
-            type: 'PayNote/Payment Mandate Attached',
-            paymentMandateDocumentId,
-          },
-          requestId,
-        })
-      );
     } else {
       responseEvents.push(
         toEventWithRequestId({
@@ -881,6 +962,11 @@ const resolveDecisionOutcome = async (input: {
         kind: 'payment-mandate-bootstrap',
         contract: decisionResult.contract,
         requestId,
+        ...(input.decision === 'accepted' && paymentMandateSessionId
+          ? {
+              paymentMandateBootstrapSessionId: paymentMandateSessionId,
+            }
+          : {}),
         responseEvents,
         historyShort:
           input.decision === 'accepted'
@@ -888,7 +974,7 @@ const resolveDecisionOutcome = async (input: {
             : 'Payment Mandate bootstrap rejected.',
         historyMore:
           input.decision === 'accepted'
-            ? 'Payment Mandate document was bootstrapped and attached to contract.'
+            ? 'Payment Mandate bootstrap accepted; waiting for target session start.'
             : 'Payment Mandate bootstrap request was rejected by user.',
       },
     };
@@ -907,7 +993,8 @@ export const decideContractPendingActionHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { contractRepository, myOsClient, logger } = await getDependencies();
+  const { contractRepository, myOsClient, logger, bootstrapContextRepository } =
+    await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const { sessionId, actionId } = request.params;
   const decision = mapDecision(request.body.decision);
@@ -971,6 +1058,31 @@ export const decideContractPendingActionHandler = async (
           : ERROR_CODES.EXTERNAL_SERVICE_ERROR,
       message: decisionOutcome.message,
       detail: decisionOutcome.detail,
+    });
+  }
+
+  if (
+    decisionOutcome.outcome.kind !== 'monitoring' &&
+    decisionOutcome.outcome.paymentMandateBootstrapSessionId
+  ) {
+    await bootstrapContextRepository.saveContext({
+      bootstrapSessionId:
+        decisionOutcome.outcome.paymentMandateBootstrapSessionId,
+      ...(contract.merchantId ? { merchantId: contract.merchantId } : {}),
+      ...(contract.accountNumber
+        ? { accountNumber: contract.accountNumber }
+        : {}),
+      ...(contract.userId ? { userId: contract.userId } : {}),
+      ...(contract.customerChannelKey
+        ? { customerChannelKey: contract.customerChannelKey }
+        : {}),
+      ...(contract.sessionId
+        ? { requestingSessionId: contract.sessionId }
+        : {}),
+      ...(decisionOutcome.outcome.requestId
+        ? { requestId: decisionOutcome.outcome.requestId }
+        : {}),
+      createdAt: decidedAt,
     });
   }
 
