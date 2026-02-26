@@ -243,6 +243,26 @@ const resolveTransferMandateCounterparty = (input: {
   return null;
 };
 
+const resolveMerchantCounterpartyAccountNumber = async (
+  context: TransferContext
+): Promise<string | undefined> => {
+  const merchantId = getString(
+    context.deliveryRecord?.merchantId ?? context.updatedRecord.merchantId
+  );
+  if (!merchantId) {
+    return undefined;
+  }
+
+  const resolver =
+    context.deps.bankingFacade.getActiveCreditLineAccountByMerchantId;
+  if (typeof resolver !== 'function') {
+    return undefined;
+  }
+
+  const account = await resolver(merchantId);
+  return account ? getString(account.accountNumber) : undefined;
+};
+
 const buildTransferMandateChargeAttemptId = (input: {
   payNoteDocumentId: string;
   eventId: string;
@@ -1578,6 +1598,10 @@ const handleCaptureFundsRequest = async (input: {
   });
   const eventType = CAPTURE_FUNDS_EVENT_NAME;
 
+  const counterpartyAccountNumber =
+    payeeAccountNumber ??
+    (await resolveMerchantCounterpartyAccountNumber(input.context));
+
   logs.push({
     level: 'info',
     message: 'PayNote capture funds request received',
@@ -1586,7 +1610,7 @@ const handleCaptureFundsRequest = async (input: {
       payNoteDocumentId,
       requestId,
       payerAccountId: account.id,
-      payeeAccountNumber,
+      payeeAccountNumber: counterpartyAccountNumber,
       transferAmountMinor,
       idempotencyKey,
     },
@@ -1659,7 +1683,7 @@ const handleCaptureFundsRequest = async (input: {
         eventIndex,
         amountMinor: transferAmountMinor,
         payerAccountNumber: account.accountNumber,
-        payeeAccountNumber,
+        payeeAccountNumber: counterpartyAccountNumber,
       });
   if (!mandateAuthorization.ok) {
     if (mandateAuthorization.pending) {
@@ -1705,7 +1729,7 @@ const handleCaptureFundsRequest = async (input: {
       userId: account.ownerUserId,
       idempotencyKey,
       amountMinor: transferAmountMinor > 0 ? transferAmountMinor : undefined,
-      counterpartyAccountNumber: payeeAccountNumber,
+      counterpartyAccountNumber,
       payNoteDocumentId,
     });
 

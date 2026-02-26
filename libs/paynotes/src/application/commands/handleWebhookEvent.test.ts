@@ -1551,6 +1551,86 @@ describe('handleWebhookEvent', () => {
     expect(JSON.stringify(simpleEvents)).toContain('amountCaptured');
   });
 
+  it('resolves merchant credit line as counterparty when transfer capture lacks payee account number', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-1',
+      holdId: 'hold-1',
+      accountNumber: '1234567890',
+      merchantId: 'merchant-123',
+      transactionId: 'txn-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    deps.bankingFacade.getActiveCreditLineAccountByMerchantId = vi
+      .fn()
+      .mockResolvedValue({
+        id: 'merchant-credit-line-id',
+        accountNumber: '2222222222',
+        ownerUserId: 'merchant-owner',
+      });
+    deps.bankingFacade.captureHold = vi.fn().mockResolvedValue({
+      holdId: 'hold-1',
+      relatedTransactionId: 'txn-2',
+    } as any);
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/PayNote',
+            payerAccountNumber: { value: '1234567890' },
+            name: 'Capture-only PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Capture Funds Requested',
+              requestId: 'capture-no-payee-1',
+              amount: 1400,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+    fetchDocument.mockResolvedValueOnce({
+      kind: 'success',
+      document: {
+        documentId: 'doc-1',
+        sessionId: 'session-1',
+        document: {
+          type: 'PayNote/PayNote',
+          payerAccountNumber: { value: '1234567890' },
+        },
+      },
+    } as MyOsFetchDocumentResult);
+
+    const result = await handleWebhookEvent(
+      { eventId: 'event-no-payee-1' },
+      deps
+    );
+
+    expect(result.note).toBe('');
+    expect(
+      deps.bankingFacade.getActiveCreditLineAccountByMerchantId
+    ).toHaveBeenCalledWith('merchant-123');
+    expect(deps.bankingFacade.captureHold).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdId: 'hold-1',
+        amountMinor: 1400,
+        userId: 'user-123',
+        counterpartyAccountNumber: '2222222222',
+        payNoteDocumentId: 'doc-1',
+      })
+    );
+    const payload = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls.at(-1)?.[0]?.payload;
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Funds Captured');
+  });
+
   it('rejects merchant-to-customer capture request when payment mandate id is missing', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
