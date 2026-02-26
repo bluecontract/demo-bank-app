@@ -378,6 +378,7 @@ const reportDeliveryMandateAttachmentToPayNotes = async (input: {
     deliveryRecord.payNoteSessionIds,
     payNoteSessionIdHint
   );
+  let canonicalPayNoteSessionId: string | undefined;
 
   if (deliveryRecord.payNoteDocumentId) {
     const [payNoteRecord, contract] = await Promise.all([
@@ -386,31 +387,34 @@ const reportDeliveryMandateAttachmentToPayNotes = async (input: {
         deliveryRecord.payNoteDocumentId
       ),
     ]);
+    canonicalPayNoteSessionId = contract?.sessionId;
     candidateSessionIds = mergeSessionIds(
       candidateSessionIds,
       payNoteRecord?.sessionIds
     );
     candidateSessionIds = mergeSessionIds(
       candidateSessionIds,
-      contract?.sessionId
+      canonicalPayNoteSessionId
     );
   }
 
-  for (const sessionId of candidateSessionIds ?? []) {
-    if (!sessionId || reportedSessionIds.has(sessionId)) {
-      continue;
-    }
-    const reported = await reportPaymentMandateAttached({
-      eventId,
-      bootstrapSessionId,
-      payNoteSessionId: sessionId,
-      paymentMandateDocumentId: deliveryRecord.paymentMandateDocumentId,
-      deps,
-      logs,
-    });
-    if (reported) {
-      reportedSessionIds.add(sessionId);
-    }
+  const selectedSessionId =
+    canonicalPayNoteSessionId ?? (candidateSessionIds ?? [])[0];
+
+  if (!selectedSessionId || reportedSessionIds.has(selectedSessionId)) {
+    return;
+  }
+
+  const reported = await reportPaymentMandateAttached({
+    eventId,
+    bootstrapSessionId,
+    payNoteSessionId: selectedSessionId,
+    paymentMandateDocumentId: deliveryRecord.paymentMandateDocumentId,
+    deps,
+    logs,
+  });
+  if (reported) {
+    reportedSessionIds.add(selectedSessionId);
   }
 };
 

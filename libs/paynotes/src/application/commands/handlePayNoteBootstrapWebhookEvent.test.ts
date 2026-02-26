@@ -1140,6 +1140,100 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
     expect(payloadJson).toContain('mandate-doc-attached-2');
   });
 
+  it('reports payment mandate attachment once using canonical paynote session when multiple sessions exist', async () => {
+    const {
+      deps,
+      myOsClient,
+      payNoteRepository,
+      payNoteDeliveryRepository,
+      payNoteBootstrapRepository,
+      bootstrapContextRepository,
+      contractRepository,
+    } = createDependencies();
+
+    payNoteDeliveryRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(true);
+    payNoteDeliveryRepository.getDeliveryByBootstrapSessionId = vi
+      .fn()
+      .mockResolvedValue({
+        deliveryId: 'delivery-canonical-1',
+        payNoteDocumentId: 'paynote-doc-canonical-1',
+        payNoteSessionIds: ['paynote-session-secondary-1'],
+        paymentMandateStatus: 'pending',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+    payNoteBootstrapRepository.getBootstrapBySessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    bootstrapContextRepository.getContextBySessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    myOsClient.fetchDocument = vi.fn().mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'target-mandate-doc-canonical-1',
+        sessionId: 'target-mandate-session-a',
+        document: buildPaymentMandateDocument(),
+      },
+    } as MyOsFetchDocumentResult);
+    payNoteRepository.getPayNote = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'paynote-doc-canonical-1',
+      sessionIds: ['paynote-session-secondary-1'],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    contractRepository.getContractByDocumentId = vi.fn().mockResolvedValue({
+      contractId: 'paynote-session-canonical-1',
+      sessionId: 'paynote-session-canonical-1',
+      documentId: 'paynote-doc-canonical-1',
+      accountNumber: 'acct-1',
+      userId: 'user-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+      archived: false,
+      pendingActions: [],
+    });
+    myOsClient.getCredentials = vi.fn().mockResolvedValue({
+      apiKey: 'api-key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.example.com',
+    });
+    myOsClient.runDocumentOperation = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200 });
+
+    const payload: HandlePayNoteBootstrapWebhookInput['payload'] = {
+      id: 'event-bootstrap-mandate-canonical-1',
+      object: {
+        sessionId: 'bootstrap-mandate-canonical-1',
+        document: buildBootstrapDocument(),
+        emitted: [
+          buildTargetSessionStartedEvent([
+            'target-mandate-session-a',
+            'target-mandate-session-b',
+          ]),
+        ],
+        created: '2024-01-01T00:00:00.000Z',
+      },
+    };
+
+    const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
+
+    expect(result.handled).toBe(true);
+    const guarantorUpdateCalls = getDocumentOperationCalls(myOsClient).filter(
+      call => call.operation === 'guarantorUpdate'
+    );
+    expect(guarantorUpdateCalls).toHaveLength(1);
+    expect(guarantorUpdateCalls[0]?.sessionId).toBe(
+      'paynote-session-canonical-1'
+    );
+    const payloadJson = JSON.stringify(guarantorUpdateCalls[0]?.payload);
+    expect(payloadJson).toContain('PayNote/Payment Mandate Attached');
+    expect(payloadJson).toContain('target-mandate-doc-canonical-1');
+  });
+
   it('omits inResponseTo for completion when requestId is not provided', async () => {
     const {
       deps,

@@ -2021,7 +2021,12 @@ const handlePayNoteBootstrapRequest = async (input: {
     }
   }
 
-  if (bootstrapSessionId && paymentMandateDocumentId) {
+  const shouldReportInlinePaymentMandateAttachment =
+    bootstrapSessionId &&
+    paymentMandateDocumentId &&
+    !existingDelivery?.paymentMandateBootstrapSessionId;
+
+  if (shouldReportInlinePaymentMandateAttachment) {
     const attachedReported = await runGuarantorUpdate({
       myOsClient: deps.myOsClient,
       sessionId: bootstrapSessionId,
