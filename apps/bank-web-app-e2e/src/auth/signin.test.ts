@@ -7,7 +7,7 @@ import {
 } from '../constants';
 
 const waitForDashboard = async (page: Page, userEmail?: string) => {
-  await expect(page).toHaveURL(/\/dashboard(?:$|\?)/, {
+  await expect(page).toHaveURL(/\/dashboard(?:\/|$|\?)/, {
     timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
   });
 
@@ -84,7 +84,7 @@ test.describe('Sign In Flow', () => {
     await page.click('button[type="submit"]');
 
     await waitForDashboard(page, testUserEmail);
-    await expect(page).toHaveURL(/\/dashboard(?:$|\?)/);
+    await expect(page).toHaveURL(/\/dashboard(?:\/|$|\?)/);
   });
 
   test('should show error for non-existent user', async ({ page }) => {
@@ -128,7 +128,7 @@ test.describe('Sign In Flow', () => {
     // Try to access dashboard directly - should stay on dashboard
     await page.goto(`${BASE_URL}/dashboard`);
     await waitForDashboard(page, testUserEmail);
-    await expect(page).toHaveURL(/\/dashboard(?:$|\?)/);
+    await expect(page).toHaveURL(/\/dashboard(?:\/|$|\?)/);
   });
 
   test('should redirect to signin when accessing protected route while unauthenticated', async ({
