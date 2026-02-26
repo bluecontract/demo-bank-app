@@ -1,4 +1,8 @@
-import { createLambdaHandler, tsr } from '@ts-rest/serverless/aws';
+import {
+  TsRestResponse,
+  createLambdaHandler,
+  tsr,
+} from '@ts-rest/serverless/aws';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import {
   signUpHandler,
@@ -56,6 +60,33 @@ import { listHoldContractsHandler } from './contracts/listHoldContracts';
 const metrics = getMetrics();
 const logger = getLogger();
 const securityHeaders = getSecurityHeaders();
+
+const normalizeResponse = async (
+  response: TsRestResponse
+): Promise<TsRestResponse> => {
+  if (response.rawBody !== undefined) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  const status = response.status;
+
+  const rawBody = (() => {
+    if (status === 204 || status === 304) {
+      return Promise.resolve<null>(null);
+    }
+    const contentType = headers.get('content-type');
+    if (contentType?.startsWith('text/') || contentType?.includes('json')) {
+      return response.text();
+    }
+    return response.arrayBuffer();
+  })();
+
+  return new TsRestResponse(await rawBody, {
+    status,
+    headers,
+  });
+};
 
 // Create the ts-rest handler
 export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
@@ -152,6 +183,9 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
     ],
     errorHandler: createErrorHandler(logger),
     responseHandlers: [
+      async response => {
+        return normalizeResponse(response);
+      },
       async response => {
         // Add security headers for all requests
         Object.entries(securityHeaders).forEach(([key, value]) => {
