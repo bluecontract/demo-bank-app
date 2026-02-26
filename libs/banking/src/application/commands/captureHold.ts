@@ -182,13 +182,13 @@ export async function captureHold(
 
     const transactionId = transactionIdGenerator();
     const transaction = Transaction.createWithId(
-        [debitPosting, creditPosting],
-        {
-          idempotencyKey: cmd.idempotencyKey,
-          description: existingHold.description ?? 'Card purchase capture',
-          createdAt: capturedAt,
-          originHoldId: existingHold.holdId,
-          payNoteDocumentId:
+      [debitPosting, creditPosting],
+      {
+        idempotencyKey: cmd.idempotencyKey,
+        description: existingHold.description ?? 'Card purchase capture',
+        createdAt: capturedAt,
+        originHoldId: existingHold.holdId,
+        payNoteDocumentId:
           cmd.payNoteDocumentId ?? existingHold.payNoteDocumentId,
       },
       transactionId
