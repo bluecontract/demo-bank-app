@@ -393,7 +393,7 @@ describe('decideContractPendingActionHandler', () => {
           actionId: 'payment-mandate-bootstrap:event-1:0',
           type: 'paymentMandateBootstrapApproval',
           status: 'pending',
-          title: 'Approve Payment Mandate bootstrap',
+          title: 'Approve Payment Mandate',
           requestId: 'subscription-payment-mandate',
           payload: {
             requestId: 'subscription-payment-mandate',
@@ -513,7 +513,7 @@ describe('decideContractPendingActionHandler', () => {
           actionId: 'payment-mandate-bootstrap:event-identity:0',
           type: 'paymentMandateBootstrapApproval',
           status: 'pending',
-          title: 'Approve Payment Mandate bootstrap',
+          title: 'Approve Payment Mandate',
           requestId: 'subscription-payment-mandate',
           payload: {
             requestId: 'subscription-payment-mandate',
@@ -592,7 +592,7 @@ describe('decideContractPendingActionHandler', () => {
           actionId: 'payment-mandate-bootstrap:event-1:0',
           type: 'paymentMandateBootstrapApproval',
           status: 'pending',
-          title: 'Approve Payment Mandate bootstrap',
+          title: 'Approve Payment Mandate',
           requestId: 'subscription-payment-mandate',
           payload: {
             requestId: 'subscription-payment-mandate',
@@ -666,7 +666,7 @@ describe('decideContractPendingActionHandler', () => {
           actionId: 'payment-mandate-bootstrap:event-2:0',
           type: 'paymentMandateBootstrapApproval',
           status: 'pending',
-          title: 'Approve Payment Mandate bootstrap',
+          title: 'Approve Payment Mandate',
           requestId: 'subscription-payment-mandate-2',
           payload: {
             requestId: 'subscription-payment-mandate-2',

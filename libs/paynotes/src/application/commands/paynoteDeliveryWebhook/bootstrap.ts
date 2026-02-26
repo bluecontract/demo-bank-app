@@ -850,13 +850,13 @@ const queuePaymentMandateBootstrapPendingAction = async (input: {
   const summary =
     resolveInitialMessageText({
       initialMessages: request.initialMessages,
-    }) ?? 'Approve Payment Mandate bootstrap requested by this contract.';
+    }) ?? 'Approve Payment Mandate requested by this contract.';
 
   const nextAction = {
     actionId,
     type: PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE,
     status: 'pending',
-    title: 'Approve Payment Mandate bootstrap',
+    title: 'Approve Payment Mandate',
     summary,
     ...(request.requestId ? { requestId: request.requestId } : {}),
     payload: {
