@@ -114,6 +114,45 @@ describe('createBankingFacade - capture branch routing', () => {
     expect(result).toEqual(hold);
   });
 
+  it('passes reserve description to reserveFunds command', async () => {
+    const deps = createDependencies();
+    const facade = createBankingFacade(deps);
+
+    bankingMocks.reserveFunds.mockResolvedValueOnce({
+      holdId: 'hold-3',
+      status: 'PENDING',
+    });
+
+    await facade.reserveFunds({
+      holdId: 'hold-3',
+      payerAccountNumber: '4444444444',
+      amountMinor: 1200,
+      description: 'Subscription monthly payment (cycle 1/12)',
+      counterpartyAccountNumber: '1234567890',
+      userId: 'customer-owner',
+      idempotencyKey: 'idem-reserve-1',
+      payNoteDocumentId: 'doc-sub-1',
+    });
+
+    expect(bankingMocks.reserveFunds).toHaveBeenCalledWith(
+      {
+        userId: 'customer-owner',
+        idempotencyKey: 'idem-reserve-1',
+        holdId: 'hold-3',
+        payerAccountNumber: '4444444444',
+        amountMinor: 1200,
+        description: 'Subscription monthly payment (cycle 1/12)',
+        counterpartyAccountNumber: '1234567890',
+        payNoteDocumentId: 'doc-sub-1',
+      },
+      {
+        bankingRepository: deps.bankingRepository,
+        holdRepository: deps.holdRepository,
+        logger: deps.logger,
+      }
+    );
+  });
+
   it('returns active merchant credit line account when available', async () => {
     const deps = createDependencies();
     const facade = createBankingFacade(deps);

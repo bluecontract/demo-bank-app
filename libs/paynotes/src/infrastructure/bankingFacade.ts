@@ -57,6 +57,7 @@ const buildReserveRequest = (request: ReserveFundsRequest) => ({
   holdId: request.holdId,
   payerAccountNumber: request.payerAccountNumber,
   amountMinor: request.amountMinor,
+  description: request.description,
   counterpartyAccountNumber: request.counterpartyAccountNumber,
   payNoteDocumentId: request.payNoteDocumentId,
 });

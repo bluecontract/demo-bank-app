@@ -83,6 +83,8 @@ type ChargeMode = 'authorize-only' | 'authorize-and-capture';
 type ParsedChargeRequest = {
   amountMinor: number;
   requestId?: string;
+  name?: string;
+  description?: string;
   paymentMandateDocumentId?: string;
   payNoteDocument?: Record<string, unknown>;
 };
@@ -429,6 +431,8 @@ const CHARGE_REQUEST_SCHEMA_BY_EVENT_TYPE: Record<
 
 type ParsedChargeRequestSchemaOutput = {
   amount?: unknown;
+  description?: unknown;
+  name?: unknown;
   requestId?: unknown;
   paymentMandateDocumentId?: unknown;
   paynote?: BlueNode;
@@ -494,6 +498,9 @@ type AcceptedChargeMandatePendingActionPayload = {
 const buildParsedChargeRequest = (input: {
   output: ParsedChargeRequestSchemaOutput;
   fallbackAmount?: number;
+  fallbackDescription?: string;
+  fallbackName?: string;
+  fallbackRequestId?: string;
   event: WebhookEmittedEvent;
 }): ParsedChargeRequest | null => {
   const amountMinor =
@@ -505,7 +512,12 @@ const buildParsedChargeRequest = (input: {
   return {
     amountMinor,
     requestId:
-      getString(input.output.requestId) ?? resolveChargeRequestId(input.event),
+      getString(input.output.requestId) ??
+      input.fallbackRequestId ??
+      resolveChargeRequestId(input.event),
+    description:
+      getString(input.output.description) ?? input.fallbackDescription,
+    name: getString(input.output.name) ?? input.fallbackName,
     paymentMandateDocumentId: getString(input.output.paymentMandateDocumentId),
     payNoteDocument: extractPayNoteDocument(input.output.paynote),
   };
@@ -520,6 +532,9 @@ const parseChargeRequest = (
     const simple = blue.nodeToJson(node, 'simple') as
       | Record<string, unknown>
       | undefined;
+    const fallbackRequestId = getString(simple?.requestId);
+    const fallbackDescription = getString(simple?.description);
+    const fallbackName = getString(simple?.name);
     const fallbackAmount =
       toPositiveInteger(simple?.amount) ??
       toPositiveInteger(event.amount?.value);
@@ -532,11 +547,28 @@ const parseChargeRequest = (
     return buildParsedChargeRequest({
       output,
       fallbackAmount,
+      fallbackRequestId,
+      fallbackDescription,
+      fallbackName,
       event,
     });
   } catch {
     return null;
   }
+};
+
+const resolveChargeReserveDescription = (
+  request: ParsedChargeRequest
+): string | undefined => {
+  const explicitDescription = request.description?.trim();
+  if (explicitDescription) {
+    return explicitDescription;
+  }
+  const explicitName = request.name?.trim();
+  if (explicitName) {
+    return explicitName;
+  }
+  return undefined;
 };
 
 const parseMandateAuthorizationResponse = (
@@ -1412,6 +1444,7 @@ const finalizeAuthorizedChargeAttemptImmediately = async (input: {
         accounts,
         eventType,
         amountMinor: request.amountMinor,
+        description: resolveChargeReserveDescription(request),
         eventIndex,
       });
       if (!chargeResult.ok) {
@@ -2074,6 +2107,7 @@ const executeCardCharge = async (input: {
   accounts: ResolvedChargeAccounts;
   eventType: ChargeRequestEventType;
   amountMinor: number;
+  description?: string;
   eventIndex: number;
 }): Promise<ChargeExecutionSuccess | ChargeExecutionFailure> => {
   const { context, accounts, eventType, amountMinor, eventIndex } = input;
@@ -2096,6 +2130,7 @@ const executeCardCharge = async (input: {
         eventId,
         eventIndex,
       }),
+      description: input.description,
       payNoteDocumentId,
     });
   } catch (error) {
@@ -2938,6 +2973,7 @@ export const handleMandateResponseEvents = async (input: {
           accounts,
           eventType: resolved.eventType,
           amountMinor: resolved.request.amountMinor,
+          description: resolveChargeReserveDescription(resolved.request),
           eventIndex: resolved.attempt.eventIndex,
         });
 
