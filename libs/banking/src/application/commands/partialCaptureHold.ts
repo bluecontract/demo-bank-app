@@ -219,8 +219,7 @@ export async function partialCaptureHold(
           {
             idempotencyKey: cmd.idempotencyKey,
             description:
-              existingHold.description ??
-              `Partially captured hold ${existingHold.holdId}`,
+              existingHold.description ?? 'Card purchase (partial capture)',
             createdAt: capturedAt,
             originHoldId: existingHold.holdId,
             payNoteDocumentId:
