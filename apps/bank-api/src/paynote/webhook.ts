@@ -38,6 +38,9 @@ const blue = new Blue({
   mergingProcessor: createDefaultMergingProcessor(),
 });
 
+const UNKNOWN_SESSION_RETRY_ATTEMPTS = 6;
+const UNKNOWN_SESSION_RETRY_DELAY_MS = 5_000;
+
 let cachedLambdaClient: LambdaClient | null = null;
 let cachedSqsClient: SQSClient | null = null;
 
@@ -251,6 +254,37 @@ const resolveDocumentName = (document: unknown): string | undefined => {
 
 const isSynchronyMerchantDocument = (document: unknown): boolean =>
   resolveDocumentName(document) === 'Synchrony Merchant';
+
+const sleep = async (ms: number): Promise<void> =>
+  new Promise(resolve => setTimeout(resolve, ms));
+
+const resolveSessionBootstrapContexts = async (
+  bootstrapContextRepository: {
+    getContextBySessionId: (sessionId: string) => Promise<unknown | null>;
+    getBootstrapSessionIdByTargetSessionId?: (
+      targetSessionId: string
+    ) => Promise<string | null>;
+  },
+  sessionId: string
+) => {
+  const directBootstrapContext =
+    await bootstrapContextRepository.getContextBySessionId(sessionId);
+  const linkedBootstrapSessionId =
+    await bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId?.(
+      sessionId
+    );
+  const linkedBootstrapContext = linkedBootstrapSessionId
+    ? await bootstrapContextRepository.getContextBySessionId(
+        linkedBootstrapSessionId
+      )
+    : null;
+
+  return {
+    directBootstrapContext,
+    linkedBootstrapContext,
+    linkedBootstrapSessionId,
+  };
+};
 
 const toCompactBlueEventArray = (value: unknown): unknown[] | undefined => {
   if (value === undefined) {
@@ -475,17 +509,51 @@ export const payNoteWebhookHandler = async (
     documentType.isDelivery;
 
   if (sessionId && !shouldSkipSessionGate) {
-    const directBootstrapContext =
-      await bootstrapContextRepository.getContextBySessionId(sessionId);
-    const linkedBootstrapSessionId =
-      await bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId?.(
-        sessionId
-      );
-    const linkedBootstrapContext = linkedBootstrapSessionId
-      ? await bootstrapContextRepository.getContextBySessionId(
-          linkedBootstrapSessionId
-        )
-      : null;
+    let {
+      directBootstrapContext,
+      linkedBootstrapContext,
+      linkedBootstrapSessionId,
+    } = await resolveSessionBootstrapContexts(
+      bootstrapContextRepository,
+      sessionId
+    );
+
+    if (!directBootstrapContext && !linkedBootstrapContext) {
+      for (
+        let attempt = 1;
+        attempt <= UNKNOWN_SESSION_RETRY_ATTEMPTS;
+        attempt += 1
+      ) {
+        logger.debug(
+          'Bootstrap context missing for webhook session, retrying session gate',
+          {
+            eventId,
+            sessionId,
+            attempt,
+            maxAttempts: UNKNOWN_SESSION_RETRY_ATTEMPTS,
+            delayMs: UNKNOWN_SESSION_RETRY_DELAY_MS,
+          }
+        );
+        await sleep(UNKNOWN_SESSION_RETRY_DELAY_MS);
+        ({
+          directBootstrapContext,
+          linkedBootstrapContext,
+          linkedBootstrapSessionId,
+        } = await resolveSessionBootstrapContexts(
+          bootstrapContextRepository,
+          sessionId
+        ));
+        if (directBootstrapContext || linkedBootstrapContext) {
+          logger.debug('Bootstrap context resolved after retry', {
+            eventId,
+            sessionId,
+            attempt,
+            linkedBootstrapSessionId: linkedBootstrapSessionId ?? null,
+          });
+          break;
+        }
+      }
+    }
 
     if (!directBootstrapContext && !linkedBootstrapContext) {
       logger.warn('Rejected webhook for unknown bootstrap/target session', {

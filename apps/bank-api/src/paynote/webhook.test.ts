@@ -471,15 +471,16 @@ describe('payNoteWebhookHandler', () => {
   });
 
   it('throws for unknown non-synchrony paynote session to trigger retry', async () => {
-    hoistedRepositories.bootstrapContextRepository.getContextBySessionId.mockResolvedValue(
-      null
-    );
-    hoistedRepositories.bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId.mockResolvedValue(
-      null
-    );
+    vi.useFakeTimers();
+    try {
+      hoistedRepositories.bootstrapContextRepository.getContextBySessionId.mockResolvedValue(
+        null
+      );
+      hoistedRepositories.bootstrapContextRepository.getBootstrapSessionIdByTargetSessionId.mockResolvedValue(
+        null
+      );
 
-    await expect(
-      payNoteWebhookHandler({
+      const handlerPromise = payNoteWebhookHandler({
         body: {
           id: 'event-unknown-session',
           object: {
@@ -490,10 +491,23 @@ describe('payNoteWebhookHandler', () => {
             },
           },
         },
-      } as any)
-    ).rejects.toThrow(
-      'Unknown webhook session "unknown-session-1" (no bootstrap context mapping)'
-    );
+      } as any);
+
+      const rejectionAssertion = expect(handlerPromise).rejects.toThrow(
+        'Unknown webhook session "unknown-session-1" (no bootstrap context mapping)'
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      await rejectionAssertion;
+      expect(
+        hoistedRepositories.bootstrapContextRepository.getContextBySessionId
+      ).toHaveBeenCalledTimes(7);
+      expect(
+        hoistedRepositories.bootstrapContextRepository
+          .getBootstrapSessionIdByTargetSessionId
+      ).toHaveBeenCalledTimes(7);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('allows unknown paynote delivery session through gate', async () => {
