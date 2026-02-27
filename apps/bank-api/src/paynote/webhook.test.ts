@@ -496,15 +496,15 @@ describe('payNoteWebhookHandler', () => {
       const rejectionAssertion = expect(handlerPromise).rejects.toThrow(
         'Unknown webhook session "unknown-session-1" (no bootstrap context mapping)'
       );
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(5_000);
       await rejectionAssertion;
       expect(
         hoistedRepositories.bootstrapContextRepository.getContextBySessionId
-      ).toHaveBeenCalledTimes(7);
+      ).toHaveBeenCalledTimes(2);
       expect(
         hoistedRepositories.bootstrapContextRepository
           .getBootstrapSessionIdByTargetSessionId
-      ).toHaveBeenCalledTimes(7);
+      ).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
