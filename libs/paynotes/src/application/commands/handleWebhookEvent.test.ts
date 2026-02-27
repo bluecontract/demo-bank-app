@@ -3545,7 +3545,7 @@ describe('handleWebhookEvent', () => {
         return (
           Array.isArray(saved.pendingActions) &&
           saved.pendingActions.some(
-            action => action.type === 'chargeMandateApproval'
+            action => action.type === 'paymentMandateBootstrapApproval'
           )
         );
       })
@@ -3670,7 +3670,7 @@ describe('handleWebhookEvent', () => {
         return (
           Array.isArray(saved.pendingActions) &&
           saved.pendingActions.some(
-            action => action.type === 'chargeMandateApproval'
+            action => action.type === 'paymentMandateBootstrapApproval'
           )
         );
       })
@@ -3789,7 +3789,7 @@ describe('handleWebhookEvent', () => {
           return (
             Array.isArray(saved.pendingActions) &&
             saved.pendingActions.some(
-              action => action.type === 'chargeMandateApproval'
+              action => action.type === 'paymentMandateBootstrapApproval'
             )
           );
         })
@@ -3837,7 +3837,7 @@ describe('handleWebhookEvent', () => {
       pendingActions: [
         {
           actionId: 'card-charge-mandate:event-1:0',
-          type: 'chargeMandateApproval',
+          type: 'paymentMandateBootstrapApproval',
           status: 'accepted',
           requestId: 'charge-lag-1',
           payload: {
@@ -3935,7 +3935,7 @@ describe('handleWebhookEvent', () => {
       pendingActions: [
         {
           actionId: 'card-charge-mandate:event-1:0',
-          type: 'chargeMandateApproval',
+          type: 'paymentMandateBootstrapApproval',
           status: 'accepted',
           requestId: 'charge-lag-1',
           payload: {

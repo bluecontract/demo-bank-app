@@ -6,7 +6,7 @@ import {
   type ContractPendingActionStatus,
   type ContractRecord,
 } from '@demo-bank-app/contracts';
-import { blue, runGuarantorUpdate } from '@demo-bank-app/paynotes';
+import { runGuarantorUpdate } from '@demo-bank-app/paynotes';
 import {
   extractAuthInfo,
   type MaybeAuthenticatedTsRestRequestContext,
@@ -14,7 +14,6 @@ import {
 import { getDependencies } from '../paynote/dependencies';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
 
-const CHARGE_MANDATE_PENDING_ACTION_TYPE = 'chargeMandateApproval';
 const PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE =
   'paymentMandateBootstrapApproval';
 
@@ -23,36 +22,10 @@ type PendingActionDecision = Extract<
   'accepted' | 'rejected'
 >;
 
-type ChargeMandatePayload = {
-  amountMinor: number;
-  direction: 'linked' | 'reverse';
-  payNoteDocument?: Record<string, unknown>;
-};
-
 type PaymentMandateBootstrapPayload = {
   requestId?: string;
   channelBindings?: Record<string, { accountId?: string; email?: string }>;
   paymentMandateDocument: Record<string, unknown>;
-};
-
-type PaymentMandateSnapshot = {
-  amountLimit?: number;
-  amountReserved?: number;
-  amountCaptured?: number;
-  currency?: string;
-  sourceAccount?: string;
-  allowLinkedPayNote?: boolean;
-  granteeType?: string;
-  granteeId?: string;
-  granterType?: string;
-  granterId?: string;
-  expiresAt?: string;
-  revokedAt?: string;
-  allowedPaymentCounterparties?: Array<{
-    counterpartyType?: string;
-    counterpartyId?: string;
-  }>;
-  allowedPayNotes?: Array<{ typeBlueId?: string; documentBlueId?: string }>;
 };
 
 type MonitoringDecisionOutcome = {
@@ -61,16 +34,6 @@ type MonitoringDecisionOutcome = {
   responseEvents: Record<string, unknown>[];
   targetMerchantId: string;
   requestId?: string;
-  historyShort: string;
-  historyMore: string;
-};
-
-type ChargeMandateDecisionOutcome = {
-  kind: 'charge-mandate';
-  contract: ContractRecord;
-  responseEvents: Record<string, unknown>[];
-  requestId?: string;
-  paymentMandateBootstrapSessionId?: string;
   historyShort: string;
   historyMore: string;
 };
@@ -87,7 +50,6 @@ type PaymentMandateBootstrapDecisionOutcome = {
 
 type DecisionOutcome =
   | MonitoringDecisionOutcome
-  | ChargeMandateDecisionOutcome
   | PaymentMandateBootstrapDecisionOutcome;
 
 const toEventWithRequestId = (input: {
@@ -120,12 +82,6 @@ const toRecord = (value: unknown): Record<string, unknown> | null =>
 const getString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 
-const getNumber = (value: unknown): number | undefined =>
-  typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-
-const getBoolean = (value: unknown): boolean | undefined =>
-  typeof value === 'boolean' ? value : undefined;
-
 const resolveOperationFailureReason = (input: {
   status: number;
   body?: unknown;
@@ -139,53 +95,6 @@ const resolveOperationFailureReason = (input: {
   return detail
     ? `${input.fallbackPrefix}: ${detail}`
     : `${input.fallbackPrefix} with status ${input.status}.`;
-};
-
-const resolvePayNoteTypeBlueId = (
-  payNoteDocument: Record<string, unknown> | undefined
-): string | undefined => {
-  if (!payNoteDocument) {
-    return undefined;
-  }
-
-  try {
-    const simple = blue.nodeToJson(
-      blue.jsonValueToNode(payNoteDocument),
-      'simple'
-    ) as { type?: { blueId?: unknown } } | undefined;
-    const blueId = simple?.type?.blueId;
-    return typeof blueId === 'string' && blueId.length > 0 ? blueId : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
-const parseChargeMandatePayload = (
-  action: ContractPendingAction
-): ChargeMandatePayload | null => {
-  const payload = toRecord(action.payload);
-  if (!payload) {
-    return null;
-  }
-
-  const amountMinor = getNumber(payload.amountMinor);
-  const direction = getString(payload.direction);
-  const payNoteDocument = toRecord(payload.payNoteDocument) ?? undefined;
-
-  if (
-    amountMinor === undefined ||
-    !Number.isInteger(amountMinor) ||
-    amountMinor <= 0 ||
-    (direction !== 'linked' && direction !== 'reverse')
-  ) {
-    return null;
-  }
-
-  return {
-    amountMinor,
-    direction,
-    payNoteDocument,
-  };
 };
 
 const normalizeChannelBindings = (
@@ -350,83 +259,6 @@ const materializePaymentMandateIdentityFromContract = (input: {
   };
 };
 
-const applyChargeMandateDecisionToContract = (input: {
-  contract: ContractRecord;
-  actionId: string;
-  decision: PendingActionDecision;
-  decidedAt: string;
-  paymentMandateDocumentId?: string;
-  paymentMandateSessionId?: string;
-  paymentMandate?: PaymentMandateSnapshot;
-}):
-  | { ok: true; contract: ContractRecord; action: ContractPendingAction }
-  | {
-      ok: false;
-      reason: 'action-not-found' | 'action-not-pending' | 'unsupported-action';
-    } => {
-  const {
-    contract,
-    actionId,
-    decision,
-    decidedAt,
-    paymentMandateDocumentId,
-    paymentMandateSessionId,
-    paymentMandate,
-  } = input;
-
-  const action = (contract.pendingActions ?? []).find(
-    item => item.actionId === actionId
-  );
-  if (!action) {
-    return { ok: false, reason: 'action-not-found' };
-  }
-  if (action.type !== CHARGE_MANDATE_PENDING_ACTION_TYPE) {
-    return { ok: false, reason: 'unsupported-action' };
-  }
-  if (action.status !== 'pending') {
-    return { ok: false, reason: 'action-not-pending' };
-  }
-
-  const nextPayload = {
-    ...(toRecord(action.payload) ?? {}),
-    ...(paymentMandateDocumentId
-      ? {
-          paymentMandateDocumentId,
-        }
-      : {}),
-    ...(paymentMandateSessionId
-      ? {
-          paymentMandateSessionId,
-        }
-      : {}),
-    ...(paymentMandate
-      ? {
-          paymentMandate,
-        }
-      : {}),
-  };
-
-  const nextAction: ContractPendingAction = {
-    ...action,
-    status: decision,
-    decidedAt,
-    payload: nextPayload,
-  };
-
-  const nextActions = (contract.pendingActions ?? []).map(item =>
-    item.actionId === actionId ? nextAction : item
-  );
-
-  return {
-    ok: true,
-    contract: {
-      ...contract,
-      pendingActions: nextActions,
-    },
-    action: nextAction,
-  };
-};
-
 const applyPaymentMandateBootstrapDecisionToContract = (input: {
   contract: ContractRecord;
   actionId: string;
@@ -494,147 +326,6 @@ const applyPaymentMandateBootstrapDecisionToContract = (input: {
       pendingActions: nextActions,
     },
     action: nextAction,
-  };
-};
-
-const buildPaymentMandateDocument = (input: {
-  contract: ContractRecord;
-  payload: ChargeMandatePayload;
-}):
-  | {
-      ok: true;
-      document: Record<string, unknown>;
-    }
-  | { ok: false; reason: string } => {
-  const { contract, payload } = input;
-
-  const granterType = payload.direction === 'reverse' ? 'merchant' : 'customer';
-  const granterId =
-    granterType === 'merchant'
-      ? getString(contract.merchantId)
-      : getString(contract.userId);
-  const granteeId = getString(contract.documentId);
-
-  if (!granterId) {
-    return {
-      ok: false,
-      reason: 'Unable to resolve mandate granter from contract context.',
-    };
-  }
-
-  if (!granteeId) {
-    return {
-      ok: false,
-      reason: 'Unable to resolve mandate grantee document id.',
-    };
-  }
-
-  const payNoteTypeBlueId = resolvePayNoteTypeBlueId(payload.payNoteDocument);
-  const allowLinkedPayNote = Boolean(
-    payload.payNoteDocument && payNoteTypeBlueId
-  );
-
-  const allowedPaymentCounterparties =
-    payload.direction === 'reverse'
-      ? getString(contract.userId)
-        ? [
-            {
-              counterpartyType: 'customerId',
-              counterpartyId: getString(contract.userId),
-            },
-          ]
-        : undefined
-      : getString(contract.merchantId)
-      ? [
-          {
-            counterpartyType: 'merchantId',
-            counterpartyId: getString(contract.merchantId),
-          },
-        ]
-      : undefined;
-
-  return {
-    ok: true,
-    document: {
-      type: 'PayNote/Payment Mandate',
-      granterType,
-      granterId,
-      granteeType: 'documentId',
-      granteeId,
-      amountLimit: payload.amountMinor,
-      currency: 'USD',
-      sourceAccount: 'root',
-      allowLinkedPayNote,
-      ...(payNoteTypeBlueId
-        ? {
-            allowedPayNotes: [{ typeBlueId: payNoteTypeBlueId }],
-          }
-        : {}),
-      ...(allowedPaymentCounterparties
-        ? {
-            allowedPaymentCounterparties,
-          }
-        : {}),
-    },
-  };
-};
-
-const buildPaymentMandateSnapshot = (
-  document: Record<string, unknown>
-): PaymentMandateSnapshot => {
-  const allowedPaymentCounterparties = Array.isArray(
-    document.allowedPaymentCounterparties
-  )
-    ? document.allowedPaymentCounterparties.reduce<
-        Array<{ counterpartyType?: string; counterpartyId?: string }>
-      >((acc, item) => {
-        const itemRecord = toRecord(item);
-        if (!itemRecord) {
-          return acc;
-        }
-        const counterpartyType = getString(itemRecord.counterpartyType);
-        const counterpartyId = getString(itemRecord.counterpartyId);
-        if (!counterpartyType || !counterpartyId) {
-          return acc;
-        }
-        acc.push({ counterpartyType, counterpartyId });
-        return acc;
-      }, [])
-    : undefined;
-
-  const allowedPayNotes = Array.isArray(document.allowedPayNotes)
-    ? document.allowedPayNotes.reduce<
-        Array<{ typeBlueId?: string; documentBlueId?: string }>
-      >((acc, item) => {
-        const itemRecord = toRecord(item);
-        if (!itemRecord) {
-          return acc;
-        }
-        const typeBlueId = getString(itemRecord.typeBlueId);
-        const documentBlueId = getString(itemRecord.documentBlueId);
-        if (!typeBlueId && !documentBlueId) {
-          return acc;
-        }
-        acc.push({ typeBlueId, documentBlueId });
-        return acc;
-      }, [])
-    : undefined;
-
-  return {
-    amountLimit: getNumber(document.amountLimit),
-    amountReserved: getNumber(document.amountReserved),
-    amountCaptured: getNumber(document.amountCaptured),
-    currency: getString(document.currency),
-    sourceAccount: getString(document.sourceAccount),
-    allowLinkedPayNote: getBoolean(document.allowLinkedPayNote),
-    granteeType: getString(document.granteeType),
-    granteeId: getString(document.granteeId),
-    granterType: getString(document.granterType),
-    granterId: getString(document.granterId),
-    expiresAt: getString(document.expiresAt),
-    revokedAt: getString(document.revokedAt),
-    ...(allowedPaymentCounterparties ? { allowedPaymentCounterparties } : {}),
-    ...(allowedPayNotes ? { allowedPayNotes } : {}),
   };
 };
 
@@ -727,129 +418,6 @@ const resolveDecisionOutcome = async (input: {
           input.decision === 'accepted'
             ? `Monitoring started for merchant ${targetMerchantId}.`
             : `Monitoring request rejected for merchant ${targetMerchantId}.`,
-      },
-    };
-  }
-
-  if (action.type === CHARGE_MANDATE_PENDING_ACTION_TYPE) {
-    const payload = parseChargeMandatePayload(action);
-    if (!payload) {
-      return {
-        ok: false,
-        status: 409,
-        message: 'Pending action cannot be decided: invalid mandate payload',
-      };
-    }
-
-    let paymentMandateDocumentId: string | undefined;
-    let paymentMandateSessionId: string | undefined;
-    let paymentMandateSnapshot: PaymentMandateSnapshot | undefined;
-    if (input.decision === 'accepted') {
-      const mandateDocumentResult = buildPaymentMandateDocument({
-        contract: input.contract,
-        payload,
-      });
-      if (!mandateDocumentResult.ok) {
-        return {
-          ok: false,
-          status: 409,
-          message: 'Pending action cannot be decided: invalid mandate context',
-          detail: mandateDocumentResult.reason,
-        };
-      }
-
-      const mandateBootstrapPayload =
-        ensurePaymentMandateGuarantorBootstrapInput({
-          paymentMandateDocument: mandateDocumentResult.document,
-          guarantorAccountId: input.credentials.accountId,
-        });
-
-      const bootstrapResponse = await input.myOsClient.bootstrapDocument({
-        credentials: input.credentials,
-        payload: {
-          channelBindings: mandateBootstrapPayload.channelBindings,
-          document: mandateBootstrapPayload.paymentMandateDocument,
-        },
-      });
-      if (!bootstrapResponse.ok) {
-        return {
-          ok: false,
-          status: 500,
-          message: 'Failed to bootstrap payment mandate document',
-          detail: resolveOperationFailureReason({
-            status: bootstrapResponse.status,
-            body: bootstrapResponse.body,
-            fallbackPrefix: 'Payment mandate bootstrap failed',
-          }),
-        };
-      }
-
-      paymentMandateSessionId = getString(
-        toRecord(bootstrapResponse.body)?.sessionId
-      );
-      paymentMandateSnapshot = buildPaymentMandateSnapshot(
-        mandateBootstrapPayload.paymentMandateDocument
-      );
-    }
-
-    const decisionResult = applyChargeMandateDecisionToContract({
-      contract: input.contract,
-      actionId: input.actionId,
-      decision: input.decision,
-      decidedAt: input.decidedAt,
-      paymentMandateDocumentId,
-      paymentMandateSessionId,
-      paymentMandate: paymentMandateSnapshot,
-    });
-    if (!decisionResult.ok) {
-      return {
-        ok: false,
-        status: 409,
-        message: `Pending action cannot be decided: ${decisionResult.reason}`,
-      };
-    }
-
-    const responseEvent = toEventWithRequestId({
-      event:
-        input.decision === 'accepted'
-          ? {
-              type: 'PayNote/Card Charge Responded',
-              status: 'accepted',
-              reason: 'Payment mandate approved by user.',
-              ...(paymentMandateDocumentId
-                ? {
-                    paymentMandateDocumentId,
-                  }
-                : {}),
-            }
-          : {
-              type: 'PayNote/Card Charge Responded',
-              status: 'rejected',
-              reason: 'Payment mandate rejected by user.',
-            },
-      requestId: decisionResult.action.requestId,
-    });
-
-    return {
-      ok: true,
-      outcome: {
-        kind: 'charge-mandate',
-        contract: decisionResult.contract,
-        requestId: decisionResult.action.requestId,
-        ...(input.decision === 'accepted' && paymentMandateSessionId
-          ? {
-              paymentMandateBootstrapSessionId: paymentMandateSessionId,
-            }
-          : {}),
-        responseEvents: [responseEvent],
-        historyShort:
-          input.decision === 'accepted'
-            ? 'Payment mandate approved.'
-            : 'Payment mandate rejected.',
-        historyMore:
-          input.decision === 'accepted'
-            ? 'Card charge request can proceed with the approved mandate.'
-            : 'Card charge request was rejected by user decision.',
       },
     };
   }

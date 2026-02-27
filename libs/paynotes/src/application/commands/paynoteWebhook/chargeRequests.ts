@@ -54,7 +54,8 @@ const CARD_CHARGE_COMPLETED_EVENT_NAME = 'PayNote/Card Charge Completed';
 const LINKED_PAYNOTE_START_RESPONDED_EVENT_NAME =
   'PayNote/Linked PayNote Start Responded';
 const LINKED_PAYNOTE_STARTED_EVENT_NAME = 'PayNote/Linked PayNote Started';
-const CHARGE_MANDATE_PENDING_ACTION_TYPE = 'chargeMandateApproval';
+const PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE =
+  'paymentMandateBootstrapApproval';
 const MAX_MANDATE_LINKAGE_RETRY_ATTEMPTS = 5;
 const MANDATE_RETRY_BASE_DELAY_MS = 1_000;
 const MANDATE_RETRY_MAX_DELAY_MS = 60_000;
@@ -490,7 +491,7 @@ type ParsedPaymentMandate = {
   chargeAttempts?: Record<string, ParsedMandateChargeAttempt>;
 };
 
-type AcceptedChargeMandatePendingActionPayload = {
+type AcceptedMandatePendingActionPayload = {
   paymentMandateDocumentId?: string;
   paymentMandateSessionId?: string;
 };
@@ -754,7 +755,7 @@ const resolveLocalPaymentMandateFromPendingActions = async (input: {
   }
 
   const matchedAction = (contract.pendingActions ?? []).find(action => {
-    if (action.type !== CHARGE_MANDATE_PENDING_ACTION_TYPE) {
+    if (action.type !== PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE) {
       return false;
     }
     if (action.status !== 'accepted') {
@@ -762,7 +763,7 @@ const resolveLocalPaymentMandateFromPendingActions = async (input: {
     }
     const payload = toSimpleRecord(
       action.payload
-    ) as AcceptedChargeMandatePendingActionPayload | null;
+    ) as AcceptedMandatePendingActionPayload | null;
     return payload?.paymentMandateDocumentId === input.mandateDocumentId;
   });
 
@@ -772,7 +773,7 @@ const resolveLocalPaymentMandateFromPendingActions = async (input: {
 
   const payload = toSimpleRecord(
     matchedAction.payload
-  ) as AcceptedChargeMandatePendingActionPayload | null;
+  ) as AcceptedMandatePendingActionPayload | null;
 
   return {
     ok: true,
