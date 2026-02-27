@@ -22,7 +22,7 @@ export const listContractsHandler = async (
   const { userId } = await extractAuthInfo(context.request);
   const updatedSince = request.query?.updatedSince;
 
-  logger.info('Listing contracts', { userId, updatedSince });
+  logger.debug('Listing contracts', { userId, updatedSince });
 
   const items = await contractRepository.listContractsByUserId(userId, {
     updatedSince,

@@ -17,7 +17,7 @@ vi.mock('../auth/middleware', () => ({
 
 describe('listContractsHandler', () => {
   const logger = {
-    info: vi.fn(),
+    debug: vi.fn(),
   };
 
   const contractRepository = {
@@ -30,7 +30,7 @@ describe('listContractsHandler', () => {
   beforeEach(() => {
     hoisted.getDependenciesMock.mockReset();
     hoisted.extractAuthInfoMock.mockReset();
-    logger.info.mockReset();
+    logger.debug.mockReset();
     contractRepository.listContractsByUserId.mockReset();
     merchantDirectoryRepository.getMerchantsByIds.mockReset();
 
@@ -85,7 +85,7 @@ describe('listContractsHandler', () => {
       'user-1',
       { updatedSince }
     );
-    expect(logger.info).toHaveBeenCalledWith('Listing contracts', {
+    expect(logger.debug).toHaveBeenCalledWith('Listing contracts', {
       userId: 'user-1',
       updatedSince,
     });

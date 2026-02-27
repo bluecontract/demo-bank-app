@@ -16,7 +16,7 @@ vi.mock('../auth/middleware', () => ({
 
 describe('listPayNoteDeliveriesHandler', () => {
   const logger = {
-    info: vi.fn(),
+    debug: vi.fn(),
   };
 
   const payNoteDeliveryRepository = {
@@ -29,7 +29,7 @@ describe('listPayNoteDeliveriesHandler', () => {
   beforeEach(() => {
     hoisted.getDependenciesMock.mockReset();
     hoisted.extractAuthInfoMock.mockReset();
-    logger.info.mockReset();
+    logger.debug.mockReset();
     payNoteDeliveryRepository.listDeliveriesByUserId.mockReset();
     merchantDirectoryRepository.getMerchantsByIds.mockReset();
 
@@ -92,7 +92,7 @@ describe('listPayNoteDeliveriesHandler', () => {
         },
       }),
     ]);
-    expect(logger.info).toHaveBeenCalledWith('Listing PayNote deliveries', {
+    expect(logger.debug).toHaveBeenCalledWith('Listing PayNote deliveries', {
       userId: 'user-1',
     });
   });
@@ -128,7 +128,7 @@ describe('listPayNoteDeliveriesHandler', () => {
       deliveryId: 'd1',
       clientDecisionStatus: 'pending',
     });
-    expect(logger.info).toHaveBeenCalledWith('Listing PayNote deliveries', {
+    expect(logger.debug).toHaveBeenCalledWith('Listing PayNote deliveries', {
       userId: 'user-1',
       clientDecisionStatus: 'pending',
     });

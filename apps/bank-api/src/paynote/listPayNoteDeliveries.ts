@@ -21,7 +21,7 @@ export const listPayNoteDeliveriesHandler = async (
   const { userId } = await extractAuthInfo(context.request);
   const clientDecisionStatus = request.query?.clientDecisionStatus;
 
-  logger.info('Listing PayNote deliveries', { userId, clientDecisionStatus });
+  logger.debug('Listing PayNote deliveries', { userId, clientDecisionStatus });
 
   const deliveries = await payNoteDeliveryRepository.listDeliveriesByUserId(
     userId
