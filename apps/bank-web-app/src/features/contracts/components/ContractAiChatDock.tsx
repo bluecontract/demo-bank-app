@@ -310,7 +310,7 @@ export function ContractAiChatDock({
       <button
         type="button"
         onClick={handleRestoreClick}
-        className="fixed bottom-4 right-4 z-30 rounded-full shadow-lg ring-1 ring-black/10 transition hover:scale-105"
+        className="fixed bottom-4 right-4 z-30 rounded-full shadow-lg ring-1 ring-black/10 transition hover:scale-105 sm:right-6 lg:right-10"
         aria-label="Open AI chat"
       >
         <Avatar
@@ -324,13 +324,13 @@ export function ContractAiChatDock({
 
   return (
     <section
-      className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4"
+      className="fixed bottom-0 z-30 pb-4 left-4 right-4 sm:left-6 sm:right-6 lg:left-[calc(240px+2.5rem)] lg:right-10"
       role="complementary"
       aria-label="AI chat dock"
       onFocusCapture={handleDockFocus}
       onBlurCapture={handleDockBlur}
     >
-      <div className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-lg">
+      <div className="mx-auto w-full rounded-2xl border border-slate-200 bg-white shadow-lg">
         <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-white/80">
           <h2 className="text-base font-semibold text-slate-900">
             Talk with AI
