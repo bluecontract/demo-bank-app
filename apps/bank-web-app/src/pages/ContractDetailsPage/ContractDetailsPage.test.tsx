@@ -209,11 +209,14 @@ describe('ContractDetailsPage', () => {
     expect(
       screen.getByText('Funds will be held until delivery is confirmed.')
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'More' })
+    ).not.toBeInTheDocument();
     expect(screen.queryByText('Highlights')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'More' }));
-    expect(screen.getByText('Highlights')).toBeInTheDocument();
-    expect(screen.queryByText('View history')).not.toBeInTheDocument();
+    expect(screen.queryByText('Latest update')).not.toBeInTheDocument();
+    expect(screen.queryByText('Next steps')).not.toBeInTheDocument();
+    expect(screen.queryByText('Available operations')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^More$/)).not.toBeInTheDocument();
     expect(markReviewedMock).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-1' })
     );
@@ -625,9 +628,8 @@ describe('ContractDetailsPage', () => {
 
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
-    expect(
-      screen.queryByRole('heading', { name: 'Linked contracts' })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Linked contracts')).not.toBeInTheDocument();
+    expect(screen.queryByText('Linked transactions')).not.toBeInTheDocument();
   });
 
   it('does not show linked proposal items when contract view is active', () => {
@@ -701,9 +703,8 @@ describe('ContractDetailsPage', () => {
 
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
-    expect(
-      screen.getByRole('heading', { name: 'Linked contracts' })
-    ).toBeInTheDocument();
+    expect(screen.getByText('More')).toBeInTheDocument();
+    expect(screen.getByText('Linked contracts')).toBeInTheDocument();
     expect(
       screen.getAllByText('Linked Contract Visible').length
     ).toBeGreaterThan(0);

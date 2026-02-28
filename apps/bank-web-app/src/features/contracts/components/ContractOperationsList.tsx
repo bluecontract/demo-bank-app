@@ -5,54 +5,66 @@ import {
 } from '@demo-bank-app/shared-bank-api-contract';
 import { blue } from '../../../lib/blue';
 import type { ContractDetails } from '../../../types/api';
-import { collectContractOperations } from '../lib/operations';
+import {
+  collectContractOperations,
+  type ContractOperation,
+} from '../lib/operations';
 import { OperationForm } from './OperationForm';
 
 interface ContractOperationsListProps {
   contract: ContractDetails;
+  operations?: ContractOperation[];
   variant?: 'card' | 'compact';
   emptyLabel?: string;
 }
 
+export function resolveContractOperations(
+  contract: ContractDetails
+): ContractOperation[] {
+  const supportedContract = getSupportedContractByTypeBlueId(
+    contract.typeBlueId
+  );
+
+  if (!contract.document || !supportedContract) {
+    return [];
+  }
+
+  const channels = resolveContractChannelKeys({
+    supportedContract,
+    customerChannelKey: contract.customerChannelKey,
+    accountNumber: contract.accountNumber,
+    document: contract.document,
+  });
+
+  const collected = collectContractOperations({
+    document: contract.document,
+    operationsChannelKey: channels.operationsChannelKey,
+    blue,
+  });
+
+  if (supportedContract.typeName === 'PayNote/PayNote Delivery') {
+    return collected.filter(operation =>
+      ['acceptPayNote', 'rejectPayNote'].includes(operation.name)
+    );
+  }
+
+  return collected;
+}
+
 export function ContractOperationsList({
   contract,
+  operations: operationsProp,
   variant = 'card',
   emptyLabel = 'No operations are available for this contract.',
 }: ContractOperationsListProps) {
   const [activeOperation, setActiveOperation] = useState<string | null>(null);
 
-  const supportedContract = getSupportedContractByTypeBlueId(
-    contract.typeBlueId
-  );
-
   const operations = useMemo(() => {
-    if (!contract.document || !supportedContract) {
-      return [];
+    if (operationsProp) {
+      return operationsProp;
     }
-    const channels = resolveContractChannelKeys({
-      supportedContract,
-      customerChannelKey: contract.customerChannelKey,
-      accountNumber: contract.accountNumber,
-      document: contract.document,
-    });
-
-    const collected = collectContractOperations({
-      document: contract.document,
-      operationsChannelKey: channels.operationsChannelKey,
-      blue,
-    });
-    if (supportedContract.typeName === 'PayNote/PayNote Delivery') {
-      return collected.filter(operation =>
-        ['acceptPayNote', 'rejectPayNote'].includes(operation.name)
-      );
-    }
-    return collected;
-  }, [
-    contract.document,
-    contract.accountNumber,
-    contract.customerChannelKey,
-    supportedContract,
-  ]);
+    return resolveContractOperations(contract);
+  }, [operationsProp, contract]);
 
   const activeOperationDetails = operations.find(
     operation => operation.name === activeOperation

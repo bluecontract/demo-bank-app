@@ -21,6 +21,7 @@ interface ContractRelatedActivitySectionProps {
   contract: ContractActivitySource;
   title?: string;
   description?: string;
+  hideHeader?: boolean;
   hideWhenEmpty?: boolean;
   className?: string;
 }
@@ -29,6 +30,7 @@ export function ContractRelatedActivitySection({
   contract,
   title = 'Linked transactions',
   description,
+  hideHeader = false,
   hideWhenEmpty = false,
   className = '',
 }: ContractRelatedActivitySectionProps) {
@@ -85,8 +87,13 @@ export function ContractRelatedActivitySection({
   };
 
   const hasVisibleRelatedItems = groupedRelatedItems.length > 0;
+  const contentSpacingClass = hideHeader ? '' : 'mt-4';
 
   if (hideWhenEmpty && !hasRelatedItems) {
+    return null;
+  }
+
+  if (hideWhenEmpty && !isActivityLoading && !hasVisibleRelatedItems) {
     return null;
   }
 
@@ -94,23 +101,29 @@ export function ContractRelatedActivitySection({
     <section
       className={`rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4 ${className}`.trim()}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-base font-semibold text-slate-900">{title}</h3>
-          {description && (
-            <p className="text-xs text-slate-500 mt-1">{description}</p>
-          )}
+      {!hideHeader && (
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+            {description && (
+              <p className="mt-1 text-xs text-slate-500">{description}</p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {!hideWhenEmpty && !hasRelatedItems && (
-        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
+        <div
+          className={`${contentSpacingClass} rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500`.trim()}
+        >
           No linked activity yet.
         </div>
       )}
 
       {isActivityLoading && (
-        <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500 flex items-center gap-3">
+        <div
+          className={`${contentSpacingClass} flex items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500`.trim()}
+        >
           <Spinner size="sm" color="green" />
           Loading linked activity details...
         </div>
@@ -120,24 +133,28 @@ export function ContractRelatedActivitySection({
         hasRelatedItems &&
         !hasVisibleRelatedItems &&
         !hideWhenEmpty && (
-          <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
+          <div
+            className={`${contentSpacingClass} rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500`.trim()}
+          >
             No linked activity available for this account.
           </div>
         )}
 
       {!isActivityLoading && hasVisibleRelatedItems && (
-        <div className="mt-4 space-y-4">
-          <div>
-            <div className="mt-2 rounded-xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
-              {groupedRelatedItems.map(item => (
-                <TransactionItem
-                  key={getActivityKey(item)}
-                  item={item}
-                  onActivitySelect={handleActivitySelect}
-                  variant="linked"
-                />
-              ))}
-            </div>
+        <div className={contentSpacingClass}>
+          <div
+            className={`${
+              hideHeader ? '' : 'mt-2'
+            } rounded-xl border border-slate-200 bg-white/80 divide-y divide-slate-100`.trim()}
+          >
+            {groupedRelatedItems.map(item => (
+              <TransactionItem
+                key={getActivityKey(item)}
+                item={item}
+                onActivitySelect={handleActivitySelect}
+                variant="linked"
+              />
+            ))}
           </div>
         </div>
       )}
