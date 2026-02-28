@@ -93,17 +93,18 @@ const normalizePendingOperation = (
     return null;
   }
 
+  const candidate = value as { operation?: unknown; request?: unknown };
+
   if (
-    typeof (value as ContractAiChatDockPendingOperation).operation !==
-      'string' ||
-    (value as ContractAiChatDockPendingOperation).operation.length === 0
+    typeof candidate.operation !== 'string' ||
+    candidate.operation.length === 0
   ) {
     return null;
   }
 
   return {
-    operation: (value as ContractAiChatDockPendingOperation).operation,
-    request: (value as ContractAiChatDockPendingOperation).request,
+    operation: candidate.operation,
+    request: candidate.request,
   };
 };
 

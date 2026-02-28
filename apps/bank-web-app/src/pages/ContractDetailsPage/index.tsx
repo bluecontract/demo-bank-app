@@ -903,16 +903,6 @@ export function ContractDetailsPage() {
                     {senderName}
                   </div>
                 </div>
-                {aiChatSessionId && aiChatState.state.mode === 'minimized' ? (
-                  <button
-                    type="button"
-                    className="text-sm font-semibold text-[color:var(--color-primary)] opacity-70 hover:opacity-100"
-                    aria-label="Talk with AI"
-                    onClick={() => aiChatState.setMode('collapsed')}
-                  >
-                    Talk with AI
-                  </button>
-                ) : null}
               </div>
 
               <div className="mt-4 space-y-3 text-slate-700">

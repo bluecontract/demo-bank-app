@@ -30,7 +30,11 @@ vi.mock('../../app/providers/AuthProvider', () => ({
 
 vi.mock('../../features/contracts/components/ContractAiChatDock', () => ({
   ContractAiChatDock: ({ state }: { state: { mode: string } }) =>
-    state.mode === 'minimized' ? null : <div data-testid="ai-chat-dock" />,
+    state.mode === 'minimized' ? (
+      <div data-testid="ai-chat-avatar" />
+    ) : (
+      <div data-testid="ai-chat-dock" />
+    ),
 }));
 
 vi.mock('../../features/contracts/hooks', () => ({
@@ -265,7 +269,7 @@ describe('ContractDetailsPage', () => {
     );
   });
 
-  it('shows Talk with AI trigger only when dock is minimized', () => {
+  it('does not render Talk with AI trigger in header', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-1' });
     mockUseLocation.mockReturnValue({
       state: { from: '/contracts', kind: 'contract' },
@@ -322,8 +326,7 @@ describe('ContractDetailsPage', () => {
     expect(screen.getByTestId('ai-chat-dock')).toBeInTheDocument();
   });
 
-  it('expands the AI dock from minimized state when trigger is clicked', () => {
-    const setModeMock = vi.fn();
+  it('renders minimized chat avatar when dock state is minimized', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-1' });
     mockUseLocation.mockReturnValue({
       state: { from: '/contracts', kind: 'contract' },
@@ -344,7 +347,7 @@ describe('ContractDetailsPage', () => {
             overview: ['Funds will be held until delivery is confirmed.'],
             bullets: [],
           },
-          listPreview: 'Funds will be held until delivery is confirmed.',
+          listPreview: 'Funds are held until delivery.',
           nextSteps: {
             title: 'Next steps',
             items: ['Awaiting client approval.'],
@@ -369,15 +372,15 @@ describe('ContractDetailsPage', () => {
 
     mockUseContractAiChatDockState.mockReturnValue({
       ...mockAiChatState,
-      setMode: setModeMock,
       state: { ...mockAiChatState.state, mode: 'minimized' },
     });
 
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Talk with AI' }));
-
-    expect(setModeMock).toHaveBeenCalledWith('collapsed');
+    expect(
+      screen.queryByRole('button', { name: 'Talk with AI' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('ai-chat-avatar')).toBeInTheDocument();
   });
 
   it('separates AI chat state by contract session', () => {

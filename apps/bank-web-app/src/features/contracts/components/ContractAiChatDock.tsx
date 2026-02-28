@@ -1,6 +1,7 @@
-import { FormEvent, useCallback, useMemo } from 'react';
+import { FocusEvent, FormEvent, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
+import { Avatar } from '../../../ui/Avatar';
 import { Button } from '../../../ui/Button';
 import { Input } from '../../../ui/Input';
 import { Spinner } from '../../../ui/Spinner';
@@ -69,8 +70,12 @@ export function ContractAiChatDock({
   const queryClient = useQueryClient();
   const chat = useContractAiChat();
   const runOperation = useRunContractOperation();
+  const { isPending: isChatPending, mutateAsync: sendChatMessage } = chat;
+  const { isPending: isRunOperationPending, mutate: runOperationMutate } =
+    runOperation;
 
   const isExpanded = state.mode === 'expanded';
+  const isMinimized = state.mode === 'minimized';
   const payloadPreview = useMemo(
     () =>
       state.pendingOperation
@@ -85,7 +90,7 @@ export function ContractAiChatDock({
         ...baseMessages,
         {
           id: createId(),
-          role: 'assistant',
+          role: 'assistant' as const,
           content: text,
         },
       ]);
@@ -99,7 +104,7 @@ export function ContractAiChatDock({
         ...currentMessages,
         {
           id: createId(),
-          role: 'assistant',
+          role: 'assistant' as const,
           content: response.assistantMessage,
         },
       ];
@@ -128,52 +133,66 @@ export function ContractAiChatDock({
     [appendAssistantMessage, onMessagesChange, onPendingOperationChange]
   );
 
-  const sendMessage = async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || chat.isPending || runOperation.isPending) {
-      return;
-    }
-
-    onPendingOperationChange(null);
-
-    const nextMessages: ChatMessage[] = [
-      ...state.messages,
-      {
-        id: createId(),
-        role: 'user',
-        content: trimmed,
-      },
-    ];
-
-    onMessagesChange(nextMessages);
-    onDraftChange('');
-
-    try {
-      const response = await chat.mutateAsync({
-        sessionId,
-        messages: nextMessages.slice(-MAX_HISTORY_MESSAGES),
-      });
-
-      handleAiResponse(response, nextMessages);
-    } catch (error) {
-      const status =
-        error && typeof error === 'object' && 'status' in error
-          ? (error as { status?: unknown }).status
-          : undefined;
-
-      if (typeof status === 'number') {
-        appendAssistantMessage(
-          `Sorry — the assistant request failed (${status}). Try again.`,
-          nextMessages
-        );
-      } else {
-        appendAssistantMessage(
-          'Sorry — I could not reach the assistant. Try again.',
-          nextMessages
-        );
+  const sendMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || isChatPending || isRunOperationPending) {
+        return;
       }
-    }
-  };
+
+      onPendingOperationChange(null);
+
+      const nextMessages: ChatMessage[] = [
+        ...state.messages,
+        {
+          id: createId(),
+          role: 'user' as const,
+          content: trimmed,
+        },
+      ];
+
+      onMessagesChange(nextMessages);
+      onDraftChange('');
+
+      try {
+        const response = await sendChatMessage({
+          sessionId,
+          messages: nextMessages.slice(-MAX_HISTORY_MESSAGES),
+        });
+
+        handleAiResponse(response, nextMessages);
+      } catch (error) {
+        const status =
+          error && typeof error === 'object' && 'status' in error
+            ? (error as { status?: unknown }).status
+            : undefined;
+
+        if (typeof status === 'number') {
+          appendAssistantMessage(
+            `Sorry — the assistant request failed (${status}). Try again.`,
+            nextMessages
+          );
+        } else {
+          appendAssistantMessage(
+            'Sorry — I could not reach the assistant. Try again.',
+            nextMessages
+          );
+        }
+      }
+    },
+    [
+      appendAssistantMessage,
+      isChatPending,
+      isRunOperationPending,
+      sendChatMessage,
+      handleAiResponse,
+      onDraftChange,
+      onMessagesChange,
+      onPendingOperationChange,
+      sessionId,
+      state.messages,
+    ]
+  );
 
   const refreshContractDetailsIfUpdated = async (
     baselineUpdatedAt: string
@@ -202,8 +221,8 @@ export function ContractAiChatDock({
     }
   };
 
-  const handleConfirmOperation = async () => {
-    if (!state.pendingOperation || runOperation.isPending) {
+  const handleConfirmOperation = () => {
+    if (!state.pendingOperation || isRunOperationPending) {
       return;
     }
 
@@ -214,7 +233,7 @@ export function ContractAiChatDock({
     const baselineUpdatedAt = cachedContract?.updatedAt ?? contractUpdatedAt;
 
     const operationPayload = [...state.messages];
-    runOperation.mutate(
+    runOperationMutate(
       {
         sessionId,
         operation: state.pendingOperation.operation,
@@ -243,27 +262,64 @@ export function ContractAiChatDock({
       event.preventDefault();
       void sendMessage(state.draft);
     },
-    [state.draft]
+    [sendMessage, state.draft]
   );
 
-  const handleMinimizeClick = () => {
-    onModeChange('minimized');
-  };
+  const handleDockFocus = useCallback(() => {
+    if (isMinimized || isExpanded) {
+      return;
+    }
 
-  const handleExpandClick = () => {
     onModeChange('expanded');
-  };
+  }, [isExpanded, isMinimized, onModeChange]);
 
-  const handleCollapseClick = () => {
+  const handleDockBlur = useCallback(
+    (event: FocusEvent<HTMLElement>) => {
+      if (isMinimized) {
+        return;
+      }
+
+      const nextFocus = event.relatedTarget;
+      if (
+        nextFocus &&
+        event.currentTarget instanceof Element &&
+        event.currentTarget.contains(nextFocus as Node)
+      ) {
+        return;
+      }
+
+      onModeChange('collapsed');
+    },
+    [isMinimized, onModeChange]
+  );
+
+  const handleHideClick = () => {
     onModeChange('collapsed');
   };
 
-  const isSendDisabled =
-    !state.draft.trim() || chat.isPending || runOperation.isPending;
-  const isAiPending = chat.isPending || runOperation.isPending;
+  const handleRestoreClick = () => {
+    onModeChange('expanded');
+  };
 
-  if (state.mode === 'minimized') {
-    return null;
+  const isSendDisabled =
+    !state.draft.trim() || isChatPending || isRunOperationPending;
+  const isAiPending = isChatPending || isRunOperationPending;
+
+  if (isMinimized) {
+    return (
+      <button
+        type="button"
+        onClick={handleRestoreClick}
+        className="fixed bottom-4 right-4 z-30 rounded-full shadow-lg ring-1 ring-black/10 transition hover:scale-105"
+        aria-label="Open AI chat"
+      >
+        <Avatar
+          name="AI"
+          size="lg"
+          className="rounded-full border-2 border-white"
+        />
+      </button>
+    );
   }
 
   return (
@@ -271,31 +327,19 @@ export function ContractAiChatDock({
       className="fixed inset-x-0 bottom-0 z-30 px-4 pb-4"
       role="complementary"
       aria-label="AI chat dock"
+      onFocusCapture={handleDockFocus}
+      onBlurCapture={handleDockBlur}
     >
-      <div className="mx-auto w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-lg">
+      <div className="mx-auto w-full max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-lg">
         <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-white/80">
           <h2 className="text-base font-semibold text-slate-900">
             Talk with AI
           </h2>
           {isExpanded ? (
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleCollapseClick}>
-                Collapse
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleMinimizeClick}
-                disabled={isAiPending}
-              >
-                Minimize
-              </Button>
-            </div>
-          ) : (
-            <Button variant="outline" size="sm" onClick={handleExpandClick}>
-              Expand
+            <Button variant="outline" size="sm" onClick={handleHideClick}>
+              Hide
             </Button>
-          )}
+          ) : null}
         </header>
 
         {isExpanded && (
@@ -321,7 +365,7 @@ export function ContractAiChatDock({
               );
             })}
 
-            {chat.isPending && (
+            {isChatPending && (
               <div className="flex items-center gap-2 text-sm text-slate-600">
                 <Spinner size="sm" color="green" />
                 Thinking...
@@ -348,7 +392,7 @@ export function ContractAiChatDock({
                     variant="secondary"
                     size="sm"
                     onClick={() => onPendingOperationChange(null)}
-                    disabled={runOperation.isPending}
+                    disabled={isRunOperationPending}
                   >
                     Cancel
                   </Button>
@@ -356,9 +400,9 @@ export function ContractAiChatDock({
                     variant="primary"
                     size="sm"
                     onClick={handleConfirmOperation}
-                    disabled={runOperation.isPending}
+                    disabled={isRunOperationPending}
                   >
-                    {runOperation.isPending ? 'Submitting...' : 'Confirm'}
+                    {isRunOperationPending ? 'Submitting...' : 'Confirm'}
                   </Button>
                 </div>
               </div>
