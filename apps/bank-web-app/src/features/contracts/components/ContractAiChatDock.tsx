@@ -364,8 +364,8 @@ export function ContractAiChatDock({
       onFocusCapture={handleDockFocus}
       onBlurCapture={handleDockBlur}
     >
-      <div className="mx-auto w-full rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5 ring-1 ring-slate-200/70">
-        <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-white/80">
+      <div className="mx-auto w-full rounded-2xl border-2 border-slate-300 bg-white shadow-2xl shadow-slate-900/15 ring-1 ring-slate-200/80">
+        <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-300 bg-slate-100">
           <h2 className="text-base font-semibold text-slate-900">
             Talk with AI
           </h2>
@@ -380,7 +380,7 @@ export function ContractAiChatDock({
           <div
             ref={messagesContainerRef}
             data-testid="ai-chat-messages"
-            className="max-h-[45vh] min-h-[220px] overflow-y-auto bg-[#f5f7fa] p-4 space-y-4 border-t border-slate-100/80"
+            className="max-h-[45vh] min-h-[220px] overflow-y-auto bg-[#f5f7fa] p-4 space-y-4 border-t border-slate-200/80"
           >
             {state.messages.map(message => {
               const isAssistant = message.role === 'assistant';
