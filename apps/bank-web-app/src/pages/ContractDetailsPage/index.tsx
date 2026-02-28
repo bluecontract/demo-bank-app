@@ -999,7 +999,7 @@ export function ContractDetailsPage() {
                     />
                   </svg>
                 </summary>
-                <div className="mt-4 space-y-4 border-t border-slate-200 pt-4 text-sm text-slate-600">
+                <div className="mt-4 space-y-3 border-t border-slate-200 pt-3 text-sm text-slate-600">
                   {hasLinkedTransactions && relatedActivitySource && (
                     <details
                       className="rounded-xl border border-slate-200 bg-white/70 p-4"
@@ -1021,7 +1021,7 @@ export function ContractDetailsPage() {
                           />
                         </svg>
                       </summary>
-                      <div className="mt-4 border-t border-slate-200 pt-4">
+                      <div className="mt-3 border-t border-slate-200 pt-3">
                         <div className="rounded-xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
                           {linkedGroupedRelatedItems.map(item => (
                             <TransactionItem
@@ -1057,7 +1057,7 @@ export function ContractDetailsPage() {
                           />
                         </svg>
                       </summary>
-                      <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+                      <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
                         {filteredRelatedContracts.map(contractItem => {
                           const isProposal =
                             isProposalRelatedContract(contractItem);
@@ -1175,7 +1175,7 @@ export function ContractDetailsPage() {
                           />
                         </svg>
                       </summary>
-                      <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+                      <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
                         {historyItems.map(item => (
                           <div
                             key={item.id}
