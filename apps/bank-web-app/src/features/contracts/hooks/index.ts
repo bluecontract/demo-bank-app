@@ -17,3 +17,4 @@ export * from './useAcceptPayNoteDelivery';
 export * from './useRejectPayNoteDelivery';
 export * from './useUnarchiveContract';
 export * from './useContractAiChat';
+export * from './useContractAiChatDockState';

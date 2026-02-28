@@ -20,6 +20,7 @@ import {
   useProposalDecision,
   useArchiveContract,
   useUnarchiveContract,
+  useContractAiChatDockState,
 } from '../../features/contracts/hooks';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -27,9 +28,9 @@ vi.mock('../../app/providers/AuthProvider', () => ({
   useAuth: vi.fn(),
 }));
 
-vi.mock('../../features/contracts/components/ContractAiChatDrawer', () => ({
-  ContractAiChatDrawer: ({ isOpen }: { isOpen: boolean }) =>
-    isOpen ? <div data-testid="ai-chat-drawer" /> : null,
+vi.mock('../../features/contracts/components/ContractAiChatDock', () => ({
+  ContractAiChatDock: ({ state }: { state: { mode: string } }) =>
+    state.mode === 'minimized' ? null : <div data-testid="ai-chat-dock" />,
 }));
 
 vi.mock('../../features/contracts/hooks', () => ({
@@ -43,6 +44,7 @@ vi.mock('../../features/contracts/hooks', () => ({
   useProposalDecision: vi.fn(),
   useArchiveContract: vi.fn(),
   useUnarchiveContract: vi.fn(),
+  useContractAiChatDockState: vi.fn(),
 }));
 
 vi.mock('../../features/dashboard/components', () => ({
@@ -80,6 +82,9 @@ const mockUseUnarchiveContract = useUnarchiveContract as ReturnType<
   typeof vi.fn
 >;
 const mockUseProposalDecision = useProposalDecision as ReturnType<typeof vi.fn>;
+const mockUseContractAiChatDockState = useContractAiChatDockState as ReturnType<
+  typeof vi.fn
+>;
 const mockUseActiveContractSession = useActiveContractSession as ReturnType<
   typeof vi.fn
 >;
@@ -90,6 +95,20 @@ const mockUseNavigate = useNavigate as ReturnType<typeof vi.fn>;
 describe('ContractDetailsPage', () => {
   let markReviewedMock: ReturnType<typeof vi.fn>;
   let markItemReviewedMock: ReturnType<typeof vi.fn>;
+  let mockAiChatState: {
+    state: {
+      version: number;
+      mode: 'collapsed' | 'minimized' | 'expanded';
+      messages: Array<{ id: string; role: string; content: string }>;
+      draft: string;
+      pendingOperation: null;
+      updatedAt: string;
+    };
+    setMode: ReturnType<typeof vi.fn>;
+    setDraft: ReturnType<typeof vi.fn>;
+    setMessages: ReturnType<typeof vi.fn>;
+    setPendingOperation: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -148,6 +167,30 @@ describe('ContractDetailsPage', () => {
       error: null,
       timedOut: false,
     });
+
+    mockAiChatState = {
+      state: {
+        version: 1,
+        mode: 'collapsed',
+        messages: [
+          {
+            id: 'welcome',
+            role: 'assistant',
+            content:
+              'How can I help you? I know everything about the document: “Contract”.',
+          },
+        ],
+        draft: '',
+        pendingOperation: null,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      setMode: vi.fn(),
+      setDraft: vi.fn(),
+      setMessages: vi.fn(),
+      setPendingOperation: vi.fn(),
+    };
+
+    mockUseContractAiChatDockState.mockReturnValue(mockAiChatState);
 
     mockUseNavigate.mockReturnValue(vi.fn());
   });
@@ -222,7 +265,7 @@ describe('ContractDetailsPage', () => {
     );
   });
 
-  it('opens the AI chat drawer when Talk with AI is clicked', () => {
+  it('shows Talk with AI trigger only when dock is minimized', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-1' });
     mockUseLocation.mockReturnValue({
       state: { from: '/contracts', kind: 'contract' },
@@ -266,13 +309,149 @@ describe('ContractDetailsPage', () => {
       error: null,
     });
 
+    mockUseContractAiChatDockState.mockReturnValue({
+      ...mockAiChatState,
+      state: { ...mockAiChatState.state, mode: 'collapsed' },
+    });
+
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
-    expect(screen.queryByTestId('ai-chat-drawer')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Talk with AI' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('ai-chat-dock')).toBeInTheDocument();
+  });
+
+  it('expands the AI dock from minimized state when trigger is clicked', () => {
+    const setModeMock = vi.fn();
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'GE Refrigerator Order',
+        document: { name: 'GE Refrigerator Order' },
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        summary: {
+          story: {
+            headline: 'GE Refrigerator Order',
+            overview: ['Funds will be held until delivery is confirmed.'],
+            bullets: [],
+          },
+          listPreview: 'Funds will be held until delivery is confirmed.',
+          nextSteps: {
+            title: 'Next steps',
+            items: ['Awaiting client approval.'],
+          },
+          lastChange: {
+            short: 'Proposal pending.',
+            more: 'Awaiting client approval.',
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseContractAiChatDockState.mockReturnValue({
+      ...mockAiChatState,
+      setMode: setModeMock,
+      state: { ...mockAiChatState.state, mode: 'minimized' },
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
     fireEvent.click(screen.getByRole('button', { name: 'Talk with AI' }));
 
-    expect(screen.getByTestId('ai-chat-drawer')).toBeInTheDocument();
+    expect(setModeMock).toHaveBeenCalledWith('collapsed');
+  });
+
+  it('separates AI chat state by contract session', () => {
+    const callLog: Array<{ sessionId: string | null }> = [];
+    mockUseContractAiChatDockState.mockImplementation(({ sessionId }) => {
+      callLog.push({ sessionId });
+      return {
+        ...mockAiChatState,
+        state: { ...mockAiChatState.state, mode: 'collapsed' },
+      };
+    });
+
+    const renderContract = (sessionId: string) => {
+      mockUseParams.mockReturnValue({ sessionId });
+      mockUseLocation.mockReturnValue({
+        state: { from: '/contracts', kind: 'contract' },
+        pathname: `/contracts/${sessionId}`,
+        search: '',
+      });
+
+      mockUseContractDetails.mockReturnValue({
+        data: {
+          sessionId,
+          typeBlueId: 'PayNote/Contract',
+          displayName: sessionId === 'session-1' ? 'First' : 'Second',
+          document: {
+            name:
+              sessionId === 'session-1' ? 'First contract' : 'Second contract',
+          },
+          updatedAt:
+            sessionId === 'session-1'
+              ? '2026-01-01T00:00:00.000Z'
+              : '2026-01-03T00:00:00.000Z',
+          summary: {
+            story: {
+              headline: sessionId === 'session-1' ? 'First' : 'Second',
+              overview: [
+                sessionId === 'session-1' ? 'Contract one.' : 'Contract two.',
+              ],
+              bullets: [],
+            },
+            listPreview:
+              sessionId === 'session-1' ? 'Contract one.' : 'Contract two.',
+            nextSteps: { title: 'Next steps', items: [] },
+            lastChange: {
+              short: 'Proposal received.',
+              more: 'Awaiting client approval.',
+            },
+          },
+        },
+        isLoading: false,
+        isError: false,
+        error: null,
+      });
+
+      mockUseProposalDetails.mockReturnValue({
+        data: null,
+        isLoading: false,
+        isError: false,
+        error: null,
+      });
+    };
+
+    renderContract('session-1');
+    const { rerender } = render(<ContractDetailsPage />, {
+      wrapper: createQueryWrapper(),
+    });
+
+    renderContract('session-2');
+    rerender(<ContractDetailsPage />);
+
+    const sessionIds = callLog.map(item => item.sessionId);
+    expect(sessionIds).toContain('session-1');
+    expect(sessionIds).toContain('session-2');
   });
 
   it('renders proposal actions when the proposal view is active', () => {

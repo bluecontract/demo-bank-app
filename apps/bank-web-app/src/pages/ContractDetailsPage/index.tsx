@@ -20,6 +20,7 @@ import {
   useProposalDecision,
   useArchiveContract,
   useUnarchiveContract,
+  useContractAiChatDockState,
 } from '../../features/contracts/hooks';
 import {
   getDocumentDescription,
@@ -48,7 +49,7 @@ import {
   ContractOperationsList,
   resolveContractOperations,
 } from '../../features/contracts/components/ContractOperationsList';
-import { ContractAiChatDrawer } from '../../features/contracts/components/ContractAiChatDrawer';
+import { ContractAiChatDock } from '../../features/contracts/components/ContractAiChatDock';
 import { Avatar } from '../../ui/Avatar';
 import { Button } from '../../ui/Button';
 import { Dropdown, DropdownItem } from '../../ui/Dropdown';
@@ -327,7 +328,6 @@ export function ContractDetailsPage() {
   if (isSessionChanged) {
     lastSessionIdRef.current = sessionId ?? null;
   }
-  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
   const [isMoreExpanded, setIsMoreExpanded] = useState(false);
   const [expandedMoreSections, setExpandedMoreSections] = useState({
     linkedTransactions: true,
@@ -586,9 +586,11 @@ export function ContractDetailsPage() {
       (contract ? getDocumentDescription(resolvedDocument) : null)) ||
     (contract ? 'Summary unavailable.' : proposalSummaryFallback);
 
-  useEffect(() => {
-    setIsAiChatOpen(false);
-  }, [aiChatSessionId]);
+  const aiChatState = useContractAiChatDockState({
+    sessionId: aiChatSessionId,
+    userId: user?.userId,
+    documentTitle: headerTitle,
+  });
 
   const historySessionId =
     resolvedKind === 'contract' ? contractData?.sessionId ?? null : null;
@@ -901,12 +903,12 @@ export function ContractDetailsPage() {
                     {senderName}
                   </div>
                 </div>
-                {aiChatSessionId ? (
+                {aiChatSessionId && aiChatState.state.mode === 'minimized' ? (
                   <button
                     type="button"
                     className="text-sm font-semibold text-[color:var(--color-primary)] opacity-70 hover:opacity-100"
                     aria-label="Talk with AI"
-                    onClick={() => setIsAiChatOpen(true)}
+                    onClick={() => aiChatState.setMode('collapsed')}
                   >
                     Talk with AI
                   </button>
@@ -1246,15 +1248,18 @@ export function ContractDetailsPage() {
         </div>
       </section>
 
-      {aiChatSessionId && contract?.updatedAt && (
-        <ContractAiChatDrawer
-          isOpen={isAiChatOpen}
+      {aiChatSessionId && contract?.updatedAt ? (
+        <ContractAiChatDock
           sessionId={aiChatSessionId}
           documentTitle={headerTitle}
           contractUpdatedAt={contract.updatedAt}
-          onClose={() => setIsAiChatOpen(false)}
+          state={aiChatState.state}
+          onModeChange={aiChatState.setMode}
+          onDraftChange={aiChatState.setDraft}
+          onMessagesChange={aiChatState.setMessages}
+          onPendingOperationChange={aiChatState.setPendingOperation}
         />
-      )}
+      ) : null}
     </DashboardShell>
   );
 }
