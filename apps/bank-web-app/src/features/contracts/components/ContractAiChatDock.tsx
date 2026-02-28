@@ -1,4 +1,11 @@
-import { FocusEvent, FormEvent, useCallback, useMemo } from 'react';
+import {
+  FocusEvent,
+  FormEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+} from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { Avatar } from '../../../ui/Avatar';
@@ -76,6 +83,7 @@ export function ContractAiChatDock({
 
   const isExpanded = state.mode === 'expanded';
   const isMinimized = state.mode === 'minimized';
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const payloadPreview = useMemo(
     () =>
       state.pendingOperation
@@ -301,6 +309,32 @@ export function ContractAiChatDock({
     onModeChange('expanded');
   };
 
+  useEffect(() => {
+    if (!isExpanded) {
+      return;
+    }
+
+    const messagesContainer = messagesContainerRef.current;
+    if (!messagesContainer) {
+      return;
+    }
+
+    const rafId = requestAnimationFrame(() => {
+      messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+    };
+  }, [
+    isExpanded,
+    state.messages.length,
+    isChatPending,
+    state.pendingOperation,
+  ]);
+
   const isSendDisabled =
     !state.draft.trim() || isChatPending || isRunOperationPending;
   const isAiPending = isChatPending || isRunOperationPending;
@@ -330,7 +364,7 @@ export function ContractAiChatDock({
       onFocusCapture={handleDockFocus}
       onBlurCapture={handleDockBlur}
     >
-      <div className="mx-auto w-full rounded-2xl border border-slate-200 bg-white shadow-lg">
+      <div className="mx-auto w-full rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5 ring-1 ring-slate-200/70">
         <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-200 bg-white/80">
           <h2 className="text-base font-semibold text-slate-900">
             Talk with AI
@@ -343,7 +377,11 @@ export function ContractAiChatDock({
         </header>
 
         {isExpanded && (
-          <div className="max-h-[45vh] min-h-[220px] overflow-y-auto bg-[#f5f7fa] p-4 space-y-4">
+          <div
+            ref={messagesContainerRef}
+            data-testid="ai-chat-messages"
+            className="max-h-[45vh] min-h-[220px] overflow-y-auto bg-[#f5f7fa] p-4 space-y-4 border-t border-slate-100/80"
+          >
             {state.messages.map(message => {
               const isAssistant = message.role === 'assistant';
               return (

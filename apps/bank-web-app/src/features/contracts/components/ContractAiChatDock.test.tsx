@@ -339,6 +339,63 @@ describe('ContractAiChatDock', () => {
       screen.getByRole('button', { name: 'Send message' })
     ).toBeInTheDocument();
   });
+
+  it('auto-scrolls to latest messages when expanded and when new messages arrive', async () => {
+    const chatMutateAsync = vi.fn().mockResolvedValue({
+      assistantMessage: 'Status captured.',
+      status: 'done',
+      nextProcessingState: 'idle',
+      focus: null,
+      operationRequest: null,
+    });
+
+    mockUseContractAiChat.mockReturnValue({
+      mutateAsync: chatMutateAsync,
+      isPending: false,
+      reset: vi.fn(),
+    });
+
+    mockUseRunContractOperation.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      reset: vi.fn(),
+    });
+
+    render(
+      <ChatDockHarness
+        initialState={{
+          ...buildState(),
+          mode: 'expanded',
+        }}
+      />,
+      { wrapper: createQueryWrapper() }
+    );
+
+    const messagesArea = screen.getByTestId('ai-chat-messages');
+    expect(messagesArea).toBeInTheDocument();
+    const scrollToSpy = vi.fn();
+    Object.defineProperty(messagesArea, 'scrollTo', {
+      value: scrollToSpy,
+      configurable: true,
+    });
+
+    await waitFor(() => {
+      expect(scrollToSpy).toHaveBeenCalled();
+    });
+
+    scrollToSpy.mockClear();
+
+    const input = screen.getByRole('textbox', { name: 'AI chat input' });
+    fireEvent.change(input, { target: { value: 'Do the thing' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    await waitFor(() => {
+      expect(chatMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(scrollToSpy).toHaveBeenCalled();
+    });
+  });
 });
 
 describe('useContractAiChatDockState', () => {
