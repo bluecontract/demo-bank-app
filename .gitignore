@@ -61,6 +61,7 @@ IMPLEMENTATION_PLAN.md
 
 # Code review artifacts
 agents/skills/code-review/reviews/
+.code-review.env
 
 # LocalStack worktree overrides
 .localstack.env

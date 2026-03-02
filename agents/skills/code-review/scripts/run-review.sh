@@ -2,6 +2,56 @@
 
 set -u
 
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+default_review_env_file="${repo_root}/.code-review.env"
+review_env_file="${REVIEW_ENV_FILE:-${default_review_env_file}}"
+
+trim_whitespace() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf "%s" "${value}"
+}
+
+load_env_file() {
+  local file_path="$1"
+  local line key value
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="$(trim_whitespace "${line}")"
+    [[ -z "${line}" || "${line}" == \#* ]] && continue
+
+    if [[ "${line}" == export[[:space:]]* ]]; then
+      line="${line#export}"
+      line="$(trim_whitespace "${line}")"
+    fi
+
+    if [[ "${line}" != *=* ]]; then
+      echo "Skipping invalid env line in ${file_path}: '${line}'" >&2
+      continue
+    fi
+
+    key="$(trim_whitespace "${line%%=*}")"
+    value="${line#*=}"
+    value="$(trim_whitespace "${value}")"
+
+    if [[ ! "${key}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+      echo "Skipping invalid env key in ${file_path}: '${key}'" >&2
+      continue
+    fi
+
+    if [[ "${value}" =~ ^\".*\"$ || "${value}" =~ ^\'.*\'$ ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+
+    export "${key}=${value}"
+  done < "${file_path}"
+}
+
+if [[ -f "${review_env_file}" ]]; then
+  load_env_file "${review_env_file}"
+fi
+
 task="${1:-review}"
 ts=$(date -u +"%Y%m%dT%H%M%SZ")
 review_dir="agents/skills/code-review/reviews/${task}_${ts}"
@@ -9,6 +59,19 @@ prompt_file="${review_dir}/context.md"
 result_file="${review_dir}/result.md"
 # Default: 600s (10 minutes) per model unless overridden via REVIEW_TIMEOUT_SECONDS.
 timeout_seconds="${REVIEW_TIMEOUT_SECONDS:-600}"
+if [[ ! "${timeout_seconds}" =~ ^[0-9]+$ || "${timeout_seconds}" -eq 0 ]]; then
+  echo "Invalid REVIEW_TIMEOUT_SECONDS='${timeout_seconds}'. Use a positive integer (seconds)." >&2
+  exit 1
+fi
+# Default model set runs all reviewers; local override can narrow this down.
+selected_models_raw="${REVIEW_MODELS:-all}"
+selected_models="$(echo "${selected_models_raw}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+if [[ -z "${selected_models}" ]]; then
+  selected_models="all"
+fi
+if [[ ",${selected_models}," == *",all,"* ]]; then
+  selected_models="claude,gemini,codex"
+fi
 # Gemini needs shell tool access to inspect staged diffs via git.
 gemini_approval_mode="${GEMINI_APPROVAL_MODE:-yolo}"
 gemini_allowed_tools="${GEMINI_ALLOWED_TOOLS:-run_shell_command,read_file,search_file_content,save_memory}"
@@ -164,7 +227,48 @@ run_model() {
   return 0
 }
 
-run_model "claude" "${review_dir}/claude.md" claude --model sonnet -p "$prompt"
+validate_selected_models() {
+  local has_enabled=0
+  IFS=',' read -r -a model_list <<< "${selected_models}"
+  for model in "${model_list[@]}"; do
+    [[ -z "${model}" ]] && continue
+    case "${model}" in
+      claude|gemini|codex) has_enabled=1 ;;
+      *)
+        echo "Invalid model in REVIEW_MODELS: '${model}' (allowed: claude,gemini,codex,all)." >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  if [[ "${has_enabled}" -eq 0 ]]; then
+    echo "No valid models configured in REVIEW_MODELS='${selected_models_raw}'." >&2
+    exit 1
+  fi
+}
+
+is_model_enabled() {
+  local target="$1"
+  [[ ",${selected_models}," == *,"${target}",* ]]
+}
+
+write_model_skipped() {
+  local label="$1"
+  local outfile="$2"
+  cat <<EOF > "${outfile}"
+Review skipped for ${label}.
+Reason: model disabled by REVIEW_MODELS=${selected_models}.
+EOF
+}
+
+validate_selected_models
+
+if is_model_enabled "claude"; then
+  run_model "claude" "${review_dir}/claude.md" claude --model sonnet -p "$prompt"
+else
+  write_model_skipped "claude" "${review_dir}/claude.md"
+fi
+
 run_gemini_with_fallback() {
   local -a base_args=(--approval-mode "${gemini_approval_mode}")
   IFS=',' read -r -a gemini_tools <<< "${gemini_allowed_tools}"
@@ -180,7 +284,12 @@ run_gemini_with_fallback() {
   run_model "gemini (fallback)" "${review_dir}/gemini.md" gemini "${base_args[@]}" -m gemini-3-flash-preview -p "$prompt"
 }
 
-run_gemini_with_fallback
+if is_model_enabled "gemini"; then
+  run_gemini_with_fallback
+else
+  write_model_skipped "gemini" "${review_dir}/gemini.md"
+fi
+
 run_codex_with_fallback() {
   local outfile="${review_dir}/codex.md"
   local -a codex_args=(
@@ -229,7 +338,11 @@ run_codex_with_fallback() {
     "${codex_fallback_args[@]}"
 }
 
-run_codex_with_fallback
+if is_model_enabled "codex"; then
+  run_codex_with_fallback
+else
+  write_model_skipped "codex" "${review_dir}/codex.md"
+fi
 
 cat <<'EOF' > "$result_file"
 # Review Resolution

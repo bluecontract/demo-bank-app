@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Run automated code reviews (Claude, Gemini, Codex) and store outputs with DRY/SRP focus.
+description: Run automated code reviews (all models by default; locally override as needed) and store outputs with DRY/SRP focus.
 ---
 
 # When to Use
@@ -49,9 +49,23 @@ Use the script below to ensure timeouts and model failures are recorded without 
 agents/skills/code-review/scripts/run-review.sh short-slug
 ```
 
+Default behavior runs all three reviewers.
+
+```bash
+# One-off: run Gemini only
+REVIEW_MODELS=gemini agents/skills/code-review/scripts/run-review.sh short-slug
+```
+
 Notes:
 
 - Configure timeout with `REVIEW_TIMEOUT_SECONDS` (default: 600 seconds per model).
+- Configure active reviewers with `REVIEW_MODELS` (default: `all`):
+  - Allowed values: `gemini`, `claude`, `codex`, comma list (`claude,gemini,codex`), or `all`.
+  - Disabled models still get output files with a "skipped" reason for traceability.
+- Local per-machine config is auto-loaded from `.code-review.env` at repo root (override with `REVIEW_ENV_FILE`):
+  - Example:
+    - `REVIEW_MODELS=gemini`
+    - `REVIEW_TIMEOUT_SECONDS=900`
 - Gemini is run with shell/git tool access by default so it can inspect staged diffs directly:
   - `GEMINI_APPROVAL_MODE` (default: `yolo`)
   - `GEMINI_ALLOWED_TOOLS` (default: `run_shell_command,read_file,search_file_content,save_memory`)
@@ -70,6 +84,7 @@ review_dir="agents/skills/code-review/reviews/${task}_${ts}"
 mkdir -p "$review_dir"
 prompt_file="${review_dir}/context.md"
 result_file="${review_dir}/result.md"
+gemini_file="${review_dir}/gemini.md"
 
 {
   cat <<'EOF'
@@ -91,28 +106,25 @@ EOF
 
 prompt=$(cat "$prompt_file")
 
-claude --model sonnet -p "$prompt" > "${review_dir}/claude.md"
 gemini --approval-mode yolo \
   --allowed-tools run_shell_command \
   --allowed-tools read_file \
   --allowed-tools search_file_content \
   --allowed-tools save_memory \
-  -m gemini-3-pro-preview -p "$prompt" > "${review_dir}/gemini.md" \
+  -m gemini-3-pro-preview -p "$prompt" > "$gemini_file" \
   || gemini --approval-mode yolo \
     --allowed-tools run_shell_command \
     --allowed-tools read_file \
     --allowed-tools search_file_content \
     --allowed-tools save_memory \
-    -m gemini-3-flash-preview -p "$prompt" > "${review_dir}/gemini.md"
-# Prefer explicit model settings for reproducibility.
-codex review -c model="gpt-5.2-codex" -c model_reasoning_effort="low" "$prompt" > "${review_dir}/codex.md"
+    -m gemini-3-flash-preview -p "$prompt" > "$gemini_file"
 
 cat <<'EOF' > "$result_file"
 # Review Resolution
 
 ## High-Priority Issues
 - [ ] Item:
-  - Source: claude|gemini|codex
+  - Source: gemini
   - Decision: accept|defer|reject
   - Rationale:
   - Action taken (if any):
