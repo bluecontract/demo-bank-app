@@ -236,7 +236,7 @@ describe('ContractDetailsPage', () => {
       )
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Chat with AI' })
+      screen.getByRole('button', { name: 'Talk with AI' })
     ).toBeInTheDocument();
     expect(markReviewedMock).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-1' })
@@ -291,19 +291,19 @@ describe('ContractDetailsPage', () => {
 
     expect(screen.queryByTestId('ai-chat-drawer')).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Chat with AI' })
+      screen.getByRole('button', { name: 'Talk with AI' })
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Chat with AI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Talk with AI' }));
     expect(screen.getByTestId('ai-chat-drawer')).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: 'Chat with AI' })
+      screen.queryByRole('button', { name: 'Talk with AI' })
     ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close AI chat' }));
     expect(screen.queryByTestId('ai-chat-drawer')).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Chat with AI' })
+      screen.getByRole('button', { name: 'Talk with AI' })
     ).toBeInTheDocument();
   });
 
@@ -357,7 +357,7 @@ describe('ContractDetailsPage', () => {
       wrapper: createQueryWrapper(),
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Chat with AI' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Talk with AI' }));
     expect(screen.getByTestId('ai-chat-drawer')).toBeInTheDocument();
 
     configureContract('session-2', 'Contract Two', '2026-01-03T00:00:00.000Z');
@@ -365,7 +365,7 @@ describe('ContractDetailsPage', () => {
 
     expect(screen.queryByTestId('ai-chat-drawer')).not.toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Chat with AI' })
+      screen.getByRole('button', { name: 'Talk with AI' })
     ).toBeInTheDocument();
   });
 

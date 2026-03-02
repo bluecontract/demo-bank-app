@@ -200,6 +200,26 @@ function ProposalActionCard({
   );
 }
 
+function AiAssistantIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 21 22"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M10.25 4.14286C13.9976 4.14286 17.0357 7.18092 17.0357 10.9286V19.0714C17.0357 19.821 16.4281 20.4286 15.6786 20.4286H4.82143C4.0719 20.4286 3.46429 19.821 3.46429 19.0714V10.9286C3.46429 7.18092 6.50235 4.14286 10.25 4.14286ZM10.25 4.14286V0.75M5.5 16.3571H15M0.75 11.6071V17.0357M19.75 11.6071V17.0357M7.53571 13.6429C6.78618 13.6429 6.17857 13.0352 6.17857 12.2857C6.17857 11.5362 6.78618 10.9286 7.53571 10.9286C8.28524 10.9286 8.89286 11.5362 8.89286 12.2857C8.89286 13.0352 8.28524 13.6429 7.53571 13.6429ZM12.9643 13.6429C12.2148 13.6429 11.6071 13.0352 11.6071 12.2857C11.6071 11.5362 12.2148 10.9286 12.9643 10.9286C13.7138 10.9286 14.3214 11.5362 14.3214 12.2857C14.3214 13.0352 13.7138 13.6429 12.9643 13.6429Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 interface MockPendingActionCardProps {
   title?: string | null;
   summary?: string | null;
@@ -891,26 +911,27 @@ export function ContractDetailsPage() {
         >
           <div className="lg:col-start-1 lg:row-start-1">
             <div className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
                   <Avatar
                     name={senderName}
                     src={senderLogo}
                     size="md"
                     className="h-10 w-10 text-sm sm:h-12 sm:w-12 sm:text-base"
                   />
-                  <div className="text-sm font-semibold leading-6 text-slate-900">
+                  <div className="truncate text-sm font-semibold leading-6 text-slate-900">
                     {senderName}
                   </div>
                 </div>
                 {aiChatSessionId && contract?.updatedAt && !isAiChatOpen ? (
                   <button
                     type="button"
-                    className="text-sm font-semibold text-[color:var(--color-primary)] opacity-70 hover:opacity-100"
-                    aria-label="Chat with AI"
+                    className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold leading-6 text-[color:var(--color-primary)] opacity-70 hover:opacity-100"
+                    aria-label="Talk with AI"
                     onClick={() => setIsAiChatOpen(true)}
                   >
-                    Chat with AI
+                    <AiAssistantIcon className="h-4 w-4" />
+                    Talk with AI
                   </button>
                 ) : null}
               </div>
