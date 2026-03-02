@@ -228,8 +228,13 @@ describe('ContractDetailsPage', () => {
     expect(screen.queryByText('Highlights')).not.toBeInTheDocument();
     expect(screen.queryByText('Latest update')).not.toBeInTheDocument();
     expect(screen.queryByText('Next steps')).not.toBeInTheDocument();
-    expect(screen.queryByText('Available operations')).not.toBeInTheDocument();
+    expect(screen.queryByText('Actions')).not.toBeInTheDocument();
     expect(screen.queryByText(/^More$/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Pending actions will appear here once they are available.'
+      )
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Chat with AI' })
     ).toBeInTheDocument();
@@ -717,8 +722,8 @@ describe('ContractDetailsPage', () => {
 
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
-    expect(screen.queryByText('Linked contracts')).not.toBeInTheDocument();
-    expect(screen.queryByText('Linked transactions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Linked Contracts')).not.toBeInTheDocument();
+    expect(screen.queryByText('Linked Transactions')).not.toBeInTheDocument();
   });
 
   it('does not show linked proposal items when contract view is active', () => {
@@ -792,8 +797,10 @@ describe('ContractDetailsPage', () => {
 
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
-    expect(screen.getByText('More')).toBeInTheDocument();
-    expect(screen.getByText('Linked contracts')).toBeInTheDocument();
+    expect(screen.queryByText('More')).not.toBeInTheDocument();
+    const linkedContractsSummary = screen.getByText('Linked Contracts');
+    expect(linkedContractsSummary).toBeInTheDocument();
+    fireEvent.click(linkedContractsSummary);
     expect(
       screen.getAllByText('Linked Contract Visible').length
     ).toBeGreaterThan(0);

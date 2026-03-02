@@ -113,11 +113,7 @@ function ProposalActionCard({
   }, [proposal?.deliverySessionId, proposal?.clientDecisionStatus, sessionId]);
 
   if (!proposal) {
-    return (
-      <div className="rounded-xl sm:rounded-2xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
-        Pending actions will appear here once they are available.
-      </div>
-    );
+    return null;
   }
 
   const decisionStatus =
@@ -327,11 +323,11 @@ export function ContractDetailsPage() {
   if (isSessionChanged) {
     lastSessionIdRef.current = sessionId ?? null;
   }
-  const [isMoreExpanded, setIsMoreExpanded] = useState(false);
-  const [expandedMoreSections, setExpandedMoreSections] = useState({
-    linkedTransactions: true,
-    linkedContracts: true,
-    activity: true,
+  const [expandedSections, setExpandedSections] = useState({
+    actions: true,
+    linkedTransactions: false,
+    linkedContracts: false,
+    activity: false,
   });
   const [expandedHistory, setExpandedHistory] = useState<
     Record<string, boolean>
@@ -346,11 +342,11 @@ export function ContractDetailsPage() {
 
   useEffect(() => {
     setExpandedHistory({});
-    setIsMoreExpanded(false);
-    setExpandedMoreSections({
-      linkedTransactions: true,
-      linkedContracts: true,
-      activity: true,
+    setExpandedSections({
+      actions: true,
+      linkedTransactions: false,
+      linkedContracts: false,
+      activity: false,
     });
     setIsAiChatOpen(false);
   }, [sessionId]);
@@ -638,8 +634,6 @@ export function ContractDetailsPage() {
   const hasLinkedTransactions =
     Boolean(relatedActivitySource) && linkedGroupedRelatedItems.length > 0;
   const hasLinkedContracts = filteredRelatedContracts.length > 0;
-  const hasMoreSections =
-    hasLinkedTransactions || hasLinkedContracts || hasHistory;
   const mockPendingAction = payNoteInitialStateMeta.action;
   const pendingContractAction =
     resolvedKind === 'contract'
@@ -721,24 +715,13 @@ export function ContractDetailsPage() {
     navigate(backTarget);
   };
 
-  const handleMoreToggle = (event: SyntheticEvent<HTMLDetailsElement>) => {
-    const isOpen = event.currentTarget.open;
-    setIsMoreExpanded(isOpen);
-
-    if (isOpen) {
-      setExpandedMoreSections({
-        linkedTransactions: hasLinkedTransactions,
-        linkedContracts: hasLinkedContracts,
-        activity: hasHistory,
-      });
-    }
-  };
-
-  const handleMoreSectionToggle =
-    (section: 'linkedTransactions' | 'linkedContracts' | 'activity') =>
+  const handleSectionToggle =
+    (
+      section: 'actions' | 'linkedTransactions' | 'linkedContracts' | 'activity'
+    ) =>
     (event: SyntheticEvent<HTMLDetailsElement>) => {
       const isOpen = event.currentTarget.open;
-      setExpandedMoreSections(prev => ({
+      setExpandedSections(prev => ({
         ...prev,
         [section]: isOpen,
       }));
@@ -758,6 +741,25 @@ export function ContractDetailsPage() {
       updatedAt: decisionUpdatedAt,
     });
   };
+  const pendingActionsContent = pendingContractAction ? (
+    <ContractPendingActionCard
+      action={pendingContractAction}
+      sessionId={sessionId ?? null}
+    />
+  ) : shouldShowMockPendingAction ? (
+    <MockPendingActionCard
+      title={mockPendingAction?.title}
+      summary={mockPendingAction?.summary}
+      left={mockPendingAction?.left}
+      right={mockPendingAction?.right}
+    />
+  ) : resolvedKind === 'proposal' ? (
+    <ProposalActionCard
+      proposal={proposal}
+      sessionId={sessionId ?? null}
+      onDecisionRecorded={handleProposalDecisionRecorded}
+    />
+  ) : null;
 
   if (isLoading) {
     return (
@@ -883,8 +885,14 @@ export function ContractDetailsPage() {
           )}
         </div>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
-          <div className="flex flex-col gap-4">
+        <div
+          className={`mt-6 grid gap-6 ${
+            pendingActionsContent
+              ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-start'
+              : ''
+          }`}
+        >
+          <div className="lg:col-start-1 lg:row-start-1">
             <div className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -909,7 +917,6 @@ export function ContractDetailsPage() {
                   </button>
                 ) : null}
               </div>
-
               <div className="mt-4 space-y-3 text-slate-700">
                 {summaryErrorMessage && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
@@ -958,29 +965,23 @@ export function ContractDetailsPage() {
                 ) : null}
               </div>
             </div>
+          </div>
 
+          {pendingActionsContent ? (
+            <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2">
+              {pendingActionsContent}
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-4 lg:col-start-1 lg:row-start-2">
             {contract && hasAvailableOperations && (
-              <section className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4">
-                <h3 className="text-base font-semibold text-slate-900">
-                  Available operations
-                </h3>
-                <div className="mt-4">
-                  <ContractOperationsList
-                    contract={contract}
-                    operations={availableOperations}
-                  />
-                </div>
-              </section>
-            )}
-
-            {hasMoreSections && (
               <details
                 className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4"
-                open={isMoreExpanded}
-                onToggle={handleMoreToggle}
+                open={expandedSections.actions}
+                onToggle={handleSectionToggle('actions')}
               >
                 <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
-                  More
+                  Actions
                   <svg
                     className="h-4 w-4 text-slate-400"
                     viewBox="0 0 20 20"
@@ -994,250 +995,232 @@ export function ContractDetailsPage() {
                     />
                   </svg>
                 </summary>
-                <div className="mt-4 space-y-3 border-t border-slate-200 pt-3 text-sm text-slate-600">
-                  {hasLinkedTransactions && relatedActivitySource && (
-                    <details
-                      className="rounded-xl border border-slate-200 bg-white/70 p-4"
-                      open={expandedMoreSections.linkedTransactions}
-                      onToggle={handleMoreSectionToggle('linkedTransactions')}
-                    >
-                      <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
-                        Linked transactions
-                        <svg
-                          className="h-4 w-4 text-slate-400"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          aria-hidden="true"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </summary>
-                      <div className="mt-3 border-t border-slate-200 pt-3">
-                        <div className="rounded-xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
-                          {linkedGroupedRelatedItems.map(item => (
-                            <TransactionItem
-                              key={getActivityKey(item)}
-                              item={item}
-                              onActivitySelect={handleLinkedActivitySelect}
-                              variant="linked"
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </details>
-                  )}
-
-                  {hasLinkedContracts && (
-                    <details
-                      className="rounded-xl border border-slate-200 bg-white/70 p-4"
-                      open={expandedMoreSections.linkedContracts}
-                      onToggle={handleMoreSectionToggle('linkedContracts')}
-                    >
-                      <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
-                        Linked contracts
-                        <svg
-                          className="h-4 w-4 text-slate-400"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          aria-hidden="true"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </summary>
-                      <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
-                        {filteredRelatedContracts.map(contractItem => {
-                          const isProposal =
-                            isProposalRelatedContract(contractItem);
-                          const isSelectable = isProposal
-                            ? Boolean(contractItem.deliverySessionId)
-                            : Boolean(contractItem.sessionId);
-                          let primaryName = 'Contract';
-                          let statusValue: string | undefined;
-                          let contractDate: string | null = null;
-                          let displayName = 'Contract';
-
-                          if (isProposal) {
-                            primaryName =
-                              contractItem.name?.trim() || 'PayNote proposal';
-                            statusValue =
-                              contractItem.clientDecisionStatus ?? 'pending';
-                            contractDate = formatShortDateTime(
-                              contractItem.updatedAt ?? contractItem.createdAt
-                            );
-                            displayName = 'Proposal';
-                          } else {
-                            primaryName =
-                              contractItem.documentName?.trim() ||
-                              contractItem.displayName;
-                            statusValue = contractItem.status ?? 'pending';
-                            contractDate = formatShortDateTime(
-                              getContractLastChangeAt(contractItem) ??
-                                contractItem.updatedAt ??
-                                contractItem.createdAt
-                            );
-                            displayName = contractItem.displayName;
-                          }
-
-                          const statusKey = statusValue?.toLowerCase() ?? '';
-                          const statusStyle =
-                            contractStatusStyles[statusKey] ??
-                            'bg-slate-100 text-slate-700 border border-slate-200';
-
-                          return (
-                            <button
-                              key={
-                                isProposal
-                                  ? `proposal-${contractItem.deliveryId}`
-                                  : contractItem.contractId
-                              }
-                              type="button"
-                              className={`w-full rounded-xl border p-4 text-left transition ${
-                                isSelectable
-                                  ? 'border-slate-200 bg-white/80 hover:border-emerald-200 hover:shadow-md'
-                                  : 'border-slate-200 bg-white/50 opacity-60 cursor-not-allowed'
-                              }`}
-                              onClick={() => {
-                                if (!isSelectable) {
-                                  return;
-                                }
-                                handleLinkedContractClick(contractItem);
-                              }}
-                              disabled={!isSelectable}
-                            >
-                              <div className="sm:hidden">
-                                <p className="truncate text-sm font-semibold text-slate-900">
-                                  {primaryName}
-                                </p>
-                                {contractDate && (
-                                  <p className="mt-1 text-xs text-slate-500">
-                                    {contractDate}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="hidden space-y-2 sm:block">
-                                <p className="truncate text-sm font-semibold text-slate-900">
-                                  {primaryName}
-                                </p>
-                                <div className="flex flex-wrap items-center gap-2 text-xs">
-                                  <span className="app-chip app-chip-neutral">
-                                    {displayName}
-                                  </span>
-                                  <span
-                                    className={`rounded-full px-2 py-1 text-xs font-semibold ${statusStyle}`}
-                                  >
-                                    {formatStatusLabel(statusValue)}
-                                  </span>
-                                  {contractDate && (
-                                    <span className="text-xs text-slate-500">
-                                      {contractDate}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </details>
-                  )}
-
-                  {hasHistory && (
-                    <details
-                      className="rounded-xl border border-slate-200 bg-white/70 p-4"
-                      open={expandedMoreSections.activity}
-                      onToggle={handleMoreSectionToggle('activity')}
-                    >
-                      <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
-                        Activity
-                        <svg
-                          className="h-4 w-4 text-slate-400"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                          aria-hidden="true"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </summary>
-                      <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
-                        {historyItems.map(item => (
-                          <div
-                            key={item.id}
-                            className="rounded-xl border border-slate-200 bg-white/80 p-3"
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div>
-                                <p className="font-semibold text-slate-900">
-                                  {item.short}
-                                </p>
-                              </div>
-                              {item.createdAt && (
-                                <span className="text-xs text-slate-500">
-                                  {formatShortDateTime(item.createdAt)}
-                                </span>
-                              )}
-                            </div>
-                            {item.more && (
-                              <div className="mt-2 text-sm text-slate-600">
-                                {expandedHistory[item.id] && (
-                                  <p className="whitespace-pre-line break-words leading-relaxed">
-                                    {item.more}
-                                  </p>
-                                )}
-                                <button
-                                  type="button"
-                                  className="mt-2 text-xs font-semibold text-[color:var(--color-primary)]"
-                                  onClick={() =>
-                                    setExpandedHistory(prev => ({
-                                      ...prev,
-                                      [item.id]: !prev[item.id],
-                                    }))
-                                  }
-                                >
-                                  {expandedHistory[item.id] ? 'Less' : 'More'}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <ContractOperationsList
+                    contract={contract}
+                    operations={availableOperations}
+                  />
                 </div>
               </details>
             )}
-          </div>
 
-          <div className="flex flex-col gap-4">
-            {pendingContractAction ? (
-              <ContractPendingActionCard
-                action={pendingContractAction}
-                sessionId={sessionId ?? null}
-              />
-            ) : shouldShowMockPendingAction ? (
-              <MockPendingActionCard
-                title={mockPendingAction?.title}
-                summary={mockPendingAction?.summary}
-                left={mockPendingAction?.left}
-                right={mockPendingAction?.right}
-              />
-            ) : (
-              <ProposalActionCard
-                proposal={proposal}
-                sessionId={sessionId ?? null}
-                onDecisionRecorded={handleProposalDecisionRecorded}
-              />
+            {hasLinkedTransactions && relatedActivitySource && (
+              <details
+                className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4"
+                open={expandedSections.linkedTransactions}
+                onToggle={handleSectionToggle('linkedTransactions')}
+              >
+                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
+                  Linked Transactions
+                  <svg
+                    className="h-4 w-4 text-slate-400"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </summary>
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <div className="rounded-xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
+                    {linkedGroupedRelatedItems.map(item => (
+                      <TransactionItem
+                        key={getActivityKey(item)}
+                        item={item}
+                        onActivitySelect={handleLinkedActivitySelect}
+                        variant="linked"
+                      />
+                    ))}
+                  </div>
+                </div>
+              </details>
+            )}
+
+            {hasLinkedContracts && (
+              <details
+                className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4"
+                open={expandedSections.linkedContracts}
+                onToggle={handleSectionToggle('linkedContracts')}
+              >
+                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
+                  Linked Contracts
+                  <svg
+                    className="h-4 w-4 text-slate-400"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </summary>
+                <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
+                  {filteredRelatedContracts.map(contractItem => {
+                    const isProposal = isProposalRelatedContract(contractItem);
+                    const isSelectable = isProposal
+                      ? Boolean(contractItem.deliverySessionId)
+                      : Boolean(contractItem.sessionId);
+                    let primaryName = 'Contract';
+                    let statusValue: string | undefined;
+                    let contractDate: string | null = null;
+                    let displayName = 'Contract';
+
+                    if (isProposal) {
+                      primaryName =
+                        contractItem.name?.trim() || 'PayNote proposal';
+                      statusValue =
+                        contractItem.clientDecisionStatus ?? 'pending';
+                      contractDate = formatShortDateTime(
+                        contractItem.updatedAt ?? contractItem.createdAt
+                      );
+                      displayName = 'Proposal';
+                    } else {
+                      primaryName =
+                        contractItem.documentName?.trim() ||
+                        contractItem.displayName;
+                      statusValue = contractItem.status ?? 'pending';
+                      contractDate = formatShortDateTime(
+                        getContractLastChangeAt(contractItem) ??
+                          contractItem.updatedAt ??
+                          contractItem.createdAt
+                      );
+                      displayName = contractItem.displayName;
+                    }
+
+                    const statusKey = statusValue?.toLowerCase() ?? '';
+                    const statusStyle =
+                      contractStatusStyles[statusKey] ??
+                      'bg-slate-100 text-slate-700 border border-slate-200';
+
+                    return (
+                      <button
+                        key={
+                          isProposal
+                            ? `proposal-${contractItem.deliveryId}`
+                            : contractItem.contractId
+                        }
+                        type="button"
+                        className={`w-full rounded-xl border p-4 text-left transition ${
+                          isSelectable
+                            ? 'border-slate-200 bg-white/80 hover:border-emerald-200 hover:shadow-md'
+                            : 'border-slate-200 bg-white/50 opacity-60 cursor-not-allowed'
+                        }`}
+                        onClick={() => {
+                          if (!isSelectable) {
+                            return;
+                          }
+                          handleLinkedContractClick(contractItem);
+                        }}
+                        disabled={!isSelectable}
+                      >
+                        <div className="sm:hidden">
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {primaryName}
+                          </p>
+                          {contractDate && (
+                            <p className="mt-1 text-xs text-slate-500">
+                              {contractDate}
+                            </p>
+                          )}
+                        </div>
+                        <div className="hidden space-y-2 sm:block">
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {primaryName}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="app-chip app-chip-neutral">
+                              {displayName}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-1 text-xs font-semibold ${statusStyle}`}
+                            >
+                              {formatStatusLabel(statusValue)}
+                            </span>
+                            {contractDate && (
+                              <span className="text-xs text-slate-500">
+                                {contractDate}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </details>
+            )}
+
+            {hasHistory && (
+              <details
+                className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4"
+                open={expandedSections.activity}
+                onToggle={handleSectionToggle('activity')}
+              >
+                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
+                  Activity
+                  <svg
+                    className="h-4 w-4 text-slate-400"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </summary>
+                <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
+                  {historyItems.map(item => (
+                    <div
+                      key={item.id}
+                      className="rounded-xl border border-slate-200 bg-white/80 p-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold text-slate-900">
+                            {item.short}
+                          </p>
+                        </div>
+                        {item.createdAt && (
+                          <span className="text-xs text-slate-500">
+                            {formatShortDateTime(item.createdAt)}
+                          </span>
+                        )}
+                      </div>
+                      {item.more && (
+                        <div className="mt-2 text-sm text-slate-600">
+                          {expandedHistory[item.id] && (
+                            <p className="whitespace-pre-line break-words leading-relaxed">
+                              {item.more}
+                            </p>
+                          )}
+                          <button
+                            type="button"
+                            className="mt-2 text-xs font-semibold text-[color:var(--color-primary)]"
+                            onClick={() =>
+                              setExpandedHistory(prev => ({
+                                ...prev,
+                                [item.id]: !prev[item.id],
+                              }))
+                            }
+                          >
+                            {expandedHistory[item.id] ? 'Less' : 'More'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </details>
             )}
           </div>
         </div>
