@@ -362,8 +362,8 @@ export function ContractAiChatDrawer({
         aria-label="Talk with AI"
       >
         <header className="flex items-center justify-between gap-3 p-4 border-b border-slate-200 bg-white/80">
-          <h2 className="text-base font-semibold text-slate-900">
-            Talk with AI
+          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900">
+            {`Talk with AI: ${documentTitle}`}
           </h2>
           <button
             type="button"

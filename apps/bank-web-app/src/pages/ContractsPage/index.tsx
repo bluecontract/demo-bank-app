@@ -101,6 +101,7 @@ type ProposalDecisionActionsProps = {
   sessionId: string | null;
   label: string;
   size?: 'sm' | 'md';
+  layout?: 'icon-only' | 'icon-with-label';
   onDecision?: (decision: 'accepted' | 'rejected') => void;
 };
 
@@ -108,6 +109,7 @@ function ProposalDecisionActions({
   sessionId,
   label,
   size = 'md',
+  layout = 'icon-only',
   onDecision,
 }: ProposalDecisionActionsProps) {
   const { accept, reject, isPending } = useProposalDecision({
@@ -125,6 +127,9 @@ function ProposalDecisionActions({
   const padding = size === 'sm' ? 'p-0.5' : 'p-1';
   const baseButton =
     'inline-flex items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50';
+  const baseInlineButton =
+    'inline-flex items-center gap-2 rounded-md text-slate-700 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-primary)] disabled:cursor-not-allowed disabled:opacity-50';
+  const inlineLabelSize = size === 'sm' ? 'text-xs' : 'text-sm';
 
   const handleAccept = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -143,6 +148,69 @@ function ProposalDecisionActions({
     }
     reject();
   };
+
+  if (layout === 'icon-with-label') {
+    return (
+      <div className="flex items-center gap-6">
+        <button
+          type="button"
+          aria-label={`Accept ${label}`}
+          className={`${baseInlineButton} ${inlineLabelSize}`}
+          onClick={handleAccept}
+          disabled={isPending}
+        >
+          <span
+            className={`inline-flex items-center justify-center rounded-full ${buttonSize} ${padding} bg-[color:var(--color-primary)] text-white`}
+            aria-hidden="true"
+          >
+            <svg
+              className={iconSize}
+              viewBox="0 0 20 20"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M5 10.5l3.2 3.2L15 7"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          <span>Accept</span>
+        </button>
+        <button
+          type="button"
+          aria-label={`Reject ${label}`}
+          className={`${baseInlineButton} ${inlineLabelSize}`}
+          onClick={handleReject}
+          disabled={isPending}
+        >
+          <span
+            className={`inline-flex items-center justify-center rounded-full ${buttonSize} ${padding} bg-[#d32f2f] text-white`}
+            aria-hidden="true"
+          >
+            <svg
+              className={iconSize}
+              viewBox="0 0 20 20"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M6 6l8 8M14 6l-8 8"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          <span>Reject</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2">
@@ -529,19 +597,9 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                         <span className={`truncate ${senderClassName}`}>
                           {sender}
                         </span>
-                        <div className="flex items-center gap-2">
-                          {shouldShowActions && (
-                            <ProposalDecisionActions
-                              sessionId={sessionId ?? null}
-                              label={subject}
-                              size="sm"
-                              onDecision={handleProposalDecision}
-                            />
-                          )}
-                          <span className="text-xs text-slate-500">
-                            {updatedAt}
-                          </span>
-                        </div>
+                        <span className="text-xs text-slate-500">
+                          {updatedAt}
+                        </span>
                       </div>
                       <p className={`mt-1 text-sm ${subjectClassName}`}>
                         {subject}
@@ -549,6 +607,17 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                       <p className="mt-1 text-xs text-slate-500 truncate">
                         {preview}
                       </p>
+                      {shouldShowActions && (
+                        <div className="mt-2 pt-1">
+                          <ProposalDecisionActions
+                            sessionId={sessionId ?? null}
+                            label={subject}
+                            size="sm"
+                            layout="icon-with-label"
+                            onDecision={handleProposalDecision}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 

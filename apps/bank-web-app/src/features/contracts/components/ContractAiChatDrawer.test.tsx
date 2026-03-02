@@ -82,6 +82,8 @@ describe('ContractAiChatDrawer', () => {
       { wrapper }
     );
 
+    expect(screen.getByText('Talk with AI: Test contract')).toBeInTheDocument();
+
     const input = screen.getByPlaceholderText(
       'Ask questions about the contract or make operations'
     );
