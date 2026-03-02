@@ -746,6 +746,28 @@ export function ContractDetailsPage() {
         [section]: isOpen,
       }));
     };
+  const sectionContainerClassName =
+    'rounded-none border-y border-slate-200 bg-white px-4 py-4 sm:rounded-2xl sm:border sm:p-4';
+  const sectionSummaryClassName =
+    'flex min-h-6 cursor-pointer list-none items-center gap-2 text-base leading-6 font-semibold text-slate-900 [&::-webkit-details-marker]:hidden';
+  const sectionBodyClassName = 'mt-4 border-t border-slate-200 pt-4';
+
+  const renderSectionChevron = (isOpen: boolean) => (
+    <svg
+      className={`h-5 w-5 shrink-0 text-slate-500 transition-transform ${
+        isOpen ? 'rotate-180' : ''
+      }`}
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
 
   const handleProposalDecisionRecorded = (
     decision: 'accepted' | 'rejected',
@@ -994,26 +1016,15 @@ export function ContractDetailsPage() {
           <div className="flex flex-col gap-4 lg:col-start-1 lg:row-start-2">
             {contract && hasAvailableOperations && (
               <details
-                className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4"
+                className={sectionContainerClassName}
                 open={expandedSections.actions}
                 onToggle={handleSectionToggle('actions')}
               >
-                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
-                  Actions
-                  <svg
-                    className="h-4 w-4 text-slate-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                <summary className={sectionSummaryClassName}>
+                  {renderSectionChevron(expandedSections.actions)}
+                  <span>Actions</span>
                 </summary>
-                <div className="mt-3 border-t border-slate-200 pt-3">
+                <div className={sectionBodyClassName}>
                   <ContractOperationsList
                     contract={contract}
                     operations={availableOperations}
@@ -1024,34 +1035,27 @@ export function ContractDetailsPage() {
 
             {hasLinkedTransactions && relatedActivitySource && (
               <details
-                className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4"
+                className={sectionContainerClassName}
                 open={expandedSections.linkedTransactions}
                 onToggle={handleSectionToggle('linkedTransactions')}
               >
-                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
-                  Linked Transactions
-                  <svg
-                    className="h-4 w-4 text-slate-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                <summary className={sectionSummaryClassName}>
+                  {renderSectionChevron(expandedSections.linkedTransactions)}
+                  <span>Linked Transactions</span>
                 </summary>
-                <div className="mt-3 border-t border-slate-200 pt-3">
-                  <div className="rounded-xl border border-slate-200 bg-white/80 divide-y divide-slate-100">
+                <div className={sectionBodyClassName}>
+                  <div className="space-y-2">
                     {linkedGroupedRelatedItems.map(item => (
-                      <TransactionItem
+                      <div
                         key={getActivityKey(item)}
-                        item={item}
-                        onActivitySelect={handleLinkedActivitySelect}
-                        variant="linked"
-                      />
+                        className="rounded-lg border border-slate-200 bg-white"
+                      >
+                        <TransactionItem
+                          item={item}
+                          onActivitySelect={handleLinkedActivitySelect}
+                          variant="linked"
+                        />
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -1060,26 +1064,15 @@ export function ContractDetailsPage() {
 
             {hasLinkedContracts && (
               <details
-                className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4"
+                className={sectionContainerClassName}
                 open={expandedSections.linkedContracts}
                 onToggle={handleSectionToggle('linkedContracts')}
               >
-                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
-                  Linked Contracts
-                  <svg
-                    className="h-4 w-4 text-slate-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                <summary className={sectionSummaryClassName}>
+                  {renderSectionChevron(expandedSections.linkedContracts)}
+                  <span>Linked Contracts</span>
                 </summary>
-                <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
+                <div className={`${sectionBodyClassName} space-y-3`}>
                   {filteredRelatedContracts.map(contractItem => {
                     const isProposal = isProposalRelatedContract(contractItem);
                     const isSelectable = isProposal
@@ -1177,26 +1170,15 @@ export function ContractDetailsPage() {
 
             {hasHistory && (
               <details
-                className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4"
+                className={sectionContainerClassName}
                 open={expandedSections.activity}
                 onToggle={handleSectionToggle('activity')}
               >
-                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-900">
-                  Activity
-                  <svg
-                    className="h-4 w-4 text-slate-400"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                <summary className={sectionSummaryClassName}>
+                  {renderSectionChevron(expandedSections.activity)}
+                  <span>Activity</span>
                 </summary>
-                <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
+                <div className={`${sectionBodyClassName} space-y-3`}>
                   {historyItems.map(item => (
                     <div
                       key={item.id}
