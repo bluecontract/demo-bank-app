@@ -654,6 +654,11 @@ export function ContractDetailsPage() {
   const hasLinkedTransactions =
     Boolean(relatedActivitySource) && linkedGroupedRelatedItems.length > 0;
   const hasLinkedContracts = filteredRelatedContracts.length > 0;
+  const hasVisibleSections =
+    Boolean(contract && hasAvailableOperations) ||
+    hasLinkedTransactions ||
+    hasLinkedContracts ||
+    hasHistory;
   const mockPendingAction = payNoteInitialStateMeta.action;
   const pendingContractAction =
     resolvedKind === 'contract'
@@ -747,7 +752,7 @@ export function ContractDetailsPage() {
       }));
     };
   const sectionContainerClassName =
-    'rounded-none border-y border-slate-200 bg-white px-4 py-4 sm:rounded-2xl sm:border sm:p-4';
+    'w-full rounded-none border-y border-slate-200 bg-white px-4 py-4 sm:rounded-2xl sm:border sm:p-4';
   const sectionSummaryClassName =
     'flex min-h-6 cursor-pointer list-none items-center gap-2 text-base leading-6 font-semibold text-slate-900 [&::-webkit-details-marker]:hidden';
   const sectionBodyClassName = 'mt-4 border-t border-slate-200 pt-4';
@@ -886,134 +891,140 @@ export function ContractDetailsPage() {
         </div>
       }
     >
-      <section className="app-surface p-4 sm:p-6 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">
-              {headerTitle}
-            </h2>
-          </div>
-          {contract && (
-            <Dropdown
-              trigger={
-                <div className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900">
-                  <svg
-                    className="h-5 w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <circle cx="10" cy="4" r="1.5" />
-                    <circle cx="10" cy="10" r="1.5" />
-                    <circle cx="10" cy="16" r="1.5" />
-                  </svg>
-                </div>
-              }
-              align="right"
-              triggerAriaLabel="More options"
-            >
-              <DropdownItem
-                onClick={handleArchiveToggle}
-                className={
-                  isArchivePending ? 'opacity-60 cursor-not-allowed' : ''
+      <div className="flex flex-col gap-4 sm:gap-6">
+        <section className="app-surface w-full p-4 sm:p-6 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900">
+                {headerTitle}
+              </h2>
+            </div>
+            {contract && (
+              <Dropdown
+                trigger={
+                  <div className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900">
+                    <svg
+                      className="h-5 w-5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <circle cx="10" cy="4" r="1.5" />
+                      <circle cx="10" cy="10" r="1.5" />
+                      <circle cx="10" cy="16" r="1.5" />
+                    </svg>
+                  </div>
                 }
+                align="right"
+                triggerAriaLabel="More options"
               >
-                {contract.archivedAt ? 'Restore contract' : 'Archive contract'}
-              </DropdownItem>
-            </Dropdown>
-          )}
-        </div>
-
-        <div
-          className={`mt-4 grid gap-6 ${
-            pendingActionsContent
-              ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-start'
-              : ''
-          }`}
-        >
-          <div className="lg:col-start-1 lg:row-start-1">
-            <div className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
-                  <Avatar
-                    name={senderName}
-                    src={senderLogo}
-                    size="md"
-                    className="h-10 w-10 text-sm sm:h-12 sm:w-12 sm:text-base"
-                  />
-                  <div className="truncate text-sm font-semibold leading-6 text-slate-900">
-                    {senderName}
-                  </div>
-                </div>
-                {aiChatSessionId && contract?.updatedAt && !isAiChatOpen ? (
-                  <button
-                    type="button"
-                    className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold leading-6 text-[color:var(--color-primary)] opacity-70 hover:opacity-100"
-                    aria-label="Talk with AI"
-                    onClick={() => setIsAiChatOpen(true)}
-                  >
-                    <AiAssistantIcon className="h-4 w-4" />
-                    Talk with AI
-                  </button>
-                ) : null}
-              </div>
-              <div className="mt-4 max-w-[720px] space-y-3 text-slate-700">
-                {summaryErrorMessage && (
-                  <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
-                    {summaryErrorMessage}
-                  </div>
-                )}
-
-                {isSummaryFetching && summary && (
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <Spinner size="sm" color="green" />
-                    Updating summary...
-                  </div>
-                )}
-
-                {isSummaryLoading && (
-                  <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
-                    <Spinner size="sm" color="green" />
-                    Generating summary...
-                  </div>
-                )}
-
-                {resolvedSummary ? (
-                  <div>
-                    <h3 className="text-[32px] leading-[40px] font-semibold text-slate-900">
-                      {summaryHeadline}
-                    </h3>
-                    {isMockSummaryEnabled && summaryOverview.length > 0 ? (
-                      <Markdown className="prose prose-sm mt-2 max-w-none break-words text-base leading-6 text-slate-600">
-                        {summaryOverview.join('\n\n')}
-                      </Markdown>
-                    ) : (
-                      summaryOverview.map((paragraph, index) => (
-                        <p
-                          key={`${summaryHeadline}-${index}`}
-                          className="mt-2 whitespace-pre-line break-words text-base text-slate-600 leading-6"
-                        >
-                          {paragraph}
-                        </p>
-                      ))
-                    )}
-                  </div>
-                ) : !isSummaryLoading ? (
-                  <p className="text-sm text-slate-600">
-                    {summaryFallbackText}
-                  </p>
-                ) : null}
-              </div>
-            </div>
+                <DropdownItem
+                  onClick={handleArchiveToggle}
+                  className={
+                    isArchivePending ? 'opacity-60 cursor-not-allowed' : ''
+                  }
+                >
+                  {contract.archivedAt
+                    ? 'Restore contract'
+                    : 'Archive contract'}
+                </DropdownItem>
+              </Dropdown>
+            )}
           </div>
 
-          {pendingActionsContent ? (
-            <div className="lg:col-start-2 lg:row-start-1 lg:row-span-2">
-              {pendingActionsContent}
-            </div>
-          ) : null}
+          <div
+            className={`mt-4 grid gap-6 ${
+              pendingActionsContent
+                ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-start'
+                : ''
+            }`}
+          >
+            <div className="lg:col-start-1 lg:row-start-1">
+              <div className="w-full rounded-xl border border-slate-200 bg-white p-4 sm:w-auto sm:rounded-2xl sm:p-5 lg:w-[720px]">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Avatar
+                      name={senderName}
+                      src={senderLogo}
+                      size="md"
+                      className="h-10 w-10 text-sm sm:h-12 sm:w-12 sm:text-base"
+                    />
+                    <div className="truncate text-sm font-semibold leading-6 text-slate-900">
+                      {senderName}
+                    </div>
+                  </div>
+                  {aiChatSessionId && contract?.updatedAt && !isAiChatOpen ? (
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold leading-6 text-[color:var(--color-primary)] opacity-70 hover:opacity-100"
+                      aria-label="Talk with AI"
+                      onClick={() => setIsAiChatOpen(true)}
+                    >
+                      <AiAssistantIcon className="h-4 w-4" />
+                      Talk with AI
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-4 max-w-[720px] space-y-3 text-slate-700">
+                  {summaryErrorMessage && (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+                      {summaryErrorMessage}
+                    </div>
+                  )}
 
-          <div className="flex flex-col gap-4 lg:col-start-1 lg:row-start-2">
+                  {isSummaryFetching && summary && (
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <Spinner size="sm" color="green" />
+                      Updating summary...
+                    </div>
+                  )}
+
+                  {isSummaryLoading && (
+                    <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
+                      <Spinner size="sm" color="green" />
+                      Generating summary...
+                    </div>
+                  )}
+
+                  {resolvedSummary ? (
+                    <div>
+                      <h3 className="text-[32px] leading-[40px] font-semibold text-slate-900">
+                        {summaryHeadline}
+                      </h3>
+                      {isMockSummaryEnabled && summaryOverview.length > 0 ? (
+                        <Markdown className="prose prose-sm mt-2 max-w-none break-words text-base leading-6 text-slate-600">
+                          {summaryOverview.join('\n\n')}
+                        </Markdown>
+                      ) : (
+                        summaryOverview.map((paragraph, index) => (
+                          <p
+                            key={`${summaryHeadline}-${index}`}
+                            className="mt-2 whitespace-pre-line break-words text-base text-slate-600 leading-6"
+                          >
+                            {paragraph}
+                          </p>
+                        ))
+                      )}
+                    </div>
+                  ) : !isSummaryLoading ? (
+                    <p className="text-sm text-slate-600">
+                      {summaryFallbackText}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            {pendingActionsContent ? (
+              <div className="lg:col-start-2 lg:row-start-1">
+                {pendingActionsContent}
+              </div>
+            ) : null}
+          </div>
+        </section>
+
+        {hasVisibleSections ? (
+          <div className="flex w-full flex-col gap-4 sm:gap-6">
             {contract && hasAvailableOperations && (
               <details
                 className={sectionContainerClassName}
@@ -1223,8 +1234,8 @@ export function ContractDetailsPage() {
               </details>
             )}
           </div>
-        </div>
-      </section>
+        ) : null}
+      </div>
 
       {aiChatSessionId && contract?.updatedAt ? (
         <ContractAiChatDrawer
