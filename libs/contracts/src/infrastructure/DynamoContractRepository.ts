@@ -4,6 +4,7 @@ import { Blue, BlueNode } from '@blue-labs/language';
 import { repository as blueRepository } from '@blue-repository/types';
 import { createDefaultMergingProcessor } from '@blue-labs/document-processor';
 import {
+  BatchGetCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
@@ -77,6 +78,11 @@ const resolveSummaryPreview = (
   normalizeSummaryText(summary?.lastChange?.short) ??
   normalizeSummaryText(summary?.listPreview) ??
   normalizeSummaryText(fallbackPreview);
+
+const hasPendingContractAction = (
+  pendingActions?: ContractPendingAction[]
+): boolean =>
+  pendingActions?.some(action => action.status === 'pending') ?? false;
 
 const compactBlue = new Blue({
   repositories: [blueRepository],
@@ -254,6 +260,7 @@ interface ContractUserItem {
   sessionId?: string;
   documentId?: string;
   status?: string;
+  hasPendingAction?: boolean;
   archivedAt?: string;
   merchantId?: string;
   summaryPreview?: string;
@@ -277,6 +284,7 @@ interface ContractRelationshipItem {
   sessionId?: string;
   documentId?: string;
   status?: string;
+  hasPendingAction?: boolean;
   userId?: string;
   archivedAt?: string;
   merchantId?: string;
@@ -390,6 +398,67 @@ export class DynamoContractRepository implements ContractRepository {
 
   private buildHistorySk(createdAt: string, historyId: string) {
     return `${HISTORY_SORT_KEY_PREFIX}${createdAt}#${historyId}`;
+  }
+
+  private async hydratePendingActionFlags(
+    contractIds: string[]
+  ): Promise<Map<string, boolean>> {
+    const uniqueContractIds = Array.from(new Set(contractIds.filter(Boolean)));
+    if (!uniqueContractIds.length) {
+      return new Map();
+    }
+
+    const flags = new Map<string, boolean>();
+    const chunkSize = 100;
+    type PendingActionMetaKey = { PK: string; SK: typeof SORT_KEYS.META };
+
+    for (let index = 0; index < uniqueContractIds.length; index += chunkSize) {
+      const chunk = uniqueContractIds.slice(index, index + chunkSize);
+      let pendingKeys: PendingActionMetaKey[] = chunk.map(contractId => ({
+        PK: this.buildContractPk(contractId),
+        SK: SORT_KEYS.META,
+      }));
+      let retries = 0;
+      const maxRetries = 5;
+
+      while (pendingKeys.length && retries <= maxRetries) {
+        const response = await this.client.send(
+          new BatchGetCommand({
+            RequestItems: {
+              [this.tableName]: {
+                Keys: pendingKeys,
+                ConsistentRead: true,
+                ProjectionExpression: 'contractId, pendingActions',
+              },
+            },
+          })
+        );
+
+        const items = (response.Responses?.[this.tableName] ?? []) as Array<
+          Pick<ContractItem, 'contractId' | 'pendingActions'>
+        >;
+        items.forEach(item => {
+          if (!item.contractId) {
+            return;
+          }
+          flags.set(
+            item.contractId,
+            hasPendingContractAction(item.pendingActions)
+          );
+        });
+
+        const unprocessed = (response.UnprocessedKeys?.[this.tableName]?.Keys ??
+          []) as PendingActionMetaKey[];
+        if (!unprocessed.length) {
+          break;
+        }
+
+        pendingKeys = unprocessed;
+        retries += 1;
+      }
+    }
+
+    return flags;
   }
 
   private mapItemToRecord(item: ContractItem): ContractRecord {
@@ -782,6 +851,7 @@ export class DynamoContractRepository implements ContractRepository {
         sessionId: record.sessionId,
         documentId: record.documentId,
         status: record.status,
+        hasPendingAction: hasPendingContractAction(record.pendingActions),
         archivedAt: record.archivedAt,
         merchantId: record.merchantId,
         summaryPreview: resolveSummaryPreview(
@@ -815,6 +885,7 @@ export class DynamoContractRepository implements ContractRepository {
       sessionId: record.sessionId,
       documentId: record.documentId,
       status: record.status,
+      hasPendingAction: hasPendingContractAction(record.pendingActions),
       userId: record.userId,
       archivedAt: record.archivedAt,
       merchantId: record.merchantId,
@@ -1204,29 +1275,40 @@ export class DynamoContractRepository implements ContractRepository {
     const filtered = updatedSince
       ? items.filter(item => getSummaryTimestamp(item) > updatedSince)
       : items;
+    const hydratedPendingActionFlags = await this.hydratePendingActionFlags(
+      filtered
+        .filter(item => item.hasPendingAction === undefined)
+        .map(item => item.contractId)
+    );
 
     return filtered
       .sort((a, b) =>
         getSummaryTimestamp(b).localeCompare(getSummaryTimestamp(a))
       )
-      .map(item => ({
-        contractId: item.contractId,
-        typeBlueId: item.typeBlueId,
-        displayName: item.displayName,
-        documentName: item.summaryDocumentName ?? item.documentName,
-        customerChannelKey: item.customerChannelKey,
-        sessionId: item.sessionId,
-        documentId: item.documentId,
-        status: item.status,
-        archivedAt: item.archivedAt,
-        merchantId: item.merchantId,
-        summaryPreview: item.summaryPreview,
-        summaryUpdatedAt: item.summaryUpdatedAt,
-        summarySourceUpdatedAt: item.summarySourceUpdatedAt,
-        summarySourceEpoch: item.summarySourceEpoch,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      }));
+      .map(item => {
+        const hasPendingAction =
+          item.hasPendingAction ??
+          hydratedPendingActionFlags.get(item.contractId);
+        return {
+          contractId: item.contractId,
+          typeBlueId: item.typeBlueId,
+          displayName: item.displayName,
+          documentName: item.summaryDocumentName ?? item.documentName,
+          customerChannelKey: item.customerChannelKey,
+          sessionId: item.sessionId,
+          documentId: item.documentId,
+          status: item.status,
+          ...(hasPendingAction !== undefined ? { hasPendingAction } : {}),
+          archivedAt: item.archivedAt,
+          merchantId: item.merchantId,
+          summaryPreview: item.summaryPreview,
+          summaryUpdatedAt: item.summaryUpdatedAt,
+          summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+          summarySourceEpoch: item.summarySourceEpoch,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      });
   }
 
   async listContractsByTransactionId(
@@ -1256,29 +1338,40 @@ export class DynamoContractRepository implements ContractRepository {
 
     const getSummaryTimestamp = (item: ContractRelationshipItem) =>
       item.summarySourceUpdatedAt ?? item.summaryUpdatedAt ?? item.updatedAt;
+    const hydratedPendingActionFlags = await this.hydratePendingActionFlags(
+      items
+        .filter(item => item.hasPendingAction === undefined)
+        .map(item => item.contractId)
+    );
 
     return items
       .sort((a, b) =>
         getSummaryTimestamp(b).localeCompare(getSummaryTimestamp(a))
       )
-      .map(item => ({
-        contractId: item.contractId,
-        typeBlueId: item.typeBlueId,
-        displayName: item.displayName,
-        documentName: item.summaryDocumentName ?? item.documentName,
-        customerChannelKey: item.customerChannelKey,
-        sessionId: item.sessionId,
-        documentId: item.documentId,
-        status: item.status,
-        archivedAt: item.archivedAt,
-        merchantId: item.merchantId,
-        summaryPreview: item.summaryPreview,
-        summaryUpdatedAt: item.summaryUpdatedAt,
-        summarySourceUpdatedAt: item.summarySourceUpdatedAt,
-        summarySourceEpoch: item.summarySourceEpoch,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      }));
+      .map(item => {
+        const hasPendingAction =
+          item.hasPendingAction ??
+          hydratedPendingActionFlags.get(item.contractId);
+        return {
+          contractId: item.contractId,
+          typeBlueId: item.typeBlueId,
+          displayName: item.displayName,
+          documentName: item.summaryDocumentName ?? item.documentName,
+          customerChannelKey: item.customerChannelKey,
+          sessionId: item.sessionId,
+          documentId: item.documentId,
+          status: item.status,
+          ...(hasPendingAction !== undefined ? { hasPendingAction } : {}),
+          archivedAt: item.archivedAt,
+          merchantId: item.merchantId,
+          summaryPreview: item.summaryPreview,
+          summaryUpdatedAt: item.summaryUpdatedAt,
+          summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+          summarySourceEpoch: item.summarySourceEpoch,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      });
   }
 
   async listContractsByHoldId(
@@ -1308,29 +1401,40 @@ export class DynamoContractRepository implements ContractRepository {
 
     const getSummaryTimestamp = (item: ContractRelationshipItem) =>
       item.summarySourceUpdatedAt ?? item.summaryUpdatedAt ?? item.updatedAt;
+    const hydratedPendingActionFlags = await this.hydratePendingActionFlags(
+      items
+        .filter(item => item.hasPendingAction === undefined)
+        .map(item => item.contractId)
+    );
 
     return items
       .sort((a, b) =>
         getSummaryTimestamp(b).localeCompare(getSummaryTimestamp(a))
       )
-      .map(item => ({
-        contractId: item.contractId,
-        typeBlueId: item.typeBlueId,
-        displayName: item.displayName,
-        documentName: item.summaryDocumentName ?? item.documentName,
-        customerChannelKey: item.customerChannelKey,
-        sessionId: item.sessionId,
-        documentId: item.documentId,
-        status: item.status,
-        archivedAt: item.archivedAt,
-        merchantId: item.merchantId,
-        summaryPreview: item.summaryPreview,
-        summaryUpdatedAt: item.summaryUpdatedAt,
-        summarySourceUpdatedAt: item.summarySourceUpdatedAt,
-        summarySourceEpoch: item.summarySourceEpoch,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      }));
+      .map(item => {
+        const hasPendingAction =
+          item.hasPendingAction ??
+          hydratedPendingActionFlags.get(item.contractId);
+        return {
+          contractId: item.contractId,
+          typeBlueId: item.typeBlueId,
+          displayName: item.displayName,
+          documentName: item.summaryDocumentName ?? item.documentName,
+          customerChannelKey: item.customerChannelKey,
+          sessionId: item.sessionId,
+          documentId: item.documentId,
+          status: item.status,
+          ...(hasPendingAction !== undefined ? { hasPendingAction } : {}),
+          archivedAt: item.archivedAt,
+          merchantId: item.merchantId,
+          summaryPreview: item.summaryPreview,
+          summaryUpdatedAt: item.summaryUpdatedAt,
+          summarySourceUpdatedAt: item.summarySourceUpdatedAt,
+          summarySourceEpoch: item.summarySourceEpoch,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      });
   }
 }
 

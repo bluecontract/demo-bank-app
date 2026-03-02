@@ -15,6 +15,7 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
   DynamoDBDocumentClient: {
     from: vi.fn(() => mockDocumentClient),
   },
+  BatchGetCommand: vi.fn(payload => payload),
   PutCommand: vi.fn(payload => payload),
   GetCommand: vi.fn(payload => payload),
   QueryCommand: vi.fn(payload => payload),
@@ -402,5 +403,120 @@ describe('DynamoContractRepository', () => {
       item => item.PK === 'CONTRACT#contract-compact' && item.SK === 'DOCUMENT'
     );
     expect(documentSnapshot?.document?.type).toEqual({ blueId: 'type-root' });
+  });
+
+  it('hydrates pending-action flag from contract META and retries unprocessed keys', async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            PK: 'USER#user-1',
+            SK: 'CONTRACT#contract-1',
+            entityType: 'CONTRACT_USER',
+            contractId: 'contract-1',
+            typeBlueId: 'type-1',
+            displayName: 'Contract 1',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        Responses: {
+          'test-table': [],
+        },
+        UnprocessedKeys: {
+          'test-table': {
+            Keys: [
+              {
+                PK: 'CONTRACT#contract-1',
+                SK: 'META',
+              },
+            ],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        Responses: {
+          'test-table': [
+            {
+              contractId: 'contract-1',
+              pendingActions: [
+                {
+                  actionId: 'action-1',
+                  type: 'monitoringConsentApproval',
+                  status: 'pending',
+                  title: 'Approve monitoring',
+                  createdAt: '2024-01-01T00:00:00.000Z',
+                },
+              ],
+            },
+          ],
+        },
+      });
+    const repository = createRepository();
+
+    const result = await repository.listContractsByUserId('user-1');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.hasPendingAction).toBe(true);
+
+    const batchGetRequests = mockSend.mock.calls
+      .map(call => call[0] as { RequestItems?: Record<string, unknown> })
+      .filter(call => Boolean(call.RequestItems?.['test-table']));
+    expect(batchGetRequests).toHaveLength(2);
+    expect(batchGetRequests[0]).toEqual(
+      expect.objectContaining({
+        RequestItems: {
+          'test-table': expect.objectContaining({
+            Keys: [
+              {
+                PK: 'CONTRACT#contract-1',
+                SK: 'META',
+              },
+            ],
+          }),
+        },
+      })
+    );
+    expect(batchGetRequests[1]).toEqual(
+      expect.objectContaining({
+        RequestItems: {
+          'test-table': expect.objectContaining({
+            Keys: [
+              {
+                PK: 'CONTRACT#contract-1',
+                SK: 'META',
+              },
+            ],
+          }),
+        },
+      })
+    );
+  });
+
+  it('does not backfill pending-action flag when projection already has hasPendingAction', async () => {
+    mockSend.mockResolvedValueOnce({
+      Items: [
+        {
+          PK: 'USER#user-1',
+          SK: 'CONTRACT#contract-1',
+          entityType: 'CONTRACT_USER',
+          contractId: 'contract-1',
+          typeBlueId: 'type-1',
+          displayName: 'Contract 1',
+          hasPendingAction: true,
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    const repository = createRepository();
+
+    const result = await repository.listContractsByUserId('user-1');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.hasPendingAction).toBe(true);
+    expect(mockSend).toHaveBeenCalledTimes(1);
   });
 });

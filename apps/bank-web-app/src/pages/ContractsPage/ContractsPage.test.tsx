@@ -193,6 +193,8 @@ describe('ContractsPage', () => {
     'pendingactionrequested',
     'pending_action_requested',
     'pending-action-requested',
+    'pending action requested',
+    'Pending Action Requested',
   ])(
     'shows pending-action indicator for supported contract status "%s"',
     status => {
@@ -210,6 +212,21 @@ describe('ContractsPage', () => {
       ).toBeGreaterThan(0);
     }
   );
+
+  it('shows pending-action indicator when contract has explicit hasPendingAction flag', () => {
+    mockUseContracts.mockReturnValue({
+      data: [{ ...contractSummary, status: 'ACTIVE', hasPendingAction: true }],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+
+    render(<ContractsPage />, { wrapper: createTestWrapper() });
+
+    expect(
+      screen.getAllByRole('img', { name: 'Pending action available' }).length
+    ).toBeGreaterThan(0);
+  });
 
   it('does not show pending-action indicator for non-pending contracts and proposals', () => {
     render(<ContractsPage />, { wrapper: createTestWrapper() });

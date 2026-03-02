@@ -487,6 +487,7 @@ export const ContractSummaryDto = z.object({
   sessionId: z.string().optional(),
   documentId: z.string().optional(),
   status: z.string().optional(),
+  hasPendingAction: z.boolean().optional(),
   archivedAt: z.string().datetime({ offset: true }).optional(),
   from: MerchantFromDto,
   summaryPreview: z.string().optional(),

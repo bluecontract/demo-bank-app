@@ -181,6 +181,7 @@ export interface ContractSummary {
   sessionId?: string;
   documentId?: string;
   status?: string;
+  hasPendingAction?: boolean;
   archivedAt?: string;
   merchantId?: string;
   summaryPreview?: string;

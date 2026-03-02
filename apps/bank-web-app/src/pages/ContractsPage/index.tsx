@@ -91,33 +91,49 @@ const getSender = (item: ContractOrProposalItem): string =>
 const pendingActionStatusValues = new Set([
   'pending',
   'pendingactionrequested',
-  'pending_action_requested',
-  'pending-action-requested',
 ]);
+
+const normalizePendingActionStatus = (value?: string): string =>
+  value
+    ?.trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '') ?? '';
 
 const hasActivePendingAction = (item: ContractOrProposalItem): boolean => {
   if (isProposalItem(item)) {
     return false;
   }
-  const status = item.status?.trim().toLowerCase();
-  if (!status) {
+  if (item.hasPendingAction === true) {
+    return true;
+  }
+  const normalizedStatus = normalizePendingActionStatus(item.status);
+  if (!normalizedStatus) {
     return false;
   }
-  return pendingActionStatusValues.has(status);
+  if (pendingActionStatusValues.has(normalizedStatus)) {
+    return true;
+  }
+  return normalizedStatus.startsWith('pendingactionrequest');
 };
 
 function PendingActionIndicator() {
   return (
     <span
       role="img"
-      className="inline-flex h-4 w-4 items-center justify-center text-[color:var(--color-primary)]"
+      className="inline-flex h-[21px] w-[18px] shrink-0 items-center justify-center text-[#0062FF]"
       aria-label="Pending action available"
       title="Pending action available"
     >
-      <svg viewBox="0 0 12 14" fill="none" className="h-4 w-4">
+      <svg
+        viewBox="0 0 18 21"
+        fill="none"
+        className="h-[21px] w-[18px]"
+        aria-hidden="true"
+      >
         <path
-          d="M4.11905 9.09524V7.7381M4.11905 7.7381V3.21429C4.11905 2.7146 4.52412 2.30952 5.02381 2.30952C5.5235 2.30952 5.92857 2.7146 5.92857 3.21429V6.83333H8.96219C9.7852 6.83333 10.4524 7.50052 10.4524 8.32353V9.09524C10.4524 11.3438 8.62954 13.1667 6.38095 13.1667H5.92857C3.92983 13.1667 2.30952 11.5464 2.30952 9.54762C2.30952 8.54825 3.11968 7.7381 4.11905 7.7381ZM7.28571 5.02381H9.09524C10.3445 5.02381 11.3571 4.01112 11.3571 2.7619C11.3571 1.51269 10.3445 0.5 9.09524 0.5H2.7619C1.51269 0.5 0.5 1.51269 0.5 2.7619C0.5 4.01112 1.51269 5.02381 2.7619 5.02381"
+          d="M6.17857 13.6429V11.6071M6.17857 11.6071V4.82143C6.17857 4.0719 6.78619 3.46429 7.53571 3.46429C8.28524 3.46429 8.89286 4.0719 8.89286 4.82143V10.25H13.4433C14.6778 10.25 15.6786 11.2508 15.6786 12.4853V13.6429C15.6786 17.0157 12.9443 19.75 9.57143 19.75H8.89286C5.89474 19.75 3.46429 17.3195 3.46429 14.3214C3.46429 12.8224 4.67951 11.6071 6.17857 11.6071ZM10.9286 7.53571H13.6429C15.5167 7.53571 17.0357 6.01668 17.0357 4.14286C17.0357 2.26903 15.5167 0.75 13.6429 0.75H4.14286C2.26903 0.75 0.75 2.26903 0.75 4.14286C0.75 6.01668 2.26903 7.53571 4.14286 7.53571"
           stroke="currentColor"
+          strokeWidth="1.5"
           strokeLinecap="round"
         />
       </svg>
@@ -509,7 +525,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
             <span>From</span>
             <span>Contract</span>
             <span className="invisible">Actions</span>
-            <div className="col-start-4 w-full text-right">Last change</div>
+            <div className="w-full text-right">Last change</div>
           </div>
         </div>
 
@@ -686,10 +702,12 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                         />
                       ) : null}
                     </div>
-                    <div className="flex items-center justify-end gap-1.5 text-right text-xs text-slate-500">
-                      {shouldShowPendingActionIndicator ? (
-                        <PendingActionIndicator />
-                      ) : null}
+                    <div className="grid grid-cols-[18px_minmax(0,1fr)] items-center justify-end gap-2 text-right text-xs text-slate-500">
+                      <span className="inline-flex items-center justify-center">
+                        {shouldShowPendingActionIndicator ? (
+                          <PendingActionIndicator />
+                        ) : null}
+                      </span>
                       <span>{updatedAt}</span>
                     </div>
                   </div>

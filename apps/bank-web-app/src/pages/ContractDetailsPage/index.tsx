@@ -940,7 +940,7 @@ export function ContractDetailsPage() {
             }`}
           >
             <div className="lg:col-start-1 lg:row-start-1">
-              <div className="w-full rounded-xl border border-slate-200 bg-white p-4 sm:w-auto sm:rounded-2xl sm:p-5 lg:w-[720px]">
+              <div className="w-full rounded-xl border border-slate-200 bg-white p-4 sm:w-auto sm:rounded-2xl sm:p-5 lg:max-w-[720px]">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
                     <Avatar
