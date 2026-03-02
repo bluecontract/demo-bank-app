@@ -20,7 +20,6 @@ import {
   useProposalDecision,
   useArchiveContract,
   useUnarchiveContract,
-  useContractAiChatDockState,
 } from '../../features/contracts/hooks';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -28,13 +27,21 @@ vi.mock('../../app/providers/AuthProvider', () => ({
   useAuth: vi.fn(),
 }));
 
-vi.mock('../../features/contracts/components/ContractAiChatDock', () => ({
-  ContractAiChatDock: ({ state }: { state: { mode: string } }) =>
-    state.mode === 'minimized' ? (
-      <div data-testid="ai-chat-avatar" />
-    ) : (
-      <div data-testid="ai-chat-dock" />
-    ),
+vi.mock('../../features/contracts/components/ContractAiChatDrawer', () => ({
+  ContractAiChatDrawer: ({
+    isOpen,
+    onClose,
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+  }) =>
+    isOpen ? (
+      <div data-testid="ai-chat-drawer">
+        <button type="button" aria-label="Close AI chat" onClick={onClose}>
+          Close AI chat
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock('../../features/contracts/hooks', () => ({
@@ -48,7 +55,6 @@ vi.mock('../../features/contracts/hooks', () => ({
   useProposalDecision: vi.fn(),
   useArchiveContract: vi.fn(),
   useUnarchiveContract: vi.fn(),
-  useContractAiChatDockState: vi.fn(),
 }));
 
 vi.mock('../../features/dashboard/components', () => ({
@@ -86,9 +92,6 @@ const mockUseUnarchiveContract = useUnarchiveContract as ReturnType<
   typeof vi.fn
 >;
 const mockUseProposalDecision = useProposalDecision as ReturnType<typeof vi.fn>;
-const mockUseContractAiChatDockState = useContractAiChatDockState as ReturnType<
-  typeof vi.fn
->;
 const mockUseActiveContractSession = useActiveContractSession as ReturnType<
   typeof vi.fn
 >;
@@ -99,20 +102,6 @@ const mockUseNavigate = useNavigate as ReturnType<typeof vi.fn>;
 describe('ContractDetailsPage', () => {
   let markReviewedMock: ReturnType<typeof vi.fn>;
   let markItemReviewedMock: ReturnType<typeof vi.fn>;
-  let mockAiChatState: {
-    state: {
-      version: number;
-      mode: 'collapsed' | 'minimized' | 'expanded';
-      messages: Array<{ id: string; role: string; content: string }>;
-      draft: string;
-      pendingOperation: null;
-      updatedAt: string;
-    };
-    setMode: ReturnType<typeof vi.fn>;
-    setDraft: ReturnType<typeof vi.fn>;
-    setMessages: ReturnType<typeof vi.fn>;
-    setPendingOperation: ReturnType<typeof vi.fn>;
-  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -172,30 +161,6 @@ describe('ContractDetailsPage', () => {
       timedOut: false,
     });
 
-    mockAiChatState = {
-      state: {
-        version: 1,
-        mode: 'collapsed',
-        messages: [
-          {
-            id: 'welcome',
-            role: 'assistant',
-            content:
-              'How can I help you? I know everything about the document: “Contract”.',
-          },
-        ],
-        draft: '',
-        pendingOperation: null,
-        updatedAt: '2026-01-01T00:00:00.000Z',
-      },
-      setMode: vi.fn(),
-      setDraft: vi.fn(),
-      setMessages: vi.fn(),
-      setPendingOperation: vi.fn(),
-    };
-
-    mockUseContractAiChatDockState.mockReturnValue(mockAiChatState);
-
     mockUseNavigate.mockReturnValue(vi.fn());
   });
 
@@ -212,6 +177,7 @@ describe('ContractDetailsPage', () => {
         sessionId: 'session-1',
         typeBlueId: 'PayNote/Contract',
         displayName: 'GE Refrigerator Order',
+        updatedAt: '2026-01-02T00:00:00.000Z',
         document: { name: 'GE Refrigerator Order' },
         summary: {
           story: {
@@ -272,7 +238,7 @@ describe('ContractDetailsPage', () => {
     );
   });
 
-  it('renders Chat with AI trigger in header when dock is collapsed', () => {
+  it('opens and closes AI chat drawer from header trigger', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-1' });
     mockUseLocation.mockReturnValue({
       state: { from: '/contracts', kind: 'contract' },
@@ -316,121 +282,55 @@ describe('ContractDetailsPage', () => {
       error: null,
     });
 
-    mockUseContractAiChatDockState.mockReturnValue({
-      ...mockAiChatState,
-      state: { ...mockAiChatState.state, mode: 'collapsed' },
-    });
-
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
+    expect(screen.queryByTestId('ai-chat-drawer')).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Chat with AI' })
     ).toBeInTheDocument();
-    expect(screen.getByTestId('ai-chat-dock')).toBeInTheDocument();
-  });
 
-  it('renders Chat with AI trigger when dock state is minimized', () => {
-    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
-    mockUseLocation.mockReturnValue({
-      state: { from: '/contracts', kind: 'contract' },
-      pathname: '/contracts/session-1',
-      search: '',
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Chat with AI' }));
+    expect(screen.getByTestId('ai-chat-drawer')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Chat with AI' })
+    ).not.toBeInTheDocument();
 
-    mockUseContractDetails.mockReturnValue({
-      data: {
-        sessionId: 'session-1',
-        typeBlueId: 'PayNote/Contract',
-        displayName: 'GE Refrigerator Order',
-        document: { name: 'GE Refrigerator Order' },
-        updatedAt: '2026-01-02T00:00:00.000Z',
-        summary: {
-          story: {
-            headline: 'GE Refrigerator Order',
-            overview: ['Funds will be held until delivery is confirmed.'],
-            bullets: [],
-          },
-          listPreview: 'Funds are held until delivery.',
-          nextSteps: {
-            title: 'Next steps',
-            items: ['Awaiting client approval.'],
-          },
-          lastChange: {
-            short: 'Proposal pending.',
-            more: 'Awaiting client approval.',
-          },
-        },
-      },
-      isLoading: false,
-      isError: false,
-      error: null,
-    });
-
-    mockUseProposalDetails.mockReturnValue({
-      data: null,
-      isLoading: false,
-      isError: false,
-      error: null,
-    });
-
-    mockUseContractAiChatDockState.mockReturnValue({
-      ...mockAiChatState,
-      state: { ...mockAiChatState.state, mode: 'minimized' },
-    });
-
-    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
-
+    fireEvent.click(screen.getByRole('button', { name: 'Close AI chat' }));
+    expect(screen.queryByTestId('ai-chat-drawer')).not.toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Chat with AI' })
     ).toBeInTheDocument();
   });
 
-  it('separates AI chat state by contract session', () => {
-    const callLog: Array<{ sessionId: string | null }> = [];
-    mockUseContractAiChatDockState.mockImplementation(({ sessionId }) => {
-      callLog.push({ sessionId });
-      return {
-        ...mockAiChatState,
-        state: { ...mockAiChatState.state, mode: 'collapsed' },
-      };
-    });
-
-    const renderContract = (sessionId: string) => {
-      mockUseParams.mockReturnValue({ sessionId });
+  it('closes AI chat drawer when contract session changes', () => {
+    const configureContract = (
+      session: string,
+      title: string,
+      updatedAt: string
+    ) => {
+      mockUseParams.mockReturnValue({ sessionId: session });
       mockUseLocation.mockReturnValue({
         state: { from: '/contracts', kind: 'contract' },
-        pathname: `/contracts/${sessionId}`,
+        pathname: `/contracts/${session}`,
         search: '',
       });
 
       mockUseContractDetails.mockReturnValue({
         data: {
-          sessionId,
+          sessionId: session,
           typeBlueId: 'PayNote/Contract',
-          displayName: sessionId === 'session-1' ? 'First' : 'Second',
-          document: {
-            name:
-              sessionId === 'session-1' ? 'First contract' : 'Second contract',
-          },
-          updatedAt:
-            sessionId === 'session-1'
-              ? '2026-01-01T00:00:00.000Z'
-              : '2026-01-03T00:00:00.000Z',
+          displayName: title,
+          updatedAt,
+          document: { name: title },
           summary: {
             story: {
-              headline: sessionId === 'session-1' ? 'First' : 'Second',
-              overview: [
-                sessionId === 'session-1' ? 'Contract one.' : 'Contract two.',
-              ],
+              headline: title,
+              overview: ['Summary'],
               bullets: [],
             },
-            listPreview:
-              sessionId === 'session-1' ? 'Contract one.' : 'Contract two.',
+            listPreview: 'Summary',
             nextSteps: { title: 'Next steps', items: [] },
-            lastChange: {
-              short: 'Proposal received.',
-              more: 'Awaiting client approval.',
-            },
+            lastChange: { short: 'Change', more: 'Change details' },
           },
         },
         isLoading: false,
@@ -446,17 +346,22 @@ describe('ContractDetailsPage', () => {
       });
     };
 
-    renderContract('session-1');
+    configureContract('session-1', 'Contract One', '2026-01-02T00:00:00.000Z');
+
     const { rerender } = render(<ContractDetailsPage />, {
       wrapper: createQueryWrapper(),
     });
 
-    renderContract('session-2');
+    fireEvent.click(screen.getByRole('button', { name: 'Chat with AI' }));
+    expect(screen.getByTestId('ai-chat-drawer')).toBeInTheDocument();
+
+    configureContract('session-2', 'Contract Two', '2026-01-03T00:00:00.000Z');
     rerender(<ContractDetailsPage />);
 
-    const sessionIds = callLog.map(item => item.sessionId);
-    expect(sessionIds).toContain('session-1');
-    expect(sessionIds).toContain('session-2');
+    expect(screen.queryByTestId('ai-chat-drawer')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Chat with AI' })
+    ).toBeInTheDocument();
   });
 
   it('renders proposal actions when the proposal view is active', () => {

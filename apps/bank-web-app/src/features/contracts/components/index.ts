@@ -3,4 +3,3 @@ export * from './ContractDetailsPanel';
 export * from './ProposalDetailsPanel';
 export * from './OperationForm';
 export * from './ContractAiChatDrawer';
-export * from './ContractAiChatDock';

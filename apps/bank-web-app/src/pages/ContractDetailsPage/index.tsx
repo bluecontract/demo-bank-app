@@ -20,7 +20,6 @@ import {
   useProposalDecision,
   useArchiveContract,
   useUnarchiveContract,
-  useContractAiChatDockState,
 } from '../../features/contracts/hooks';
 import {
   getDocumentDescription,
@@ -49,10 +48,7 @@ import {
   ContractOperationsList,
   resolveContractOperations,
 } from '../../features/contracts/components/ContractOperationsList';
-import {
-  ContractAiChatDock,
-  type ContractAiChatDockPlacement,
-} from '../../features/contracts/components/ContractAiChatDock';
+import { ContractAiChatDrawer } from '../../features/contracts/components/ContractAiChatDrawer';
 import { Avatar } from '../../ui/Avatar';
 import { Button } from '../../ui/Button';
 import { Dropdown, DropdownItem } from '../../ui/Dropdown';
@@ -71,15 +67,6 @@ import type {
 type LocationState = {
   from?: string;
   kind?: 'contract' | 'proposal';
-};
-
-const CHAT_DOCK_PLACEMENT_STORAGE_KEY_PREFIX =
-  'demo-bank-contract-ai-chat-layout';
-
-const getChatDockPlacementStorageKey = (userId?: string | null) => {
-  return `${CHAT_DOCK_PLACEMENT_STORAGE_KEY_PREFIX}:${
-    userId?.trim() || 'anonymous'
-  }`;
 };
 
 interface ProposalActionCardProps {
@@ -349,6 +336,7 @@ export function ContractDetailsPage() {
   const [expandedHistory, setExpandedHistory] = useState<
     Record<string, boolean>
   >({});
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
 
   useEffect(() => {
     if (activeKind !== resolvedKind) {
@@ -364,6 +352,7 @@ export function ContractDetailsPage() {
       linkedContracts: true,
       activity: true,
     });
+    setIsAiChatOpen(false);
   }, [sessionId]);
 
   const contractQuery = useContractDetails(sessionId ?? null);
@@ -597,39 +586,6 @@ export function ContractDetailsPage() {
     (summaryOverview[0] ??
       (contract ? getDocumentDescription(resolvedDocument) : null)) ||
     (contract ? 'Summary unavailable.' : proposalSummaryFallback);
-
-  const aiChatState = useContractAiChatDockState({
-    sessionId: aiChatSessionId,
-    userId: user?.userId,
-    documentTitle: headerTitle,
-  });
-  const chatPlacementStorageKey = useMemo(
-    () => getChatDockPlacementStorageKey(user?.userId),
-    [user?.userId]
-  );
-  const [chatDockPlacement, setChatDockPlacement] =
-    useState<ContractAiChatDockPlacement>('bottom');
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const storedPlacement = window.localStorage.getItem(
-      chatPlacementStorageKey
-    );
-    if (storedPlacement === 'side' || storedPlacement === 'bottom') {
-      setChatDockPlacement(storedPlacement);
-    }
-  }, [chatPlacementStorageKey]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.localStorage.setItem(chatPlacementStorageKey, chatDockPlacement);
-  }, [chatDockPlacement, chatPlacementStorageKey]);
 
   const historySessionId =
     resolvedKind === 'contract' ? contractData?.sessionId ?? null : null;
@@ -942,12 +898,12 @@ export function ContractDetailsPage() {
                     {senderName}
                   </div>
                 </div>
-                {aiChatSessionId && aiChatState.state.mode !== 'expanded' ? (
+                {aiChatSessionId && contract?.updatedAt && !isAiChatOpen ? (
                   <button
                     type="button"
                     className="text-sm font-semibold text-[color:var(--color-primary)] opacity-70 hover:opacity-100"
                     aria-label="Chat with AI"
-                    onClick={() => aiChatState.setMode('expanded')}
+                    onClick={() => setIsAiChatOpen(true)}
                   >
                     Chat with AI
                   </button>
@@ -1283,40 +1239,17 @@ export function ContractDetailsPage() {
                 onDecisionRecorded={handleProposalDecisionRecorded}
               />
             )}
-            {chatDockPlacement === 'side' &&
-            aiChatSessionId &&
-            contract?.updatedAt ? (
-              <ContractAiChatDock
-                placement={chatDockPlacement}
-                sessionId={aiChatSessionId}
-                documentTitle={headerTitle}
-                contractUpdatedAt={contract.updatedAt}
-                state={aiChatState.state}
-                onPlacementChange={setChatDockPlacement}
-                onModeChange={aiChatState.setMode}
-                onDraftChange={aiChatState.setDraft}
-                onMessagesChange={aiChatState.setMessages}
-                onPendingOperationChange={aiChatState.setPendingOperation}
-              />
-            ) : null}
           </div>
         </div>
       </section>
 
-      {chatDockPlacement === 'bottom' &&
-      aiChatSessionId &&
-      contract?.updatedAt ? (
-        <ContractAiChatDock
-          placement={chatDockPlacement}
+      {aiChatSessionId && contract?.updatedAt ? (
+        <ContractAiChatDrawer
+          isOpen={isAiChatOpen}
           sessionId={aiChatSessionId}
           documentTitle={headerTitle}
           contractUpdatedAt={contract.updatedAt}
-          state={aiChatState.state}
-          onPlacementChange={setChatDockPlacement}
-          onModeChange={aiChatState.setMode}
-          onDraftChange={aiChatState.setDraft}
-          onMessagesChange={aiChatState.setMessages}
-          onPendingOperationChange={aiChatState.setPendingOperation}
+          onClose={() => setIsAiChatOpen(false)}
         />
       ) : null}
     </DashboardShell>
