@@ -81,7 +81,9 @@ describe('ContractAiChatDrawer', () => {
       { wrapper }
     );
 
-    const input = screen.getByPlaceholderText('Write what you want');
+    const input = screen.getByPlaceholderText(
+      'Ask questions about the contract or make operations'
+    );
     fireEvent.change(input, { target: { value: 'Run it' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 

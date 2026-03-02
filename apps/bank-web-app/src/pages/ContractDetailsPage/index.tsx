@@ -49,7 +49,10 @@ import {
   ContractOperationsList,
   resolveContractOperations,
 } from '../../features/contracts/components/ContractOperationsList';
-import { ContractAiChatDock } from '../../features/contracts/components/ContractAiChatDock';
+import {
+  ContractAiChatDock,
+  type ContractAiChatDockPlacement,
+} from '../../features/contracts/components/ContractAiChatDock';
 import { Avatar } from '../../ui/Avatar';
 import { Button } from '../../ui/Button';
 import { Dropdown, DropdownItem } from '../../ui/Dropdown';
@@ -68,6 +71,15 @@ import type {
 type LocationState = {
   from?: string;
   kind?: 'contract' | 'proposal';
+};
+
+const CHAT_DOCK_PLACEMENT_STORAGE_KEY_PREFIX =
+  'demo-bank-contract-ai-chat-layout';
+
+const getChatDockPlacementStorageKey = (userId?: string | null) => {
+  return `${CHAT_DOCK_PLACEMENT_STORAGE_KEY_PREFIX}:${
+    userId?.trim() || 'anonymous'
+  }`;
 };
 
 interface ProposalActionCardProps {
@@ -591,6 +603,33 @@ export function ContractDetailsPage() {
     userId: user?.userId,
     documentTitle: headerTitle,
   });
+  const chatPlacementStorageKey = useMemo(
+    () => getChatDockPlacementStorageKey(user?.userId),
+    [user?.userId]
+  );
+  const [chatDockPlacement, setChatDockPlacement] =
+    useState<ContractAiChatDockPlacement>('bottom');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const storedPlacement = window.localStorage.getItem(
+      chatPlacementStorageKey
+    );
+    if (storedPlacement === 'side' || storedPlacement === 'bottom') {
+      setChatDockPlacement(storedPlacement);
+    }
+  }, [chatPlacementStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(chatPlacementStorageKey, chatDockPlacement);
+  }, [chatDockPlacement, chatPlacementStorageKey]);
 
   const historySessionId =
     resolvedKind === 'contract' ? contractData?.sessionId ?? null : null;
@@ -903,6 +942,16 @@ export function ContractDetailsPage() {
                     {senderName}
                   </div>
                 </div>
+                {aiChatSessionId && aiChatState.state.mode !== 'expanded' ? (
+                  <button
+                    type="button"
+                    className="text-sm font-semibold text-[color:var(--color-primary)] opacity-70 hover:opacity-100"
+                    aria-label="Chat with AI"
+                    onClick={() => aiChatState.setMode('expanded')}
+                  >
+                    Chat with AI
+                  </button>
+                ) : null}
               </div>
 
               <div className="mt-4 space-y-3 text-slate-700">
@@ -1234,16 +1283,36 @@ export function ContractDetailsPage() {
                 onDecisionRecorded={handleProposalDecisionRecorded}
               />
             )}
+            {chatDockPlacement === 'side' &&
+            aiChatSessionId &&
+            contract?.updatedAt ? (
+              <ContractAiChatDock
+                placement={chatDockPlacement}
+                sessionId={aiChatSessionId}
+                documentTitle={headerTitle}
+                contractUpdatedAt={contract.updatedAt}
+                state={aiChatState.state}
+                onPlacementChange={setChatDockPlacement}
+                onModeChange={aiChatState.setMode}
+                onDraftChange={aiChatState.setDraft}
+                onMessagesChange={aiChatState.setMessages}
+                onPendingOperationChange={aiChatState.setPendingOperation}
+              />
+            ) : null}
           </div>
         </div>
       </section>
 
-      {aiChatSessionId && contract?.updatedAt ? (
+      {chatDockPlacement === 'bottom' &&
+      aiChatSessionId &&
+      contract?.updatedAt ? (
         <ContractAiChatDock
+          placement={chatDockPlacement}
           sessionId={aiChatSessionId}
           documentTitle={headerTitle}
           contractUpdatedAt={contract.updatedAt}
           state={aiChatState.state}
+          onPlacementChange={setChatDockPlacement}
           onModeChange={aiChatState.setMode}
           onDraftChange={aiChatState.setDraft}
           onMessagesChange={aiChatState.setMessages}

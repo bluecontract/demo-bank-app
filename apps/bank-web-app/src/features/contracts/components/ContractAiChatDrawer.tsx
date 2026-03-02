@@ -356,7 +356,7 @@ export function ContractAiChatDrawer({
                 ref={inputRef}
                 value={draft}
                 onChange={event => setDraft(event.target.value)}
-                placeholder="Write what you want"
+                placeholder="Ask questions about the contract or make operations"
                 disabled={chat.isPending || runOperation.isPending}
                 className="rounded-lg"
               />

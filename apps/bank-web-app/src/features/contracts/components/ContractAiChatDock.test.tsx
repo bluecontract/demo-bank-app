@@ -65,13 +65,16 @@ type ChatDockHarnessProps = {
 
 function ChatDockHarness({ initialState }: ChatDockHarnessProps) {
   const [state, setState] = useState(initialState);
+  const [placement, setPlacement] = useState<'bottom' | 'side'>('bottom');
 
   return (
     <ContractAiChatDock
       sessionId="session-1"
       documentTitle="Contract"
       contractUpdatedAt="2026-01-01T00:00:00.000Z"
+      placement={placement}
       state={state}
+      onPlacementChange={setPlacement}
       onModeChange={mode =>
         setState(previous => ({
           ...previous,
@@ -126,21 +129,32 @@ describe('ContractAiChatDock', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders collapsed mode with input visible', () => {
+  it('does not render in collapsed mode', () => {
     render(<ChatDockHarness initialState={buildState()} />, {
       wrapper: createQueryWrapper(),
     });
 
     expect(
-      screen.getByRole('heading', { name: 'Talk with AI' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Send message' })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Hide' })
+      screen.queryByRole('complementary', { name: 'AI chat dock' })
     ).not.toBeInTheDocument();
-    expect(screen.queryByText(/How can I help you\?/)).not.toBeInTheDocument();
+  });
+
+  it('switches chat placement from header toggle', () => {
+    render(
+      <ChatDockHarness initialState={{ ...buildState(), mode: 'expanded' }} />,
+      {
+        wrapper: createQueryWrapper(),
+      }
+    );
+
+    const bottomButton = screen.getByRole('button', { name: 'Bottom' });
+    const sideButton = screen.getByRole('button', { name: 'Side' });
+
+    expect(bottomButton).toBeDisabled();
+    expect(sideButton).not.toBeDisabled();
+
+    fireEvent.click(sideButton);
+    expect(sideButton).toBeDisabled();
   });
 
   it('sends message and appends assistant reply', async () => {
@@ -276,16 +290,16 @@ describe('ContractAiChatDock', () => {
     });
   });
 
-  it('opens minimized dock with floating avatar and restores to expanded', () => {
-    const state = buildState();
-    const setModeMock = vi.fn();
+  it('renders nothing in minimized mode', () => {
     render(
       <ContractAiChatDock
         sessionId="session-1"
         documentTitle="Contract"
         contractUpdatedAt="2026-01-01T00:00:00.000Z"
-        state={{ ...state, mode: 'minimized' }}
-        onModeChange={setModeMock}
+        placement="bottom"
+        state={{ ...buildState(), mode: 'minimized' }}
+        onPlacementChange={vi.fn()}
+        onModeChange={vi.fn()}
         onDraftChange={vi.fn()}
         onMessagesChange={vi.fn()}
         onPendingOperationChange={vi.fn()}
@@ -294,50 +308,33 @@ describe('ContractAiChatDock', () => {
     );
 
     expect(
-      screen.getByRole('button', { name: 'Open AI chat' })
-    ).toBeInTheDocument();
+      screen.queryByRole('complementary', { name: 'AI chat dock' })
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Send message' })
     ).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open AI chat' }));
-    expect(setModeMock).toHaveBeenCalledWith('expanded');
   });
 
-  it('expands on focus and collapses on blur', () => {
-    render(<ChatDockHarness initialState={buildState()} />, {
-      wrapper: createQueryWrapper(),
-    });
-
-    const input = screen.getByRole('textbox', { name: 'AI chat input' });
-    expect(screen.queryByText('How can I help you?')).not.toBeInTheDocument();
-
-    fireEvent.focus(input);
-    expect(screen.getByText(/How can I help you\?/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
-
-    fireEvent.blur(input);
-    expect(screen.queryByText(/How can I help you\?/)).not.toBeInTheDocument();
-  });
-
-  it('hides chat history with Hide button', () => {
+  it('collapses expanded chat from header action', () => {
+    const onModeChange = vi.fn();
     render(
-      <ChatDockHarness
-        initialState={{
-          ...buildState(),
-          mode: 'expanded',
-        }}
+      <ContractAiChatDock
+        sessionId="session-1"
+        documentTitle="Contract"
+        contractUpdatedAt="2026-01-01T00:00:00.000Z"
+        placement="bottom"
+        state={{ ...buildState(), mode: 'expanded' }}
+        onPlacementChange={vi.fn()}
+        onModeChange={onModeChange}
+        onDraftChange={vi.fn()}
+        onMessagesChange={vi.fn()}
+        onPendingOperationChange={vi.fn()}
       />,
       { wrapper: createQueryWrapper() }
     );
 
-    expect(screen.getByText(/How can I help you\?/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
-    expect(screen.queryByText(/How can I help you\?/)).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Send message' })
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
+    expect(onModeChange).toHaveBeenCalledWith('collapsed');
   });
 
   it('auto-scrolls to latest messages when expanded and when new messages arrive', async () => {

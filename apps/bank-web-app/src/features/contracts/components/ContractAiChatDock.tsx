@@ -1,14 +1,6 @@
-import {
-  FocusEvent,
-  FormEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useMemo,
-} from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
-import { Avatar } from '../../../ui/Avatar';
 import { Button } from '../../../ui/Button';
 import { Input } from '../../../ui/Input';
 import { Spinner } from '../../../ui/Spinner';
@@ -24,11 +16,15 @@ import { useRunContractOperation } from '../hooks/useRunContractOperation';
 
 type ChatMessage = ContractAiChatDockMessage;
 
+export type ContractAiChatDockPlacement = 'bottom' | 'side';
+
 type ContractAiChatDockProps = {
   sessionId: string;
   documentTitle: string;
   contractUpdatedAt: string;
+  placement: ContractAiChatDockPlacement;
   state: ContractAiChatDockState;
+  onPlacementChange: (placement: ContractAiChatDockPlacement) => void;
   onModeChange: (mode: ContractAiChatDockMode) => void;
   onDraftChange: (draft: string) => void;
   onMessagesChange: (messages: ChatMessage[]) => void;
@@ -68,7 +64,9 @@ export function ContractAiChatDock({
   sessionId,
   documentTitle,
   contractUpdatedAt,
+  placement,
   state,
+  onPlacementChange,
   onModeChange,
   onDraftChange,
   onMessagesChange,
@@ -82,8 +80,27 @@ export function ContractAiChatDock({
     runOperation;
 
   const isExpanded = state.mode === 'expanded';
-  const isMinimized = state.mode === 'minimized';
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isBottomPlacement = placement === 'bottom';
+  const isSidePlacement = placement === 'side';
+  const sectionClassName = isBottomPlacement
+    ? 'fixed bottom-0 z-30 pb-4 left-4 right-4 sm:left-6 sm:right-6 lg:left-[calc(240px+2.5rem)] lg:right-10'
+    : '';
+  const shellClassName = isBottomPlacement
+    ? 'mx-auto w-full rounded-2xl border-4 border-slate-400 bg-slate-100 p-1 shadow-[0_32px_70px_rgba(15,23,42,0.32)] ring-2 ring-slate-300/70'
+    : 'w-full rounded-xl border border-slate-200 bg-white';
+  const contentClassName = isBottomPlacement
+    ? 'rounded-xl border border-slate-300 bg-white shadow-inner'
+    : 'rounded-xl bg-white';
+  const headerClassName = isBottomPlacement
+    ? 'flex items-center justify-between gap-3 rounded-t-xl px-4 py-3 border-b border-slate-300 bg-gradient-to-r from-slate-100 via-white to-slate-100'
+    : 'flex items-center justify-between gap-3 rounded-t-xl border-b border-slate-200 bg-white px-4 py-3';
+  const messagesListClassName = isBottomPlacement
+    ? 'max-h-[45vh] min-h-[220px] overflow-y-auto bg-[#f5f7fa] p-4 space-y-4 border-t border-slate-200/80'
+    : 'max-h-[45vh] min-h-[220px] overflow-y-auto bg-white p-4 space-y-4 border-t border-slate-200/80';
+  const formClassName = isBottomPlacement
+    ? 'flex items-center gap-2 rounded-b-xl border-t border-slate-200 bg-white/80 p-4'
+    : 'flex items-center gap-2 rounded-b-xl border-t border-slate-200 bg-white p-4';
   const payloadPreview = useMemo(
     () =>
       state.pendingOperation
@@ -273,222 +290,194 @@ export function ContractAiChatDock({
     [sendMessage, state.draft]
   );
 
-  const handleDockFocus = useCallback(() => {
-    if (isMinimized || isExpanded) {
-      return;
-    }
-
-    onModeChange('expanded');
-  }, [isExpanded, isMinimized, onModeChange]);
-
-  const handleDockBlur = useCallback(
-    (event: FocusEvent<HTMLElement>) => {
-      if (isMinimized) {
-        return;
-      }
-
-      const nextFocus = event.relatedTarget;
-      if (
-        nextFocus &&
-        event.currentTarget instanceof Element &&
-        event.currentTarget.contains(nextFocus as Node)
-      ) {
-        return;
-      }
-
-      onModeChange('collapsed');
-    },
-    [isMinimized, onModeChange]
-  );
-
-  const handleHideClick = () => {
+  const handleCollapseClick = () => {
     onModeChange('collapsed');
   };
 
-  const handleRestoreClick = () => {
-    onModeChange('expanded');
-  };
+  if (!isExpanded) {
+    return null;
+  }
 
   useEffect(() => {
-    if (!isExpanded) {
-      return;
-    }
-
     const messagesContainer = messagesContainerRef.current;
     if (!messagesContainer) {
       return;
     }
 
     const rafId = requestAnimationFrame(() => {
-      messagesContainer.scrollTo({
-        top: messagesContainer.scrollHeight,
-      });
+      if (typeof messagesContainer.scrollTo === 'function') {
+        messagesContainer.scrollTo({
+          top: messagesContainer.scrollHeight,
+        });
+        return;
+      }
+
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
     });
 
     return () => {
       cancelAnimationFrame(rafId);
     };
-  }, [
-    isExpanded,
-    state.messages.length,
-    isChatPending,
-    state.pendingOperation,
-  ]);
+  }, [state.messages.length, isChatPending, state.pendingOperation]);
 
   const isSendDisabled =
     !state.draft.trim() || isChatPending || isRunOperationPending;
   const isAiPending = isChatPending || isRunOperationPending;
 
-  if (isMinimized) {
-    return (
-      <button
-        type="button"
-        onClick={handleRestoreClick}
-        className="fixed bottom-4 right-4 z-30 rounded-full shadow-lg ring-1 ring-black/10 transition hover:scale-105 sm:right-6 lg:right-10"
-        aria-label="Open AI chat"
-      >
-        <Avatar
-          name="AI"
-          size="lg"
-          className="rounded-full border-2 border-white"
-        />
-      </button>
-    );
-  }
-
   return (
     <section
-      className="fixed bottom-0 z-30 pb-4 left-4 right-4 sm:left-6 sm:right-6 lg:left-[calc(240px+2.5rem)] lg:right-10"
+      className={sectionClassName}
       role="complementary"
       aria-label="AI chat dock"
-      onFocusCapture={handleDockFocus}
-      onBlurCapture={handleDockBlur}
     >
-      <div className="mx-auto w-full rounded-2xl border-2 border-slate-300 bg-white shadow-2xl shadow-slate-900/15 ring-1 ring-slate-200/80">
-        <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-300 bg-slate-100">
-          <h2 className="text-base font-semibold text-slate-900">
-            Talk with AI
-          </h2>
-          {isExpanded ? (
-            <Button variant="outline" size="sm" onClick={handleHideClick}>
-              Hide
-            </Button>
-          ) : null}
-        </header>
-
-        {isExpanded && (
-          <div
-            ref={messagesContainerRef}
-            data-testid="ai-chat-messages"
-            className="max-h-[45vh] min-h-[220px] overflow-y-auto bg-[#f5f7fa] p-4 space-y-4 border-t border-slate-200/80"
-          >
-            {state.messages.map(message => {
-              const isAssistant = message.role === 'assistant';
-              return (
-                <div
-                  key={message.id}
-                  className={`w-full border border-slate-200 p-4 text-sm text-slate-800 ${
-                    isAssistant
-                      ? 'bg-[#ccf1cf] rounded-tl-lg rounded-tr-lg rounded-br-lg'
-                      : 'bg-[#f5f7fa] rounded-tl-lg rounded-tr-lg rounded-bl-lg'
-                  }`}
+      <div className={shellClassName}>
+        <div className={contentClassName}>
+          <header className={headerClassName}>
+            <h2 className="text-base font-semibold text-slate-900">
+              Talk with AI
+            </h2>
+            <div className="flex items-center gap-1">
+              <div className="mr-1 flex rounded-lg border border-slate-200 bg-slate-100/80 p-0.5">
+                <Button
+                  type="button"
+                  variant={isBottomPlacement ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => onPlacementChange('bottom')}
+                  disabled={isBottomPlacement}
+                  aria-label="Chat at bottom"
                 >
-                  <p className="whitespace-pre-wrap break-words leading-relaxed">
-                    {message.content}
-                  </p>
-                  {isAssistant && (
-                    <p className="mt-3 text-xs text-slate-600">AI Assistant</p>
-                  )}
-                </div>
-              );
-            })}
-
-            {isChatPending && (
-              <div className="flex items-center gap-2 text-sm text-slate-600">
-                <Spinner size="sm" color="green" />
-                Thinking...
+                  Bottom
+                </Button>
+                <Button
+                  type="button"
+                  variant={isSidePlacement ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => onPlacementChange('side')}
+                  disabled={isSidePlacement}
+                  aria-label="Chat at side"
+                >
+                  Side
+                </Button>
               </div>
-            )}
+              <Button variant="outline" size="sm" onClick={handleCollapseClick}>
+                Collapse
+              </Button>
+            </div>
+          </header>
 
-            {state.pendingOperation && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Confirm operation
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {state.pendingOperation.operation}
-                  </p>
-                </div>
-                {payloadPreview && (
-                  <pre className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
-                    {payloadPreview}
-                  </pre>
-                )}
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => onPendingOperationChange(null)}
-                    disabled={isRunOperationPending}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleConfirmOperation}
-                    disabled={isRunOperationPending}
-                  >
-                    {isRunOperationPending ? 'Submitting...' : 'Confirm'}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <form
-          onSubmit={handleSubmit}
-          className="flex items-center gap-2 border-t border-slate-200 bg-white/80 p-4"
-        >
-          <div className="flex-1">
-            <Input
-              value={state.draft}
-              onChange={event => onDraftChange(event.target.value)}
-              placeholder="Write what you want"
-              disabled={isAiPending}
-              className="rounded-lg"
-              aria-label="AI chat input"
-            />
-            <p className="sr-only">You are chatting about {documentTitle}</p>
-          </div>
-          <button
-            type="submit"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50"
-            disabled={isSendDisabled}
-            aria-label="Send message"
-          >
-            <svg
-              className="h-4 w-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+          {isExpanded && (
+            <div
+              ref={messagesContainerRef}
+              data-testid="ai-chat-messages"
+              className={messagesListClassName}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M22 2L11 13"
+              {state.messages.map(message => {
+                const isAssistant = message.role === 'assistant';
+                return (
+                  <div
+                    key={message.id}
+                    className={`w-full border border-slate-200 p-4 text-sm text-slate-800 ${
+                      isAssistant
+                        ? 'bg-[#ccf1cf] rounded-tl-lg rounded-tr-lg rounded-br-lg'
+                        : 'bg-[#f5f7fa] rounded-tl-lg rounded-tr-lg rounded-bl-lg'
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap break-words leading-relaxed">
+                      {message.content}
+                    </p>
+                    {isAssistant && (
+                      <p className="mt-3 text-xs text-slate-600">
+                        AI Assistant
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+
+              {isChatPending && (
+                <div className="flex items-center gap-2 text-sm text-slate-600">
+                  <Spinner size="sm" color="green" />
+                  Thinking...
+                </div>
+              )}
+
+              {state.pendingOperation && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                      Confirm operation
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {state.pendingOperation.operation}
+                    </p>
+                  </div>
+                  {payloadPreview && (
+                    <pre className="max-h-56 overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700">
+                      {payloadPreview}
+                    </pre>
+                  )}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onPendingOperationChange(null)}
+                      disabled={isRunOperationPending}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleConfirmOperation}
+                      disabled={isRunOperationPending}
+                    >
+                      {isRunOperationPending ? 'Submitting...' : 'Confirm'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className={formClassName}>
+            <div className="flex-1">
+              <Input
+                value={state.draft}
+                onChange={event => onDraftChange(event.target.value)}
+                placeholder="Ask questions about the contract or make operations"
+                disabled={isAiPending}
+                className="rounded-lg"
+                aria-label="AI chat input"
               />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M22 2L15 22l-4-9-9-4 20-7z"
-              />
-            </svg>
-          </button>
-        </form>
+              <p className="sr-only">You are chatting about {documentTitle}</p>
+            </div>
+            <button
+              type="submit"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 disabled:opacity-50"
+              disabled={isSendDisabled}
+              aria-label="Send message"
+            >
+              <svg
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M22 2L11 13"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M22 2L15 22l-4-9-9-4 20-7z"
+                />
+              </svg>
+            </button>
+          </form>
+        </div>
       </div>
     </section>
   );

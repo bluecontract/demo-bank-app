@@ -264,12 +264,15 @@ describe('ContractDetailsPage', () => {
     expect(screen.queryByText('Next steps')).not.toBeInTheDocument();
     expect(screen.queryByText('Available operations')).not.toBeInTheDocument();
     expect(screen.queryByText(/^More$/)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Chat with AI' })
+    ).toBeInTheDocument();
     expect(markReviewedMock).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'session-1' })
     );
   });
 
-  it('does not render Talk with AI trigger in header', () => {
+  it('renders Chat with AI trigger in header when dock is collapsed', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-1' });
     mockUseLocation.mockReturnValue({
       state: { from: '/contracts', kind: 'contract' },
@@ -321,12 +324,12 @@ describe('ContractDetailsPage', () => {
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
     expect(
-      screen.queryByRole('button', { name: 'Talk with AI' })
-    ).not.toBeInTheDocument();
+      screen.getByRole('button', { name: 'Chat with AI' })
+    ).toBeInTheDocument();
     expect(screen.getByTestId('ai-chat-dock')).toBeInTheDocument();
   });
 
-  it('renders minimized chat avatar when dock state is minimized', () => {
+  it('renders Chat with AI trigger when dock state is minimized', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-1' });
     mockUseLocation.mockReturnValue({
       state: { from: '/contracts', kind: 'contract' },
@@ -378,9 +381,8 @@ describe('ContractDetailsPage', () => {
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
     expect(
-      screen.queryByRole('button', { name: 'Talk with AI' })
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId('ai-chat-avatar')).toBeInTheDocument();
+      screen.getByRole('button', { name: 'Chat with AI' })
+    ).toBeInTheDocument();
   });
 
   it('separates AI chat state by contract session', () => {
