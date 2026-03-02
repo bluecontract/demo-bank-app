@@ -24,6 +24,38 @@ const buildMonitoringRequestDedupeKey = (input: {
   eventIndex: number;
 }) => `paynote-monitoring-request:${input.eventId}:${input.eventIndex}`;
 
+const MONITORING_CONSENT_TITLE = 'Consent to data processing';
+const UNKNOWN_REQUESTING_MERCHANT_NAME = 'Merchant';
+
+const formatMonitoringConsentSummary = (
+  targetMerchantName: string,
+  requestingMerchantName: string
+) =>
+  `I agree to Synchrony sharing details of my card transactions at ${targetMerchantName} with ${requestingMerchantName}.`;
+
+const resolveRequestingMerchantName = async (input: {
+  merchantId?: string;
+  resolver?: (merchantId: string) => Promise<string | undefined>;
+}) => {
+  const merchantId = getString(input.merchantId);
+  if (!merchantId) {
+    return UNKNOWN_REQUESTING_MERCHANT_NAME;
+  }
+
+  const resolvedName = getString(await input.resolver?.(merchantId));
+  return resolvedName ?? UNKNOWN_REQUESTING_MERCHANT_NAME;
+};
+
+const resolveTargetMerchantName = async (input: {
+  targetMerchantId: string;
+  resolver?: (merchantId: string) => Promise<string | undefined>;
+}) => {
+  const resolvedName = getString(
+    await input.resolver?.(input.targetMerchantId)
+  );
+  return resolvedName ?? input.targetMerchantId;
+};
+
 const parseMonitoringRequest = (event: WebhookEmittedEvent) => {
   try {
     const node = blue.jsonValueToNode(event);
@@ -125,6 +157,14 @@ export const handleMonitoringRequestEvents = async (input: {
     }
 
     const now = deps.clock.now().toISOString();
+    const requestingMerchantName = await resolveRequestingMerchantName({
+      merchantId: contract.merchantId,
+      resolver: deps.resolveMerchantNameById,
+    });
+    const targetMerchantName = await resolveTargetMerchantName({
+      targetMerchantId,
+      resolver: deps.resolveMerchantNameById,
+    });
     const upsertResult = upsertMonitoringRequestInContract({
       contract,
       targetMerchantId,
@@ -133,6 +173,11 @@ export const handleMonitoringRequestEvents = async (input: {
       requestEventIndex: item.eventIndex,
       requestedAt: now,
       requestId: resolveMonitoringRequestId(item.event),
+      pendingActionTitle: MONITORING_CONSENT_TITLE,
+      pendingActionSummary: formatMonitoringConsentSummary(
+        targetMerchantName,
+        requestingMerchantName
+      ),
     });
 
     if (!upsertResult.changed) {

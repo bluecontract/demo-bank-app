@@ -24,6 +24,7 @@ export interface HandleWebhookEventDependencies {
   bootstrapContextRepository: BootstrapContextRepository;
   contractRepository: ContractRepository;
   clock: ClockPort;
+  resolveMerchantNameById?: (merchantId: string) => Promise<string | undefined>;
 }
 
 export interface HandleWebhookEventResult {

@@ -88,6 +88,18 @@ export const createResolveMerchantOwnerUserId = (
   };
 };
 
+export const createResolveMerchantNameById = (
+  merchantDirectoryRepository: MerchantDirectoryRepository
+) => {
+  return async (merchantId: string): Promise<string | undefined> => {
+    const entries = await merchantDirectoryRepository.getMerchantsByIds([
+      merchantId,
+    ]);
+    const entry = entries.find(item => item.merchantId === merchantId);
+    return entry?.name;
+  };
+};
+
 const initializeDependencies = async (): Promise<PaynoteDependencies> => {
   const logger = getLogger();
   const awsRegion = process.env.AWS_REGION || 'eu-west-1';

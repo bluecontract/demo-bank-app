@@ -52,6 +52,8 @@ export type UpsertMonitoringRequestInput = {
   requestEventIndex: number;
   requestedAt: string;
   requestId?: string;
+  pendingActionTitle?: string;
+  pendingActionSummary?: string;
 };
 
 export type UpsertMonitoringRequestResult =
@@ -78,6 +80,8 @@ export const upsertMonitoringRequestInContract = (
     requestEventIndex,
     requestedAt,
     requestId,
+    pendingActionTitle,
+    pendingActionSummary,
   } = input;
 
   const existingSubscriptions = contract.monitoringSubscriptions ?? [];
@@ -123,8 +127,10 @@ export const upsertMonitoringRequestInContract = (
     actionId: pendingActionId,
     type: 'monitoringConsentApproval',
     status: 'pending',
-    title: 'Allow card transaction monitoring',
-    summary: `Allow monitoring transactions for merchant ${targetMerchantId}.`,
+    title: pendingActionTitle ?? 'Allow card transaction monitoring',
+    summary:
+      pendingActionSummary ??
+      `Allow monitoring transactions for merchant ${targetMerchantId}.`,
     targetMerchantId,
     requestedEvents,
     createdAt: requestedAt,

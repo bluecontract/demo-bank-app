@@ -7,6 +7,7 @@ import { payNoteWebhookHandler } from './webhook';
 const hoistedDeps = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
   createResolveMerchantOwnerUserIdMock: vi.fn(),
+  createResolveMerchantNameByIdMock: vi.fn(),
 }));
 
 const hoistedPaynotes = vi.hoisted(() => ({
@@ -34,6 +35,7 @@ vi.mock('./dependencies', () => ({
   getDependencies: hoistedDeps.getDependenciesMock,
   createResolveMerchantOwnerUserId:
     hoistedDeps.createResolveMerchantOwnerUserIdMock,
+  createResolveMerchantNameById: hoistedDeps.createResolveMerchantNameByIdMock,
 }));
 
 vi.mock('@demo-bank-app/paynotes', async () => {
@@ -63,6 +65,7 @@ describe('payNoteWebhookHandler', () => {
 
     hoistedDeps.getDependenciesMock.mockReset();
     hoistedDeps.createResolveMerchantOwnerUserIdMock.mockReset();
+    hoistedDeps.createResolveMerchantNameByIdMock.mockReset();
     hoistedDeps.createResolveMerchantOwnerUserIdMock.mockImplementation(
       (merchantDirectoryRepository: {
           getMerchantsByIds: (
@@ -75,6 +78,20 @@ describe('payNoteWebhookHandler', () => {
           ]);
           const entry = entries.find(item => item.merchantId === merchantId);
           return entry?.ownerUserId;
+        }
+    );
+    hoistedDeps.createResolveMerchantNameByIdMock.mockImplementation(
+      (merchantDirectoryRepository: {
+          getMerchantsByIds: (
+            merchantIds: string[]
+          ) => Promise<Array<{ merchantId: string; name?: string }>>;
+        }) =>
+        async (merchantId: string): Promise<string | undefined> => {
+          const entries = await merchantDirectoryRepository.getMerchantsByIds([
+            merchantId,
+          ]);
+          const entry = entries.find(item => item.merchantId === merchantId);
+          return entry?.name;
         }
     );
     logger.info.mockReset();

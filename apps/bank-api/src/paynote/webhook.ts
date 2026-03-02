@@ -19,6 +19,7 @@ import { repository } from '@blue-repository/types';
 import { DocumentSessionBootstrapSchema } from '@blue-repository/types/packages/myos/schemas';
 import type { ContractRecord } from '@demo-bank-app/contracts';
 import {
+  createResolveMerchantNameById,
   createResolveMerchantOwnerUserId,
   getDependencies,
 } from './dependencies';
@@ -377,6 +378,9 @@ export const payNoteWebhookHandler = async (
   const resolveMerchantOwnerUserId = createResolveMerchantOwnerUserId(
     merchantDirectoryRepository
   );
+  const resolveMerchantNameById = createResolveMerchantNameById(
+    merchantDirectoryRepository
+  );
 
   const body = request.body ?? {};
   let eventId = typeof body.id === 'string' ? body.id : undefined;
@@ -666,6 +670,7 @@ export const payNoteWebhookHandler = async (
           bootstrapContextRepository,
           contractRepository,
           clock,
+          resolveMerchantNameById,
         }
       )
     : null;

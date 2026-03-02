@@ -3164,6 +3164,17 @@ describe('handleWebhookEvent', () => {
 
   it('creates pending monitoring action from monitoring request event without immediate guarantor response', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
+    deps.resolveMerchantNameById = vi
+      .fn()
+      .mockImplementation(async (merchantId: string) => {
+        if (merchantId === 'merchant-req') {
+          return 'Abt.com';
+        }
+        if (merchantId === 'merchant-123') {
+          return 'Balanced Bowl Restaurant';
+        }
+        return undefined;
+      });
     fetchEvent.mockResolvedValueOnce({
       kind: 'success',
       payload: {
@@ -3207,6 +3218,7 @@ describe('handleWebhookEvent', () => {
       sessionId: 'session-1',
       documentId: 'doc-1',
       userId: 'user-1',
+      merchantId: 'merchant-req',
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
     });
@@ -3221,6 +3233,9 @@ describe('handleWebhookEvent', () => {
           expect.objectContaining({
             type: 'monitoringConsentApproval',
             status: 'pending',
+            title: 'Consent to data processing',
+            summary:
+              'I agree to Synchrony sharing details of my card transactions at Balanced Bowl Restaurant with Abt.com.',
             targetMerchantId: 'merchant-123',
           }),
         ]),
@@ -3245,6 +3260,14 @@ describe('handleWebhookEvent', () => {
 
   it('stores monitoring pending action without undefined requestId when requestId is absent', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
+    deps.resolveMerchantNameById = vi
+      .fn()
+      .mockImplementation(async (merchantId: string) => {
+        if (merchantId === 'merchant-req') {
+          return 'Abt.com';
+        }
+        return undefined;
+      });
     fetchEvent.mockResolvedValueOnce({
       kind: 'success',
       payload: {
@@ -3287,6 +3310,7 @@ describe('handleWebhookEvent', () => {
       sessionId: 'session-1',
       documentId: 'doc-1',
       userId: 'user-1',
+      merchantId: 'merchant-req',
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
     });
@@ -3302,6 +3326,13 @@ describe('handleWebhookEvent', () => {
     };
     expect(saved).toBeDefined();
     expect(saved.pendingActions?.[0]).not.toHaveProperty('requestId');
+    expect(saved.pendingActions?.[0]).toEqual(
+      expect.objectContaining({
+        title: 'Consent to data processing',
+        summary:
+          'I agree to Synchrony sharing details of my card transactions at merchant-123 with Abt.com.',
+      })
+    );
     expect(saved.monitoringSubscriptions?.[0]).not.toHaveProperty('requestId');
   });
 
