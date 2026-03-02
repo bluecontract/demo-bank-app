@@ -30,6 +30,7 @@ const mockUseRunContractOperation = useRunContractOperation as ReturnType<
 describe('ContractAiChatDrawer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
   });
 
   it('requires confirmation before running an operation and confirms submission', async () => {
@@ -105,5 +106,60 @@ describe('ContractAiChatDrawer', () => {
       },
       { timeout: 3000 }
     );
+  });
+
+  it('restores stored chat state for the same user and session', async () => {
+    mockUseContractAiChat.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+      reset: vi.fn(),
+    });
+
+    mockUseRunContractOperation.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      reset: vi.fn(),
+    });
+
+    window.localStorage.setItem(
+      'demo-bank-contract-ai-chat:v1:user-1:sess-1',
+      JSON.stringify({
+        version: 1,
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Stored assistant message.',
+          },
+          { id: 'user-1', role: 'user', content: 'Stored user message.' },
+        ],
+        draft: 'Stored draft',
+        pendingOperation: {
+          operation: 'incrementCounter',
+          request: { by: 3 },
+        },
+        updatedAt: '2026-03-02T10:00:00.000Z',
+      })
+    );
+
+    const wrapper = createQueryWrapper();
+    render(
+      <ContractAiChatDrawer
+        isOpen
+        sessionId="sess-1"
+        documentTitle="Test contract"
+        contractUpdatedAt="2026-02-01T00:00:00.000Z"
+        userId="user-1"
+        onClose={() => undefined}
+      />,
+      { wrapper }
+    );
+
+    expect(
+      await screen.findByText('Stored assistant message.')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Stored user message.')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Stored draft')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
   });
 });

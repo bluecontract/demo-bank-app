@@ -847,10 +847,7 @@ export function ContractDetailsPage() {
       <section className="app-surface p-4 sm:p-6 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
-              Contract
-            </p>
-            <h2 className="mt-2 text-xl font-semibold text-slate-900">
+            <h2 className="text-xl font-semibold text-slate-900">
               {headerTitle}
             </h2>
           </div>
@@ -886,7 +883,7 @@ export function ContractDetailsPage() {
         </div>
 
         <div
-          className={`mt-6 grid gap-6 ${
+          className={`mt-4 grid gap-6 ${
             pendingActionsContent
               ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-start'
               : ''
@@ -917,7 +914,7 @@ export function ContractDetailsPage() {
                   </button>
                 ) : null}
               </div>
-              <div className="mt-4 space-y-3 text-slate-700">
+              <div className="mt-4 max-w-[720px] space-y-3 text-slate-700">
                 {summaryErrorMessage && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
                     {summaryErrorMessage}
@@ -1232,6 +1229,7 @@ export function ContractDetailsPage() {
           sessionId={aiChatSessionId}
           documentTitle={headerTitle}
           contractUpdatedAt={contract.updatedAt}
+          userId={user?.userId ?? null}
           onClose={() => setIsAiChatOpen(false)}
         />
       ) : null}

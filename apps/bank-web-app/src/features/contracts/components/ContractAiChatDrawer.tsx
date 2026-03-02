@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { Button } from '../../../ui/Button';
@@ -18,15 +18,25 @@ type PendingOperation = {
   request?: unknown;
 };
 
+type ChatStoragePayloadV1 = {
+  version: 1;
+  messages: ChatMessage[];
+  draft: string;
+  pendingOperation: PendingOperation | null;
+  updatedAt: string;
+};
+
 type ContractAiChatDrawerProps = {
   isOpen: boolean;
   sessionId: string;
   documentTitle: string;
   contractUpdatedAt: string;
+  userId?: string | null;
   onClose: () => void;
 };
 
 const MAX_HISTORY_MESSAGES = 20;
+const CHAT_STORAGE_VERSION = 1;
 
 const createId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -53,11 +63,84 @@ const sleep = (ms: number) =>
     window.setTimeout(resolve, ms);
   });
 
+const createGreetingMessage = (documentTitle: string): ChatMessage => ({
+  id: createId(),
+  role: 'assistant',
+  content: `How can I help you? I know everything about the document: “${documentTitle}”.`,
+});
+
+const isValidMessage = (value: unknown): value is ChatMessage => {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const message = value as Partial<ChatMessage>;
+  return (
+    typeof message.id === 'string' &&
+    (message.role === 'assistant' || message.role === 'user') &&
+    typeof message.content === 'string'
+  );
+};
+
+const sanitizePendingOperation = (value: unknown): PendingOperation | null => {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const pendingOperation = value as Partial<PendingOperation>;
+  if (typeof pendingOperation.operation !== 'string') {
+    return null;
+  }
+
+  return {
+    operation: pendingOperation.operation,
+    request: pendingOperation.request,
+  };
+};
+
+const readStoredChat = (storageKey: string): ChatStoragePayloadV1 | null => {
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<ChatStoragePayloadV1>;
+    if (
+      parsed.version !== CHAT_STORAGE_VERSION ||
+      !Array.isArray(parsed.messages) ||
+      typeof parsed.draft !== 'string'
+    ) {
+      return null;
+    }
+
+    const messages = parsed.messages.filter(isValidMessage);
+    if (messages.length === 0) {
+      return null;
+    }
+
+    return {
+      version: CHAT_STORAGE_VERSION,
+      messages,
+      draft: parsed.draft,
+      pendingOperation: sanitizePendingOperation(parsed.pendingOperation),
+      updatedAt:
+        typeof parsed.updatedAt === 'string'
+          ? parsed.updatedAt
+          : new Date().toISOString(),
+    };
+  } catch (error) {
+    console.warn('Failed to restore contract AI chat state', error);
+    return null;
+  }
+};
+
 export function ContractAiChatDrawer({
   isOpen,
   sessionId,
   documentTitle,
   contractUpdatedAt,
+  userId,
   onClose,
 }: ContractAiChatDrawerProps) {
   const queryClient = useQueryClient();
@@ -65,11 +148,16 @@ export function ContractAiChatDrawer({
   const [draft, setDraft] = useState('');
   const [pendingOperation, setPendingOperation] =
     useState<PendingOperation | null>(null);
+  const [isStorageHydrated, setStorageHydrated] = useState(false);
   const chat = useContractAiChat();
   const runOperation = useRunContractOperation();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const chatResetRef = useRef<(() => void) | undefined>(undefined);
   const runOperationResetRef = useRef<(() => void) | undefined>(undefined);
+  const storageKey = useMemo(
+    () => `demo-bank-contract-ai-chat:v1:${userId ?? 'anonymous'}:${sessionId}`,
+    [sessionId, userId]
+  );
 
   const appendAssistantMessage = (text: string) => {
     setMessages(prev => [
@@ -210,22 +298,44 @@ export function ContractAiChatDrawer({
   }, [runOperation.reset]);
 
   useEffect(() => {
-    if (!isOpen) {
+    setStorageHydrated(false);
+    chatResetRef.current?.();
+    runOperationResetRef.current?.();
+
+    const stored = readStoredChat(storageKey);
+    if (stored) {
+      setMessages(stored.messages);
+      setDraft(stored.draft);
+      setPendingOperation(stored.pendingOperation);
+      setStorageHydrated(true);
       return;
     }
 
-    setMessages([
-      {
-        id: createId(),
-        role: 'assistant',
-        content: `How can I help you? I know everything about the document: “${documentTitle}”.`,
-      },
-    ]);
+    setMessages([createGreetingMessage(documentTitle)]);
     setDraft('');
     setPendingOperation(null);
-    chatResetRef.current?.();
-    runOperationResetRef.current?.();
-  }, [isOpen, sessionId, documentTitle]);
+    setStorageHydrated(true);
+  }, [storageKey, documentTitle]);
+
+  useEffect(() => {
+    if (!isStorageHydrated) {
+      return;
+    }
+
+    const payload: ChatStoragePayloadV1 = {
+      version: CHAT_STORAGE_VERSION,
+      messages,
+      draft,
+      pendingOperation,
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch (error) {
+      console.warn('Failed to persist contract AI chat state', error);
+    }
+  }, [isStorageHydrated, messages, draft, pendingOperation, storageKey]);
 
   useEffect(() => {
     if (!isOpen) {
