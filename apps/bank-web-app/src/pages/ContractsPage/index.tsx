@@ -88,6 +88,43 @@ const getSubject = (item: ContractOrProposalItem): string => {
 const getSender = (item: ContractOrProposalItem): string =>
   item.from?.name?.trim() || 'Merchant';
 
+const pendingActionStatusValues = new Set([
+  'pending',
+  'pendingactionrequested',
+  'pending_action_requested',
+  'pending-action-requested',
+]);
+
+const hasActivePendingAction = (item: ContractOrProposalItem): boolean => {
+  if (isProposalItem(item)) {
+    return false;
+  }
+  const status = item.status?.trim().toLowerCase();
+  if (!status) {
+    return false;
+  }
+  return pendingActionStatusValues.has(status);
+};
+
+function PendingActionIndicator() {
+  return (
+    <span
+      role="img"
+      className="inline-flex h-4 w-4 items-center justify-center text-[color:var(--color-primary)]"
+      aria-label="Pending action available"
+      title="Pending action available"
+    >
+      <svg viewBox="0 0 12 14" fill="none" className="h-4 w-4">
+        <path
+          d="M4.11905 9.09524V7.7381M4.11905 7.7381V3.21429C4.11905 2.7146 4.52412 2.30952 5.02381 2.30952C5.5235 2.30952 5.92857 2.7146 5.92857 3.21429V6.83333H8.96219C9.7852 6.83333 10.4524 7.50052 10.4524 8.32353V9.09524C10.4524 11.3438 8.62954 13.1667 6.38095 13.1667H5.92857C3.92983 13.1667 2.30952 11.5464 2.30952 9.54762C2.30952 8.54825 3.11968 7.7381 4.11905 7.7381ZM7.28571 5.02381H9.09524C10.3445 5.02381 11.3571 4.01112 11.3571 2.7619C11.3571 1.51269 10.3445 0.5 9.09524 0.5H2.7619C1.51269 0.5 0.5 1.51269 0.5 2.7619C0.5 4.01112 1.51269 5.02381 2.7619 5.02381"
+          stroke="currentColor"
+          strokeLinecap="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
 type ProposalDecisionKeySource = {
   deliveryId?: string;
   deliverySessionId?: string;
@@ -524,6 +561,8 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                 : undefined;
               const shouldShowActions =
                 isProposalItem(item) && effectiveProposalStatus === 'pending';
+              const shouldShowPendingActionIndicator =
+                hasActivePendingAction(item);
               const handleProposalDecision = (
                 decision: 'accepted' | 'rejected'
               ) => {
@@ -597,9 +636,12 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                         <span className={`truncate ${senderClassName}`}>
                           {sender}
                         </span>
-                        <span className="text-xs text-slate-500">
-                          {updatedAt}
-                        </span>
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                          {shouldShowPendingActionIndicator ? (
+                            <PendingActionIndicator />
+                          ) : null}
+                          <span>{updatedAt}</span>
+                        </div>
                       </div>
                       <p className={`mt-1 text-sm ${subjectClassName}`}>
                         {subject}
@@ -644,8 +686,11 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                         />
                       ) : null}
                     </div>
-                    <div className="text-right text-xs text-slate-500">
-                      {updatedAt}
+                    <div className="flex items-center justify-end gap-1.5 text-right text-xs text-slate-500">
+                      {shouldShowPendingActionIndicator ? (
+                        <PendingActionIndicator />
+                      ) : null}
+                      <span>{updatedAt}</span>
                     </div>
                   </div>
                 </div>

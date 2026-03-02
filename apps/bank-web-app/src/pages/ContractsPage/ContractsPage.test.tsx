@@ -188,6 +188,37 @@ describe('ContractsPage', () => {
     ).toBeGreaterThan(0);
   });
 
+  it.each([
+    'pending',
+    'pendingactionrequested',
+    'pending_action_requested',
+    'pending-action-requested',
+  ])(
+    'shows pending-action indicator for supported contract status "%s"',
+    status => {
+      mockUseContracts.mockReturnValue({
+        data: [{ ...contractSummary, status }],
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+      });
+
+      render(<ContractsPage />, { wrapper: createTestWrapper() });
+
+      expect(
+        screen.getAllByRole('img', { name: 'Pending action available' }).length
+      ).toBeGreaterThan(0);
+    }
+  );
+
+  it('does not show pending-action indicator for non-pending contracts and proposals', () => {
+    render(<ContractsPage />, { wrapper: createTestWrapper() });
+
+    expect(
+      screen.queryByRole('img', { name: 'Pending action available' })
+    ).not.toBeInTheDocument();
+  });
+
   it('hides proposal actions immediately after accept and keeps them hidden before server refresh', () => {
     mockUseProposalDecision.mockImplementation(({ onAccepted }) => ({
       accept: () => onAccepted?.(),
