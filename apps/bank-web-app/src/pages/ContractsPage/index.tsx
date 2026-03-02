@@ -372,8 +372,8 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
   return (
     <DashboardShell data-testid="contracts-main-container" header={header}>
       {view === 'inbox' && (
-        <div className="flex items-start justify-between gap-3 text-sm text-slate-600">
-          <p className="max-w-[560px]">
+        <div className="flex min-w-0 items-start justify-between gap-3 text-sm text-slate-600">
+          <p className="min-w-0 flex-1 max-w-[560px]">
             Here you can find the smart contracts linked to your transactions.
           </p>
           <button
@@ -524,7 +524,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
                       size="lg"
                       className="h-14 w-14 text-base"
                     />
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 overflow-hidden">
                       <div className="flex items-center justify-between gap-3">
                         <span className={`truncate ${senderClassName}`}>
                           {sender}
