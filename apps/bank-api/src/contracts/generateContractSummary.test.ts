@@ -544,6 +544,135 @@ describe('generateContractSummaryHandler', () => {
     );
   });
 
+  it('uses static ready fallback without LLM for epoch 0 with one emitted event and empty trigger', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      documentId: 'doc-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      emittedEvents: [
+        {
+          type: { blueId: 'BrpmpNt5JkapeUvPqYcxgXZrHNZX3R757dRwuXXdfNM2' },
+        },
+      ],
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:02:00.000Z',
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body.cached).toBe(false);
+    expect(result.body.summary.story.headline).toBe('Contract is ready.');
+    expect(result.body.summary.lastChange.short).toBe('Contract is ready.');
+    expect(result.body.summary.lastChange.more).toBe(
+      'Contract was set up successfully.'
+    );
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(getOpenAiApiKey).not.toHaveBeenCalled();
+    expect(contractRepository.updateContractSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        summaryModel: null,
+        summaryError: null,
+      })
+    );
+    expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'init:doc-1',
+        short: 'Contract is ready.',
+      })
+    );
+  });
+
+  it('does not use static ready fallback when epoch 0 has more than one emitted event', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      emittedEvents: [
+        { type: { blueId: 'BrpmpNt5JkapeUvPqYcxgXZrHNZX3R757dRwuXXdfNM2' } },
+        { type: { blueId: 'BJvjorbC5ed5KTV7SxoV3CvrJXjrFPcFxY9QT4jHBbXi' } },
+      ],
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:02:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(1);
+    expect(getOpenAiApiKey).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not use static ready fallback when trigger event is present', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      triggerEvent: {
+        actor: { accountId: 'bank-account' },
+      },
+      emittedEvents: [
+        { type: { blueId: 'BrpmpNt5JkapeUvPqYcxgXZrHNZX3R757dRwuXXdfNM2' } },
+      ],
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:02:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(1);
+    expect(getOpenAiApiKey).toHaveBeenCalledTimes(1);
+  });
+
   it('marks actorIsViewer=false when trigger actor is not the viewer', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',

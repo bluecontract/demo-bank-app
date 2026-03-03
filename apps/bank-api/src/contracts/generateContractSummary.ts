@@ -83,6 +83,28 @@ const isDynamoItemSizeError = (error: unknown): boolean => {
 const isFiniteInteger = (value: number) =>
   Number.isFinite(value) && Number.isInteger(value);
 
+const buildInitReadySummary = (): z.infer<
+  typeof ContractDocumentSummaryDto
+> => ({
+  story: {
+    headline: 'Contract is ready.',
+    overview: [
+      'This contract is ready to use.',
+      'Contract was set up successfully.',
+    ],
+    bullets: [],
+  },
+  listPreview: 'Contract is ready.',
+  nextSteps: {
+    title: 'Next steps',
+    items: ['No action required.'],
+  },
+  lastChange: {
+    short: 'Contract is ready.',
+    more: 'Contract was set up successfully.',
+  },
+});
+
 const parseSourceEpoch = (value: unknown): number | undefined => {
   if (typeof value === 'number' && isFiniteInteger(value)) {
     return value;
@@ -173,6 +195,10 @@ const generateOrLoadContractSummary = async (input: {
   const previousSummary = cachedSummary ?? undefined;
   const model = process.env.CONTRACT_SUMMARY_MODEL || DEFAULT_MODEL;
   const summarySourceEpoch = resolveSummarySourceEpoch(contract);
+  const shouldUseReadyFallback =
+    summarySourceEpoch === 0 &&
+    (contract.triggerEvent === undefined || contract.triggerEvent === null) &&
+    (contract.emittedEvents?.length ?? 0) === 1;
   const mockConfig = getPayNoteSummaryMockConfig(contract.document);
 
   if (mockConfig.enabled) {
@@ -226,6 +252,63 @@ const generateOrLoadContractSummary = async (input: {
       summaryUpdatedAt: now,
       summarySourceUpdatedAt,
       cached: false,
+    };
+  }
+
+  if (shouldUseReadyFallback) {
+    const summary = buildInitReadySummary();
+    const now = new Date().toISOString();
+    const summaryPreview = resolveSummaryPreview({ summary });
+
+    await input.contractRepository.updateContractSummary({
+      contractId: contract.contractId,
+      summary,
+      summaryPreview,
+      summaryUpdatedAt: now,
+      summarySourceUpdatedAt: contract.updatedAt,
+      summarySourceEpoch,
+      summaryInputBlueId: null,
+      summaryModel: null,
+      summaryError: null,
+      summaryDocumentName: contract.documentName,
+      summaryStatus: contract.status,
+      summaryStatusUpdatedAt: contract.statusUpdatedAt,
+      summaryStatusTimestamps: contract.statusTimestamps,
+      userId: contract.userId,
+      relatedTransactionIds: contract.relatedTransactionIds,
+      relatedHoldIds: contract.relatedHoldIds,
+    });
+
+    const historyShort = summary.lastChange.short || summary.listPreview;
+    const historyMore = summary.lastChange.more;
+    const historyKind = 'contractUpdated' as const;
+    const historyEntries = await input.contractRepository.listContractHistory(
+      contract.contractId
+    );
+    const historyId =
+      input.historyEventId ??
+      `init:${contract.documentId ?? contract.contractId}`;
+    const historyCreatedAt = contract.updatedAt;
+    const hasExistingId = historyEntries.some(entry => entry.id === historyId);
+
+    if (!hasExistingId) {
+      await input.contractRepository.addContractHistoryEntry({
+        contractId: contract.contractId,
+        kind: historyKind,
+        short: historyShort,
+        more: historyMore,
+        createdAt: historyCreatedAt,
+        id: historyId,
+      });
+    }
+
+    return {
+      summary,
+      summaryUpdatedAt: now,
+      summarySourceUpdatedAt: contract.updatedAt,
+      summaryInputBlueId: undefined,
+      cached: false,
+      model: undefined,
     };
   }
 
