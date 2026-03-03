@@ -25,7 +25,10 @@ test.describe('Card Issuing Flow', () => {
 
     await createAccountViaModal(page, createUniqueAccountName('card'));
 
-    await page.getByRole('button', { name: 'Fund' }).first().click();
+    await page
+      .getByRole('button', { name: 'Fund', exact: true })
+      .first()
+      .click();
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '50.00');
     await page.click('button[type="submit"]');
@@ -134,6 +137,6 @@ test.describe('Card Issuing Flow', () => {
     await expect(demoShopRow).toBeVisible({
       timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
     });
-    await expect(demoShopRow).toContainText(`**** ${last4}`);
+    await expect(demoShopRow).toContainText(new RegExp(`\\*+\\s*${last4}`));
   });
 });

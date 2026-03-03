@@ -17,14 +17,18 @@ test.describe('Merchant Credit Line Flows', () => {
     page,
   }) => {
     await expect(page.getByText('Merchant Credit Line')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Edit', exact: true })
+    ).toBeVisible();
     await expect(page.getByText('Limit: $5,000')).toBeVisible();
   });
 
   test('should update credit limit from the dashboard', async ({ page }) => {
-    await expect(page.getByRole('button', { name: 'Edit' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Edit', exact: true })
+    ).toBeVisible();
 
-    await page.getByRole('button', { name: 'Edit' }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await waitForModalToOpen(page, 'credit-limit-modal-content');
 
     await page.fill('input#creditLimit', '6000');

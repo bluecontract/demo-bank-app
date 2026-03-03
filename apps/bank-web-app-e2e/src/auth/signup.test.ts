@@ -68,7 +68,12 @@ test.describe('Sign Up Flow', () => {
     });
 
     // Should see dashboard content
-    await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+    await expect(
+      page.getByRole('heading', {
+        name: DASHBOARD_HEADING_TEXT,
+        exact: true,
+      })
+    ).toBeVisible();
   });
 
   test('should show validation errors for empty email and clear them when typing', async ({

@@ -125,7 +125,7 @@ export const waitForModalToOpen = async (
   });
 };
 
-export const DASHBOARD_HEADING_TEXT = 'Welcome back';
+export const DASHBOARD_HEADING_TEXT = 'Overview';
 
 export const signUpAndReachDashboard = async (
   page: Page,
@@ -140,7 +140,12 @@ export const signUpAndReachDashboard = async (
   await page.waitForURL(URLS.DASHBOARD, {
     timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
   });
-  await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+  await expect(
+    page.getByRole('heading', {
+      name: DASHBOARD_HEADING_TEXT,
+      exact: true,
+    })
+  ).toBeVisible();
 
   return testUserEmail;
 };
@@ -162,7 +167,12 @@ export const signUpMerchantAndReachDashboard = async (
   await page.waitForURL(URLS.DASHBOARD, {
     timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
   });
-  await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+  await expect(
+    page.getByRole('heading', {
+      name: DASHBOARD_HEADING_TEXT,
+      exact: true,
+    })
+  ).toBeVisible();
 
   return { merchantEmail, merchantId };
 };
