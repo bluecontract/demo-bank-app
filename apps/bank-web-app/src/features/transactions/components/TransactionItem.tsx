@@ -9,6 +9,17 @@ const formatDate = (timestamp: string) =>
     year: 'numeric',
   });
 
+const formatAbsoluteCurrency = (amountMinor: number) =>
+  formatCurrency(Math.abs(amountMinor));
+
+const capturedBadgeClass =
+  'bg-[var(--color-primary-tint)] text-[var(--color-primary)] border border-[var(--color-primary)]';
+
+const isCompletedTransactionStatus = (status: string) => {
+  const normalizedStatus = status.toLowerCase();
+  return normalizedStatus === 'posted' || normalizedStatus === 'completed';
+};
+
 const getTransactionTypeDisplay = (
   type: PostedTransactionActivity['type'],
   side: PostedTransactionActivity['side']
@@ -61,6 +72,33 @@ const normalizeDescription = (description?: string, merchantName?: string) => {
   return description;
 };
 
+const buildTxnListTitle = (
+  baseText: string | undefined,
+  merchantName?: string
+): string => {
+  const normalizedBase = baseText?.trim();
+  const normalizedMerchant = merchantName?.trim();
+
+  if (normalizedBase && normalizedMerchant) {
+    const lowerBase = normalizedBase.toLowerCase();
+    const lowerMerchant = normalizedMerchant.toLowerCase();
+    if (lowerBase.includes(lowerMerchant)) {
+      return normalizedBase;
+    }
+    return `${normalizedBase} at ${normalizedMerchant}`;
+  }
+
+  if (normalizedBase) {
+    return normalizedBase;
+  }
+
+  if (normalizedMerchant) {
+    return normalizedMerchant;
+  }
+
+  return 'Transaction';
+};
+
 const toTitleCase = (value: string) =>
   value
     .toLowerCase()
@@ -68,10 +106,10 @@ const toTitleCase = (value: string) =>
     .replace(/\b\w/g, char => char.toUpperCase());
 
 const getPostedBadgeLabel = (status: string): string => {
-  const normalizedStatus = status.toLowerCase();
-  if (normalizedStatus === 'posted' || normalizedStatus === 'completed') {
-    return 'Charged';
+  if (isCompletedTransactionStatus(status)) {
+    return 'Captured';
   }
+  const normalizedStatus = status.toLowerCase();
   if (normalizedStatus === 'pending') {
     return 'Pending';
   }
@@ -93,7 +131,9 @@ const buildVisualState = (item: ActivityItem): VisualState => {
 
   if (item.kind === 'POSTED_TRANSACTION') {
     const isCredit = item.side === 'CREDIT';
-    const amount = formatCurrency(item.amountMinor);
+    const amount = formatAbsoluteCurrency(item.amountMinor);
+    const isOutgoingCompleted =
+      !isCredit && isCompletedTransactionStatus(item.status);
     const title = hasCardContext
       ? item.merchantName ?? 'Card Purchase'
       : getTransactionTypeDisplay(item.type, item.side);
@@ -102,8 +142,8 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       badgeLabel: getPostedBadgeLabel(item.status),
       badgeClass:
         {
-          posted: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
-          completed: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+          posted: capturedBadgeClass,
+          completed: capturedBadgeClass,
           pending: 'bg-amber-50 text-amber-700 border border-amber-100',
           failed: 'bg-rose-50 text-rose-700 border border-rose-100',
         }[item.status.toLowerCase()] ??
@@ -121,8 +161,10 @@ const buildVisualState = (item: ActivityItem): VisualState => {
           ]
         : [],
       description: normalizeDescription(item.description, item.merchantName),
-      amountText: `${isCredit ? '+' : '-'}${amount}`,
-      amountClass: isCredit ? 'text-emerald-600' : 'text-rose-600',
+      amountText: isOutgoingCompleted ? `-${amount}` : amount,
+      amountClass: isOutgoingCompleted
+        ? 'text-[var(--color-danger)]'
+        : 'text-[var(--color-ink)]',
       clickable: true,
       activityId: item.activityId,
     };
@@ -145,7 +187,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         ]
       : [],
     description: normalizeDescription(item.description, item.merchantName),
-    amountText: formatCurrency(item.amountMinor),
+    amountText: formatAbsoluteCurrency(item.amountMinor),
   };
 
   switch (item.kind) {
@@ -153,25 +195,26 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       return {
         ...base,
         badgeLabel: 'Hold',
-        badgeClass: 'bg-amber-50 text-amber-700 border border-amber-100',
+        badgeClass:
+          'bg-[#ffefe9] text-[var(--color-accent)] border border-[var(--color-accent)]',
         title: item.merchantName ?? 'Hold Created',
         timestamp: item.createdAt,
-        amountClass: 'text-amber-700',
+        amountClass: 'text-[var(--color-ink)]',
         clickable: true,
         activityId: item.activityId,
       };
     case 'HOLD_CAPTURED':
       return {
         ...base,
-        badgeLabel: 'Charged',
-        badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+        badgeLabel: 'Captured',
+        badgeClass: capturedBadgeClass,
         title: item.merchantName ?? 'Hold Captured',
         timestamp: item.capturedAt,
         subtitleLines: item.transactionId
           ? [...base.subtitleLines, `txn: ${item.transactionId}`]
           : base.subtitleLines,
-        amountText: `-${formatCurrency(item.amountMinor)}`,
-        amountClass: 'text-amber-700',
+        amountText: `-${base.amountText}`,
+        amountClass: 'text-[var(--color-danger)]',
         clickable: true,
         activityId: item.activityId,
       };
@@ -185,7 +228,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         subtitleLines: item.releaseReason
           ? [...base.subtitleLines, `Reason: ${item.releaseReason}`]
           : base.subtitleLines,
-        amountClass: 'text-sky-700',
+        amountClass: 'text-[var(--color-ink)]',
         clickable: true,
         activityId: item.activityId,
       };
@@ -197,8 +240,8 @@ const buildVisualState = (item: ActivityItem): VisualState => {
         title: item.merchantName ?? 'Hold Failed',
         timestamp: item.failedAt,
         subtitleLines: [`Failure: ${item.failureCode}`],
-        description: item.failureMessage ?? base.description,
-        amountClass: 'text-rose-700',
+        description: base.description,
+        amountClass: 'text-[var(--color-ink)]',
         clickable: true,
         activityId: item.activityId,
       };
@@ -224,12 +267,9 @@ export function TransactionItem({
       ? item.counterpartyAccountNumber
       : undefined;
   const primaryText = visualState.description ?? visualState.title;
-  const secondaryText =
-    visualState.description && visualState.description !== visualState.title
-      ? visualState.title
-      : undefined;
+  const listTitle = buildTxnListTitle(primaryText, item.merchantName);
   const cardLabel = item.cardLast4
-    ? `**** ${item.cardLast4}`
+    ? `***${item.cardLast4}`
     : counterpartyAccountNumber
     ? formatAccountNumber(counterpartyAccountNumber)
     : '—';
@@ -253,7 +293,7 @@ export function TransactionItem({
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-900 truncate">
-              {primaryText}
+              {listTitle}
             </p>
             <p className="mt-1 text-xs text-slate-500">{dateLabel}</p>
           </div>
@@ -269,18 +309,18 @@ export function TransactionItem({
 
   return (
     <div
-      className={`px-4 py-3 transition-colors ${
-        visualState.clickable ? 'cursor-pointer hover:bg-slate-50/80' : ''
+      className={`px-4 py-3 sm:h-12 sm:py-0 transition-colors ${
+        visualState.clickable ? 'cursor-pointer' : ''
       }`}
       onClick={visualState.clickable ? handleClick : undefined}
       data-testid={testId}
     >
-      <div className="grid w-full items-center gap-3 sm:grid-cols-[minmax(0,1fr)_140px_64px_360px_120px] sm:gap-4">
+      <div className="grid h-full w-full items-center gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_96px_minmax(0,1fr)_120px] sm:gap-4">
         <div className="min-w-0 sm:hidden">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium text-slate-900 truncate">
-                {primaryText}
+                {listTitle}
               </div>
               <div className="mt-1 flex items-center justify-between gap-4 text-xs text-slate-500">
                 <span className="truncate">{cardLabel}</span>
@@ -302,36 +342,34 @@ export function TransactionItem({
           </div>
         </div>
 
-        <div className="hidden sm:block min-w-0">
-          <div className="text-[13px] font-medium leading-5 text-slate-700 truncate">
-            {primaryText}
-          </div>
-          {secondaryText && (
-            <div className="mt-1 text-xs text-slate-500 truncate">
-              {secondaryText}
-            </div>
-          )}
+        <div className="hidden sm:flex min-w-0 h-full items-center">
+          <span className="block truncate text-sm font-normal leading-6 text-[color:var(--color-ink)]">
+            {listTitle}
+          </span>
         </div>
 
-        <div className="hidden sm:block min-w-0 text-sm text-slate-500 text-right">
-          <span className="truncate block">{cardLabel}</span>
+        <div className="hidden sm:flex min-w-0 h-full items-center">
+          <span className="block truncate text-sm font-normal leading-6 text-slate-500">
+            {cardLabel}
+          </span>
         </div>
 
-        <div className="hidden sm:block" aria-hidden="true" />
+        <div className="hidden sm:flex min-w-0 h-full items-center justify-end">
+          <span
+            className={`inline-flex items-center justify-center whitespace-nowrap rounded-[4px] border px-2 text-sm font-normal leading-6 ${visualState.badgeClass}`}
+          >
+            {visualState.badgeLabel}
+          </span>
+        </div>
 
-        <div className="hidden sm:grid items-center min-w-0 text-sm text-slate-500">
-          <div className="grid grid-cols-[120px_1fr] items-center gap-x-2 min-w-0">
-            <span
-              className={`inline-flex items-center justify-center min-w-[104px] px-2 py-1 rounded-full text-[11px] font-semibold justify-self-start ${visualState.badgeClass}`}
-            >
-              {visualState.badgeLabel}
-            </span>
-            <span className="truncate">{dateLabel}</span>
-          </div>
+        <div className="hidden sm:flex min-w-0 h-full items-center">
+          <span className="block truncate text-sm font-normal leading-6 text-slate-500">
+            {dateLabel}
+          </span>
         </div>
 
         <div
-          className={`hidden sm:block text-lg font-semibold text-right ${visualState.amountClass}`}
+          className={`hidden sm:flex h-full items-center justify-end text-right text-2xl font-[800] leading-8 font-[var(--font-title)] ${visualState.amountClass}`}
         >
           {visualState.amountText}
         </div>

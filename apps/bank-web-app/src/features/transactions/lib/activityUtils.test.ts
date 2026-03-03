@@ -79,7 +79,7 @@ describe('filterActivityByCardGroups', () => {
 });
 
 describe('collapseActivityLifecycle', () => {
-  it('keeps hold lifecycle history and hides mirrored posted settlement rows', () => {
+  it('keeps only the latest hold state and hides mirrored posted settlement rows', () => {
     const holdCreated = buildHoldCreated({
       activityId: 'HOLD#hold-10',
       holdId: 'hold-10',
@@ -107,11 +107,8 @@ describe('collapseActivityLifecycle', () => {
       holdCreated,
     ]);
 
-    expect(result).toHaveLength(2);
-    expect(result.map(item => item.kind)).toEqual([
-      'HOLD_CAPTURED',
-      'HOLD_CREATED',
-    ]);
+    expect(result).toHaveLength(1);
+    expect(result.map(item => item.kind)).toEqual(['HOLD_CAPTURED']);
   });
 
   it('keeps unrelated transfers as separate entries', () => {
@@ -132,5 +129,93 @@ describe('collapseActivityLifecycle', () => {
     const result = collapseActivityLifecycle([second, first]);
 
     expect(result).toEqual([second, first]);
+  });
+
+  it('prefers terminal hold state when timestamps are identical', () => {
+    const holdCreated = buildHoldCreated({
+      activityId: 'HOLD#hold-20',
+      holdId: 'hold-20',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+    const holdCaptured: ActivityItem = {
+      kind: 'HOLD_CAPTURED',
+      activityId: 'HOLD#hold-20',
+      holdId: 'hold-20',
+      amountMinor: 1200,
+      capturedAt: '2024-01-01T00:00:00.000Z',
+      transactionId: 'txn-20',
+      counterpartyAccountNumber: '1234567890',
+    };
+
+    const result = collapseActivityLifecycle([holdCreated, holdCaptured]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(holdCaptured);
+  });
+
+  it('prefers terminal hold state when timestamps are invalid', () => {
+    const holdCreated = buildHoldCreated({
+      activityId: 'HOLD#hold-21',
+      holdId: 'hold-21',
+      createdAt: 'invalid',
+    });
+    const holdCaptured: ActivityItem = {
+      kind: 'HOLD_CAPTURED',
+      activityId: 'HOLD#hold-21',
+      holdId: 'hold-21',
+      amountMinor: 1200,
+      capturedAt: 'invalid',
+      transactionId: 'txn-21',
+      counterpartyAccountNumber: '1234567890',
+    };
+
+    const result = collapseActivityLifecycle([holdCreated, holdCaptured]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(holdCaptured);
+  });
+
+  it('prefers terminal hold state when only newer timestamp is invalid', () => {
+    const holdCreated = buildHoldCreated({
+      activityId: 'HOLD#hold-22',
+      holdId: 'hold-22',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+    const holdCaptured: ActivityItem = {
+      kind: 'HOLD_CAPTURED',
+      activityId: 'HOLD#hold-22',
+      holdId: 'hold-22',
+      amountMinor: 1200,
+      capturedAt: 'invalid',
+      transactionId: 'txn-22',
+      counterpartyAccountNumber: '1234567890',
+    };
+
+    const result = collapseActivityLifecycle([holdCreated, holdCaptured]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(holdCaptured);
+  });
+
+  it('keeps terminal hold state when invalid timestamp appears first', () => {
+    const holdCreated = buildHoldCreated({
+      activityId: 'HOLD#hold-23',
+      holdId: 'hold-23',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+    const holdCaptured: ActivityItem = {
+      kind: 'HOLD_CAPTURED',
+      activityId: 'HOLD#hold-23',
+      holdId: 'hold-23',
+      amountMinor: 1200,
+      capturedAt: 'invalid',
+      transactionId: 'txn-23',
+      counterpartyAccountNumber: '1234567890',
+    };
+
+    const result = collapseActivityLifecycle([holdCaptured, holdCreated]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toBe(holdCaptured);
   });
 });

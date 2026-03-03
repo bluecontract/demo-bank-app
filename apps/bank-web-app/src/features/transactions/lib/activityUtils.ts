@@ -1,5 +1,48 @@
 import type { ActivityItem } from '../hooks/useActivity';
 
+type HoldActivityItem = Exclude<ActivityItem, { kind: 'POSTED_TRANSACTION' }>;
+
+const getHoldStatePriority = (item: HoldActivityItem): number => {
+  switch (item.kind) {
+    case 'HOLD_CREATED':
+      return 0;
+    case 'HOLD_FAILED':
+    case 'HOLD_RELEASED':
+      return 1;
+    case 'HOLD_CAPTURED':
+      return 2;
+  }
+};
+
+const shouldReplaceHoldState = (
+  existing: HoldActivityItem,
+  next: HoldActivityItem
+) => {
+  const existingTimestamp = Date.parse(getActivityTimestamp(existing));
+  const nextTimestamp = Date.parse(getActivityTimestamp(next));
+  const hasExistingTimestamp = !Number.isNaN(existingTimestamp);
+  const hasNextTimestamp = !Number.isNaN(nextTimestamp);
+
+  // Prefer newer timestamps when both are valid and different.
+  if (
+    hasExistingTimestamp &&
+    hasNextTimestamp &&
+    nextTimestamp !== existingTimestamp
+  ) {
+    return nextTimestamp > existingTimestamp;
+  }
+
+  // Otherwise fall back to lifecycle priority.
+  const existingPriority = getHoldStatePriority(existing);
+  const nextPriority = getHoldStatePriority(next);
+  if (nextPriority !== existingPriority) {
+    return nextPriority > existingPriority;
+  }
+
+  // If priority ties, prefer the one with a valid timestamp.
+  return !hasExistingTimestamp && hasNextTimestamp;
+};
+
 export const getHoldEventTimestamp = (item: ActivityItem) => {
   if (item.kind === 'HOLD_CREATED') {
     return item.createdAt;
@@ -43,26 +86,46 @@ export const collapseActivityLifecycle = (
   if (!items.length) {
     return items;
   }
-  const holdIds = new Set(
-    items
-      .filter(
-        (item): item is Exclude<ActivityItem, { kind: 'POSTED_TRANSACTION' }> =>
-          item.kind !== 'POSTED_TRANSACTION'
-      )
-      .map(item => item.holdId)
-  );
-
-  // Keep full hold history (including partial captures), but hide
-  // settlement POSTED_TRANSACTION rows that only mirror a hold-origin flow.
-  return items.filter(item => {
-    if (
-      item.kind === 'POSTED_TRANSACTION' &&
-      item.originHoldId &&
-      holdIds.has(item.originHoldId)
-    ) {
-      return false;
+  const holdIds = new Set<string>();
+  for (const item of items) {
+    if (item.kind !== 'POSTED_TRANSACTION') {
+      holdIds.add(item.holdId);
     }
-    return true;
+  }
+
+  // Hide settlement POSTED_TRANSACTION rows that only mirror a hold-origin flow.
+  const withoutMirroredPostedRows = items.filter(item => {
+    if (item.kind !== 'POSTED_TRANSACTION') {
+      return true;
+    }
+    if (!item.originHoldId) {
+      return true;
+    }
+    return !holdIds.has(item.originHoldId);
+  });
+
+  // Keep only the most recent state for each hold in the top-level list.
+  const latestHoldStateById = new Map<string, HoldActivityItem>();
+  for (const item of withoutMirroredPostedRows) {
+    if (item.kind === 'POSTED_TRANSACTION') {
+      continue;
+    }
+
+    const existing = latestHoldStateById.get(item.holdId);
+    if (!existing) {
+      latestHoldStateById.set(item.holdId, item);
+      continue;
+    }
+    if (shouldReplaceHoldState(existing, item)) {
+      latestHoldStateById.set(item.holdId, item);
+    }
+  }
+
+  return withoutMirroredPostedRows.filter(item => {
+    if (item.kind === 'POSTED_TRANSACTION') {
+      return true;
+    }
+    return latestHoldStateById.get(item.holdId) === item;
   });
 };
 

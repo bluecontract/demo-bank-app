@@ -216,7 +216,7 @@ describe('TransactionList', () => {
     );
   });
 
-  it('keeps hold lifecycle history and hides posted settlement row', () => {
+  it('shows only the latest hold state and hides posted settlement row', () => {
     render(
       <TransactionList
         activityItems={[postedFromHold, holdCaptured, holdCreated]}
@@ -230,8 +230,8 @@ describe('TransactionList', () => {
 
     expect(screen.queryByTestId('activity-item-txn-txn-123')).toBeNull();
     expect(
-      screen.getByTestId('activity-item-hold_created-hold-1')
-    ).toBeInTheDocument();
+      screen.queryByTestId('activity-item-hold_created-hold-1')
+    ).toBeNull();
     expect(
       screen.getByTestId('activity-item-hold_captured-hold-1')
     ).toBeInTheDocument();
