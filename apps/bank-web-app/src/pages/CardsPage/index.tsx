@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { SelectedAccountProvider } from '../../app/providers/SelectedAccountProvider';
-import { DashboardShell } from '../../features/dashboard/components';
+import {
+  DashboardHeader,
+  DashboardShell,
+} from '../../features/dashboard/components';
 import {
   AccountCreationModal,
   AccountsSection,
@@ -16,7 +19,7 @@ import { SpinnerWithText } from '../../ui/Spinner';
 import type { CardSummary } from '../../types/api';
 
 export function CardsPage() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const { data: accounts, isLoading, error } = useAccounts();
   const navigate = useNavigate();
   const [selectedCard, setSelectedCard] = useState<CardSummary | null>(null);
@@ -34,10 +37,6 @@ export function CardsPage() {
     openCreditLimitModal,
     closeCreditLimitModal,
   } = useAccountModals(accounts);
-
-  const handleSignOut = () => {
-    signOut();
-  };
 
   const handleTransfer = (accountId: string) => {
     navigate(`/transfer/new?accountId=${accountId}`);
@@ -73,34 +72,7 @@ export function CardsPage() {
         data-testid="cards-main-container"
         contentWidth="full"
         header={
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <h1 className="text-3xl font-semibold text-slate-900">Cards</h1>
-            <div className="hidden lg:flex items-center gap-3">
-              <span className="text-sm text-slate-600">
-                {user?.email || 'Guest'}
-              </span>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="rounded-full border border-slate-200 bg-white/80 p-2 text-slate-600 transition hover:text-slate-900"
-                aria-label="Sign out"
-              >
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 3v6m6.364-2.364A9 9 0 105.636 6.636"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
+          <DashboardHeader userEmail={user?.email || 'Guest'} title="Cards" />
         }
       >
         <AccountsSection
@@ -110,6 +82,7 @@ export function CardsPage() {
           onFund={openFundModal}
           onEditCreditLimit={openCreditLimitModal}
           showActions={false}
+          showAddAccountCard={false}
           cardSize="compact"
         />
 

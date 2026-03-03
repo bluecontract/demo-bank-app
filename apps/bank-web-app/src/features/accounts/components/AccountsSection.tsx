@@ -9,6 +9,7 @@ interface AccountsSectionProps {
   onEditCreditLimit?: (accountId: string) => void;
   isCreatingAccount?: boolean;
   showActions?: boolean;
+  showAddAccountCard?: boolean;
   cardSize?: 'default' | 'compact';
 }
 
@@ -20,6 +21,7 @@ export function AccountsSection({
   onEditCreditLimit,
   isCreatingAccount = false,
   showActions = true,
+  showAddAccountCard = true,
   cardSize = 'default',
 }: AccountsSectionProps) {
   return (
@@ -35,6 +37,7 @@ export function AccountsSection({
         onEditCreditLimit={onEditCreditLimit}
         isCreatingAccount={isCreatingAccount}
         showActions={showActions}
+        showAddAccountCard={showAddAccountCard}
         cardSize={cardSize}
       />
     </section>

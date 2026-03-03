@@ -71,6 +71,19 @@ describe('HorizontalAccountsList', () => {
     expect(screen.getByText('Add new account')).toBeInTheDocument();
   });
 
+  it('should hide add account card when disabled', () => {
+    render(
+      <HorizontalAccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onTransfer={vi.fn()}
+        showAddAccountCard={false}
+      />
+    );
+
+    expect(screen.queryByText('Add new account')).not.toBeInTheDocument();
+  });
+
   it('should call onCreateAccount when add account button is clicked', () => {
     const mockOnCreateAccount = vi.fn();
     render(
@@ -130,7 +143,7 @@ describe('HorizontalAccountsList', () => {
       />
     );
 
-    const selectedCard = container.querySelector('.ring-2');
+    const selectedCard = container.querySelector('.border-2');
     expect(selectedCard).toBeInTheDocument();
   });
 

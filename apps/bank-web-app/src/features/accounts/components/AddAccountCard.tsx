@@ -16,11 +16,13 @@ export function AddAccountCard({
   'data-testid': testId,
 }: AddAccountCardProps) {
   const heightClass = ACCOUNT_CARD_HEIGHT_CLASSES[size];
+  const radiusClass =
+    size === 'compact' ? 'rounded-lg' : 'rounded-lg sm:rounded-2xl';
 
   return (
     <Card
       variant="dashed"
-      className={`p-4 ${heightClass} rounded-lg sm:rounded-2xl shadow-none sm:shadow-[var(--shadow-soft)]`}
+      className={`p-4 ${heightClass} ${radiusClass} shadow-none sm:shadow-[var(--shadow-soft)]`}
       data-testid={testId}
     >
       <button

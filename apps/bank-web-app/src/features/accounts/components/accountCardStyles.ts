@@ -4,4 +4,4 @@ export const ACCOUNT_CARD_HEIGHT_CLASSES = {
 } as const;
 
 export const ACCOUNT_CARD_SELECTED_RING_CLASS =
-  'ring-2 ring-[rgba(43,190,156,0.35)] bg-white';
+  'border-2 border-[color:var(--color-primary)] bg-white';

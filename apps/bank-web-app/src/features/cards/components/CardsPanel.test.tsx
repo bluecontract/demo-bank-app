@@ -196,7 +196,7 @@ describe('CardsPanel', () => {
 
     render(<CardsPanel />);
 
-    expect(screen.getByText('**** 4242')).toBeInTheDocument();
+    expect(screen.getByText('***4242')).toBeInTheDocument();
     expect(screen.getByText('Active')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Issue' })).toBeEnabled();
   });

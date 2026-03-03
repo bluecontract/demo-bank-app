@@ -192,7 +192,7 @@ describe('AccountCard', () => {
       <AccountCard account={mockAccount} isSelected={true} />
     );
 
-    const cardElement = container.querySelector('.ring-2');
+    const cardElement = container.querySelector('.border-2');
     expect(cardElement).toBeInTheDocument();
   });
 
@@ -201,14 +201,14 @@ describe('AccountCard', () => {
       <AccountCard account={mockAccount} isSelected={false} />
     );
 
-    const cardElement = container.querySelector('.ring-2');
+    const cardElement = container.querySelector('.border-2');
     expect(cardElement).not.toBeInTheDocument();
   });
 
   it('applies default styling when isSelected is not provided', () => {
     const { container } = render(<AccountCard account={mockAccount} />);
 
-    const cardElement = container.querySelector('.ring-2');
+    const cardElement = container.querySelector('.border-2');
     expect(cardElement).not.toBeInTheDocument();
   });
 
