@@ -37,9 +37,10 @@ const MERCHANT_TOOLING = `Merchant name resolution:
 - Tool available: \`resolve_merchant_names\`.
 - Input: \`{ "merchantIds": ["id-1", "id-2"] }\`.
 - Output: \`{ "merchantNamesById": { "id-1": "Name", "id-2": null }, "unresolvedMerchantIds": ["id-2"] }\`.
-- If merchant IDs appear in facts or draft wording, call this tool before finalizing the summary.
-- In customer-facing text, prefer merchant names. Do not show raw merchant IDs.
-- If a merchant name cannot be resolved, use a plain fallback like "specified merchant".`;
+- If merchant IDs appear in facts or draft wording, you MUST call this tool before finalizing the summary.
+- In customer-facing text, use the resolved merchant name whenever available. Do not show raw merchant IDs.
+- Do not default to generic wording like "specified merchant" if lookup has not been attempted.
+- Use a generic fallback like "specified merchant" only for IDs returned as unresolved (or when the tool is unavailable).`;
 
 const CONTRACT_TASK = `Your task:
 - Write a short, human headline describing the most recent change or status update (the "last change"). It should read like a notification update.

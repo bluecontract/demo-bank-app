@@ -16,6 +16,10 @@ describe('summary prompts', () => {
     expect(prompt).toContain('"payment mandate" -> prefer');
     expect(prompt).toContain('outcome-first');
     expect(prompt).toContain('Tool available: `resolve_merchant_names`.');
+    expect(prompt).toContain('you MUST call this tool');
+    expect(prompt).toContain(
+      'Use a generic fallback like "specified merchant" only for IDs returned as unresolved'
+    );
     expect(prompt).toContain('Do not show raw merchant IDs.');
     expect(prompt).not.toContain(
       '`story.overview`: array of 1-2 short sentences total.'
@@ -38,5 +42,9 @@ describe('summary prompts', () => {
       '- `story.overview`: array of 2-3 short plain-language sentences.'
     );
     expect(prompt).toContain('Tool available: `resolve_merchant_names`.');
+    expect(prompt).toContain('you MUST call this tool');
+    expect(prompt).toContain(
+      'Use a generic fallback like "specified merchant" only for IDs returned as unresolved'
+    );
   });
 });
