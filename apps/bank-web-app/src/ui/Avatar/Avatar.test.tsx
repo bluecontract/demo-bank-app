@@ -72,7 +72,7 @@ describe('Avatar', () => {
     render(<Avatar name="Alice" data-testid="avatar" />);
 
     const avatar = screen.getByTestId('avatar');
-    expect(avatar).toHaveClass('bg-gradient-to-br');
+    expect(avatar.className).toContain('bg-[var(--color-primary)]');
   });
 
   it('should handle empty name gracefully', () => {
