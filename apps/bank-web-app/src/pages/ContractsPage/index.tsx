@@ -491,7 +491,11 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
     );
 
   return (
-    <DashboardShell data-testid="contracts-main-container" header={header}>
+    <DashboardShell
+      data-testid="contracts-main-container"
+      header={header}
+      contentWidth="full"
+    >
       {view === 'inbox' && (
         <div className="flex min-w-0 items-start justify-between gap-3 text-sm text-slate-600">
           <p className="min-w-0 flex-1 max-w-[560px]">

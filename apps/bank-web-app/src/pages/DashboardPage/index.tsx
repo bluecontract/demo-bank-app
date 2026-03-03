@@ -67,6 +67,7 @@ export function DashboardPage() {
       <DashboardShell
         header={<DashboardHeader userEmail={user?.email || 'Guest'} />}
         data-testid="dashboard-main-container"
+        contentWidth="full"
       >
         <AccountsSection
           accounts={accounts || []}

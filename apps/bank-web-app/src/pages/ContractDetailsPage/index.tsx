@@ -845,6 +845,7 @@ export function ContractDetailsPage() {
   return (
     <DashboardShell
       data-testid="contract-details-page"
+      contentWidth="full"
       header={
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
@@ -898,7 +899,7 @@ export function ContractDetailsPage() {
         </div>
       }
     >
-      <div className="flex flex-col gap-4 sm:gap-6">
+      <div className="flex w-full max-w-[720px] flex-col gap-4 sm:gap-6">
         <section className="app-surface w-full p-4 sm:p-6 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -939,15 +940,9 @@ export function ContractDetailsPage() {
             )}
           </div>
 
-          <div
-            className={`mt-4 grid gap-6 ${
-              pendingActionsContent
-                ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-start'
-                : ''
-            }`}
-          >
-            <div className="lg:col-start-1 lg:row-start-1">
-              <div className="w-full rounded-xl border border-slate-200 bg-white p-4 sm:w-auto sm:rounded-2xl sm:p-5 lg:max-w-[720px]">
+          <div className="mt-4 flex flex-col gap-6">
+            <div>
+              <div className="w-full rounded-xl border border-slate-200 bg-white p-4 sm:rounded-2xl sm:p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
                     <Avatar
@@ -972,7 +967,7 @@ export function ContractDetailsPage() {
                     </button>
                   ) : null}
                 </div>
-                <div className="mt-4 max-w-[720px] space-y-3 text-slate-700">
+                <div className="mt-4 space-y-3 text-slate-700">
                   {summaryErrorMessage && (
                     <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
                       {summaryErrorMessage}
@@ -1026,11 +1021,7 @@ export function ContractDetailsPage() {
               </div>
             </div>
 
-            {pendingActionsContent ? (
-              <div className="lg:col-start-2 lg:row-start-1">
-                {pendingActionsContent}
-              </div>
-            ) : null}
+            {pendingActionsContent ? <div>{pendingActionsContent}</div> : null}
           </div>
         </section>
 

@@ -84,6 +84,7 @@ function TransactionsPageContent({
   return (
     <DashboardShell
       data-testid="transactions-main-container"
+      contentWidth="full"
       header={
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-3xl font-semibold text-slate-900">
