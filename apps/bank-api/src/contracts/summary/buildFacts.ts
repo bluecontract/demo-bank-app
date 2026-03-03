@@ -5,6 +5,7 @@ import {
   getSupportedContractByTypeBlueId,
   resolveContractChannelKeys,
 } from '@demo-bank-app/shared-bank-api-contract';
+import { formatMinorAmountWithCurrency } from '@demo-bank-app/shared-core';
 import {
   buildChannelBindingsFromContracts,
   getDeliveryStatusFromDocument,
@@ -88,18 +89,6 @@ type BuildFactsInput = {
     emittedEvents?: unknown[];
     previousSummary?: z.infer<typeof ContractDocumentSummaryDto>;
   };
-};
-
-const formatMinorAmount = (amountMinor?: number, currency?: string) => {
-  if (typeof amountMinor !== 'number' || Number.isNaN(amountMinor)) {
-    return undefined;
-  }
-  const major = (amountMinor / 100).toFixed(2);
-  const normalizedCurrency = currency?.trim().toUpperCase();
-  if (!normalizedCurrency || normalizedCurrency === 'USD') {
-    return `$${major}`;
-  }
-  return `${normalizedCurrency} ${major}`;
 };
 
 const getStringValue = (value: unknown): string | undefined => {
@@ -449,10 +438,12 @@ export const buildContractSummaryFacts = (
     (document as { payNote?: unknown }).payNote ??
     document;
   const payNoteSummary = getPayNoteSummaryFromDocument(payNoteSummarySource);
-  const payNoteAmountDisplay = formatMinorAmount(
-    payNoteSummary.amountMinor,
-    payNoteSummary.currency
-  );
+  const payNoteAmountDisplay = formatMinorAmountWithCurrency({
+    amountMinor: payNoteSummary.amountMinor,
+    currencyCode: payNoteSummary.currency,
+    defaultCurrencyCode: 'USD',
+    locale: 'en-US',
+  });
 
   const payNoteDeliveryStatus = getDeliveryStatusFromDocument(document);
 

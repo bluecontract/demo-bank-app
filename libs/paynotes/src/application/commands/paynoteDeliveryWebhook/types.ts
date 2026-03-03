@@ -24,6 +24,7 @@ export interface HandlePayNoteDeliveryWebhookDependencies {
   resolveMerchantOwnerUserId?: (
     merchantId: string
   ) => Promise<string | undefined>;
+  resolveMerchantNameById?: (merchantId: string) => Promise<string | undefined>;
   clock: ClockPort;
   enqueuePayNoteDeliverySummary?: (input: {
     sessionId: string;

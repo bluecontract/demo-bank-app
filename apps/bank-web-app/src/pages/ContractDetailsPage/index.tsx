@@ -289,7 +289,9 @@ function ContractPendingActionCard({
     <div className="rounded-xl sm:rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
       <h3 className="text-lg font-semibold text-slate-900">{action.title}</h3>
       {action.summary && (
-        <p className="mt-2 text-sm text-slate-600">{action.summary}</p>
+        <p className="mt-2 whitespace-pre-line text-sm text-slate-600">
+          {action.summary}
+        </p>
       )}
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
         <Button

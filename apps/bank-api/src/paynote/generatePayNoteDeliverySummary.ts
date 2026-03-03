@@ -6,6 +6,7 @@ import {
   bankApiContract,
   ContractDocumentSummaryDto,
 } from '@demo-bank-app/shared-bank-api-contract';
+import { formatMinorAmountWithCurrency } from '@demo-bank-app/shared-core';
 import type { PayNoteDeliveryRecord } from '@demo-bank-app/paynotes';
 import { getPayNoteSummaryFromDocument } from '@demo-bank-app/paynotes';
 import {
@@ -39,18 +40,6 @@ const SUMMARY_TIMEOUT_MS = Number(
 const SUMMARY_TIMEOUT = Number.isFinite(SUMMARY_TIMEOUT_MS)
   ? SUMMARY_TIMEOUT_MS
   : 45000;
-
-const formatMinorAmount = (amountMinor?: number, currency?: string) => {
-  if (typeof amountMinor !== 'number' || Number.isNaN(amountMinor)) {
-    return undefined;
-  }
-  const major = (amountMinor / 100).toFixed(2);
-  const normalizedCurrency = currency?.trim().toUpperCase();
-  if (!normalizedCurrency || normalizedCurrency === 'USD') {
-    return `$${major}`;
-  }
-  return `${normalizedCurrency} ${major}`;
-};
 
 const buildProposalFacts = (input: {
   record: PayNoteDeliveryRecord;
@@ -159,10 +148,12 @@ const buildProposalFacts = (input: {
 
   const typesPack = buildTypeDefinitionPack(referencedTypeIds);
   const payNoteSummary = getPayNoteSummaryFromDocument(payNoteDocument);
-  const payNoteAmountDisplay = formatMinorAmount(
-    payNoteSummary.amountMinor,
-    payNoteSummary.currency
-  );
+  const payNoteAmountDisplay = formatMinorAmountWithCurrency({
+    amountMinor: payNoteSummary.amountMinor,
+    currencyCode: payNoteSummary.currency,
+    defaultCurrencyCode: 'USD',
+    locale: 'en-US',
+  });
   const displayName = payNoteSummary.name || 'PayNote proposal';
 
   const previousSummary = record.summary

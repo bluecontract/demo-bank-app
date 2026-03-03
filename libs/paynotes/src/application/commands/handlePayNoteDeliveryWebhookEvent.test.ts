@@ -3646,6 +3646,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         sessionId: 'paynote-session-1',
         documentId: 'paynote-doc-1',
         userId: 'user-1',
+        customerChannelKey: 'payerChannel',
         pendingActions: [],
         createdAt: now,
         updatedAt: now,
@@ -3667,8 +3668,13 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
                 bootstrapAssignee: 'guarantorChannel',
                 requestId: 'subscription-payment-mandate',
                 initialMessages: {
-                  defaultMessage:
-                    'Authorize recurring monthly payments for this contract.',
+                  perChannel: {
+                    granterChannel:
+                      'Authorize recurring monthly payments for this contract (customer message).',
+                    payerChannel:
+                      'Authorize recurring monthly payments for this contract (payer fallback).',
+                  },
+                  defaultMessage: 'Default payment mandate message.',
                 },
                 channelBindings: {
                   granterChannel: { accountId: 'user-1' },
@@ -3683,6 +3689,17 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
                   amountLimit: 12000,
                   currency: 'USD',
                   sourceAccount: 'root',
+                  allowedPaymentCounterparties: [
+                    {
+                      counterpartyType: 'merchantId',
+                      counterpartyId: 'merchant-allowed-1',
+                    },
+                    {
+                      counterpartyType: 'customerId',
+                      counterpartyId: 'customer-allowed-1',
+                    },
+                  ],
+                  expiresAt: '2027-12-31T23:59:59.000Z',
                 },
               },
             ],
@@ -3696,6 +3713,11 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         bankingRepository: {} as any,
         holdRepository: {} as any,
         bootstrapContextRepository,
+        resolveMerchantNameById: vi
+          .fn()
+          .mockImplementation(async (merchantId: string) =>
+            merchantId === 'merchant-allowed-1' ? 'Shop 2' : undefined
+          ),
         clock: { now: () => new Date(now) },
       }
     );
@@ -3703,16 +3725,40 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     expect(result.handled).toBe(true);
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
-    expect(contractRepository.saveContract).toHaveBeenCalledWith(
+    expect(contractRepository.saveContract).toHaveBeenCalledTimes(1);
+    const savedContract = (
+      contractRepository.saveContract as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    const savedAction = savedContract.pendingActions?.[0];
+    expect(savedAction).toEqual(
       expect.objectContaining({
-        pendingActions: expect.arrayContaining([
-          expect.objectContaining({
-            type: 'paymentMandateBootstrapApproval',
-            status: 'pending',
-            requestId: 'subscription-payment-mandate',
-          }),
-        ]),
+        type: 'paymentMandateBootstrapApproval',
+        status: 'pending',
+        requestId: 'subscription-payment-mandate',
+        title: 'Authorize automated payments',
       })
+    );
+    expect(savedAction?.summary).toContain(
+      'I authorize automated payments regulated by this contract:'
+    );
+    expect(savedAction?.summary).toContain(
+      'Authorize recurring monthly payments for this contract (customer message).'
+    );
+    expect(savedAction?.summary).not.toContain(
+      'Authorize recurring monthly payments for this contract (payer fallback).'
+    );
+    expect(savedAction?.summary).toContain('Total funds authorized: 120 USD');
+    expect(savedAction?.summary).toContain(
+      'Automated payments to Shop 2, customer-allowed-1.'
+    );
+    expect(savedAction?.summary).toContain(
+      'Authorization valid until December 31, 2027.'
+    );
+    expect(savedAction?.summary).toContain(
+      'You will be able to revoke this payment authorization at any time.'
+    );
+    expect(savedAction?.summary).toContain(
+      '\n\nYou will be able to revoke this payment authorization at any time.'
     );
     expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -3824,9 +3870,17 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
             type: 'paymentMandateBootstrapApproval',
             status: 'pending',
             requestId: 'subscription-payment-mandate',
+            title: 'Authorize automated payments',
           }),
         ]),
       })
+    );
+    const savedContract = (
+      contractRepository.saveContract as ReturnType<typeof vi.fn>
+    ).mock.calls[0][0];
+    const savedAction = savedContract.pendingActions?.[0];
+    expect(savedAction?.summary).toContain(
+      'Automated payments to any party pointed by the contract.'
     );
     expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
   });

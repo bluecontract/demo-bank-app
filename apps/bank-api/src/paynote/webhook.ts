@@ -601,6 +601,7 @@ export const payNoteWebhookHandler = async (
           holdRepository,
           bootstrapContextRepository,
           resolveMerchantOwnerUserId,
+          resolveMerchantNameById,
           clock,
           enqueuePayNoteDeliverySummary: async input => {
             await invokeSummaryLambdaJob(

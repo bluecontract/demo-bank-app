@@ -427,17 +427,19 @@ const createDependencies = () => {
 
   const clock = { now: () => new Date('2024-01-01T00:00:00.000Z') };
 
+  const deps: HandleWebhookEventDependencies = {
+    myOsClient,
+    bankingFacade,
+    holdRepository,
+    payNoteRepository,
+    payNoteDeliveryRepository,
+    bootstrapContextRepository,
+    contractRepository,
+    clock,
+  };
+
   return {
-    deps: {
-      myOsClient,
-      bankingFacade,
-      holdRepository,
-      payNoteRepository,
-      payNoteDeliveryRepository,
-      bootstrapContextRepository,
-      contractRepository,
-      clock,
-    } satisfies HandleWebhookEventDependencies,
+    deps,
     fetchEvent,
     fetchDocument,
   };

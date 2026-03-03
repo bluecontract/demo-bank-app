@@ -10,6 +10,10 @@ import {
 import { blueIds as payNoteBlueIds } from '@blue-repository/types/packages/paynote/blue-ids';
 import type { Hold } from '@demo-bank-app/banking';
 import { buildCardTransactionDetailsKey } from '@demo-bank-app/banking';
+import {
+  formatIsoDateHumanReadable,
+  formatMinorAmount,
+} from '@demo-bank-app/shared-core';
 import type { LogEntry, MyOsClient, PayNoteDeliveryRecord } from '../../ports';
 import { runGuarantorUpdate } from '../documentOperations';
 import {
@@ -50,6 +54,9 @@ type NormalizedBootstrapRequest = {
 
 const PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE =
   'paymentMandateBootstrapApproval' as const;
+const PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TITLE =
+  'Authorize automated payments';
+const MAX_PAYMENT_MANDATE_COUNTERPARTIES = 20;
 
 type PayNoteBootstrapContext = {
   payNoteDocument?: Record<string, unknown> | null;
@@ -718,6 +725,15 @@ const readNonEmptyString = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+const readTextValue = (value: unknown): string | undefined => {
+  const direct = readNonEmptyString(value);
+  if (direct) {
+    return direct;
+  }
+  const typed = toSimpleRecord(value);
+  return readNonEmptyString(typed?.value);
+};
+
 const resolvePaymentMandateBootstrapFields = (
   node: BlueNode | null
 ): { granterType?: string; granterId?: string } | null => {
@@ -752,10 +768,24 @@ const supportsGuarantorUpdateResponses = (
 
 const resolveInitialMessageText = (input: {
   initialMessages?: Record<string, unknown>;
+  preferredChannelKeys?: string[];
 }): string | undefined => {
   const initialMessages = input.initialMessages;
   if (!initialMessages) {
     return undefined;
+  }
+
+  const perChannel = toSimpleRecord(initialMessages.perChannel);
+  if (perChannel && input.preferredChannelKeys?.length) {
+    for (const channelKey of input.preferredChannelKeys) {
+      if (!channelKey) {
+        continue;
+      }
+      const customerMessage = getString(perChannel[channelKey]);
+      if (customerMessage) {
+        return customerMessage;
+      }
+    }
   }
 
   const defaultMessage = getString(initialMessages.defaultMessage);
@@ -763,15 +793,124 @@ const resolveInitialMessageText = (input: {
     return defaultMessage;
   }
 
-  const perChannel = toSimpleRecord(initialMessages.perChannel);
   if (!perChannel) {
     return undefined;
   }
+
   return (
     getString(perChannel.granterChannel) ??
     getString(perChannel.payerChannel) ??
     getString(perChannel.payeeChannel)
   );
+};
+
+const formatMandateExpiryDate = (expiresAt?: string): string | undefined => {
+  return formatIsoDateHumanReadable({
+    isoDate: expiresAt,
+    locale: 'en-US',
+    timeZone: 'UTC',
+    fallbackToInput: true,
+  });
+};
+
+const resolvePaymentMandateCounterpartyDisplayNames = async (input: {
+  counterparties: unknown;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<string[]> => {
+  const records = Array.isArray(input.counterparties)
+    ? input.counterparties.slice(0, MAX_PAYMENT_MANDATE_COUNTERPARTIES)
+    : [];
+  const resolved = await Promise.all(
+    records.map(async counterpartyValue => {
+      const counterparty = toSimpleRecord(counterpartyValue);
+      const counterpartyType = getString(counterparty?.counterpartyType);
+      const counterpartyId = getString(counterparty?.counterpartyId);
+      if (!counterpartyType || !counterpartyId) {
+        return undefined;
+      }
+
+      if (
+        counterpartyType === 'merchantId' &&
+        typeof input.deps.resolveMerchantNameById === 'function'
+      ) {
+        try {
+          const merchantName = getString(
+            await input.deps.resolveMerchantNameById(counterpartyId)
+          );
+          return merchantName ?? counterpartyId;
+        } catch {
+          return counterpartyId;
+        }
+      }
+
+      return counterpartyId;
+    })
+  );
+
+  return resolved.filter((name): name is string => Boolean(name));
+};
+
+const buildPaymentMandateBootstrapSummary = async (input: {
+  request: NormalizedBootstrapRequest;
+  requestedDocumentPayload: Record<string, unknown>;
+  customerChannelKey?: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<string> => {
+  const mandateSimple =
+    toSimpleRecord(input.requestedDocumentPayload) ??
+    input.requestedDocumentPayload;
+  const granterType = readTextValue(mandateSimple.granterType);
+  const preferredMessageChannelKeys =
+    granterType === 'customer'
+      ? ['granterChannel', input.customerChannelKey]
+      : [input.customerChannelKey];
+  const initialMessage =
+    resolveInitialMessageText({
+      initialMessages: input.request.initialMessages,
+      preferredChannelKeys: preferredMessageChannelKeys.filter(
+        (channel): channel is string => Boolean(channel)
+      ),
+    }) ?? '';
+  const currency = readNonEmptyString(mandateSimple.currency) ?? 'USD';
+  const amountLimit =
+    formatMinorAmount({
+      amountMinor: mandateSimple.amountLimit,
+      currencyCode: currency,
+      locale: 'en-US',
+      trimTrailingZeros: true,
+    }) ?? '';
+  const totalFundsLine = amountLimit
+    ? `Total funds authorized: ${[amountLimit, currency]
+        .filter(Boolean)
+        .join(' ')}`
+    : undefined;
+  const counterpartyDisplayNames =
+    await resolvePaymentMandateCounterpartyDisplayNames({
+      counterparties: mandateSimple.allowedPaymentCounterparties,
+      deps: input.deps,
+    });
+  const expiresAtLabel = formatMandateExpiryDate(
+    readNonEmptyString(mandateSimple.expiresAt)
+  );
+  const automatedPaymentsSubject = counterpartyDisplayNames.length
+    ? `Automated payments to ${counterpartyDisplayNames.join(', ')}`
+    : 'Automated payments to any party pointed by the contract';
+  const automatedPaymentsLine = `${automatedPaymentsSubject}.`;
+  const authorizationValidityLine = expiresAtLabel
+    ? `Authorization valid until ${expiresAtLabel}.`
+    : undefined;
+
+  const lines = [
+    'I authorize automated payments regulated by this contract:',
+    ...(initialMessage ? [initialMessage] : []),
+    ...(totalFundsLine ? [totalFundsLine] : []),
+    automatedPaymentsLine,
+    ...(authorizationValidityLine ? [authorizationValidityLine] : []),
+    '',
+    'You will be able to revoke this payment authorization at any time.',
+  ];
+
+  return lines.join('\n').trim();
 };
 
 const buildPaymentMandateBootstrapPendingActionId = (input: {
@@ -847,16 +986,18 @@ const queuePaymentMandateBootstrapPendingAction = async (input: {
     return { ok: true };
   }
 
-  const summary =
-    resolveInitialMessageText({
-      initialMessages: request.initialMessages,
-    }) ?? 'Approve Payment Mandate requested by this contract.';
+  const summary = await buildPaymentMandateBootstrapSummary({
+    request,
+    requestedDocumentPayload,
+    customerChannelKey: getString(contract.customerChannelKey),
+    deps,
+  });
 
   const nextAction = {
     actionId,
     type: PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE,
     status: 'pending',
-    title: 'Approve Payment Mandate',
+    title: PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TITLE,
     summary,
     ...(request.requestId ? { requestId: request.requestId } : {}),
     payload: {
