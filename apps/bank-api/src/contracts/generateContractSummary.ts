@@ -27,10 +27,6 @@ import {
   type MerchantDirectoryLookupRepository,
 } from './summary/merchantNameToolCalling';
 import {
-  collectMerchantIdsFromFacts,
-  sanitizeMerchantIdsInSummary,
-} from './summary/merchantIdSanitization';
-import {
   buildMockContractSummary,
   getPayNoteSummaryMockConfig,
 } from './payNoteSummaryMock';
@@ -325,10 +321,7 @@ const generateOrLoadContractSummary = async (input: {
       },
     });
 
-    const summary = sanitizeMerchantIdsInSummary(
-      parseSummary(response),
-      collectMerchantIdsFromFacts(facts)
-    );
+    const summary = parseSummary(response);
     const now = new Date().toISOString();
 
     const summaryPreview = resolveSummaryPreview({ summary });

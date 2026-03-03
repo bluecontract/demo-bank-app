@@ -419,53 +419,6 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     expect(secondCallRequest?.input?.[0]?.output).toContain('Demo Restaurant');
   });
 
-  it('replaces raw merchant IDs in final summary text with fallback label', async () => {
-    const payNoteDocument = {
-      type: { blueId: payNoteTypeBlueId },
-      name: 'Demo Voucher CashBack',
-      contracts: {},
-    };
-
-    payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValueOnce({
-      deliveryId: 'delivery-1',
-      deliverySessionId: 'session-1',
-      userId: 'user-1',
-      transactionIdentificationStatus: 'identified',
-      merchantId: 'merchant-raw-1',
-      deliveryDocument: {
-        payNoteBootstrapRequest: {
-          document: payNoteDocument,
-        },
-      },
-      deliveryUpdatedAt: '2026-01-02T00:00:00.000Z',
-      updatedAt: '2026-01-02T00:00:00.000Z',
-      createdAt: '2026-01-01T00:00:00.000Z',
-    });
-
-    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
-      output_parsed: {
-        ...summaryFixture,
-        story: {
-          ...summaryFixture.story,
-          bullets: ['Cashback for merchant merchant-raw-1'],
-        },
-      },
-    });
-
-    const result = await generatePayNoteDeliverySummaryHandler(
-      { params: { sessionId: 'session-1' }, body: { force: true } } as any,
-      { request: {} as any }
-    );
-
-    expect(result.status).toBe(200);
-    expect(result.body.summary.story.bullets[0]).toContain(
-      'specified merchant'
-    );
-    expect(result.body.summary.story.bullets[0]).not.toContain(
-      'merchant-raw-1'
-    );
-  });
-
   it('adds customer-facing recurring payment notes for subscription proposals', async () => {
     const payNoteDocument = {
       type: { blueId: payNoteTypeBlueId },
