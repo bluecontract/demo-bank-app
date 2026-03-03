@@ -350,7 +350,7 @@ export function OperationForm({
           <>
             <input
               type="text"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               value={typeof value === 'string' ? value : ''}
               onChange={event => updateValue(path, event.target.value)}
               disabled={disabled}
@@ -365,7 +365,7 @@ export function OperationForm({
               type="number"
               inputMode="numeric"
               step={1}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               value={
                 typeof value === 'string' || typeof value === 'number'
                   ? value
@@ -383,7 +383,7 @@ export function OperationForm({
             <input
               type="number"
               step="any"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               value={
                 typeof value === 'string' || typeof value === 'number'
                   ? value
@@ -412,7 +412,7 @@ export function OperationForm({
             <input
               type="datetime-local"
               step="1"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               value={typeof value === 'string' ? value : ''}
               onChange={event => updateValue(path, event.target.value)}
               disabled={disabled}
@@ -424,7 +424,7 @@ export function OperationForm({
         return (
           <>
             <textarea
-              className="w-full min-h-[120px] rounded-lg border border-slate-200 bg-slate-900/95 px-3 py-2 text-xs font-mono text-emerald-100 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full min-h-[120px] rounded-lg border border-slate-200 bg-slate-900/95 px-3 py-2 text-xs font-mono text-emerald-100 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               placeholder='Enter JSON (example: {"message": "Hello"})'
               value={typeof value === 'string' ? value : ''}
               onChange={event => updateValue(path, event.target.value)}
@@ -585,7 +585,7 @@ export function OperationForm({
 
     return (
       <div className="space-y-3">
-        {Object.entries(entries).map(([key, entryValue]) => (
+        {Object.entries(entries).map(([key]) => (
           <div
             key={key}
             className="rounded-xl border border-slate-200 bg-white/70 p-4"
@@ -634,7 +634,7 @@ export function OperationForm({
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <input
               type="text"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               placeholder="Key"
               value={draft.key}
               onChange={event =>
@@ -657,7 +657,7 @@ export function OperationForm({
                 <input
                   type="datetime-local"
                   step="1"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
                   placeholder="Value"
                   value={typeof draft.value === 'string' ? draft.value : ''}
                   onChange={event =>
@@ -678,7 +678,7 @@ export function OperationForm({
                       ? 'text'
                       : 'number'
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
                   placeholder="Value"
                   value={
                     typeof draft.value === 'string' ||

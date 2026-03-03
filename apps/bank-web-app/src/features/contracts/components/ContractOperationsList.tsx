@@ -93,7 +93,7 @@ export function ContractOperationsList({
               type="button"
               className={`${buttonClasses} flex items-center justify-between gap-4 ${
                 activeOperation === operation.name
-                  ? 'border-[color:var(--color-primary)] bg-[rgba(43,190,156,0.08)]'
+                  ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary-soft)]'
                   : 'border-slate-200 bg-white hover:border-emerald-200'
               }`}
               onClick={() => setActiveOperation(operation.name)}

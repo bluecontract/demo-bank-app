@@ -14,11 +14,19 @@
     --color-primary: #01b810;
     --color-primary-600: #019a0d;
     --color-accent: #ff5f1f;
+    --color-accent-600: #e55416;
+    --color-danger: #d32f2f;
+    --color-info: #0062ff;
     --color-bg: #f5f7fa;
     --color-surface: #ffffff;
     --color-ink: #212121;
     --color-muted: #536471;
     --color-border: #cfd9de;
+    --color-primary-tint: #ccf1cf;
+    --color-primary-soft: rgba(1, 184, 16, 0.08);
+    --color-primary-soft-strong: rgba(1, 184, 16, 0.12);
+    --color-primary-focus: rgba(1, 184, 16, 0.2);
+    --color-primary-ring: rgba(1, 184, 16, 0.35);
     --radius-surface: 16px;
     --shadow-soft: none;
     --shadow-lift: none;
@@ -66,7 +74,7 @@
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--color-primary);
-    background: #ccf1cf;
+    background: var(--color-primary-tint);
     border: 1px solid var(--color-primary);
   }
 

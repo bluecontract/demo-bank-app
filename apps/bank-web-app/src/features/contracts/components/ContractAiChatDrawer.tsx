@@ -387,7 +387,7 @@ export function ContractAiChatDrawer({
           </button>
         </header>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-[#f5f7fa]">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-[color:var(--color-bg)]">
           {messages.map(message => {
             const isAssistant = message.role === 'assistant';
             return (
@@ -395,8 +395,8 @@ export function ContractAiChatDrawer({
                 key={message.id}
                 className={`w-full border border-slate-200 p-4 text-sm text-slate-800 ${
                   isAssistant
-                    ? 'bg-[#ccf1cf] rounded-tl-lg rounded-tr-lg rounded-br-lg'
-                    : 'bg-[#f5f7fa] rounded-tl-lg rounded-tr-lg rounded-bl-lg'
+                    ? 'bg-[color:var(--color-primary-tint)] rounded-tl-lg rounded-tr-lg rounded-br-lg'
+                    : 'bg-[color:var(--color-bg)] rounded-tl-lg rounded-tr-lg rounded-bl-lg'
                 }`}
               >
                 <p className="whitespace-pre-wrap break-words leading-relaxed">

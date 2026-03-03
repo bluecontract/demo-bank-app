@@ -72,7 +72,7 @@ export function ContractDetailsPanel({
   if (!contract) {
     return (
       <Card className="p-6 text-sm text-slate-600">
-        Select a contract to view details and available operations.
+        Select a contract to view details and actions.
       </Card>
     );
   }
@@ -124,7 +124,7 @@ export function ContractDetailsPanel({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-slate-900">
-                  Available operations
+                  Actions
                 </h3>
               </div>
             </div>

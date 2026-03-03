@@ -64,7 +64,7 @@ export function ContractsListPanel({
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Contracts</h2>
           <p className="text-sm text-[color:var(--color-muted)] mt-1">
-            Review document sessions and available operations.
+            Review document sessions and actions.
           </p>
         </div>
       </div>
@@ -136,7 +136,7 @@ export function ContractsListPanel({
                   type="button"
                   className={`w-full text-left rounded-2xl border p-4 shadow-sm transition ${
                     isActive
-                      ? 'border-[color:var(--color-primary)] bg-[rgba(43,190,156,0.08)]'
+                      ? 'border-[color:var(--color-primary)] bg-[color:var(--color-primary-soft)]'
                       : 'border-slate-200 bg-white/80 hover:border-emerald-200 hover:shadow-md'
                   } ${isSelectable ? '' : 'opacity-60 cursor-not-allowed'}`}
                   onClick={() => {

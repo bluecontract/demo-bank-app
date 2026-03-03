@@ -290,7 +290,7 @@ export function Select({
                   }}
                   className={`w-full px-3 py-2.5 text-left text-base flex items-center gap-3 bg-white ${
                     isSelected
-                      ? 'bg-[rgba(43,190,156,0.12)] text-slate-900'
+                      ? 'bg-[color:var(--color-primary-soft-strong)] text-slate-900'
                       : isActive
                       ? 'bg-slate-50 text-slate-900'
                       : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'

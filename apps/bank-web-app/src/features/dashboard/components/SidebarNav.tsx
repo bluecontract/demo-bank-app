@@ -66,7 +66,7 @@ export function SidebarNav() {
               </span>
               <span className="min-w-0 flex-1">{item.label}</span>
               {isContracts && newCount > 0 && (
-                <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded bg-[#d32f2f] px-1.5 text-xs font-normal leading-4 text-white">
+                <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded bg-[color:var(--color-danger)] px-1.5 text-xs font-normal leading-4 text-white">
                   {newCount}
                 </span>
               )}

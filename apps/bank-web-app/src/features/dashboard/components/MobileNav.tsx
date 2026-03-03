@@ -47,7 +47,7 @@ export function MobileNav() {
       return null;
     }
     return (
-      <span className="inline-flex min-w-6 items-center justify-center rounded bg-[#d32f2f] px-1.5 text-sm font-normal leading-6 text-white">
+      <span className="inline-flex min-w-6 items-center justify-center rounded bg-[color:var(--color-danger)] px-1.5 text-sm font-normal leading-6 text-white">
         {newCount}
       </span>
     );
@@ -147,7 +147,7 @@ export function MobileNav() {
                     </span>
                     <span className="flex-1">{item.label}</span>
                     {isContracts && newCount > 0 && (
-                      <span className="inline-flex h-6 min-w-6 items-center justify-center rounded bg-[#d32f2f] px-1.5 text-xs font-normal leading-4 text-white">
+                      <span className="inline-flex h-6 min-w-6 items-center justify-center rounded bg-[color:var(--color-danger)] px-1.5 text-xs font-normal leading-4 text-white">
                         {newCount}
                       </span>
                     )}
