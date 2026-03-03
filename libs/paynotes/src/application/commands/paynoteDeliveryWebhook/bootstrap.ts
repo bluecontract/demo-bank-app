@@ -10,10 +10,7 @@ import {
 import { blueIds as payNoteBlueIds } from '@blue-repository/types/packages/paynote/blue-ids';
 import type { Hold } from '@demo-bank-app/banking';
 import { buildCardTransactionDetailsKey } from '@demo-bank-app/banking';
-import {
-  formatIsoDateHumanReadable,
-  formatMinorAmount,
-} from '@demo-bank-app/shared-core';
+import { formatIsoDateHumanReadable } from '@demo-bank-app/shared-core';
 import type { LogEntry, MyOsClient, PayNoteDeliveryRecord } from '../../ports';
 import { runGuarantorUpdate } from '../documentOperations';
 import {
@@ -813,7 +810,7 @@ const formatMandateExpiryDate = (expiresAt?: string): string | undefined => {
   });
 };
 
-const resolvePaymentMandateCounterpartyDisplayNames = async (input: {
+const resolvePaymentMandateMerchantDisplayNames = async (input: {
   counterparties: unknown;
   deps: HandlePayNoteDeliveryWebhookDependencies;
 }): Promise<string[]> => {
@@ -829,21 +826,22 @@ const resolvePaymentMandateCounterpartyDisplayNames = async (input: {
         return undefined;
       }
 
-      if (
-        counterpartyType === 'merchantId' &&
-        typeof input.deps.resolveMerchantNameById === 'function'
-      ) {
+      if (counterpartyType !== 'merchantId') {
+        return undefined;
+      }
+
+      if (typeof input.deps.resolveMerchantNameById === 'function') {
         try {
           const merchantName = getString(
             await input.deps.resolveMerchantNameById(counterpartyId)
           );
-          return merchantName ?? counterpartyId;
+          return merchantName;
         } catch {
-          return counterpartyId;
+          return undefined;
         }
       }
 
-      return counterpartyId;
+      return undefined;
     })
   );
 
@@ -870,45 +868,22 @@ const buildPaymentMandateBootstrapSummary = async (input: {
       preferredChannelKeys: preferredMessageChannelKeys.filter(
         (channel): channel is string => Boolean(channel)
       ),
-    }) ?? '';
-  const currency = readNonEmptyString(mandateSimple.currency) ?? 'USD';
-  const amountLimit =
-    formatMinorAmount({
-      amountMinor: mandateSimple.amountLimit,
-      currencyCode: currency,
-      locale: 'en-US',
-      trimTrailingZeros: true,
-    }) ?? '';
-  const totalFundsLine = amountLimit
-    ? `Total funds authorized: ${[amountLimit, currency]
-        .filter(Boolean)
-        .join(' ')}`
-    : undefined;
-  const counterpartyDisplayNames =
-    await resolvePaymentMandateCounterpartyDisplayNames({
-      counterparties: mandateSimple.allowedPaymentCounterparties,
-      deps: input.deps,
-    });
+    }) ?? 'This payment authorization follows the contract terms.';
+  const merchantDisplayNames = await resolvePaymentMandateMerchantDisplayNames({
+    counterparties: mandateSimple.allowedPaymentCounterparties,
+    deps: input.deps,
+  });
   const expiresAtLabel = formatMandateExpiryDate(
     readNonEmptyString(mandateSimple.expiresAt)
   );
-  const automatedPaymentsSubject = counterpartyDisplayNames.length
-    ? `Automated payments to ${counterpartyDisplayNames.join(', ')}`
-    : 'Automated payments to any party pointed by the contract';
-  const automatedPaymentsLine = `${automatedPaymentsSubject}.`;
-  const authorizationValidityLine = expiresAtLabel
-    ? `Authorization valid until ${expiresAtLabel}.`
-    : undefined;
+  const paidToLine = merchantDisplayNames.length
+    ? `Paid to ${merchantDisplayNames.join(', ')}.`
+    : 'Paid to the merchant specified in this contract.';
+  const validityLine = expiresAtLabel
+    ? `Valid until ${expiresAtLabel}, and can be revoked anytime.`
+    : 'Can be revoked anytime.';
 
-  const lines = [
-    'I authorize automated payments regulated by this contract:',
-    ...(initialMessage ? [initialMessage] : []),
-    ...(totalFundsLine ? [totalFundsLine] : []),
-    automatedPaymentsLine,
-    ...(authorizationValidityLine ? [authorizationValidityLine] : []),
-    '',
-    'You will be able to revoke this payment authorization at any time.',
-  ];
+  const lines = [initialMessage, paidToLine, '', validityLine];
 
   return lines.join('\n').trim();
 };

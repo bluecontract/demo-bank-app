@@ -3739,27 +3739,16 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       })
     );
     expect(savedAction?.summary).toContain(
-      'I authorize automated payments regulated by this contract:'
-    );
-    expect(savedAction?.summary).toContain(
       'Authorize recurring monthly payments for this contract (customer message).'
     );
     expect(savedAction?.summary).not.toContain(
       'Authorize recurring monthly payments for this contract (payer fallback).'
     );
-    expect(savedAction?.summary).toContain('Total funds authorized: 120 USD');
+    expect(savedAction?.summary).toContain('Paid to Shop 2.');
     expect(savedAction?.summary).toContain(
-      'Automated payments to Shop 2, customer-allowed-1.'
+      'Valid until December 31, 2027, and can be revoked anytime.'
     );
-    expect(savedAction?.summary).toContain(
-      'Authorization valid until December 31, 2027.'
-    );
-    expect(savedAction?.summary).toContain(
-      'You will be able to revoke this payment authorization at any time.'
-    );
-    expect(savedAction?.summary).toContain(
-      '\n\nYou will be able to revoke this payment authorization at any time.'
-    );
+    expect(savedAction?.summary).toContain('\n\n');
     expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'pendingActionRequested',
@@ -3880,8 +3869,9 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
     ).mock.calls[0][0];
     const savedAction = savedContract.pendingActions?.[0];
     expect(savedAction?.summary).toContain(
-      'Automated payments to any party pointed by the contract.'
+      'Paid to the merchant specified in this contract.'
     );
+    expect(savedAction?.summary).toContain('Can be revoked anytime.');
     expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
   });
 
