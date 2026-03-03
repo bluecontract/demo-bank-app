@@ -154,7 +154,7 @@ export function TransactionDetailsPanel({
     'We could not load the selected activity item.';
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {!accountNumber && (
         <div className="p-8 text-center" data-testid="activity-missing-account">
           <div className="text-6xl mb-4">

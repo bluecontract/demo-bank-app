@@ -22,13 +22,13 @@ export function DashboardShell({
     <div className="app-shell flex w-full overflow-x-clip" data-testid={testId}>
       <SidebarNav />
 
-      <div className="min-w-0 flex-1 flex flex-col min-h-screen">
+      <div className="min-h-screen min-w-0 flex-1 flex flex-col">
         <MobileNav />
-        <div className="px-4 pb-3 pt-4 sm:px-6 sm:pb-4 sm:pt-6 lg:px-6">
+        <div className="px-4 pt-4 sm:px-6 sm:pt-6 lg:px-6">
           <div className={contentContainerClassName}>{header}</div>
         </div>
 
-        <main className="min-w-0 flex-1 px-4 pb-6 sm:px-6 sm:pb-8 lg:px-6">
+        <main className="min-w-0 flex-1 px-4 pb-6 pt-4 sm:px-6 sm:pb-6 sm:pt-6 lg:px-6">
           <div
             className={`${contentContainerClassName} flex min-h-0 flex-col gap-4 sm:gap-6`}
           >

@@ -120,7 +120,7 @@ function PendingActionIndicator() {
   return (
     <span
       role="img"
-      className="inline-flex h-[21px] w-[18px] shrink-0 items-center justify-center text-[#0062FF]"
+      className="inline-flex h-[21px] w-[18px] shrink-0 items-center justify-center text-[color:var(--color-info)]"
       aria-label="Pending action available"
       title="Pending action available"
     >
@@ -241,7 +241,7 @@ function ProposalDecisionActions({
           disabled={isPending}
         >
           <span
-            className={`inline-flex items-center justify-center rounded-full ${buttonSize} ${padding} bg-[#d32f2f] text-white`}
+            className={`inline-flex items-center justify-center rounded-full ${buttonSize} ${padding} bg-[color:var(--color-danger)] text-white`}
             aria-hidden="true"
           >
             <svg
@@ -292,7 +292,7 @@ function ProposalDecisionActions({
       <button
         type="button"
         aria-label={`Reject ${label}`}
-        className={`${baseButton} ${buttonSize} ${padding} bg-[#d32f2f] text-white`}
+        className={`${baseButton} ${buttonSize} ${padding} bg-[color:var(--color-danger)] text-white`}
         onClick={handleReject}
         disabled={isPending}
       >
@@ -525,7 +525,7 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
 
       <section className="app-surface overflow-hidden flex flex-col min-h-0 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
         <div className="border-b border-[color:var(--color-border)] hidden sm:block">
-          <div className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_80px_120px] gap-6 px-4 py-2 text-xs font-semibold text-slate-500">
+          <div className="grid grid-cols-[minmax(0,200px)_minmax(0,1fr)_80px_120px] gap-6 px-4 py-2 font-[var(--font-body)] text-sm font-normal leading-6 text-slate-500">
             <span>From</span>
             <span>Contract</span>
             <span className="invisible">Actions</span>

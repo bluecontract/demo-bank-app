@@ -149,7 +149,7 @@ export function HorizontalAccountsList({
       {/* Scrollable Container */}
       <div
         ref={scrollContainerRef}
-        className="flex gap-4 overflow-x-auto scrollbar-hide px-4 pb-4 pt-3"
+        className="flex gap-4 overflow-x-auto scrollbar-hide px-4 pb-4 pt-4"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         data-testid="accounts-scroll-container"
       >

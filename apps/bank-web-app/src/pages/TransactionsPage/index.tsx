@@ -116,7 +116,7 @@ function TransactionsPageContent({
         </div>
       }
     >
-      <div className="app-surface p-4 sm:p-6 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
+      <div className="app-surface p-4 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
         <div className="grid gap-4 sm:grid-cols-2">
           <Select
             value={accountSelectValue}
@@ -142,7 +142,7 @@ function TransactionsPageContent({
         {selectedAccount ? (
           <TransactionHistory cardId={selectedCardId} />
         ) : (
-          <div className="app-surface flex items-center justify-center h-full p-6 text-sm text-slate-500">
+          <div className="app-surface flex h-full items-center justify-center p-4 text-sm text-slate-500">
             Select an account to view transaction history.
           </div>
         )}
@@ -172,7 +172,7 @@ export function TransactionsPage() {
   if (error) {
     return (
       <div className="app-shell flex items-center justify-center">
-        <div className="app-surface px-8 py-6 text-slate-700 text-lg">
+        <div className="app-surface p-4 text-lg text-slate-700">
           Error loading accounts. Please try again.
         </div>
       </div>

@@ -832,7 +832,7 @@ export function ContractDetailsPage() {
   if (isError || !sessionId) {
     return (
       <div className="app-shell flex items-center justify-center">
-        <div className="app-surface px-8 py-6 text-slate-700 text-lg text-center">
+        <div className="app-surface p-4 text-center text-lg text-slate-700">
           Unable to load contract details. Please return to contracts.
           <div className="mt-4">
             <Button onClick={handleBack}>Back to contracts</Button>
@@ -899,11 +899,11 @@ export function ContractDetailsPage() {
         </div>
       }
     >
-      <div className="flex w-full max-w-[720px] flex-col gap-4 sm:gap-6">
-        <section className="app-surface w-full p-4 sm:p-6 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
-          <div className="flex items-start justify-between gap-4">
+      <div className="flex w-full max-w-[720px] flex-col gap-4">
+        <section className="app-surface w-full rounded-none p-4 shadow-none sm:rounded-[20px] sm:shadow-[var(--shadow-soft)]">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900">
+              <h2 className="text-base font-extrabold leading-6 text-slate-900">
                 {headerTitle}
               </h2>
             </div>
@@ -940,7 +940,7 @@ export function ContractDetailsPage() {
             )}
           </div>
 
-          <div className="mt-4 flex flex-col gap-6">
+          <div className="mt-4 flex flex-col gap-4">
             <div>
               <div className="w-full rounded-xl border border-slate-200 bg-white p-4 sm:rounded-2xl sm:p-5">
                 <div className="flex items-center justify-between gap-3">
@@ -1026,7 +1026,7 @@ export function ContractDetailsPage() {
         </section>
 
         {hasVisibleSections ? (
-          <div className="flex w-full flex-col gap-4 sm:gap-6">
+          <div className="flex w-full flex-col gap-4">
             {contract && hasAvailableOperations && (
               <details
                 className={sectionContainerClassName}

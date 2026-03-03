@@ -76,8 +76,8 @@ export function TransactionHistory({ cardId }: TransactionHistoryProps) {
   const isEmpty = !isLoading && !isError && filteredItems.length === 0;
 
   return (
-    <Card className="flex flex-col flex-1 min-h-0 p-0 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
-      <div className="border-b border-slate-200 px-4 pt-4 pb-3">
+    <Card className="flex flex-col flex-1 min-h-0 !p-0 rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
+      <div className="border-b border-slate-200 px-4 py-4">
         <h2 className="text-base font-semibold text-slate-900">Transactions</h2>
       </div>
 
@@ -105,7 +105,7 @@ export function TransactionHistory({ cardId }: TransactionHistoryProps) {
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 px-4 pb-4 pt-3">
+      <div className="flex-1 min-h-0">
         <TransactionList
           activityItems={filteredItems}
           accountId={selectedAccount?.accountId || ''}

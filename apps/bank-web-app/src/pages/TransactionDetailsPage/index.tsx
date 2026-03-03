@@ -100,7 +100,7 @@ function TransactionDetailsPageContent({
       }
     >
       {!accountId || !activityId ? (
-        <div className="app-surface p-6 text-center text-slate-600">
+        <div className="app-surface p-4 text-center text-slate-600">
           <p className="text-sm">Missing transaction details.</p>
           <Button className="mt-4" onClick={handleBack}>
             Back to transactions
@@ -144,7 +144,7 @@ export function TransactionDetailsPage() {
   if (error) {
     return (
       <div className="app-shell flex items-center justify-center">
-        <div className="app-surface px-8 py-6 text-slate-700 text-lg">
+        <div className="app-surface p-4 text-lg text-slate-700">
           Error loading accounts. Please try again.
         </div>
       </div>
