@@ -331,6 +331,110 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     expect(payNoteSummary?.amountDisplay).toBe('$5.00');
   });
 
+  it('adds customer-facing recurring payment notes for subscription proposals', async () => {
+    const payNoteDocument = {
+      type: { blueId: payNoteTypeBlueId },
+      name: 'Monthly $12.00 subscription with up to 12 charges',
+      contracts: {},
+    };
+
+    payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValueOnce({
+      deliveryId: 'delivery-1',
+      deliverySessionId: 'session-1',
+      userId: 'user-1',
+      transactionIdentificationStatus: 'identified',
+      transactionId: 'txn-1',
+      paymentMandateStatus: 'pending',
+      merchantId: 'merchant-123',
+      deliveryDocument: {
+        payNoteBootstrapRequest: {
+          document: payNoteDocument,
+        },
+      },
+      deliveryUpdatedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generatePayNoteDeliverySummaryHandler(
+      { params: { sessionId: 'session-1' }, body: { force: true } } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    const facts = extractFactsFromFirstParseCall();
+    const contractFacts = facts.contract as Record<string, unknown> | undefined;
+    expect(contractFacts?.transactionId).toBe('txn-1');
+    expect(contractFacts?.paymentMandateStatus).toBe('pending');
+    expect(contractFacts?.merchantId).toBe('merchant-123');
+
+    const integrationNotes = facts.integrationNotes as string[] | undefined;
+    expect(integrationNotes).toEqual(expect.any(Array));
+    expect(
+      integrationNotes?.some(note =>
+        note.includes('finalize the current card purchase')
+      )
+    ).toBe(true);
+    expect(
+      integrationNotes?.some(note => note.includes('future recurring charges'))
+    ).toBe(true);
+  });
+
+  it('adds cashback and monitoring consent notes for voucher proposals', async () => {
+    const payNoteDocument = {
+      type: { blueId: payNoteTypeBlueId },
+      name: 'Demo Voucher CashBack',
+      amount: { total: 500 },
+      currency: 'USD',
+      monitoringSubscriptions: [
+        { subscriptionId: 'card-monitoring:merchant-1' },
+      ],
+      contracts: {},
+    };
+
+    payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValueOnce({
+      deliveryId: 'delivery-1',
+      deliverySessionId: 'session-1',
+      userId: 'user-1',
+      transactionIdentificationStatus: 'identified',
+      transactionId: 'txn-1',
+      deliveryDocument: {
+        payNoteBootstrapRequest: {
+          document: payNoteDocument,
+        },
+      },
+      deliveryUpdatedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generatePayNoteDeliverySummaryHandler(
+      { params: { sessionId: 'session-1' }, body: { force: true } } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    const facts = extractFactsFromFirstParseCall();
+    const integrationNotes = facts.integrationNotes as string[] | undefined;
+    expect(integrationNotes).toEqual(expect.any(Array));
+    expect(integrationNotes?.some(note => note.includes('secures $5.00'))).toBe(
+      true
+    );
+    expect(
+      integrationNotes?.some(note =>
+        note.includes('consent to monitor eligible card payments')
+      )
+    ).toBe(true);
+  });
+
   it('regenerates summary when source epoch changed', async () => {
     const payNoteDocument = {
       type: { blueId: payNoteTypeBlueId },

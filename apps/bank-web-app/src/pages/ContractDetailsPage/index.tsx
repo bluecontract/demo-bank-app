@@ -586,6 +586,9 @@ export function ContractDetailsPage() {
     getDocumentName(resolvedDocument) ||
     headerTitle;
   const summaryOverview = resolvedSummary?.story?.overview ?? [];
+  const summaryOverviewParagraphs = summaryOverview
+    .map(paragraph => paragraph.trim())
+    .filter(Boolean);
   const availableOperations = useMemo(
     () => (contract ? resolveContractOperations(contract) : []),
     [contract]
@@ -593,6 +596,8 @@ export function ContractDetailsPage() {
   const hasAvailableOperations = availableOperations.length > 0;
   const isMockSummaryEnabled =
     Boolean(contract) && payNoteInitialStateMeta.llmSummaryDisabled;
+  const useContractOverviewLayout =
+    resolvedKind === 'contract' && !isMockSummaryEnabled;
   const isSummaryLoading =
     proposalSummaryQuery.isLoading && !resolvedSummary && !!proposal;
   const isSummaryFetching =
@@ -998,10 +1003,14 @@ export function ContractDetailsPage() {
                           {summaryOverview.join('\n\n')}
                         </Markdown>
                       ) : (
-                        summaryOverview.map((paragraph, index) => (
+                        summaryOverviewParagraphs.map((paragraph, index) => (
                           <p
-                            key={`${summaryHeadline}-${index}`}
-                            className="mt-2 whitespace-pre-line break-words text-base text-slate-600 leading-6"
+                            key={`${summaryHeadline}-overview-${index}`}
+                            className={
+                              useContractOverviewLayout && index === 0
+                                ? 'mt-2 whitespace-pre-line break-words text-base font-medium text-slate-700 leading-6'
+                                : 'mt-2 whitespace-pre-line break-words text-base text-slate-600 leading-6'
+                            }
                           >
                             {paragraph}
                           </p>

@@ -37,10 +37,15 @@ const CONTRACT_TASK = `Your task:
 - Write a short, human headline describing the most recent change or status update (the "last change"). It should read like a notification update.
 - The "last change" MUST be anchored to \`transition.triggerEvent\` when provided. Use the current document to explain its effect, but do not pick a different event as the latest change.
 - If the trigger event represents a concrete action (e.g., an operation call) with a specific value, describe that change explicitly (e.g., "Counter increased by 9") instead of a generic "status update recorded".
-- Provide a concise overview (1-2 sentences total) describing the real-world agreement: what is being purchased/arranged and what happens to the funds or services.
+- For voucher/cashback contracts, keep wording outcome-first: "voucher is ready", "bank will report card payments", "cashback is paid from reserved amount".
+- In \`story.overview\`, build a two-layer explanation of the contract:
+  - \`story.overview[0]\`: a short catch-up sentence saying what this contract is about in real-world terms.
+  - \`story.overview[1...]\`: a clearer, more detailed explanation of how it works now (rules, money/service flow, and current state).
+- Keep \`story.overview\` adaptive to contract complexity. Usually 2-4 short sentences total are enough.
 - If a reward/benefit (voucher, rebate, etc.) is present, mention it briefly in the overview.
 - Avoid long state dumps. Do NOT use headings like "Current state" or "What's next" inside the text.
 - Provide a short list-preview sentence and a short "last change" sentence (with a longer "more" version).
+- Do not force bullet points. Use \`story.bullets\` only when they truly improve clarity for this specific contract.
 - Use \`nextSteps\` only for concrete next actions (0-2 items).
 - Be conservative: if an outcome depends on logic you cannot determine from the provided data, state that it is unknown.
 - If \`previousSummary\` is provided, treat it as the baseline to keep the narrative stable:
@@ -52,17 +57,32 @@ const PROPOSAL_TASK = `Your task:
 - Explain the target PayNote itself: what agreement it creates, what rules apply, and what the customer is agreeing to by accepting.
 - Keep proposal-status wording minimal. Mention pending approval only briefly if needed; focus on post-acceptance behavior.
 - If acceptance would create/start the PayNote, say so in plain language.
+- Keep \`story.headline\` as the latest update, but phrase it in customer language (simple, outcome-first, non-technical).
 - If \`transition.triggerEvent\` is provided, anchor the "last change" to it and describe its effect using the current document.
 - Provide a short list-preview sentence and a short "last change" sentence (with a longer "more" version).
 - Describe participants only if they are clearly identifiable from the document.
 - Do not describe lifecycle progress, transitions, or next steps beyond the acceptance context.
-- Keep the overview brief (1-2 sentences).
+- In \`story.overview\`, prefer:
+  - sentence 1: short catch-up of what this agreement gives/sets up for the customer,
+  - sentence 2 (and optional 3): what happens after acceptance in plain customer terms.
+- If \`contract.transactionId\` is present, explain that acceptance finalizes the current purchase.
+- If facts suggest recurring/subscription charges, explain that acceptance asks for approval of future automatic payments.
+- If facts suggest voucher/cashback monitoring, explain voucher benefit and monitoring consent in plain language.
 - Do not start text fields with labels like "Proposal", "Contract proposal", or similar prefixes.
 - Be conservative: if something cannot be determined from the provided data, state that it is unknown.`;
 
 const STYLE = `Writing style (for non-technical end users):
 - The goal is to explain the contract in plain language (think: a bank customer, not an engineer).
+- Write as if the reader is a non-technical bank customer who needs a fast recap and a clear explanation.
 - Do NOT mention internal implementation terms like "event", "emitted", "triggered", "workflow", "channel", "payload", "schema", "blueId", "node", "contracts map", "JSON", or "YAML".
+- Also avoid domain-jargon phrases that sound internal/technical to customers:
+  - "reserve request" -> prefer "voucher setup" or "voucher is ready"
+  - "payment mandate" -> prefer "payment approval"
+  - "captured transaction(s)" -> prefer "completed card payment(s)"
+  - "request payouts" -> prefer "pay cashback"
+  - "linked to/attached to" -> prefer simple relationship wording like "uses" or "works with"
+  - "bootstrap" -> prefer "start" or "set up"
+  - "funds confirmed/reserved for cashback" -> prefer "cashback voucher is ready"
 - Translate technical concepts into everyday language:
   - Instead of "emitted an event", say "it informed", "it recorded", "it requested/asked", or "it sent a message" (pick the best fit).
   - Instead of "operation", say "action" (and phrase viewer actions as "You can ...").
@@ -75,10 +95,7 @@ const STYLE = `Writing style (for non-technical end users):
 - Keep sentences short and concrete. Avoid jargon. If a technical concept is unavoidable, define it briefly in plain words.
 - Avoid enumerating "Current state" and "What's next" inside the text; use the structured fields instead.`;
 
-const OUTPUT = `Output guidance (map to schema fields):
-- \`story.headline\`: one short sentence describing the latest change (no internal IDs). Aim for <= 120 characters.
-- \`story.overview\`: array of 1-2 short sentences total. No headings or labels.
-- \`story.bullets\`: 0-4 short bullet points only if truly helpful; otherwise [].
+const OUTPUT_SHARED = `- \`story.headline\`: one short sentence describing the latest change (no internal IDs). Aim for <= 120 characters.
 - \`listPreview\`: one short sentence for list preview. It should match \`lastChange.short\` and stay <= 90 characters.
 - \`nextSteps.title\`: short label for the next-steps section (use "Next steps" if unsure).
 - \`nextSteps.items\`: 0-2 concrete next actions (or ["No action required."] if none).
@@ -87,8 +104,23 @@ const OUTPUT = `Output guidance (map to schema fields):
 
 Output MUST be a JSON object that matches the provided schema exactly. Do not wrap output in markdown.`;
 
-const buildPrompt = (task: string) =>
-  [BASE_INTRO, task, STYLE, OUTPUT].join('\n\n');
+const CONTRACT_OUTPUT = `Output guidance (map to schema fields):
+- \`story.overview\`: an array of short plain-language sentences with a two-layer structure:
+  - first item = short catch-up ("what this contract is about"),
+  - following items = more detailed explanation of rules/current state.
+  Do not use headings or labels in the text itself.
+- \`story.bullets\`: optional; include only if they improve clarity for this contract.
+${OUTPUT_SHARED}`;
 
-export const buildContractSummaryPrompt = () => buildPrompt(CONTRACT_TASK);
-export const buildProposalSummaryPrompt = () => buildPrompt(PROPOSAL_TASK);
+const PROPOSAL_OUTPUT = `Output guidance (map to schema fields):
+- \`story.overview\`: array of 2-3 short plain-language sentences. No headings or labels.
+- \`story.bullets\`: 0-4 short bullet points only if truly helpful; otherwise [].
+${OUTPUT_SHARED}`;
+
+const buildPrompt = (task: string, output: string) =>
+  [BASE_INTRO, task, STYLE, output].join('\n\n');
+
+export const buildContractSummaryPrompt = () =>
+  buildPrompt(CONTRACT_TASK, CONTRACT_OUTPUT);
+export const buildProposalSummaryPrompt = () =>
+  buildPrompt(PROPOSAL_TASK, PROPOSAL_OUTPUT);

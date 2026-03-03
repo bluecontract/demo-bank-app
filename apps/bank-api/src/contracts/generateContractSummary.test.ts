@@ -213,6 +213,70 @@ describe('generateContractSummaryHandler', () => {
     expect(contractRepository.addContractHistoryEntry).toHaveBeenCalled();
   });
 
+  it('accepts two-layer contract overview text from the model response', async () => {
+    const summaryWithDetails = {
+      ...summaryFixture,
+      story: {
+        ...summaryFixture.story,
+        overview: [
+          'This contract covers payment for the ordered goods.',
+          'The funds remain secured until delivery is confirmed by the required participant.',
+        ],
+      },
+    };
+
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      summary: summaryFixture,
+      summaryUpdatedAt: '2026-01-02T00:00:01.000Z',
+      summarySourceUpdatedAt: '2026-01-02T00:00:00.000Z',
+      summaryModel: 'gpt-5',
+      summaryError: undefined,
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryWithDetails,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body.summary.story.overview).toEqual([
+      'This contract covers payment for the ordered goods.',
+      'The funds remain secured until delivery is confirmed by the required participant.',
+    ]);
+    expect(contractRepository.updateContractSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'sess-1',
+        summary: expect.objectContaining({
+          story: expect.objectContaining({
+            overview: [
+              'This contract covers payment for the ordered goods.',
+              'The funds remain secured until delivery is confirmed by the required participant.',
+            ],
+          }),
+        }),
+      })
+    );
+  });
+
   it('repairs summary index fields when returning a cached summary', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',

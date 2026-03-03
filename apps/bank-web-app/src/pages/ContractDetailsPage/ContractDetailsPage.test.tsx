@@ -243,6 +243,70 @@ describe('ContractDetailsPage', () => {
     );
   });
 
+  it('renders contract overview as plain text composition without section labels', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'GE Refrigerator Order',
+        updatedAt: '2026-01-02T00:00:00.000Z',
+        document: { name: 'GE Refrigerator Order' },
+        summary: {
+          story: {
+            headline: 'Bank confirmed the latest contract update.',
+            overview: [
+              'This contract covers payment for a refrigerator delivery.',
+              'The payment stays secured until delivery confirmation is recorded.',
+            ],
+            bullets: [],
+          },
+          listPreview: 'Bank confirmed the latest contract update.',
+          nextSteps: {
+            title: 'Next steps',
+            items: ['Awaiting delivery confirmation.'],
+          },
+          lastChange: {
+            short: 'Bank confirmed the latest contract update.',
+            more: 'Delivery confirmation is still pending.',
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    expect(
+      screen.getByText(
+        'This contract covers payment for a refrigerator delivery.'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The payment stays secured until delivery confirmation is recorded.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Highlights')).not.toBeInTheDocument();
+    expect(screen.queryByText('Latest update')).not.toBeInTheDocument();
+    expect(screen.queryByText('Next steps')).not.toBeInTheDocument();
+  });
+
   it('opens and closes AI chat drawer from header trigger', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-1' });
     mockUseLocation.mockReturnValue({

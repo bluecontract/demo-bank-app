@@ -41,6 +41,71 @@ const SUMMARY_TIMEOUT = Number.isFinite(SUMMARY_TIMEOUT_MS)
   ? SUMMARY_TIMEOUT_MS
   : 45000;
 
+const toSearchText = (value: unknown): string => {
+  try {
+    return JSON.stringify(value).toLowerCase();
+  } catch {
+    return '';
+  }
+};
+
+const hasAnyToken = (value: string, tokens: string[]) =>
+  tokens.some(token => value.includes(token));
+
+const buildProposalIntegrationNotes = (input: {
+  record: PayNoteDeliveryRecord;
+  mergedDocument: Record<string, unknown>;
+  displayName: string;
+  payNoteAmountDisplay?: string;
+}): string[] => {
+  const { record, mergedDocument, displayName, payNoteAmountDisplay } = input;
+  const notes = [
+    'This proposal is not active yet. Accepting it starts the contract.',
+  ];
+
+  const nameText = displayName.toLowerCase();
+  const documentText = toSearchText(mergedDocument);
+
+  const hasSubscriptionHints =
+    hasAnyToken(nameText, ['subscription', 'recurring', 'monthly']) ||
+    hasAnyToken(documentText, ['subscription', 'recurring', 'monthly']);
+  const hasVoucherHints =
+    hasAnyToken(nameText, ['voucher', 'cashback', 'rebate']) ||
+    hasAnyToken(documentText, ['voucher', 'cashback', 'rebate']);
+  const hasMonitoringHints = hasAnyToken(documentText, [
+    'monitoringsubscriptions',
+    'monitoringconsentapproval',
+    'card-monitoring',
+    'monitoring',
+  ]);
+
+  if (record.transactionId) {
+    notes.push(
+      'After acceptance, it can finalize the current card purchase linked to this proposal.'
+    );
+  }
+
+  if (hasSubscriptionHints) {
+    notes.push(
+      'For future recurring charges, it can ask for your approval to run automatic payments.'
+    );
+  }
+
+  if (hasVoucherHints && payNoteAmountDisplay) {
+    notes.push(
+      `After acceptance, the bank secures ${payNoteAmountDisplay} for your cashback voucher.`
+    );
+  }
+
+  if (hasVoucherHints && hasMonitoringHints) {
+    notes.push(
+      'It can also ask for your consent to monitor eligible card payments for cashback.'
+    );
+  }
+
+  return notes;
+};
+
 const buildProposalFacts = (input: {
   record: PayNoteDeliveryRecord;
   payNoteDocument: Record<string, unknown>;
@@ -53,6 +118,9 @@ const buildProposalFacts = (input: {
       sessionId?: string;
       documentId?: string;
       status?: string;
+      transactionId?: string;
+      paymentMandateStatus?: string;
+      merchantId?: string;
       statusUpdatedAt?: string;
       updatedAt: string;
     };
@@ -159,10 +227,12 @@ const buildProposalFacts = (input: {
   const previousSummary = record.summary
     ? ContractDocumentSummaryDto.safeParse(record.summary)
     : null;
-
-  const integrationNotes = [
-    'This is a PayNote proposal that has not started yet. Accepting it creates the PayNote contract.',
-  ];
+  const integrationNotes = buildProposalIntegrationNotes({
+    record,
+    mergedDocument,
+    displayName,
+    payNoteAmountDisplay: payNoteAmountDisplay ?? undefined,
+  });
 
   return {
     summaryInputBlueId,
@@ -174,6 +244,9 @@ const buildProposalFacts = (input: {
         sessionId: record.deliverySessionId,
         documentId: record.deliveryDocumentId,
         status: record.clientDecisionStatus,
+        transactionId: record.transactionId,
+        paymentMandateStatus: record.paymentMandateStatus,
+        merchantId: record.merchantId,
         statusUpdatedAt:
           record.decisionRecordedAt ??
           record.deliveryUpdatedAt ??
