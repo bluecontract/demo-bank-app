@@ -1,6 +1,11 @@
 import { NavLink } from 'react-router-dom';
 import { useContractsBadgeCount } from '../../contracts/hooks';
-import { CardsIcon, ContractsIcon, OverviewIcon } from './SidebarNavIcons';
+import {
+  CardsIcon,
+  ContractsIcon,
+  OverviewIcon,
+  TransactionsIcon,
+} from './SidebarNavIcons';
 
 const navItems = [
   {
@@ -16,22 +21,7 @@ const navItems = [
   {
     label: 'Transactions',
     to: '/transactions',
-    icon: (
-      <svg
-        className="h-4 w-4"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      >
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h10" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7 12h10" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7 17h10" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h.01" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h.01" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4 17h.01" />
-      </svg>
-    ),
+    icon: <TransactionsIcon />,
   },
   {
     label: 'Contracts',
@@ -44,17 +34,13 @@ export function SidebarNav() {
   const newCount = useContractsBadgeCount();
 
   return (
-    <aside className="hidden lg:flex w-[240px] shrink-0 flex-col gap-8 border-r border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4">
+    <aside className="hidden h-screen w-[240px] shrink-0 flex-col gap-8 border-r border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-4 lg:flex">
       <div className="flex items-center gap-2">
-        <div className="grid size-10 place-items-center overflow-hidden rounded-full border border-[color:var(--color-border)] bg-white">
-          <img
-            src="/assets/synchrony-logo.png"
-            alt="My Synchrony logo"
-            className="h-full w-full object-cover"
-          />
+        <div className="grid size-14 place-items-center rounded-full bg-[color:var(--color-primary)] text-base font-extrabold leading-6 text-white">
+          DB
         </div>
-        <p className="text-base font-semibold uppercase tracking-wide text-[color:var(--color-muted)]">
-          My Synchrony
+        <p className="text-base font-bold uppercase tracking-[0.01em] text-[color:var(--color-muted)]">
+          DEMO BANK
         </p>
       </div>
 
@@ -68,19 +54,19 @@ export function SidebarNav() {
               to={item.to}
               end={item.to === '/dashboard'}
               className={({ isActive }) =>
-                `flex items-center gap-2 rounded-2xl px-4 py-3 text-base font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-primary)] ${
+                `flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-base font-semibold leading-6 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-primary)] ${
                   isActive
                     ? 'bg-[color:var(--color-primary)] text-white'
-                    : 'border border-[color:var(--color-border)] text-slate-900 hover:bg-slate-50'
+                    : 'border border-[color:var(--color-border)] text-[color:var(--color-ink)] hover:bg-slate-50'
                 }`
               }
             >
-              <span className="grid size-6 place-items-center p-0.5 text-current">
+              <span className="grid size-6 place-items-center text-current">
                 {item.icon}
               </span>
               <span className="min-w-0 flex-1">{item.label}</span>
               {isContracts && newCount > 0 && (
-                <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded bg-[#ff5f1f] px-2 text-xs font-semibold text-white">
+                <span className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded bg-[#d32f2f] px-1.5 text-xs font-normal leading-4 text-white">
                   {newCount}
                 </span>
               )}

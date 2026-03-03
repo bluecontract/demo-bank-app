@@ -1,163 +1,69 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { BrowserRouter } from 'react-router-dom';
+import type { ReactElement } from 'react';
 import { DashboardHeader } from './DashboardHeader';
 import { routerFutureConfig } from '../../../app/routerFutureConfig';
 
 const mockSignOut = vi.fn();
-const mockSignIn = vi.fn();
-const mockUpdateProfile = vi.fn();
-let mockUser: {
-  merchantName?: string;
-  merchantId?: string;
-  avatarDataUrl?: string;
-} | null = null;
 
 vi.mock('../../../app/providers/AuthProvider', () => ({
   useAuth: () => ({
-    user: mockUser,
     signOut: mockSignOut,
-    signIn: mockSignIn,
   }),
 }));
 
-vi.mock('../../../app/providers/ApiProvider', () => ({
-  useApiClient: () => ({
-    updateUserProfile: mockUpdateProfile,
-  }),
-}));
-
-const renderWithRouter = (component: React.ReactElement) => {
-  return render(
+const renderWithRouter = (component: ReactElement) =>
+  render(
     <BrowserRouter future={routerFutureConfig}>{component}</BrowserRouter>
   );
-};
 
 describe('DashboardHeader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUser = null;
   });
 
-  it('does not render redundant bank label in header', () => {
-    renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
-
-    expect(screen.queryByText('My Synchrony')).not.toBeInTheDocument();
-  });
-
-  it('should render user name correctly', () => {
-    renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
-
-    expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
-  });
-
-  it('should render user avatar with correct initials', () => {
-    renderWithRouter(<DashboardHeader userEmail="alice.johnson@example.com" />);
-
-    expect(screen.getByText('AJ')).toBeInTheDocument();
-  });
-
-  it('should render welcome message', () => {
+  it('renders default title and description', () => {
     renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
 
     expect(screen.getByText('Welcome back')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Your personal overview for accounts, cards, and activity.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
   });
 
-  it('should have proper layout structure', () => {
+  it('renders custom title', () => {
+    renderWithRouter(
+      <DashboardHeader userEmail="john.doe@example.com" title="Contracts" />
+    );
+
+    expect(screen.getByText('Contracts')).toBeInTheDocument();
+  });
+
+  it('does not render description when set to null', () => {
     renderWithRouter(
       <DashboardHeader
         userEmail="john.doe@example.com"
-        data-testid="dashboard-header"
+        title="Contracts"
+        description={null}
       />
     );
 
-    const header = screen.getByTestId('dashboard-header');
-    expect(header).toBeInTheDocument();
-    expect(header).toHaveClass(
-      'flex',
-      'flex-col',
-      'gap-4',
-      'lg:flex-row',
-      'lg:items-center',
-      'lg:justify-between'
-    );
-  });
-
-  it('should render avatar when user name is provided', () => {
-    renderWithRouter(<DashboardHeader userEmail="jane.smith@example.com" />);
-
-    const avatar = screen.getByText('JS');
-    expect(avatar).toBeInTheDocument();
-  });
-
-  it('should handle single name correctly', () => {
-    renderWithRouter(<DashboardHeader userEmail="alice@example.com" />);
-
-    expect(screen.getByText('AE')).toBeInTheDocument();
-  });
-
-  it('should handle long user names', () => {
-    renderWithRouter(
-      <DashboardHeader userEmail="alexander.vonderberg@example.com" />
-    );
-
-    expect(screen.getByText('AV')).toBeInTheDocument();
-  });
-
-  it('should show dropdown menu when avatar is clicked', () => {
-    renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
-
-    const avatar = screen.getByText('JD');
-    fireEvent.click(avatar);
-
-    expect(screen.getByRole('menu')).toBeInTheDocument();
     expect(
-      screen.getByRole('menuitem', { name: 'Change logo' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('menuitem', { name: 'Sign Out' })
-    ).toBeInTheDocument();
+      screen.queryByText(
+        'Your personal overview for accounts, cards, and activity.'
+      )
+    ).not.toBeInTheDocument();
   });
 
-  it('shows merchant id in dropdown when user has merchant profile', () => {
-    mockUser = {
-      merchantName: 'Merchant Demo',
-      merchantId: 'merchant-123',
-    };
-
+  it('calls signOut from the desktop header action', () => {
     renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
 
-    fireEvent.click(screen.getByRole('button'));
-
-    expect(screen.getByText('Merchant ID')).toBeInTheDocument();
-    expect(screen.getByText('merchant-123')).toBeInTheDocument();
-  });
-
-  it('should call signOut when Sign Out is clicked', () => {
-    renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
-
-    const avatar = screen.getByText('JD');
-    fireEvent.click(avatar);
-
-    const signOutButton = screen.getByRole('menuitem', { name: 'Sign Out' });
-    fireEvent.click(signOutButton);
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
 
     expect(mockSignOut).toHaveBeenCalledTimes(1);
-  });
-
-  it('should hide dropdown when clicking outside', () => {
-    renderWithRouter(
-      <div>
-        <DashboardHeader userEmail="john.doe@example.com" />
-        <div data-testid="outside">Outside element</div>
-      </div>
-    );
-
-    const avatar = screen.getByText('JD');
-    fireEvent.click(avatar);
-    expect(screen.getByRole('menu')).toBeInTheDocument();
-
-    fireEvent.mouseDown(screen.getByTestId('outside'));
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });

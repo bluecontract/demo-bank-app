@@ -47,7 +47,7 @@ export function MobileNav() {
       return null;
     }
     return (
-      <span className="inline-flex min-w-6 items-center justify-center rounded bg-[#ff5f1f] px-2 text-xs font-semibold text-white">
+      <span className="inline-flex min-w-6 items-center justify-center rounded bg-[#d32f2f] px-1.5 text-sm font-normal leading-6 text-white">
         {newCount}
       </span>
     );
@@ -55,24 +55,20 @@ export function MobileNav() {
 
   return (
     <>
-      <div className="lg:hidden flex items-center justify-between gap-4 px-4 pt-4 pb-2">
-        <div className="flex items-center gap-2">
-          <div className="grid size-10 place-items-center overflow-hidden rounded-full border border-slate-200 bg-white">
-            <img
-              src="/assets/synchrony-logo.png"
-              alt="My Synchrony logo"
-              className="h-full w-full object-cover"
-            />
+      <div className="flex items-center justify-between gap-4 px-4 pb-2 pt-6 lg:hidden">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="grid size-14 shrink-0 place-items-center rounded-full bg-[color:var(--color-primary)] text-base font-extrabold leading-6 text-white">
+            DB
           </div>
-          <p className="text-base font-semibold uppercase tracking-wide text-slate-500">
-            My Synchrony
+          <p className="truncate text-base font-bold uppercase tracking-[0.01em] text-[color:var(--color-muted)]">
+            DEMO BANK
           </p>
         </div>
         <div className="flex items-center gap-2">
           {unreadBadge}
           <button
             type="button"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100"
+            className="inline-flex h-10 w-10 items-center justify-center text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)]"
             onClick={() => setIsOpen(true)}
             aria-label="Open menu"
           >
@@ -97,23 +93,19 @@ export function MobileNav() {
           role="dialog"
           aria-modal="true"
         >
-          <div className="flex h-full flex-col gap-8 px-4 pt-6 pb-8">
+          <div className="flex h-full flex-col gap-8 px-4 pb-6 pt-6">
             <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <div className="grid size-10 place-items-center overflow-hidden rounded-full border border-slate-200 bg-white">
-                  <img
-                    src="/assets/synchrony-logo.png"
-                    alt="My Synchrony logo"
-                    className="h-full w-full object-cover"
-                  />
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className="grid size-14 shrink-0 place-items-center rounded-full bg-[color:var(--color-primary)] text-base font-extrabold leading-6 text-white">
+                  DB
                 </div>
-                <p className="text-base font-semibold uppercase tracking-wide text-slate-500">
-                  My Synchrony
+                <p className="truncate text-base font-bold uppercase tracking-[0.01em] text-[color:var(--color-muted)]">
+                  DEMO BANK
                 </p>
               </div>
               <button
                 type="button"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100"
+                className="inline-flex h-10 w-10 items-center justify-center text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)]"
                 onClick={() => setIsOpen(false)}
                 aria-label="Close menu"
               >
@@ -143,10 +135,10 @@ export function MobileNav() {
                     to={item.to}
                     end={item.to === '/dashboard'}
                     className={({ isActive }) =>
-                      `flex items-center gap-3 rounded-2xl px-4 py-3 text-base font-semibold transition ${
+                      `flex w-full items-center gap-2 rounded-2xl px-4 py-3 text-base font-semibold leading-6 transition ${
                         isActive
                           ? 'bg-[color:var(--color-primary)] text-white'
-                          : 'border border-slate-200 text-slate-900'
+                          : 'border border-[color:var(--color-border)] text-[color:var(--color-ink)]'
                       }`
                     }
                   >
@@ -155,7 +147,7 @@ export function MobileNav() {
                     </span>
                     <span className="flex-1">{item.label}</span>
                     {isContracts && newCount > 0 && (
-                      <span className="inline-flex min-w-6 items-center justify-center rounded bg-[#ff5f1f] px-2 text-xs font-semibold text-white">
+                      <span className="inline-flex h-6 min-w-6 items-center justify-center rounded bg-[#d32f2f] px-1.5 text-xs font-normal leading-4 text-white">
                         {newCount}
                       </span>
                     )}
@@ -164,27 +156,27 @@ export function MobileNav() {
               })}
             </nav>
 
-            <div className="mt-auto flex items-center justify-end gap-3 text-sm text-slate-600">
-              <span className="truncate text-slate-700">
+            <div className="mt-auto flex items-center justify-end gap-2 text-sm text-slate-600">
+              <span className="truncate text-base leading-6 text-[color:var(--color-ink)]">
                 {user?.email || 'Guest'}
               </span>
               <button
                 type="button"
                 onClick={signOut}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-600 hover:bg-slate-100"
+                className="inline-flex h-9 w-9 items-center justify-center text-[color:var(--color-muted)] hover:text-[color:var(--color-ink)]"
                 aria-label="Sign out"
               >
                 <svg
-                  className="h-4 w-4"
+                  className="h-5 w-5"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="1.8"
                 >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
-                    d="M12 3v6m6.364-2.364A9 9 0 105.636 6.636"
+                    d="M12 2.5V9m6.364-2.364A9 9 0 105.636 6.636"
                   />
                 </svg>
               </button>
