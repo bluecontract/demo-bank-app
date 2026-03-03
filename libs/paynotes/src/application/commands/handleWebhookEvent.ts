@@ -21,6 +21,7 @@ import {
 } from './paynoteWebhook/transfers';
 import { dispatchPayNoteEvents } from './paynoteWebhook/eventDispatcher';
 import { handleMonitoringRequestEvents } from './paynoteWebhook/monitoring';
+import { handleCustomerActionRequestEvents } from './paynoteWebhook/customerAction';
 import {
   handleChargeRequestEvents,
   handleMandateResponseEvents,
@@ -385,6 +386,7 @@ export const handleWebhookEvent = async (
         mandateResponseEvents,
         transferEvents,
         monitoringRequestEvents,
+        customerActionRequestEvents,
       } = dispatchPayNoteEvents({
         events,
         eventId: input.eventId,
@@ -394,6 +396,15 @@ export const handleWebhookEvent = async (
 
       await handleMonitoringRequestEvents({
         events: monitoringRequestEvents,
+        eventId: input.eventId,
+        payNoteDocumentId,
+        sessionId,
+        deps,
+        logs,
+      });
+
+      await handleCustomerActionRequestEvents({
+        events: customerActionRequestEvents,
         eventId: input.eventId,
         payNoteDocumentId,
         sessionId,

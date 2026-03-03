@@ -2,23 +2,66 @@ export type ContractStatusTimestamps = Record<string, string>;
 
 export type ContractPendingActionType =
   | 'monitoringConsentApproval'
-  | 'paymentMandateBootstrapApproval';
+  | 'paymentMandateBootstrapApproval'
+  | 'customerActionOptions'
+  | 'customerActionInput';
 
 export type ContractPendingActionStatus = 'pending' | 'accepted' | 'rejected';
 
-export type ContractPendingAction = {
+export type ContractPendingCustomerActionVariant =
+  | 'primary'
+  | 'secondary'
+  | 'reject';
+
+export type ContractPendingCustomerAction = {
+  label: string;
+  variant?: ContractPendingCustomerActionVariant;
+  inputSchema?: unknown;
+  inputRequired?: boolean;
+  inputTitle?: string;
+  inputPlaceholder?: string;
+};
+
+type ContractPendingActionBase = {
   actionId: string;
-  type: ContractPendingActionType;
   status: ContractPendingActionStatus;
   title: string;
-  summary?: string;
   requestId?: string;
-  targetMerchantId?: string;
-  requestedEvents?: string[];
-  payload?: Record<string, unknown>;
   createdAt: string;
   decidedAt?: string;
 };
+
+export type MonitoringContractPendingAction = ContractPendingActionBase & {
+  type: 'monitoringConsentApproval';
+  summary?: string;
+  targetMerchantId?: string;
+  requestedEvents?: string[];
+  payload?: Record<string, unknown>;
+};
+
+export type PaymentMandateBootstrapContractPendingAction =
+  ContractPendingActionBase & {
+    type: 'paymentMandateBootstrapApproval';
+    summary?: string;
+    payload?: Record<string, unknown>;
+  };
+
+export type CustomerContractPendingAction = ContractPendingActionBase & {
+  type: 'customerActionOptions' | 'customerActionInput';
+  summary?: string;
+  message: string;
+  actions: ContractPendingCustomerAction[];
+  payload?: Record<string, unknown>;
+  decisionPayload?: {
+    actionLabel?: string;
+    input?: unknown;
+  };
+};
+
+export type ContractPendingAction =
+  | MonitoringContractPendingAction
+  | PaymentMandateBootstrapContractPendingAction
+  | CustomerContractPendingAction;
 
 export type ContractMonitoringSubscriptionStatus =
   | 'pending'

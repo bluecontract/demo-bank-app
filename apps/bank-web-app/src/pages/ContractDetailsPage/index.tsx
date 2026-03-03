@@ -56,6 +56,7 @@ import { Markdown } from '../../ui/Markdown';
 import { Spinner, SpinnerWithText } from '../../ui/Spinner';
 import { formatShortDateTime } from '../../lib/formatDate';
 import { formatStatusLabel } from '../../lib/formatStatusLabel';
+import { blue } from '../../lib/blue';
 import { getSupportedContractByTypeBlueId } from '@demo-bank-app/shared-bank-api-contract';
 import type {
   ContractDetails,
@@ -63,6 +64,7 @@ import type {
   PayNoteDeliveryDetailsSanitized,
   RelatedContractItem,
 } from '../../types/api';
+import { buildRequestModel } from '../../features/contracts/lib/operationFormModel';
 
 type LocationState = {
   from?: string;
@@ -261,6 +263,25 @@ function MockPendingActionCard({
 type ContractPendingAction = NonNullable<
   ContractDetails['pendingActions']
 >[number];
+type CustomerContractPendingAction = Extract<
+  ContractPendingAction,
+  { type: 'customerActionOptions' | 'customerActionInput' }
+>;
+
+type PendingActionOption = {
+  label: string;
+  variant?: 'primary' | 'secondary' | 'reject';
+  inputSchema?: unknown;
+  inputRequired?: boolean;
+  inputTitle?: string;
+  inputPlaceholder?: string;
+};
+
+const isCustomerPendingAction = (
+  action: ContractPendingAction
+): action is CustomerContractPendingAction =>
+  action.type === 'customerActionOptions' ||
+  action.type === 'customerActionInput';
 
 interface ContractPendingActionCardProps {
   action: ContractPendingAction;
@@ -273,45 +294,373 @@ function ContractPendingActionCard({
 }: ContractPendingActionCardProps) {
   const decisionMutation = useDecideContractPendingAction();
   const isPending = decisionMutation.isPending;
+  const [activeInputActionLabel, setActiveInputActionLabel] = useState<
+    string | null
+  >(null);
+  const [textInputValue, setTextInputValue] = useState('');
+  const [booleanInputValue, setBooleanInputValue] = useState(false);
+  const [jsonInputValue, setJsonInputValue] = useState('');
+  const [inputError, setInputError] = useState<string | null>(null);
 
-  const decide = (decision: 'accepted' | 'rejected') => {
+  const isCustomerAction = isCustomerPendingAction(action);
+  const customerAction = isCustomerAction ? action : null;
+  const options = useMemo<PendingActionOption[]>(() => {
+    if (!customerAction) {
+      return [];
+    }
+    return (customerAction.actions ?? []).reduce<PendingActionOption[]>(
+      (acc, option) => {
+        if (!option || typeof option !== 'object') {
+          return acc;
+        }
+        const label =
+          typeof option.label === 'string' ? option.label.trim() : undefined;
+        if (!label) {
+          return acc;
+        }
+        const variant =
+          option.variant === 'primary' ||
+          option.variant === 'secondary' ||
+          option.variant === 'reject'
+            ? option.variant
+            : undefined;
+        acc.push({
+          label,
+          ...(variant ? { variant } : {}),
+          ...(option.inputSchema !== undefined
+            ? { inputSchema: option.inputSchema }
+            : {}),
+          ...(typeof option.inputRequired === 'boolean'
+            ? { inputRequired: option.inputRequired }
+            : {}),
+          ...(typeof option.inputTitle === 'string'
+            ? { inputTitle: option.inputTitle }
+            : {}),
+          ...(typeof option.inputPlaceholder === 'string'
+            ? { inputPlaceholder: option.inputPlaceholder }
+            : {}),
+        });
+        return acc;
+      },
+      []
+    );
+  }, [customerAction]);
+
+  const activeInputAction = useMemo(
+    () =>
+      options.find(
+        option =>
+          option.label === activeInputActionLabel &&
+          option.inputSchema !== undefined
+      ) ?? null,
+    [options, activeInputActionLabel]
+  );
+
+  const activeInputModel = useMemo(() => {
+    if (!activeInputAction?.inputSchema) {
+      return null;
+    }
+    try {
+      const schemaNode = blue.jsonValueToNode(activeInputAction.inputSchema);
+      return buildRequestModel(
+        schemaNode,
+        blue,
+        activeInputAction.inputTitle || activeInputAction.label
+      );
+    } catch {
+      return null;
+    }
+  }, [activeInputAction]);
+
+  const resetInputState = () => {
+    setInputError(null);
+    setTextInputValue('');
+    setBooleanInputValue(false);
+    setJsonInputValue('');
+  };
+
+  const closeInputEditor = () => {
+    setActiveInputActionLabel(null);
+    resetInputState();
+  };
+
+  const runApproveRejectDecision = (decision: 'accepted' | 'rejected') => {
     if (!sessionId || isPending) {
       return;
     }
     decisionMutation.mutate({
       sessionId,
       actionId: action.actionId,
-      decision,
+      decision: {
+        kind: 'approveReject',
+        input: decision,
+      },
     });
   };
+
+  const runSelectOptionDecision = (label: string) => {
+    if (!sessionId || isPending) {
+      return;
+    }
+    decisionMutation.mutate({
+      sessionId,
+      actionId: action.actionId,
+      decision: {
+        kind: 'selectOption',
+        input: label,
+      },
+    });
+  };
+
+  const openInputEditor = (option: PendingActionOption) => {
+    if (isPending || option.inputSchema === undefined) {
+      return;
+    }
+    setActiveInputActionLabel(option.label);
+    resetInputState();
+  };
+
+  const resolveInputPayload = ():
+    | { ok: true; value: unknown }
+    | { ok: false; error: string } => {
+    if (!activeInputAction) {
+      return { ok: false, error: 'Input action is not selected.' };
+    }
+
+    const required = activeInputAction.inputRequired === true;
+    const kind = activeInputModel?.kind ?? 'raw';
+
+    if (kind === 'boolean') {
+      return { ok: true, value: booleanInputValue };
+    }
+
+    if (kind === 'integer' || kind === 'double') {
+      const trimmed = textInputValue.trim();
+      if (!trimmed) {
+        return required
+          ? { ok: false, error: 'Input is required.' }
+          : { ok: true, value: undefined };
+      }
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed)) {
+        return { ok: false, error: 'Input must be a number.' };
+      }
+      if (kind === 'integer' && !Number.isInteger(parsed)) {
+        return { ok: false, error: 'Input must be an integer.' };
+      }
+      return { ok: true, value: parsed };
+    }
+
+    if (kind === 'text' || kind === 'timestamp') {
+      const trimmed = textInputValue.trim();
+      if (!trimmed) {
+        return required
+          ? { ok: false, error: 'Input is required.' }
+          : { ok: true, value: undefined };
+      }
+      return { ok: true, value: trimmed };
+    }
+
+    const trimmedJson = jsonInputValue.trim();
+    if (!trimmedJson) {
+      return required
+        ? { ok: false, error: 'Input is required.' }
+        : { ok: true, value: undefined };
+    }
+
+    try {
+      return { ok: true, value: JSON.parse(trimmedJson) };
+    } catch {
+      return { ok: false, error: 'Input must be a valid JSON value.' };
+    }
+  };
+
+  const submitInputDecision = () => {
+    if (!sessionId || isPending || !activeInputAction) {
+      return;
+    }
+
+    const resolvedPayload = resolveInputPayload();
+    if (!resolvedPayload.ok) {
+      setInputError(resolvedPayload.error);
+      return;
+    }
+
+    setInputError(null);
+    decisionMutation.mutate(
+      {
+        sessionId,
+        actionId: action.actionId,
+        decision: {
+          kind: 'submitInput',
+          input: {
+            actionLabel: activeInputAction.label,
+            value: resolvedPayload.value,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          closeInputEditor();
+        },
+      }
+    );
+  };
+
+  const resolveButtonLook = (
+    variant: PendingActionOption['variant']
+  ): { variant: 'primary' | 'secondary' | 'outline'; className?: string } => {
+    if (variant === 'primary') {
+      return { variant: 'primary' };
+    }
+    if (variant === 'reject') {
+      return {
+        variant: 'outline',
+        className:
+          'border-rose-500 text-rose-500 hover:bg-rose-50 focus:ring-rose-500',
+      };
+    }
+    return { variant: 'secondary' };
+  };
+
+  const description =
+    customerAction && typeof customerAction.message === 'string'
+      ? customerAction.message
+      : 'summary' in action
+      ? action.summary
+      : undefined;
 
   return (
     <div className="rounded-xl sm:rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
       <h3 className="text-lg font-semibold text-slate-900">{action.title}</h3>
-      {action.summary && (
+      {description && (
         <p className="mt-2 whitespace-pre-line text-sm text-slate-600">
-          {action.summary}
+          {description}
         </p>
       )}
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-rose-500 text-rose-500 hover:bg-rose-50 focus:ring-rose-500"
-          onClick={() => decide('rejected')}
-          disabled={isPending}
-        >
-          Reject
-        </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => decide('accepted')}
-          disabled={isPending}
-        >
-          Accept
-        </Button>
-      </div>
+      {isCustomerAction ? (
+        <>
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+            {options.map(option => {
+              const look = resolveButtonLook(option.variant);
+              return (
+                <Button
+                  key={option.label}
+                  variant={look.variant}
+                  size="sm"
+                  className={look.className}
+                  onClick={() =>
+                    option.inputSchema !== undefined
+                      ? openInputEditor(option)
+                      : runSelectOptionDecision(option.label)
+                  }
+                  disabled={isPending}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
+          </div>
+          {activeInputAction && (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+              <p className="text-sm font-semibold text-slate-900">
+                {activeInputAction.inputTitle ?? activeInputAction.label}
+              </p>
+              {activeInputModel?.kind === 'boolean' ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={booleanInputValue ? 'secondary' : 'primary'}
+                    onClick={() => setBooleanInputValue(false)}
+                    disabled={isPending}
+                  >
+                    False
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={booleanInputValue ? 'primary' : 'secondary'}
+                    onClick={() => setBooleanInputValue(true)}
+                    disabled={isPending}
+                  >
+                    True
+                  </Button>
+                </div>
+              ) : activeInputModel &&
+                ['text', 'integer', 'double', 'timestamp'].includes(
+                  activeInputModel.kind
+                ) ? (
+                <input
+                  type={
+                    activeInputModel.kind === 'integer' ||
+                    activeInputModel.kind === 'double'
+                      ? 'number'
+                      : activeInputModel.kind === 'timestamp'
+                      ? 'datetime-local'
+                      : 'text'
+                  }
+                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
+                  placeholder={activeInputAction.inputPlaceholder}
+                  value={textInputValue}
+                  onChange={event => setTextInputValue(event.target.value)}
+                  disabled={isPending}
+                />
+              ) : (
+                <textarea
+                  className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
+                  placeholder={
+                    activeInputAction.inputPlaceholder ??
+                    'Provide input as JSON (for example: {"message":"..."})'
+                  }
+                  value={jsonInputValue}
+                  onChange={event => setJsonInputValue(event.target.value)}
+                  disabled={isPending}
+                />
+              )}
+              {inputError && (
+                <p className="mt-2 text-xs text-rose-600">{inputError}</p>
+              )}
+              <div className="mt-3 flex justify-end gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={closeInputEditor}
+                  disabled={isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={submitInputDecision}
+                  disabled={isPending}
+                >
+                  Submit
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-rose-500 text-rose-500 hover:bg-rose-50 focus:ring-rose-500"
+            onClick={() => runApproveRejectDecision('rejected')}
+            disabled={isPending}
+          >
+            Reject
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => runApproveRejectDecision('accepted')}
+            disabled={isPending}
+          >
+            Accept
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

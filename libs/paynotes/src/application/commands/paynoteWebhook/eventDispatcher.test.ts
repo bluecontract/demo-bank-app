@@ -33,6 +33,7 @@ describe('paynote event dispatcher', () => {
       chargeRequestEvents,
       transferEvents,
       monitoringRequestEvents,
+      customerActionRequestEvents,
     } = dispatchPayNoteEvents({
       eventId: 'event-1',
       payNoteDocumentId: 'doc-1',
@@ -56,6 +57,12 @@ describe('paynote event dispatcher', () => {
           targetMerchantId: 'merchant-123',
           events: ['transaction'],
         }),
+        toOfficialBlue({
+          type: 'Conversation/Customer Action Requested',
+          title: 'Confirm milestone',
+          message: 'Please confirm milestone #1',
+          actions: [{ label: 'Accept' }, { label: 'I have a concern' }],
+        }),
         {
           type: 'PayNote/Future Event Requested',
         },
@@ -66,6 +73,7 @@ describe('paynote event dispatcher', () => {
     expect(chargeRequestEvents).toHaveLength(1);
     expect(transferEvents).toHaveLength(1);
     expect(monitoringRequestEvents).toHaveLength(1);
+    expect(customerActionRequestEvents).toHaveLength(1);
     expect(chargeRequestEvents[0]).toEqual(
       expect.objectContaining({
         eventType: 'PayNote/Linked Card Charge Requested',
@@ -77,6 +85,13 @@ describe('paynote event dispatcher', () => {
       expect.objectContaining({
         eventType: 'PayNote/Capture Funds Requested',
         eventIndex: 1,
+        event: expect.any(Object),
+      })
+    );
+    expect(customerActionRequestEvents[0]).toEqual(
+      expect.objectContaining({
+        eventType: 'Conversation/Customer Action Requested',
+        eventIndex: 5,
         event: expect.any(Object),
       })
     );

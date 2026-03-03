@@ -1,4 +1,7 @@
-import { DocumentBootstrapRequestedSchema } from '@blue-repository/types/packages/conversation/schemas';
+import {
+  CustomerActionRequestedSchema,
+  DocumentBootstrapRequestedSchema,
+} from '@blue-repository/types/packages/conversation/schemas';
 import {
   CardTransactionCaptureLockRequestedSchema,
   CardTransactionCaptureUnlockRequestedSchema,
@@ -27,6 +30,8 @@ export const CAPTURE_UNLOCK_REQUESTED_EVENT_NAME =
   'PayNote/Card Transaction Capture Unlock Requested';
 export const DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME =
   'Conversation/Document Bootstrap Requested';
+export const CUSTOMER_ACTION_REQUESTED_EVENT_NAME =
+  'Conversation/Customer Action Requested';
 export const START_CARD_TRANSACTION_MONITORING_REQUESTED_EVENT_NAME =
   'PayNote/Start Card Transaction Monitoring Requested';
 export const LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME =
@@ -101,6 +106,9 @@ const resolveEventType = (event: unknown): string | undefined => {
     }
     if (blue.isTypeOf(node, DocumentBootstrapRequestedSchema)) {
       return DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME;
+    }
+    if (blue.isTypeOf(node, CustomerActionRequestedSchema)) {
+      return CUSTOMER_ACTION_REQUESTED_EVENT_NAME;
     }
     if (blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema)) {
       return CAPTURE_IMMEDIATELY_EVENT_NAME;

@@ -1,8 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
+import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
+import { ClientInferRequest } from '@ts-rest/core';
 import type { ContractOperationResponse } from '../../../types/api';
 
-type PendingActionDecision = 'accepted' | 'rejected';
+type PendingActionDecision = ClientInferRequest<
+  (typeof bankApiContract)['banking']['decideContractPendingAction']
+>['body'];
 
 type DecideContractPendingActionInput = {
   sessionId: string;
@@ -39,9 +43,7 @@ export function useDecideContractPendingAction() {
           sessionId: input.sessionId,
           actionId: input.actionId,
         },
-        body: {
-          decision: input.decision,
-        },
+        body: input.decision,
         overrideClientOptions: { credentials: 'include' },
       });
 

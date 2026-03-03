@@ -132,7 +132,8 @@ describe('decideContractPendingActionHandler', () => {
           actionId: 'card-monitoring:merchant-1:consent',
         },
         body: {
-          decision: 'accepted',
+          kind: 'approveReject',
+          input: 'accepted',
         },
       } as any,
       { request: {} as any }
@@ -187,7 +188,8 @@ describe('decideContractPendingActionHandler', () => {
           actionId: 'missing-action',
         },
         body: {
-          decision: 'accepted',
+          kind: 'approveReject',
+          input: 'accepted',
         },
       } as any,
       { request: {} as any }
@@ -262,7 +264,8 @@ describe('decideContractPendingActionHandler', () => {
           actionId: 'payment-mandate-bootstrap:event-1:0',
         },
         body: {
-          decision: 'accepted',
+          kind: 'approveReject',
+          input: 'accepted',
         },
       } as any,
       { request: {} as any }
@@ -378,7 +381,8 @@ describe('decideContractPendingActionHandler', () => {
           actionId: 'payment-mandate-bootstrap:event-identity:0',
         },
         body: {
-          decision: 'accepted',
+          kind: 'approveReject',
+          input: 'accepted',
         },
       } as any,
       { request: {} as any }
@@ -443,7 +447,8 @@ describe('decideContractPendingActionHandler', () => {
           actionId: 'payment-mandate-bootstrap:event-1:0',
         },
         body: {
-          decision: 'rejected',
+          kind: 'approveReject',
+          input: 'rejected',
         },
       } as any,
       { request: {} as any }
@@ -536,7 +541,8 @@ describe('decideContractPendingActionHandler', () => {
           actionId: 'payment-mandate-bootstrap:event-2:0',
         },
         body: {
-          decision: 'accepted',
+          kind: 'approveReject',
+          input: 'accepted',
         },
       } as any,
       { request: {} as any }
@@ -552,5 +558,449 @@ describe('decideContractPendingActionHandler', () => {
         }),
       })
     );
+  });
+
+  it('decides customerActionOptions via selectOption and emits Customer Action Responded', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      pendingActions: [
+        {
+          actionId: 'customer-action:event-1:0',
+          type: 'customerActionOptions',
+          status: 'pending',
+          title: 'Milestone 1',
+          message: 'Confirm milestone 1.',
+          requestId: 'request-1',
+          actions: [{ label: 'Accept', variant: 'primary' }],
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    myOsClient.getCredentials.mockResolvedValue({
+      apiKey: 'key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.local',
+    });
+    myOsClient.runDocumentOperation.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {},
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'customer-action:event-1:0',
+        },
+        body: {
+          kind: 'selectOption',
+          input: 'Accept',
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(200);
+    expect(contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingActions: expect.arrayContaining([
+          expect.objectContaining({
+            actionId: 'customer-action:event-1:0',
+            status: 'accepted',
+            decisionPayload: expect.objectContaining({
+              actionLabel: 'Accept',
+            }),
+          }),
+        ]),
+      })
+    );
+    const runCall = myOsClient.runDocumentOperation.mock.calls[0]?.[0];
+    const payload = JSON.stringify(runCall?.payload);
+    expect(payload).toContain('Conversation/Customer Action Responded');
+    expect(payload).toContain('Accept');
+    expect(payload).toContain('inResponseTo');
+  });
+
+  it('decides customerActionInput via submitInput and validates payload shape', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      pendingActions: [
+        {
+          actionId: 'customer-action:event-2:0',
+          type: 'customerActionInput',
+          status: 'pending',
+          title: 'Milestone concern',
+          message: 'Share your concern.',
+          actions: [
+            {
+              label: 'I have a concern',
+              variant: 'secondary',
+              inputSchema: { type: 'Text' },
+              inputRequired: false,
+            },
+          ],
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    myOsClient.getCredentials.mockResolvedValue({
+      apiKey: 'key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.local',
+    });
+    myOsClient.runDocumentOperation.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {},
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'customer-action:event-2:0',
+        },
+        body: {
+          kind: 'submitInput',
+          input: {
+            actionLabel: 'I have a concern',
+            value: 'Delivery photos do not match.',
+          },
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(200);
+    expect(contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingActions: expect.arrayContaining([
+          expect.objectContaining({
+            actionId: 'customer-action:event-2:0',
+            status: 'accepted',
+            decisionPayload: expect.objectContaining({
+              actionLabel: 'I have a concern',
+              input: 'Delivery photos do not match.',
+            }),
+          }),
+        ]),
+      })
+    );
+    const runCall = myOsClient.runDocumentOperation.mock.calls[0]?.[0];
+    const payload = JSON.stringify(runCall?.payload);
+    expect(payload).toContain('Conversation/Customer Action Responded');
+    expect(payload).toContain('Delivery photos do not match.');
+  });
+
+  it('rejects selectOption when selected action requires input submission', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      pendingActions: [
+        {
+          actionId: 'customer-action:event-3:0',
+          type: 'customerActionInput',
+          status: 'pending',
+          title: 'Milestone concern',
+          message: 'Share your concern.',
+          actions: [
+            {
+              label: 'I have a concern',
+              variant: 'secondary',
+              inputSchema: { type: 'Text' },
+              inputRequired: true,
+            },
+          ],
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    myOsClient.getCredentials.mockResolvedValue({
+      apiKey: 'key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.local',
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'customer-action:event-3:0',
+        },
+        body: {
+          kind: 'selectOption',
+          input: 'I have a concern',
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(409);
+    expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(contractRepository.saveContract).not.toHaveBeenCalled();
+  });
+
+  it('rejects submitInput when required value is missing', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      pendingActions: [
+        {
+          actionId: 'customer-action:event-4:0',
+          type: 'customerActionInput',
+          status: 'pending',
+          title: 'Milestone concern',
+          message: 'Share your concern.',
+          actions: [
+            {
+              label: 'I have a concern',
+              variant: 'secondary',
+              inputSchema: { type: 'Text' },
+              inputRequired: true,
+            },
+          ],
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    myOsClient.getCredentials.mockResolvedValue({
+      apiKey: 'key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.local',
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'customer-action:event-4:0',
+        },
+        body: {
+          kind: 'submitInput',
+          input: {
+            actionLabel: 'I have a concern',
+          },
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(409);
+    expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(contractRepository.saveContract).not.toHaveBeenCalled();
+  });
+
+  it('rejects submitInput when payload type does not match schema', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      pendingActions: [
+        {
+          actionId: 'customer-action:event-5:0',
+          type: 'customerActionInput',
+          status: 'pending',
+          title: 'Milestone concern',
+          message: 'Share your concern.',
+          actions: [
+            {
+              label: 'I have a concern',
+              variant: 'secondary',
+              inputSchema: { type: 'Text' },
+              inputRequired: true,
+            },
+          ],
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    myOsClient.getCredentials.mockResolvedValue({
+      apiKey: 'key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.local',
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'customer-action:event-5:0',
+        },
+        body: {
+          kind: 'submitInput',
+          input: {
+            actionLabel: 'I have a concern',
+            value: 123,
+          },
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(409);
+    expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(contractRepository.saveContract).not.toHaveBeenCalled();
+  });
+
+  it('accepts submitInput when payload matches Boolean schema', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      pendingActions: [
+        {
+          actionId: 'customer-action:event-6:0',
+          type: 'customerActionInput',
+          status: 'pending',
+          title: 'Boolean confirmation',
+          message: 'Please confirm with a boolean input.',
+          actions: [
+            {
+              label: 'Confirm',
+              variant: 'primary',
+              inputSchema: { type: 'Boolean' },
+              inputRequired: true,
+            },
+          ],
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    myOsClient.getCredentials.mockResolvedValue({
+      apiKey: 'key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.local',
+    });
+    myOsClient.runDocumentOperation.mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {},
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'customer-action:event-6:0',
+        },
+        body: {
+          kind: 'submitInput',
+          input: {
+            actionLabel: 'Confirm',
+            value: true,
+          },
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(200);
+    expect(contractRepository.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingActions: expect.arrayContaining([
+          expect.objectContaining({
+            actionId: 'customer-action:event-6:0',
+            decisionPayload: expect.objectContaining({
+              actionLabel: 'Confirm',
+              input: true,
+            }),
+          }),
+        ]),
+      })
+    );
+  });
+
+  it('rejects submitInput when payload is not an Integer for Integer schema', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      pendingActions: [
+        {
+          actionId: 'customer-action:event-7:0',
+          type: 'customerActionInput',
+          status: 'pending',
+          title: 'Integer confirmation',
+          message: 'Provide integer input.',
+          actions: [
+            {
+              label: 'Provide integer',
+              variant: 'secondary',
+              inputSchema: { type: 'Integer' },
+              inputRequired: true,
+            },
+          ],
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    myOsClient.getCredentials.mockResolvedValue({
+      apiKey: 'key',
+      accountId: 'bank-account',
+      baseUrl: 'https://myos.local',
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'customer-action:event-7:0',
+        },
+        body: {
+          kind: 'submitInput',
+          input: {
+            actionLabel: 'Provide integer',
+            value: 10.5,
+          },
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(409);
+    expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+    expect(contractRepository.saveContract).not.toHaveBeenCalled();
   });
 });

@@ -573,14 +573,72 @@ const PaymentMandateBootstrapContractPendingActionDto = z.object({
   decidedAt: z.string().datetime({ offset: true }).optional(),
 });
 
+const CustomerActionVariantDto = z.enum(['primary', 'secondary', 'reject']);
+
+const CustomerActionOptionDto = z.object({
+  label: z.string(),
+  variant: CustomerActionVariantDto.optional(),
+  inputSchema: z.unknown().optional(),
+  inputRequired: z.boolean().optional(),
+  inputTitle: z.string().optional(),
+  inputPlaceholder: z.string().optional(),
+});
+
+const CustomerActionDecisionPayloadDto = z.object({
+  actionLabel: z.string().optional(),
+  input: z.unknown().optional(),
+});
+
+const CustomerActionOptionsContractPendingActionDto = z.object({
+  actionId: z.string(),
+  type: z.literal('customerActionOptions'),
+  status: z.enum(['pending', 'accepted', 'rejected']),
+  title: z.string(),
+  message: z.string(),
+  actions: z.array(CustomerActionOptionDto),
+  requestId: z.string().optional(),
+  decisionPayload: CustomerActionDecisionPayloadDto.optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  decidedAt: z.string().datetime({ offset: true }).optional(),
+});
+
+const CustomerActionInputContractPendingActionDto = z.object({
+  actionId: z.string(),
+  type: z.literal('customerActionInput'),
+  status: z.enum(['pending', 'accepted', 'rejected']),
+  title: z.string(),
+  message: z.string(),
+  actions: z.array(CustomerActionOptionDto),
+  requestId: z.string().optional(),
+  decisionPayload: CustomerActionDecisionPayloadDto.optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  decidedAt: z.string().datetime({ offset: true }).optional(),
+});
+
 export const ContractPendingActionDto = z.discriminatedUnion('type', [
   MonitoringContractPendingActionDto,
   PaymentMandateBootstrapContractPendingActionDto,
+  CustomerActionOptionsContractPendingActionDto,
+  CustomerActionInputContractPendingActionDto,
 ]);
 
-export const ContractPendingActionDecisionRequestDto = z.object({
-  decision: z.enum(['accepted', 'rejected']),
-});
+export const ContractPendingActionDecisionRequestDto = z.discriminatedUnion(
+  'kind',
+  [
+    z.object({
+      kind: z.literal('approveReject'),
+      input: z.enum(['accepted', 'rejected']),
+    }),
+    z.object({
+      kind: z.literal('selectOption'),
+      input: z.string(),
+    }),
+    z.object({
+      kind: z.literal('submitInput'),
+      input: z.unknown(),
+    }),
+  ]
+);
 
 export const ContractDetailsDto = z.object({
   contractId: z.string(),

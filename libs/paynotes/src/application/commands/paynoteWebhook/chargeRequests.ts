@@ -767,7 +767,10 @@ const resolveLocalPaymentMandateFromPendingActions = async (input: {
     return payload?.paymentMandateDocumentId === input.mandateDocumentId;
   });
 
-  if (!matchedAction) {
+  if (
+    !matchedAction ||
+    matchedAction.type !== PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE
+  ) {
     return null;
   }
 

@@ -4,6 +4,7 @@ import {
   CAPTURE_IMMEDIATELY_EVENT_NAME,
   CAPTURE_LOCK_REQUESTED_EVENT_NAME,
   CAPTURE_UNLOCK_REQUESTED_EVENT_NAME,
+  CUSTOMER_ACTION_REQUESTED_EVENT_NAME,
   DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME,
   LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME,
   LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME,
@@ -45,12 +46,17 @@ const MANDATE_RESPONSE_EVENT_TYPES = new Set<string>([
   MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME,
 ]);
 
+const CUSTOMER_ACTION_EVENT_TYPES = new Set<string>([
+  CUSTOMER_ACTION_REQUESTED_EVENT_NAME,
+]);
+
 export type PayNoteEventDispatchDecision =
   | 'capture-request'
   | 'transfer'
   | 'charge-request'
   | 'mandate-response'
   | 'monitoring-request'
+  | 'customer-action-request'
   | 'document-bootstrap-requested'
   | 'unsupported';
 
@@ -111,6 +117,14 @@ export const classifyPayNoteEvent = (
     };
   }
 
+  if (eventType && CUSTOMER_ACTION_EVENT_TYPES.has(eventType)) {
+    return {
+      event,
+      eventType,
+      decision: 'customer-action-request',
+    };
+  }
+
   if (eventType === DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME) {
     return {
       event,
@@ -141,6 +155,11 @@ export const dispatchPayNoteEvents = (input: {
     eventType?: string;
     eventIndex: number;
   }>;
+  customerActionRequestEvents: Array<{
+    event: WebhookEmittedEvent;
+    eventType?: string;
+    eventIndex: number;
+  }>;
 } => {
   const { events, eventId, payNoteDocumentId, logs } = input;
 
@@ -149,6 +168,11 @@ export const dispatchPayNoteEvents = (input: {
   const mandateResponseEvents: DispatchedTransferEvent[] = [];
   const transferEvents: DispatchedTransferEvent[] = [];
   const monitoringRequestEvents: Array<{
+    event: WebhookEmittedEvent;
+    eventType?: string;
+    eventIndex: number;
+  }> = [];
+  const customerActionRequestEvents: Array<{
     event: WebhookEmittedEvent;
     eventType?: string;
     eventIndex: number;
@@ -206,6 +230,15 @@ export const dispatchPayNoteEvents = (input: {
       continue;
     }
 
+    if (classified.decision === 'customer-action-request') {
+      customerActionRequestEvents.push({
+        event: classified.event,
+        eventType: classified.eventType,
+        eventIndex,
+      });
+      continue;
+    }
+
     if (classified.decision === 'document-bootstrap-requested') {
       logs.push({
         level: 'info',
@@ -239,5 +272,6 @@ export const dispatchPayNoteEvents = (input: {
     mandateResponseEvents,
     transferEvents,
     monitoringRequestEvents,
+    customerActionRequestEvents,
   };
 };

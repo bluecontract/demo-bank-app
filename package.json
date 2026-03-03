@@ -48,7 +48,7 @@
     "@aws-sdk/client-ssm": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
     "@blue-labs/document-processor": "3.5.0",
-    "@blue-repository/types": "^0.16.0",
+    "@blue-repository/types": "^0.18.0",
     "@demo-bank-app/shared-bank-api-client": "*",
     "@demo-bank-app/shared-bank-api-contract": "*",
     "@demo-bank-app/shared-config": "*",

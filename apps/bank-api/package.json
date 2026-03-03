@@ -26,7 +26,7 @@
     "@aws-sdk/lib-dynamodb": "^3.840.0",
     "@blue-labs/document-processor": "3.5.0",
     "@blue-labs/language": "3.5.0",
-    "@blue-repository/types": "^0.16.0",
+    "@blue-repository/types": "^0.18.0",
     "@demo-bank-app/auth": "*",
     "@demo-bank-app/banking": "*",
     "@demo-bank-app/contracts": "*",
