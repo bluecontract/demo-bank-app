@@ -1,6 +1,5 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import OpenAI from 'openai';
-import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import {
   bankApiContract,
@@ -32,6 +31,10 @@ import {
   summaryBlue,
   toBlueNode,
 } from '../contracts/summaryUtils';
+import {
+  runStructuredSummaryWithMerchantLookup,
+  type MerchantDirectoryLookupRepository,
+} from '../contracts/summary/merchantNameToolCalling';
 
 const DEFAULT_MODEL = 'gpt-5';
 const SUMMARY_TIMEOUT_MS = Number(
@@ -295,6 +298,7 @@ const generateOrLoadProposalSummary = async (input: {
   record: PayNoteDeliveryRecord;
   payNoteDocument: Record<string, unknown>;
   force: boolean;
+  merchantDirectoryRepository?: MerchantDirectoryLookupRepository;
   getOpenAiApiKey: () => Promise<string>;
   payNoteDeliveryRepository: {
     updateDeliverySummary: (input: {
@@ -397,29 +401,21 @@ const generateOrLoadProposalSummary = async (input: {
   });
 
   try {
-    const response = await openai.responses.parse(
-      {
-        model,
-        reasoning: { effort: 'minimal' },
-        input: [
-          {
-            role: 'system',
-            content: [{ type: 'input_text', text: prompt }],
-          },
-          {
-            role: 'user',
-            content: [{ type: 'input_text', text: payload }],
-          },
-        ],
-        text: {
-          format: zodTextFormat(ContractDocumentSummaryDto, 'proposal_summary'),
-        },
+    const response = await runStructuredSummaryWithMerchantLookup({
+      client: openai,
+      model,
+      systemPrompt: prompt,
+      facts,
+      schema: ContractDocumentSummaryDto,
+      schemaName: 'proposal_summary',
+      timeoutMs: SUMMARY_TIMEOUT,
+      merchantDirectoryRepository: input.merchantDirectoryRepository,
+      logger: input.logger,
+      logContext: {
+        deliveryId: record.deliveryId,
+        sessionId: record.deliverySessionId,
       },
-      {
-        timeout: SUMMARY_TIMEOUT,
-        maxRetries: 0,
-      }
-    );
+    });
 
     const summary = parseSummary(response);
     const now = new Date().toISOString();
@@ -487,8 +483,12 @@ export const generatePayNoteDeliverySummaryHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { payNoteDeliveryRepository, logger, getOpenAiApiKey } =
-    await getDependencies();
+  const {
+    payNoteDeliveryRepository,
+    logger,
+    getOpenAiApiKey,
+    merchantDirectoryRepository,
+  } = await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const { sessionId } = request.params;
   const force = Boolean(request.body?.force);
@@ -575,6 +575,7 @@ export const generatePayNoteDeliverySummaryHandler = async (
       record,
       payNoteDocument,
       force,
+      merchantDirectoryRepository,
       getOpenAiApiKey,
       payNoteDeliveryRepository,
       logger,
@@ -617,6 +618,7 @@ export const generatePayNoteDeliverySummaryHandler = async (
 export const generatePayNoteDeliverySummaryForSessionId = async (input: {
   sessionId: string;
   force: boolean;
+  merchantDirectoryRepository?: MerchantDirectoryLookupRepository;
   payNoteDeliveryRepository: {
     getDeliveryBySessionId: (
       sessionId: string
@@ -677,6 +679,7 @@ export const generatePayNoteDeliverySummaryForSessionId = async (input: {
       record,
       payNoteDocument,
       force,
+      merchantDirectoryRepository: input.merchantDirectoryRepository,
       getOpenAiApiKey,
       payNoteDeliveryRepository,
       logger,

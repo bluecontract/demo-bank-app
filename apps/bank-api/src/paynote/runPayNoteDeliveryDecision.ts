@@ -10,6 +10,7 @@ type DecisionDeps = Pick<
   PaynoteDependencies,
   | 'myOsClient'
   | 'payNoteDeliveryRepository'
+  | 'merchantDirectoryRepository'
   | 'contractRepository'
   | 'logger'
   | 'getOpenAiApiKey'
@@ -154,6 +155,7 @@ export const runPayNoteDeliveryDecision = async (input: {
       await generatePayNoteDeliverySummaryForSessionId({
         sessionId: operationSessionId,
         force: false,
+        merchantDirectoryRepository: deps.merchantDirectoryRepository,
         payNoteDeliveryRepository: deps.payNoteDeliveryRepository,
         getOpenAiApiKey: deps.getOpenAiApiKey,
         logger: deps.logger,

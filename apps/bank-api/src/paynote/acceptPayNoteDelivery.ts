@@ -18,6 +18,7 @@ export const acceptPayNoteDeliveryHandler = async (
     payNoteDeliveryRepository,
     myOsClient,
     contractRepository,
+    merchantDirectoryRepository,
     logger,
     getOpenAiApiKey,
   } = await getDependencies();
@@ -77,6 +78,7 @@ export const acceptPayNoteDeliveryHandler = async (
     deps: {
       myOsClient,
       payNoteDeliveryRepository,
+      merchantDirectoryRepository,
       contractRepository,
       logger,
       getOpenAiApiKey,

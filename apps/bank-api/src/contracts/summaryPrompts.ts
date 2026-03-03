@@ -33,6 +33,14 @@ Input format:
 - Aside from type references (type/itemType/keyType/valueType), the input does not contain Blue node reference stubs of the shape \`{ "blueId": "..." }\`.
 - Exception: timeline entries may include \`prevEntry: { "blueId": "..." }\`, which is an opaque linkage id. Do not interpret it.`;
 
+const MERCHANT_TOOLING = `Merchant name resolution:
+- Tool available: \`resolve_merchant_names\`.
+- Input: \`{ "merchantIds": ["id-1", "id-2"] }\`.
+- Output: \`{ "merchantNamesById": { "id-1": "Name", "id-2": null }, "unresolvedMerchantIds": ["id-2"] }\`.
+- If merchant IDs appear in facts or draft wording, call this tool before finalizing the summary.
+- In customer-facing text, prefer merchant names. Do not show raw merchant IDs.
+- If a merchant name cannot be resolved, use a plain fallback like "specified merchant".`;
+
 const CONTRACT_TASK = `Your task:
 - Write a short, human headline describing the most recent change or status update (the "last change"). It should read like a notification update.
 - The "last change" MUST be anchored to \`transition.triggerEvent\` when provided. Use the current document to explain its effect, but do not pick a different event as the latest change.
@@ -118,7 +126,7 @@ const PROPOSAL_OUTPUT = `Output guidance (map to schema fields):
 ${OUTPUT_SHARED}`;
 
 const buildPrompt = (task: string, output: string) =>
-  [BASE_INTRO, task, STYLE, output].join('\n\n');
+  [BASE_INTRO, MERCHANT_TOOLING, task, STYLE, output].join('\n\n');
 
 export const buildContractSummaryPrompt = () =>
   buildPrompt(CONTRACT_TASK, CONTRACT_OUTPUT);

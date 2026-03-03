@@ -169,6 +169,7 @@ export const handleSummaryJob = async (
     contractRepository,
     summaryInputStore,
     payNoteDeliveryRepository,
+    merchantDirectoryRepository,
     getOpenAiApiKey,
   } = await getDependencies();
 
@@ -249,6 +250,7 @@ export const handleSummaryJob = async (
         contract: contractForSummary,
         force: Boolean(force),
         historyEventId: contractSummarySnapshot.eventId,
+        merchantDirectoryRepository,
         contractRepository,
         getOpenAiApiKey,
         logger,
@@ -259,6 +261,7 @@ export const handleSummaryJob = async (
     await generatePayNoteDeliverySummaryForSessionId({
       sessionId: event.sessionId,
       force: Boolean(force),
+      merchantDirectoryRepository,
       payNoteDeliveryRepository,
       getOpenAiApiKey,
       logger,

@@ -1,6 +1,5 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import OpenAI from 'openai';
-import { zodTextFormat } from 'openai/helpers/zod';
 import { z } from 'zod';
 import {
   bankApiContract,
@@ -23,6 +22,10 @@ import {
   isOpenAiContextLimitError,
 } from './summaryUtils';
 import { buildContractSummaryFacts } from './summary/buildFacts';
+import {
+  runStructuredSummaryWithMerchantLookup,
+  type MerchantDirectoryLookupRepository,
+} from './summary/merchantNameToolCalling';
 import {
   buildMockContractSummary,
   getPayNoteSummaryMockConfig,
@@ -147,6 +150,7 @@ const generateOrLoadContractSummary = async (input: {
   contract: ContractRecord;
   force: boolean;
   historyEventId?: string;
+  merchantDirectoryRepository?: MerchantDirectoryLookupRepository;
   contractRepository: Pick<
     ContractRepository,
     'updateContractSummary' | 'addContractHistoryEntry' | 'listContractHistory'
@@ -300,37 +304,21 @@ const generateOrLoadContractSummary = async (input: {
       payload,
     });
 
-    const response = await client.responses.parse(
-      {
-        model,
-        reasoning: { effort: 'minimal' },
-        input: [
-          {
-            role: 'system',
-            content: [{ type: 'input_text', text: SYSTEM_PROMPT }],
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'input_text',
-                text: payload,
-              },
-            ],
-          },
-        ],
-        text: {
-          format: zodTextFormat(
-            ContractDocumentSummaryDto,
-            'ContractDocumentSummary'
-          ),
-        },
+    const response = await runStructuredSummaryWithMerchantLookup({
+      client,
+      model,
+      systemPrompt: SYSTEM_PROMPT,
+      facts,
+      schema: ContractDocumentSummaryDto,
+      schemaName: 'ContractDocumentSummary',
+      timeoutMs: SUMMARY_TIMEOUT,
+      merchantDirectoryRepository: input.merchantDirectoryRepository,
+      logger: input.logger,
+      logContext: {
+        contractId: contract.contractId,
+        sessionId: contract.sessionId,
       },
-      {
-        timeout: SUMMARY_TIMEOUT,
-        maxRetries: 0,
-      }
-    );
+    });
 
     const summary = parseSummary(response);
     const now = new Date().toISOString();
@@ -446,6 +434,7 @@ const generateOrLoadContractSummary = async (input: {
 
 export const prefetchContractSummaryForSessionId = async (input: {
   sessionId: string;
+  merchantDirectoryRepository?: MerchantDirectoryLookupRepository;
   contractRepository: Pick<
     ContractRepository,
     | 'getContractBySessionId'
@@ -478,6 +467,7 @@ export const prefetchContractSummaryForSessionId = async (input: {
     await generateOrLoadContractSummary({
       contract,
       force: false,
+      merchantDirectoryRepository: input.merchantDirectoryRepository,
       contractRepository: input.contractRepository,
       getOpenAiApiKey: input.getOpenAiApiKey,
       logger: input.logger,
@@ -502,8 +492,12 @@ export const generateContractSummaryHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { contractRepository, logger, getOpenAiApiKey } =
-    await getDependencies();
+  const {
+    contractRepository,
+    logger,
+    getOpenAiApiKey,
+    merchantDirectoryRepository,
+  } = await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const { sessionId } = request.params;
   const force = Boolean(request.body?.force);
@@ -558,6 +552,7 @@ export const generateContractSummaryHandler = async (
     const result = await generateOrLoadContractSummary({
       contract,
       force,
+      merchantDirectoryRepository,
       contractRepository,
       getOpenAiApiKey,
       logger,
@@ -599,6 +594,7 @@ export const generateContractSummaryForSessionId = async (input: {
   sessionId: string;
   force: boolean;
   historyEventId?: string;
+  merchantDirectoryRepository?: MerchantDirectoryLookupRepository;
   contractRepository: ContractRepository;
   getOpenAiApiKey: () => Promise<string>;
   logger: PowertoolsLogger;
@@ -622,6 +618,7 @@ export const generateContractSummaryForContract = async (input: {
   contract: ContractRecord;
   force: boolean;
   historyEventId?: string;
+  merchantDirectoryRepository?: MerchantDirectoryLookupRepository;
   contractRepository: ContractRepository;
   getOpenAiApiKey: () => Promise<string>;
   logger: PowertoolsLogger;
@@ -642,6 +639,7 @@ export const generateContractSummaryForContract = async (input: {
       contract,
       force,
       historyEventId: input.historyEventId,
+      merchantDirectoryRepository: input.merchantDirectoryRepository,
       contractRepository,
       getOpenAiApiKey,
       logger,

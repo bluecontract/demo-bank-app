@@ -18,6 +18,7 @@ export const rejectPayNoteDeliveryHandler = async (
     payNoteDeliveryRepository,
     myOsClient,
     contractRepository,
+    merchantDirectoryRepository,
     logger,
     getOpenAiApiKey,
   } = await getDependencies();
@@ -78,6 +79,7 @@ export const rejectPayNoteDeliveryHandler = async (
     deps: {
       myOsClient,
       payNoteDeliveryRepository,
+      merchantDirectoryRepository,
       contractRepository,
       logger,
       getOpenAiApiKey,

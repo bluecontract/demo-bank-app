@@ -81,6 +81,9 @@ describe('generateContractSummaryHandler', () => {
     addContractHistoryEntry: vi.fn(),
     listContractHistory: vi.fn(),
   };
+  const merchantDirectoryRepository = {
+    getMerchantsByIds: vi.fn(),
+  };
 
   beforeEach(() => {
     hoistedOpenAI.responsesParseMock.mockReset();
@@ -90,9 +93,11 @@ describe('generateContractSummaryHandler', () => {
     contractRepository.updateContractSummary.mockReset();
     contractRepository.addContractHistoryEntry.mockReset();
     contractRepository.listContractHistory.mockReset();
+    merchantDirectoryRepository.getMerchantsByIds.mockReset();
     logger.info.mockReset();
     logger.error.mockReset();
     getOpenAiApiKey.mockClear();
+    merchantDirectoryRepository.getMerchantsByIds.mockResolvedValue([]);
 
     contractRepository.listContractHistory.mockResolvedValue([]);
 
@@ -100,6 +105,7 @@ describe('generateContractSummaryHandler', () => {
       logger,
       contractRepository,
       getOpenAiApiKey,
+      merchantDirectoryRepository,
     });
     hoistedDeps.extractAuthInfoMock.mockResolvedValue({ userId: 'user-123' });
   });
@@ -619,6 +625,83 @@ describe('generateContractSummaryHandler', () => {
       | Record<string, unknown>
       | undefined;
     expect(payNoteSummary?.amountDisplay).toBe('$5.00');
+  });
+
+  it('resolves merchant IDs via tool calling when requested by the model', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'Voucher',
+      sessionId: 'sess-1',
+      merchantId: 'merchant-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Voucher contract',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+
+    merchantDirectoryRepository.getMerchantsByIds.mockResolvedValueOnce([
+      {
+        merchantId: 'merchant-1',
+        name: 'Demo Restaurant',
+      },
+    ]);
+
+    hoistedOpenAI.responsesParseMock
+      .mockResolvedValueOnce({
+        id: 'resp-tool-1',
+        output: [
+          {
+            type: 'function_call',
+            name: 'resolve_merchant_names',
+            call_id: 'call-1',
+            arguments: '{"merchantIds":["merchant-1"]}',
+            parsed_arguments: {
+              merchantIds: ['merchant-1'],
+            },
+          },
+        ],
+        output_parsed: null,
+      })
+      .mockResolvedValueOnce({
+        id: 'resp-tool-2',
+        output_parsed: summaryFixture,
+        output: [],
+      });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(2);
+    expect(merchantDirectoryRepository.getMerchantsByIds).toHaveBeenCalledWith([
+      'merchant-1',
+    ]);
+
+    const secondCallRequest = hoistedOpenAI.responsesParseMock.mock
+      .calls[1]?.[0] as
+      | {
+          previous_response_id?: string;
+          input?: Array<{
+            type?: string;
+            output?: string;
+            call_id?: string;
+          }>;
+        }
+      | undefined;
+    expect(secondCallRequest?.previous_response_id).toBe('resp-tool-1');
+    expect(secondCallRequest?.input?.[0]?.type).toBe('function_call_output');
+    expect(secondCallRequest?.input?.[0]?.call_id).toBe('call-1');
+    expect(secondCallRequest?.input?.[0]?.output).toContain('Demo Restaurant');
   });
 
   it('returns 400 when type pack is missing required type definitions', async () => {
