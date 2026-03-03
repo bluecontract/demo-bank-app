@@ -35,6 +35,7 @@ export type ContractFactsV2 = {
     typeBlueId: string;
     sessionId?: string;
     documentId?: string;
+    merchantId?: string;
     status?: string;
     statusUpdatedAt?: string;
     statusTimestamps?: Record<string, string>;
@@ -79,6 +80,7 @@ type BuildFactsInput = {
     customerChannelKey?: string;
     sessionId?: string;
     documentId?: string;
+    merchantId?: string;
     status?: string;
     statusUpdatedAt?: string;
     statusTimestamps?: Record<string, string>;
@@ -477,6 +479,7 @@ export const buildContractSummaryFacts = (
         typeBlueId: input.contract.typeBlueId,
         sessionId: input.contract.sessionId,
         documentId: input.contract.documentId,
+        merchantId: input.contract.merchantId,
         status: input.contract.status,
         statusUpdatedAt: input.contract.statusUpdatedAt,
         statusTimestamps: input.contract.statusTimestamps,

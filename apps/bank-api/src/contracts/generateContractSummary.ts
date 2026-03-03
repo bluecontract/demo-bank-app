@@ -27,6 +27,10 @@ import {
   type MerchantDirectoryLookupRepository,
 } from './summary/merchantNameToolCalling';
 import {
+  collectMerchantIdsFromFacts,
+  sanitizeMerchantIdsInSummary,
+} from './summary/merchantIdSanitization';
+import {
   buildMockContractSummary,
   getPayNoteSummaryMockConfig,
 } from './payNoteSummaryMock';
@@ -238,6 +242,7 @@ const generateOrLoadContractSummary = async (input: {
           displayName: contract.displayName,
           sessionId: contract.sessionId,
           documentId: contract.documentId,
+          merchantId: contract.merchantId,
           status: contract.status,
           statusUpdatedAt: contract.statusUpdatedAt,
           statusTimestamps: contract.statusTimestamps,
@@ -320,7 +325,10 @@ const generateOrLoadContractSummary = async (input: {
       },
     });
 
-    const summary = parseSummary(response);
+    const summary = sanitizeMerchantIdsInSummary(
+      parseSummary(response),
+      collectMerchantIdsFromFacts(facts)
+    );
     const now = new Date().toISOString();
 
     const summaryPreview = resolveSummaryPreview({ summary });

@@ -704,6 +704,50 @@ describe('generateContractSummaryHandler', () => {
     expect(secondCallRequest?.input?.[0]?.output).toContain('Demo Restaurant');
   });
 
+  it('replaces raw merchant IDs in final summary text with fallback label', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'Voucher',
+      sessionId: 'sess-1',
+      merchantId: 'merchant-raw-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Voucher contract',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: {
+        ...summaryFixture,
+        story: {
+          ...summaryFixture.story,
+          bullets: ['Benefit at merchant merchant-raw-1'],
+        },
+      },
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body.summary.story.bullets[0]).toContain(
+      'specified merchant'
+    );
+    expect(result.body.summary.story.bullets[0]).not.toContain(
+      'merchant-raw-1'
+    );
+  });
+
   it('returns 400 when type pack is missing required type definitions', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',

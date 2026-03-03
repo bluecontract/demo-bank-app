@@ -35,6 +35,10 @@ import {
   runStructuredSummaryWithMerchantLookup,
   type MerchantDirectoryLookupRepository,
 } from '../contracts/summary/merchantNameToolCalling';
+import {
+  collectMerchantIdsFromFacts,
+  sanitizeMerchantIdsInSummary,
+} from '../contracts/summary/merchantIdSanitization';
 
 const DEFAULT_MODEL = 'gpt-5';
 const SUMMARY_TIMEOUT_MS = Number(
@@ -417,7 +421,10 @@ const generateOrLoadProposalSummary = async (input: {
       },
     });
 
-    const summary = parseSummary(response);
+    const summary = sanitizeMerchantIdsInSummary(
+      parseSummary(response),
+      collectMerchantIdsFromFacts(facts)
+    );
     const now = new Date().toISOString();
     const sourceUpdatedAt = record.deliveryUpdatedAt ?? record.updatedAt;
 

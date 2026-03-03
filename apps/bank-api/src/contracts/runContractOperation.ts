@@ -26,6 +26,7 @@ export const runContractOperationHandler = async (
 
   const {
     payNoteDeliveryRepository,
+    merchantDirectoryRepository,
     contractRepository,
     myOsClient,
     logger,
@@ -167,6 +168,7 @@ export const runContractOperationHandler = async (
     deps: {
       myOsClient,
       payNoteDeliveryRepository,
+      merchantDirectoryRepository,
       contractRepository,
       logger,
       getOpenAiApiKey,
