@@ -369,7 +369,7 @@ export function TransactionItem({
         </div>
 
         <div
-          className={`hidden sm:flex h-full items-center justify-end text-right text-2xl font-[800] leading-8 font-[var(--font-title)] ${visualState.amountClass}`}
+          className={`hidden sm:flex h-full items-center justify-end text-right text-[20px] font-[800] leading-6 font-[family-name:var(--font-title)] ${visualState.amountClass}`}
         >
           {visualState.amountText}
         </div>
