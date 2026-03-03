@@ -12,6 +12,12 @@ describe('summary prompts', () => {
     expect(prompt).toContain('story.overview[1...]');
     expect(prompt).toContain('Do not force bullet points');
     expect(prompt).toContain('non-technical bank customer');
+    expect(prompt).toContain(
+      'plain readiness wording like "Contract is ready."'
+    );
+    expect(prompt).toContain(
+      'Avoid setup-only wording that does not help customers'
+    );
     expect(prompt).toContain('"reserve request" -> prefer');
     expect(prompt).toContain('"payment mandate" -> prefer');
     expect(prompt).toContain('outcome-first');

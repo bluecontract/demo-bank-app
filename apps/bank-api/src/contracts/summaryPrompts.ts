@@ -46,6 +46,7 @@ const CONTRACT_TASK = `Your task:
 - Write a short, human headline describing the most recent change or status update (the "last change"). It should read like a notification update.
 - The "last change" MUST be anchored to \`transition.triggerEvent\` when provided. Use the current document to explain its effect, but do not pick a different event as the latest change.
 - If the trigger event represents a concrete action (e.g., an operation call) with a specific value, describe that change explicitly (e.g., "Counter increased by 9") instead of a generic "status update recorded".
+- If the trigger event is only lifecycle/initialization setup (for example document processing initiated) and there is no clear customer-visible business action yet, use plain readiness wording like "Contract is ready." for \`story.headline\`, \`listPreview\`, and \`lastChange.short\`.
 - For voucher/cashback contracts, keep wording outcome-first: "voucher is ready", "bank will report card payments", "cashback is paid from reserved amount".
 - In \`story.overview\`, build a two-layer explanation of the contract:
   - \`story.overview[0]\`: a short catch-up sentence saying what this contract is about in real-world terms.
@@ -84,6 +85,7 @@ const STYLE = `Writing style (for non-technical end users):
 - The goal is to explain the contract in plain language (think: a bank customer, not an engineer).
 - Write as if the reader is a non-technical bank customer who needs a fast recap and a clear explanation.
 - Do NOT mention internal implementation terms like "event", "emitted", "triggered", "workflow", "channel", "payload", "schema", "blueId", "node", "contracts map", "JSON", or "YAML".
+- Avoid setup-only wording that does not help customers, such as "participants set up" or "participants initialized".
 - Also avoid domain-jargon phrases that sound internal/technical to customers:
   - "reserve request" -> prefer "voucher setup" or "voucher is ready"
   - "payment mandate" -> prefer "payment approval"
