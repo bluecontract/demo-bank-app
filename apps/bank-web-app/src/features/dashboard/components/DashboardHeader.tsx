@@ -14,10 +14,7 @@ export function DashboardHeader({
   'data-testid': testId,
 }: DashboardHeaderProps) {
   const { signOut } = useAuth();
-  const resolvedDescription =
-    description === undefined
-      ? 'Your personal overview for accounts, cards, and activity.'
-      : description;
+  const resolvedDescription = description ?? null;
   const shouldRenderDescription = resolvedDescription !== null;
 
   return (
@@ -27,7 +24,7 @@ export function DashboardHeader({
     >
       <div className="min-w-0">
         <h1 className="text-[32px] font-extrabold leading-10 text-[color:var(--color-ink)]">
-          {title ?? 'Welcome back'}
+          {title ?? 'Overview'}
         </h1>
         {shouldRenderDescription && (
           <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted)]">

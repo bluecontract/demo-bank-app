@@ -1063,7 +1063,7 @@ export function ContractDetailsPage() {
               >
                 <summary className={sectionSummaryClassName}>
                   {renderSectionChevron(expandedSections.linkedTransactions)}
-                  <span>Linked Transactions</span>
+                  <span>Linked transactions</span>
                 </summary>
                 <div className={sectionBodyClassName}>
                   <div className="space-y-2">
@@ -1092,7 +1092,7 @@ export function ContractDetailsPage() {
               >
                 <summary className={sectionSummaryClassName}>
                   {renderSectionChevron(expandedSections.linkedContracts)}
-                  <span>Linked Contracts</span>
+                  <span>Linked contracts</span>
                 </summary>
                 <div className={`${sectionBodyClassName} space-y-3`}>
                   {filteredRelatedContracts.map(contractItem => {

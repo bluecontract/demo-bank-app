@@ -41,18 +41,6 @@ describe('AccountCard', () => {
     expect(screen.getByText('Business Account')).toBeInTheDocument();
   });
 
-  it('calls onDetailsClick when Details button is clicked', () => {
-    const onDetailsClick = vi.fn();
-    render(
-      <AccountCard account={mockAccount} onDetailsClick={onDetailsClick} />
-    );
-
-    const detailsButton = screen.getByRole('button', { name: 'Details' });
-    fireEvent.click(detailsButton);
-
-    expect(onDetailsClick).toHaveBeenCalledWith(mockAccount.accountId);
-  });
-
   it('calls onSelect when card is clicked', () => {
     const onSelect = vi.fn();
     render(
@@ -71,13 +59,13 @@ describe('AccountCard', () => {
     expect(onSelect).toHaveBeenCalledWith(mockAccount.accountId);
   });
 
-  it('calls onTransferClick when Transfer button is clicked', () => {
+  it('calls onTransferClick when New transfer button is clicked', () => {
     const onTransferClick = vi.fn();
     render(
       <AccountCard account={mockAccount} onTransferClick={onTransferClick} />
     );
 
-    const transferButton = screen.getByRole('button', { name: 'Transfer' });
+    const transferButton = screen.getByRole('button', { name: 'New transfer' });
     fireEvent.click(transferButton);
 
     expect(onTransferClick).toHaveBeenCalledWith(mockAccount.accountId);
@@ -94,11 +82,16 @@ describe('AccountCard', () => {
   });
 
   it('renders action buttons for deposit accounts', () => {
-    render(<AccountCard account={mockAccount} onFundClick={vi.fn()} />);
+    render(
+      <AccountCard
+        account={mockAccount}
+        onFundClick={vi.fn()}
+        onTransferClick={vi.fn()}
+      />
+    );
 
-    expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'Transfer' })
+      screen.getByRole('button', { name: 'New transfer' })
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Fund' })).toBeInTheDocument();
   });
@@ -121,10 +114,7 @@ describe('AccountCard', () => {
     render(<AccountCard account={mockAccount} showActions={false} />);
 
     expect(
-      screen.queryByRole('button', { name: 'Details' })
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Transfer' })
+      screen.queryByRole('button', { name: 'New transfer' })
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Fund' })
@@ -157,15 +147,12 @@ describe('AccountCard', () => {
     );
   });
 
-  it('does not call handlers when not provided', () => {
+  it('does not render transfer action when transfer handler is not provided', () => {
     render(<AccountCard account={mockAccount} />);
 
-    const detailsButton = screen.getByRole('button', { name: 'Details' });
-    const transferButton = screen.getByRole('button', { name: 'Transfer' });
-    expect(() => {
-      fireEvent.click(detailsButton);
-      fireEvent.click(transferButton);
-    }).not.toThrow();
+    expect(
+      screen.queryByRole('button', { name: 'New transfer' })
+    ).not.toBeInTheDocument();
   });
 
   it('displays correct currency formatting', () => {

@@ -14,7 +14,6 @@ interface AccountCardProps {
   showActions?: boolean;
   size?: 'default' | 'compact';
   onSelect?: (accountId: string) => void;
-  onDetailsClick?: (accountId: string) => void;
   onTransferClick?: (accountId: string) => void;
   onFundClick?: (accountId: string) => void;
   onEditCreditLimitClick?: (accountId: string) => void;
@@ -26,7 +25,6 @@ export function AccountCard({
   showActions = true,
   size = 'default',
   onSelect,
-  onDetailsClick,
   onTransferClick,
   onFundClick,
   onEditCreditLimitClick,
@@ -36,10 +34,6 @@ export function AccountCard({
 
   const handleSelect = () => {
     onSelect?.(account.accountId);
-  };
-
-  const handleDetailsClick = () => {
-    onDetailsClick?.(account.accountId);
   };
 
   const handleTransferClick = () => {
@@ -125,19 +119,8 @@ export function AccountCard({
           </button>
         ) : null}
 
-        {showActions && (
-          <div className="mt-auto flex gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={event => {
-                event.stopPropagation();
-                handleDetailsClick();
-              }}
-              className="flex-1"
-            >
-              Details
-            </Button>
+        {showActions && onTransferClick && (
+          <div className="mt-auto flex">
             <Button
               variant="outline"
               size="sm"
@@ -145,9 +128,9 @@ export function AccountCard({
                 event.stopPropagation();
                 handleTransferClick();
               }}
-              className="flex-1 whitespace-nowrap"
+              className="w-full whitespace-nowrap"
             >
-              Transfer
+              New transfer
             </Button>
           </div>
         )}

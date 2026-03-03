@@ -786,8 +786,8 @@ describe('ContractDetailsPage', () => {
 
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
-    expect(screen.queryByText('Linked Contracts')).not.toBeInTheDocument();
-    expect(screen.queryByText('Linked Transactions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Linked contracts')).not.toBeInTheDocument();
+    expect(screen.queryByText('Linked transactions')).not.toBeInTheDocument();
   });
 
   it('does not show linked proposal items when contract view is active', () => {
@@ -862,7 +862,7 @@ describe('ContractDetailsPage', () => {
     render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
 
     expect(screen.queryByText('More')).not.toBeInTheDocument();
-    const linkedContractsSummary = screen.getByText('Linked Contracts');
+    const linkedContractsSummary = screen.getByText('Linked contracts');
     expect(linkedContractsSummary).toBeInTheDocument();
     fireEvent.click(linkedContractsSummary);
     expect(

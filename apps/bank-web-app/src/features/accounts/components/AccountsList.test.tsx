@@ -76,7 +76,7 @@ describe('AccountsList', () => {
     expect(handleCreateAccount).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle account details click', () => {
+  it('should handle account selection click', () => {
     const handleAccountDetails = vi.fn();
     render(
       <AccountsList
@@ -87,8 +87,10 @@ describe('AccountsList', () => {
       />
     );
 
-    const detailsButton = screen.getAllByText('Details')[0];
-    detailsButton.click();
+    const accountCard = screen.getByRole('button', {
+      name: 'Select Checking Account',
+    });
+    accountCard.click();
 
     expect(handleAccountDetails).toHaveBeenCalledTimes(1);
     expect(handleAccountDetails).toHaveBeenCalledWith(
@@ -107,7 +109,7 @@ describe('AccountsList', () => {
       />
     );
 
-    const transferButton = screen.getAllByText('Transfer')[0];
+    const transferButton = screen.getAllByText('New transfer')[0];
     transferButton.click();
 
     expect(handleTransfer).toHaveBeenCalledTimes(1);
@@ -167,7 +169,9 @@ describe('AccountsList', () => {
     );
 
     // 2 account cards + 1 add account card
-    const detailsButtons = screen.getAllByText('Details');
-    expect(detailsButtons).toHaveLength(2);
+    const accountCards = screen.getAllByRole('button', {
+      name: /Select .* Account/,
+    });
+    expect(accountCards).toHaveLength(2);
   });
 });

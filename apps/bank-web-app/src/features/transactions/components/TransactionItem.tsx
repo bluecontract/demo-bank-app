@@ -28,8 +28,6 @@ const getTransactionTypeDisplay = (
 type VisualState = {
   badgeLabel: string;
   badgeClass: string;
-  icon: string;
-  iconClasses: string;
   title: string;
   timestamp: string;
   subtitleLines: string[];
@@ -63,6 +61,26 @@ const normalizeDescription = (description?: string, merchantName?: string) => {
   return description;
 };
 
+const toTitleCase = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
+
+const getPostedBadgeLabel = (status: string): string => {
+  const normalizedStatus = status.toLowerCase();
+  if (normalizedStatus === 'posted' || normalizedStatus === 'completed') {
+    return 'Charged';
+  }
+  if (normalizedStatus === 'pending') {
+    return 'Pending';
+  }
+  if (normalizedStatus === 'failed') {
+    return 'Failed';
+  }
+  return toTitleCase(status);
+};
+
 const buildVisualState = (item: ActivityItem): VisualState => {
   const hasCardContext = Boolean(
     item.cardLast4 || item.merchantName || item.processorChargeId
@@ -81,10 +99,7 @@ const buildVisualState = (item: ActivityItem): VisualState => {
       : getTransactionTypeDisplay(item.type, item.side);
 
     return {
-      badgeLabel:
-        item.status.toLowerCase() === 'posted'
-          ? 'COMPLETED'
-          : item.status.toUpperCase(),
+      badgeLabel: getPostedBadgeLabel(item.status),
       badgeClass:
         {
           posted: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
@@ -93,10 +108,6 @@ const buildVisualState = (item: ActivityItem): VisualState => {
           failed: 'bg-rose-50 text-rose-700 border border-rose-100',
         }[item.status.toLowerCase()] ??
         'bg-slate-100 text-slate-700 border border-slate-200',
-      icon: isCredit ? '↓' : '↑',
-      iconClasses: isCredit
-        ? 'bg-emerald-50 text-emerald-600'
-        : 'bg-rose-50 text-rose-600',
       title,
       timestamp: item.postedAt,
       subtitleLines: hasCardContext
@@ -141,10 +152,8 @@ const buildVisualState = (item: ActivityItem): VisualState => {
     case 'HOLD_CREATED':
       return {
         ...base,
-        badgeLabel: 'HOLD PLACED',
+        badgeLabel: 'Hold',
         badgeClass: 'bg-amber-50 text-amber-700 border border-amber-100',
-        icon: '⏳',
-        iconClasses: 'bg-amber-50 text-amber-700',
         title: item.merchantName ?? 'Hold Created',
         timestamp: item.createdAt,
         amountClass: 'text-amber-700',
@@ -154,10 +163,8 @@ const buildVisualState = (item: ActivityItem): VisualState => {
     case 'HOLD_CAPTURED':
       return {
         ...base,
-        badgeLabel: 'HOLD CAPTURED',
+        badgeLabel: 'Charged',
         badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
-        icon: '✔',
-        iconClasses: 'bg-emerald-50 text-emerald-700',
         title: item.merchantName ?? 'Hold Captured',
         timestamp: item.capturedAt,
         subtitleLines: item.transactionId
@@ -171,10 +178,8 @@ const buildVisualState = (item: ActivityItem): VisualState => {
     case 'HOLD_RELEASED':
       return {
         ...base,
-        badgeLabel: 'HOLD RELEASED',
+        badgeLabel: 'Released',
         badgeClass: 'bg-sky-50 text-sky-700 border border-sky-100',
-        icon: '↺',
-        iconClasses: 'bg-sky-50 text-sky-700',
         title: item.merchantName ?? 'Hold Released',
         timestamp: item.releasedAt,
         subtitleLines: item.releaseReason
@@ -187,10 +192,8 @@ const buildVisualState = (item: ActivityItem): VisualState => {
     case 'HOLD_FAILED':
       return {
         ...base,
-        badgeLabel: 'HOLD FAILED',
+        badgeLabel: 'Failed',
         badgeClass: 'bg-rose-50 text-rose-700 border border-rose-100',
-        icon: '✖',
-        iconClasses: 'bg-rose-50 text-rose-700',
         title: item.merchantName ?? 'Hold Failed',
         timestamp: item.failedAt,
         subtitleLines: [`Failure: ${item.failureCode}`],

@@ -12,7 +12,6 @@ interface HorizontalAccountsListProps {
   onEditCreditLimit?: (accountId: string) => void;
   isCreatingAccount?: boolean;
   showActions?: boolean;
-  selectOnCardClick?: boolean;
   cardSize?: 'default' | 'compact';
   'data-testid'?: string;
 }
@@ -25,7 +24,6 @@ export function HorizontalAccountsList({
   onEditCreditLimit,
   isCreatingAccount = false,
   showActions = true,
-  selectOnCardClick = false,
   cardSize = 'default',
   'data-testid': testId,
 }: HorizontalAccountsListProps) {
@@ -166,10 +164,7 @@ export function HorizontalAccountsList({
               }
               showActions={showActions}
               size={cardSize}
-              onSelect={selectOnCardClick ? handleAccountSelection : undefined}
-              onDetailsClick={
-                selectOnCardClick ? undefined : handleAccountSelection
-              }
+              onSelect={handleAccountSelection}
               onTransferClick={showActions ? onTransfer : undefined}
               onFundClick={showActions ? onFund : undefined}
               onEditCreditLimitClick={

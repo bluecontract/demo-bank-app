@@ -33,7 +33,7 @@ export function AccountsList({
         <AccountCard
           key={account.accountId}
           account={account}
-          onDetailsClick={onAccountDetails}
+          onSelect={onAccountDetails}
           onTransferClick={onTransfer}
           onFundClick={onFund}
           onEditCreditLimitClick={onEditCreditLimit}

@@ -109,7 +109,6 @@ export function CardsPage() {
           onFund={openFundModal}
           onEditCreditLimit={openCreditLimitModal}
           showActions={false}
-          selectOnCardClick={true}
           cardSize="compact"
         />
 

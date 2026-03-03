@@ -95,33 +95,17 @@ describe('HorizontalAccountsList', () => {
       />
     );
 
-    const transferButtons = screen.getAllByText('Transfer');
+    const transferButtons = screen.getAllByText('New transfer');
     fireEvent.click(transferButtons[0]);
     expect(mockOnTransfer).toHaveBeenCalledWith('1');
   });
 
-  it('should select account when details button is clicked', () => {
+  it('should select account when account card is clicked', () => {
     render(
       <HorizontalAccountsList
         accounts={mockAccounts}
         onCreateAccount={vi.fn()}
         onTransfer={vi.fn()}
-      />
-    );
-
-    const detailsButtons = screen.getAllByText('Details');
-    fireEvent.click(detailsButtons[0]);
-    expect(mockSetSelectedAccount).toHaveBeenCalledWith(mockAccounts[0]);
-  });
-
-  it('should select account when card is clicked in selectOnCardClick mode', () => {
-    render(
-      <HorizontalAccountsList
-        accounts={mockAccounts}
-        onCreateAccount={vi.fn()}
-        onTransfer={vi.fn()}
-        showActions={false}
-        selectOnCardClick={true}
       />
     );
 
@@ -130,7 +114,6 @@ describe('HorizontalAccountsList', () => {
     });
     fireEvent.click(cardButton);
     expect(mockSetSelectedAccount).toHaveBeenCalledWith(mockAccounts[0]);
-    expect(screen.queryByText('Details')).not.toBeInTheDocument();
   });
 
   it('should show selected account with different styling', () => {

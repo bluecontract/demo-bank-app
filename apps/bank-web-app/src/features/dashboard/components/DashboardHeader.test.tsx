@@ -23,15 +23,15 @@ describe('DashboardHeader', () => {
     vi.clearAllMocks();
   });
 
-  it('renders default title and description', () => {
+  it('renders default title without description', () => {
     renderWithRouter(<DashboardHeader userEmail="john.doe@example.com" />);
 
-    expect(screen.getByText('Welcome back')).toBeInTheDocument();
+    expect(screen.getByText('Overview')).toBeInTheDocument();
     expect(
-      screen.getByText(
+      screen.queryByText(
         'Your personal overview for accounts, cards, and activity.'
       )
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(screen.getByText('john.doe@example.com')).toBeInTheDocument();
   });
 

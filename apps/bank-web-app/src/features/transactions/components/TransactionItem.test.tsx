@@ -96,7 +96,7 @@ describe('TransactionItem', () => {
     );
 
     expect(screen.getByText('Incoming')).toBeInTheDocument();
-    expect(screen.getAllByText('COMPLETED').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Charged').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Deposit from employer').length).toBeGreaterThan(
       0
     );
@@ -131,7 +131,7 @@ describe('TransactionItem', () => {
     );
 
     expect(screen.getByText('Hold Created')).toBeInTheDocument();
-    expect(screen.getAllByText('HOLD PLACED').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Hold').length).toBeGreaterThan(0);
     expect(screen.getAllByText('$450').length).toBeGreaterThan(0);
     expect(screen.getAllByText('111 111 1222').length).toBeGreaterThan(0);
 
@@ -143,7 +143,7 @@ describe('TransactionItem', () => {
     render(<TransactionItem item={holdCaptured} onActivitySelect={vi.fn()} />);
 
     expect(screen.getByText('Hold Captured')).toBeInTheDocument();
-    expect(screen.getAllByText('HOLD CAPTURED').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Charged').length).toBeGreaterThan(0);
     expect(screen.getAllByText('222 233 3344').length).toBeGreaterThan(0);
     expect(screen.getAllByText('-$95').length).toBeGreaterThan(0);
   });
@@ -152,7 +152,7 @@ describe('TransactionItem', () => {
     render(<TransactionItem item={holdFailed} onActivitySelect={vi.fn()} />);
 
     expect(screen.getByText('Hold Failed')).toBeInTheDocument();
-    expect(screen.getAllByText('HOLD FAILED').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Failed').length).toBeGreaterThan(0);
     expect(
       screen.getAllByText('Available balance too low').length
     ).toBeGreaterThan(0);
