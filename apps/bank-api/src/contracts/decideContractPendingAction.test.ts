@@ -199,6 +199,109 @@ describe('decideContractPendingActionHandler', () => {
     expect(response.body.error).toBe(ERROR_CODES.VALIDATION_ERROR);
   });
 
+  it('returns 409 when trying to decide a queued action that is not active yet', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      summarySourceEpoch: 4,
+      pendingActions: [
+        {
+          actionId: 'action-1',
+          type: 'customerActionOptions',
+          status: 'pending',
+          title: 'Action 1',
+          message: 'Please decide action 1.',
+          actions: [{ label: 'Approve', variant: 'primary' }],
+          minSummaryEpoch: 4,
+          queueOrder: 4000000,
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+        {
+          actionId: 'action-2',
+          type: 'customerActionOptions',
+          status: 'pending',
+          title: 'Action 2',
+          message: 'Please decide action 2.',
+          actions: [{ label: 'Approve', variant: 'primary' }],
+          minSummaryEpoch: 4,
+          queueOrder: 4000001,
+          createdAt: '2024-01-01T00:00:01.000Z',
+        },
+      ],
+      monitoringSubscriptions: [],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'action-2',
+        },
+        body: {
+          kind: 'selectOption',
+          input: 'Approve',
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe(ERROR_CODES.VALIDATION_ERROR);
+    expect(response.body.message).toContain('action-not-active');
+    expect(myOsClient.getCredentials).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when queue head is still blocked by summary epoch', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'paynote-type',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      summarySourceEpoch: 1,
+      pendingActions: [
+        {
+          actionId: 'action-1',
+          type: 'customerActionOptions',
+          status: 'pending',
+          title: 'Action 1',
+          message: 'Please decide action 1.',
+          actions: [{ label: 'Approve', variant: 'primary' }],
+          minSummaryEpoch: 2,
+          queueOrder: 2000000,
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      monitoringSubscriptions: [],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const response = await decideContractPendingActionHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          actionId: 'action-1',
+        },
+        body: {
+          kind: 'selectOption',
+          input: 'Approve',
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe(ERROR_CODES.VALIDATION_ERROR);
+    expect(response.body.message).toContain('action-not-active');
+    expect(myOsClient.getCredentials).not.toHaveBeenCalled();
+  });
+
   it('accepts payment mandate bootstrap pending action and emits attachment events', async () => {
     contractRepository.getContractBySessionId.mockResolvedValue({
       contractId: 'contract-1',

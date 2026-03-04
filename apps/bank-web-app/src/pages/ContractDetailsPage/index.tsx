@@ -58,7 +58,11 @@ import { Spinner, SpinnerWithText } from '../../ui/Spinner';
 import { formatShortDateTime } from '../../lib/formatDate';
 import { formatStatusLabel } from '../../lib/formatStatusLabel';
 import { blue } from '../../lib/blue';
-import { getSupportedContractByTypeBlueId } from '@demo-bank-app/shared-bank-api-contract';
+import {
+  getSupportedContractByTypeBlueId,
+  resolveCurrentSummaryEpoch,
+  resolveActivePendingAction,
+} from '@demo-bank-app/shared-bank-api-contract';
 import type {
   ContractDetails,
   ContractSummary,
@@ -1090,11 +1094,15 @@ export function ContractDetailsPage() {
     hasLinkedContracts ||
     hasHistory;
   const mockPendingAction = payNoteInitialStateMeta.action;
-  const pendingContractAction =
-    resolvedKind === 'contract'
-      ? contract?.pendingActions?.find(action => action.status === 'pending') ??
-        null
-      : null;
+  const currentSummaryEpoch = resolveCurrentSummaryEpoch(
+    contract?.currentSummaryEpoch
+  );
+  const pendingContractActions =
+    resolvedKind === 'contract' ? contract?.pendingActions ?? [] : [];
+  const pendingContractAction = resolveActivePendingAction({
+    actions: pendingContractActions,
+    currentSummaryEpoch,
+  });
   const shouldShowMockPendingAction =
     resolvedKind !== 'proposal' &&
     Boolean(contract) &&

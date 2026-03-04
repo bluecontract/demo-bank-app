@@ -55,6 +55,7 @@ export type WebhookContext = {
   eventPayload: WebhookEventPayload;
   eventObject?: WebhookEventObject;
   eventType?: string;
+  eventEpoch?: number;
   document: Record<string, unknown>;
   emittedEvents?: WebhookEmittedEvent[];
   events: WebhookEmittedEvent[];

@@ -28,6 +28,8 @@ type ContractPendingActionBase = {
   status: ContractPendingActionStatus;
   title: string;
   requestId?: string;
+  minSummaryEpoch?: number;
+  queueOrder?: number;
   createdAt: string;
   decidedAt?: string;
 };

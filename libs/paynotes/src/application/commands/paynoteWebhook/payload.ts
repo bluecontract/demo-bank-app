@@ -18,6 +18,12 @@ const fetchEventMessages = {
   networkError: 'Unexpected error while downloading PayNote event',
 };
 
+const resolveEventEpoch = (value: unknown): number | undefined => {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
+};
+
 export type WebhookPayloadResolution =
   | { payload: WebhookEventPayload }
   | { result: HandleWebhookEventResult };
@@ -93,12 +99,14 @@ export const resolveWebhookContext = (
   const emittedEvents = Array.isArray(eventObject?.emitted)
     ? eventObject.emitted
     : undefined;
+  const eventEpoch = resolveEventEpoch(eventObject?.epoch);
 
   return {
     context: {
       eventPayload: payload,
       eventObject,
       eventType,
+      eventEpoch,
       document,
       emittedEvents,
       events: emittedEvents ?? [],

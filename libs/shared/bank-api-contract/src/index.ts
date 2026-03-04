@@ -43,3 +43,7 @@ export {
   type FieldModel,
   type FieldKind,
 } from './lib/operationRequestModel';
+export {
+  resolveCurrentSummaryEpoch,
+  resolveActivePendingAction,
+} from './lib/pendingActionQueue';

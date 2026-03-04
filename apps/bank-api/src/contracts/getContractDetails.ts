@@ -1,5 +1,8 @@
 import { ServerInferRequest } from '@ts-rest/core';
-import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
+import {
+  bankApiContract,
+  resolveCurrentSummaryEpoch,
+} from '@demo-bank-app/shared-bank-api-contract';
 import {
   extractAuthInfo,
   type MaybeAuthenticatedTsRestRequestContext,
@@ -71,6 +74,9 @@ export const getContractDetailsHandler = async (
     merchantDirectoryRepository
   );
   const from = resolveMerchantFrom(contract.merchantId, directory);
+  const currentSummaryEpoch = resolveCurrentSummaryEpoch(
+    contract.summarySourceEpoch
+  );
 
   return {
     status: 200 as const,
@@ -108,6 +114,7 @@ export const getContractDetailsHandler = async (
       summary: normalizedSummary ?? undefined,
       summaryUpdatedAt: contract.summaryUpdatedAt,
       summarySourceUpdatedAt: contract.summarySourceUpdatedAt,
+      currentSummaryEpoch,
       summaryInputBlueId: contract.summaryInputBlueId,
       summaryModel: contract.summaryModel,
       summaryError: contract.summaryError,

@@ -47,17 +47,13 @@ const parseIsoTimestamp = (value: string): number | null => {
 
 const resolveEventEpochOrder = (input: {
   eventType?: string;
-  eventEpoch?: unknown;
+  eventEpoch?: number;
 }): number | undefined => {
   const { eventType, eventEpoch } = input;
   if (eventType === 'DOCUMENT_CREATED') {
     return -1;
   }
-  if (
-    eventType === 'DOCUMENT_EPOCH_ADVANCED' &&
-    typeof eventEpoch === 'number' &&
-    Number.isFinite(eventEpoch)
-  ) {
+  if (eventType === 'DOCUMENT_EPOCH_ADVANCED' && eventEpoch !== undefined) {
     return eventEpoch;
   }
   return undefined;
@@ -97,6 +93,7 @@ export const handleWebhookEvent = async (
     eventPayload,
     eventObject,
     eventType,
+    eventEpoch,
     document,
     emittedEvents,
     events,
@@ -227,10 +224,9 @@ export const handleWebhookEvent = async (
         });
         return { note: '', logs };
       }
-      const eventEpoch = eventObject?.epoch;
       const isEpochAdvancedWithoutCanonicalSession =
         eventType === 'DOCUMENT_EPOCH_ADVANCED' &&
-        typeof eventEpoch === 'number' &&
+        eventEpoch !== undefined &&
         eventEpoch > 0 &&
         !canonicalSessionId;
       if (isEpochAdvancedWithoutCanonicalSession) {
@@ -406,6 +402,7 @@ export const handleWebhookEvent = async (
       await handleCustomerActionRequestEvents({
         events: customerActionRequestEvents,
         eventId: input.eventId,
+        eventEpoch,
         payNoteDocumentId,
         sessionId,
         deps,

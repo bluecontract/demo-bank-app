@@ -158,6 +158,7 @@ describe('getContractDetailsHandler', () => {
         contractId: 'contract-1',
         displayName: 'PayNote',
         sessionId: 'session-1',
+        currentSummaryEpoch: 0,
         relatedTransactionIds: ['txn-1'],
         from: {
           name: 'Merchant',

@@ -19,6 +19,7 @@ type CustomerActionRequestEvent = {
 };
 
 const ALLOWED_VARIANTS = new Set(['primary', 'secondary', 'reject']);
+const EVENT_INDEX_MULTIPLIER_FOR_EPOCH_SORTING = 1_000_000;
 
 const buildCustomerActionRequestDedupeKey = (input: {
   eventId: string;
@@ -29,6 +30,22 @@ const buildCustomerActionPendingActionId = (input: {
   eventId: string;
   eventIndex: number;
 }) => `customer-action:${input.eventId}:${input.eventIndex}`;
+
+const resolveQueueOrder = (input: {
+  eventIndex: number;
+  eventEpoch?: number;
+}): number => {
+  if (
+    typeof input.eventEpoch === 'number' &&
+    Number.isFinite(input.eventEpoch)
+  ) {
+    return (
+      input.eventEpoch * EVENT_INDEX_MULTIPLIER_FOR_EPOCH_SORTING +
+      input.eventIndex
+    );
+  }
+  return input.eventIndex;
+};
 
 const parseCustomerActionRequest = (event: WebhookEmittedEvent) => {
   try {
@@ -226,6 +243,7 @@ const resolveCustomerActionType = (
 export const handleCustomerActionRequestEvents = async (input: {
   events: CustomerActionRequestEvent[];
   eventId: string;
+  eventEpoch?: number;
   payNoteDocumentId: string;
   sessionId: string;
   deps: HandleWebhookEventDependencies;
@@ -363,6 +381,14 @@ export const handleCustomerActionRequestEvents = async (input: {
       title,
       message,
       actions: optionsResult.actions,
+      queueOrder: resolveQueueOrder({
+        eventIndex: item.eventIndex,
+        eventEpoch: input.eventEpoch,
+      }),
+      ...(typeof input.eventEpoch === 'number' &&
+      Number.isFinite(input.eventEpoch)
+        ? { minSummaryEpoch: input.eventEpoch }
+        : {}),
       createdAt: now,
       ...(requestId ? { requestId } : {}),
     };

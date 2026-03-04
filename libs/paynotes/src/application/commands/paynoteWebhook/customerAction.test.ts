@@ -116,6 +116,7 @@ describe('handleCustomerActionRequestEvents', () => {
         },
       ],
       eventId: 'event-1',
+      eventEpoch: 5,
       payNoteDocumentId: 'doc-1',
       sessionId: 'session-1',
       deps,
@@ -132,6 +133,8 @@ describe('handleCustomerActionRequestEvents', () => {
             title: 'Milestone 1',
             message: 'Confirm milestone 1 delivery.',
             requestId: 'request-1',
+            minSummaryEpoch: 5,
+            queueOrder: 5000000,
           }),
         ]),
       })

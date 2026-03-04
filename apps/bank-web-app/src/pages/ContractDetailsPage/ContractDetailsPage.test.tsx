@@ -728,6 +728,73 @@ describe('ContractDetailsPage', () => {
     });
   });
 
+  it('keeps pending action area empty when pending action waits for newer summary epoch', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'Milestone Contract',
+        currentSummaryEpoch: 2,
+        document: { name: 'Milestone Contract' },
+        summary: {
+          story: {
+            headline: 'Milestone Contract',
+            overview: ['Please review milestone details.'],
+            bullets: [],
+          },
+          listPreview: 'Milestone awaiting your response.',
+          nextSteps: {
+            title: 'Next steps',
+            items: ['Respond to the pending action.'],
+          },
+          lastChange: {
+            short: 'Milestone pending response.',
+            more: 'The contractor requested milestone confirmation.',
+          },
+        },
+        pendingActions: [
+          {
+            actionId: 'pending-1',
+            type: 'customerActionOptions',
+            status: 'pending',
+            title: 'Milestone 1 Confirmation',
+            message: 'Confirm completion of milestone 1.',
+            minSummaryEpoch: 3,
+            queueOrder: 3000000,
+            actions: [{ label: 'Approve milestone 1', variant: 'primary' }],
+            createdAt: '2026-02-01T10:00:00.000Z',
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    expect(
+      screen.queryByText('Updating pending action')
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Approve milestone 1' })
+    ).not.toBeInTheDocument();
+  });
+
   it('does not render history section in proposal view', () => {
     mockUseParams.mockReturnValue({ sessionId: 'session-2' });
     mockUseLocation.mockReturnValue({

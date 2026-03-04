@@ -1,7 +1,11 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import { BlueNode, Properties } from '@blue-labs/language';
 import commonBlueIds from '@blue-repository/types/packages/common/blue-ids';
-import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
+import {
+  bankApiContract,
+  resolveActivePendingAction,
+  resolveCurrentSummaryEpoch,
+} from '@demo-bank-app/shared-bank-api-contract';
 import {
   applyMonitoringDecisionToContract,
   type ContractPendingAction,
@@ -1005,6 +1009,23 @@ export const decideContractPendingActionHandler = async (
       status: 404,
       code: ERROR_CODES.CONTRACT_NOT_FOUND,
       message: 'Contract not found',
+    });
+  }
+
+  const activePendingAction = resolveActivePendingAction({
+    actions: contract.pendingActions ?? [],
+    currentSummaryEpoch: resolveCurrentSummaryEpoch(
+      contract.summarySourceEpoch
+    ),
+  });
+  if (!activePendingAction || activePendingAction.actionId !== actionId) {
+    return problemResponse({
+      status: 409,
+      code: ERROR_CODES.VALIDATION_ERROR,
+      message: 'Pending action cannot be decided: action-not-active',
+      detail: activePendingAction
+        ? `Current active pending action is ${activePendingAction.actionId}.`
+        : 'No active pending action is available for the current summary epoch.',
     });
   }
 
