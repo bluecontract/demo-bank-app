@@ -272,6 +272,27 @@ export const handleCustomerActionRequestEvents = async (input: {
       getString(request?.title) ?? getString(request?.name) ?? 'Pending action';
     const requestId = getString(request?.requestId);
 
+    if (requestId) {
+      const existingByRequestId = (contract.pendingActions ?? []).find(
+        action => action.requestId === requestId
+      );
+      if (existingByRequestId) {
+        logs.push({
+          level: 'info',
+          message: 'Customer action request deduplicated by request id',
+          context: {
+            eventId,
+            payNoteDocumentId,
+            sessionId,
+            eventIndex: item.eventIndex,
+            actionId,
+            requestId,
+          },
+        });
+        continue;
+      }
+    }
+
     const nextAction: ContractPendingAction = {
       actionId,
       type: resolveCustomerActionType(optionsResult.actions),
@@ -287,14 +308,6 @@ export const handleCustomerActionRequestEvents = async (input: {
       ...contract,
       pendingActions: [...(contract.pendingActions ?? []), nextAction],
       updatedAt: now,
-    });
-
-    await deps.contractRepository.addContractHistoryEntry({
-      contractId: contract.contractId,
-      kind: 'pendingActionRequested',
-      short: 'Customer action requested.',
-      more: `Contract requested customer action: ${title}.`,
-      createdAt: now,
     });
 
     logs.push({

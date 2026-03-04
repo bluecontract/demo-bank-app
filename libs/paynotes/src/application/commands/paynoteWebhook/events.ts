@@ -51,22 +51,58 @@ export const CHARGE_ATTEMPT_ID_PREFIX = 'paynote-card-charge-attempt:';
 export const TRANSFER_MANDATE_CHARGE_ATTEMPT_ID_PREFIX =
   'paynote-transfer-mandate-attempt:';
 
-const resolveEventTypeLabel = (event: unknown): string | undefined => {
+type EventTypeLabelResolution =
+  | {
+      kind: 'prefixed';
+      value: string;
+    }
+  | {
+      kind: 'short';
+      value: string;
+    }
+  | {
+      kind: 'none';
+    };
+
+const parseTypeLabel = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const resolveEventTypeLabel = (event: unknown): EventTypeLabelResolution => {
   if (!event || typeof event !== 'object') {
-    return undefined;
+    return { kind: 'none' };
   }
+
   const type = (event as { type?: unknown }).type;
-  if (typeof type === 'string') {
-    return type;
+  const directLabel = parseTypeLabel(type);
+  if (directLabel) {
+    return directLabel.includes('/')
+      ? { kind: 'prefixed', value: directLabel }
+      : { kind: 'short', value: directLabel };
   }
+
   if (!type || typeof type !== 'object') {
-    return undefined;
+    return { kind: 'none' };
   }
+
   const typeRecord = type as { name?: unknown; value?: unknown };
-  if (typeof typeRecord.name === 'string') {
-    return typeRecord.name;
+  const fromName = parseTypeLabel(typeRecord.name);
+  if (fromName) {
+    return fromName.includes('/')
+      ? { kind: 'prefixed', value: fromName }
+      : { kind: 'short', value: fromName };
   }
-  return typeof typeRecord.value === 'string' ? typeRecord.value : undefined;
+  const fromValue = parseTypeLabel(typeRecord.value);
+  if (fromValue) {
+    return fromValue.includes('/')
+      ? { kind: 'prefixed', value: fromValue }
+      : { kind: 'short', value: fromValue };
+  }
+  return { kind: 'none' };
 };
 
 const resolveEventType = (event: unknown): string | undefined => {
@@ -131,8 +167,17 @@ const resolveEventType = (event: unknown): string | undefined => {
 
 export const resolveEmittedEventType = (
   event: WebhookEmittedEvent
-): string | undefined =>
-  resolveEventTypeLabel(event) ?? resolveEventType(event);
+): string | undefined => {
+  const label = resolveEventTypeLabel(event);
+  if (label.kind === 'prefixed') {
+    return label.value;
+  }
+  if (label.kind === 'short') {
+    // Event type names must include package prefix (e.g. "Conversation/...").
+    return undefined;
+  }
+  return resolveEventType(event);
+};
 
 export const resolveTransferRequestId = (
   event: WebhookEmittedEvent

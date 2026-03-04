@@ -191,6 +191,59 @@ describe('handleCustomerActionRequestEvents', () => {
     );
   });
 
+  it('deduplicates customer action request by requestId', async () => {
+    const contract = {
+      ...createContract(),
+      pendingActions: [
+        {
+          actionId: 'customer-action:event-existing:0',
+          type: 'customerActionOptions' as const,
+          status: 'pending' as const,
+          title: 'Milestone 2',
+          message: 'Confirm milestone 2 delivery.',
+          actions: [{ label: 'Accept' }],
+          requestId: 'request-2',
+          createdAt: NOW,
+        },
+      ],
+    };
+    const { deps, contractRepository } = createDeps(contract);
+    const logs: Array<{
+      level: 'info' | 'warn' | 'error';
+      message: string;
+      context?: Record<string, unknown>;
+    }> = [];
+
+    await handleCustomerActionRequestEvents({
+      events: [
+        {
+          event: {
+            type: 'Conversation/Customer Action Requested',
+            requestId: 'request-2',
+            title: 'Milestone 2',
+            message: 'Confirm milestone 2 delivery.',
+            actions: [{ label: 'Accept' }],
+          } as any,
+          eventType: 'Conversation/Customer Action Requested',
+          eventIndex: 4,
+        },
+      ],
+      eventId: 'event-dup-request-id',
+      payNoteDocumentId: 'doc-1',
+      sessionId: 'session-1',
+      deps,
+      logs,
+    });
+
+    expect(contractRepository.saveContract).not.toHaveBeenCalled();
+    expect(logs).toContainEqual(
+      expect.objectContaining({
+        level: 'info',
+        message: 'Customer action request deduplicated by request id',
+      })
+    );
+  });
+
   it('rejects customer action request with duplicate labels', async () => {
     const contract = createContract();
     const { deps, contractRepository } = createDeps(contract);

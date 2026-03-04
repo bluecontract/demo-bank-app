@@ -21,6 +21,32 @@ describe('paynote event dispatcher', () => {
     );
   });
 
+  it('treats short-form emitted type label as unsupported', () => {
+    const event = toOfficialBlue({
+      type: 'Conversation/Customer Action Requested',
+      requestId: 'customer-action-1',
+      title: 'Confirm milestone',
+      message: 'Please confirm milestone #1',
+      actions: [{ label: 'Accept' }, { label: 'I have a concern' }],
+    }) as {
+      type?: {
+        name?: string;
+        value?: string;
+      };
+    };
+
+    // Simulate MyOS-emitted payload shape where type.name is short-form.
+    if (event.type && typeof event.type === 'object') {
+      event.type.name = 'Customer Action Requested';
+      event.type.value = 'Customer Action Requested';
+    }
+
+    const result = classifyPayNoteEvent(event);
+
+    expect(result.decision).toBe('unsupported');
+    expect(result.eventType).toBeUndefined();
+  });
+
   it('routes supported events and intentionally ignores unsupported events', () => {
     const logs: Array<{
       level: 'info' | 'warn' | 'error';
