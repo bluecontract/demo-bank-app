@@ -16,6 +16,15 @@ describe('summary prompts', () => {
       'Treat lifecycle-only setup events (for example `Core/Document Processing Initiated`) as technical noise'
     );
     expect(prompt).toContain(
+      'document.payNoteBootstrapRequest.document.description'
+    );
+    expect(prompt).toContain(
+      'Treat that description as the primary narrative source for customer wording and intent'
+    );
+    expect(prompt).toContain('what they are buying/agreeing to');
+    expect(prompt).toContain('what has just happened');
+    expect(prompt).toContain('what (if anything) is required from them now');
+    expect(prompt).toContain(
       'Avoid setup-only wording that does not help customers'
     );
     expect(prompt).toContain('"reserve request" -> prefer');
@@ -27,6 +36,23 @@ describe('summary prompts', () => {
       'Use a generic fallback like "specified merchant" only for IDs returned as unresolved'
     );
     expect(prompt).toContain('Do not show raw merchant IDs.');
+    expect(prompt).toContain(
+      'Write UI text to the customer in second person ("you", "your").'
+    );
+    expect(prompt).toContain(
+      'Never say "the bank approves" when describing customer payment approvals; use "you approve" / "waiting for your approval".'
+    );
+    expect(prompt).toContain('avoid "captured from existing hold" phrasing.');
+    expect(prompt).toContain(
+      '"card hold"/"existing hold" -> prefer "authorized card payment" or "amount already set aside from your card payment"'
+    );
+    expect(prompt).toContain(
+      '"captured" (money movement) -> prefer "paid" or "charged"'
+    );
+    expect(prompt).toContain('Never output raw event labels');
+    expect(prompt).not.toContain(
+      'Use "You" only when `transition.actorIsViewer` is true.'
+    );
     expect(prompt).not.toContain(
       '`story.overview`: array of 1-2 short sentences total.'
     );
@@ -43,6 +69,18 @@ describe('summary prompts', () => {
     );
     expect(prompt).toContain(
       '- If facts suggest recurring/subscription charges, explain that acceptance asks for approval of future automatic payments.'
+    );
+    expect(prompt).toContain(
+      '- Treat merchant-authored description in `document` as the primary explanation of agreement intent and rules, but always verify against contract facts.'
+    );
+    expect(prompt).toContain(
+      '- For recurring charges and mandate-like approvals, the approver is the customer using the bank app. Do not describe this as the bank approving charges.'
+    );
+    expect(prompt).toContain(
+      '- Keep proposal text customer-oriented: make clear what the customer buys/gets, what has already happened, and what decision (if any) is now waiting for them.'
+    );
+    expect(prompt).toContain(
+      '- Do not copy merchant-authored description verbatim; paraphrase in customer-facing UI language.'
     );
     expect(prompt).toContain(
       '- `story.overview`: array of 2-3 short plain-language sentences.'

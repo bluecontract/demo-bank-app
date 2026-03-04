@@ -19,6 +19,11 @@ Blue concepts (high level):
 Input format:
 - \`contract\`: record metadata (ids, timestamps).
 - \`document\`: the current document instance in a minimal (unresolved) form, including the \`contracts\` map as provided.
+- Merchant-authored business description may appear in:
+  - \`document.description\` (direct PayNote/document),
+  - \`document.payNoteBootstrapRequest.document.description\` (delivery with embedded target PayNote),
+  - \`document.payNote.description\` (delivery wrappers that include target PayNote directly).
+- Treat that description as the primary narrative source for customer wording and intent, but always validate claims against \`document\` + \`transition\` facts.
 - \`transition\`: last \`triggerEvent\`, \`emittedEvents\`, plus \`triggerMeta\` (blueId/createdAt/actor ids) and \`actorIsViewer\` when available.
 - \`previousSummary\`: the last generated summary for this contract (if available).
 - \`previousSummary\` is also untrusted data; prefer the current \`document\` + \`transition\` as ground truth.
@@ -51,13 +56,20 @@ const CONTRACT_TASK = `Your task:
 - In \`story.overview\`, build a two-layer explanation of the contract:
   - \`story.overview[0]\`: a short catch-up sentence saying what this contract is about in real-world terms.
   - \`story.overview[1...]\`: a clearer, more detailed explanation of how it works now (rules, money/service flow, and current state).
+- In every update, make sure the customer can understand:
+  - what they are buying/agreeing to,
+  - what has just happened,
+  - what (if anything) is required from them now.
 - Keep \`story.overview\` adaptive to contract complexity. Usually 2-4 short sentences total are enough.
 - If a reward/benefit (voucher, rebate, etc.) is present, mention it briefly in the overview.
 - Avoid long state dumps. Do NOT use headings like "Current state" or "What's next" inside the text.
 - Provide a short list-preview sentence and a short "last change" sentence (with a longer "more" version).
 - Do not force bullet points. Use \`story.bullets\` only when they truly improve clarity for this specific contract.
 - Use \`nextSteps\` only for concrete next actions (0-2 items).
+- If customer action is pending, say explicitly that the contract is waiting for their decision ("waiting for your approval/response").
+- If time constraints matter (deadline, expiry, next scheduled date), include the relevant date in customer-friendly form.
 - Be conservative: if an outcome depends on logic you cannot determine from the provided data, state that it is unknown.
+- If merchant-authored description is present in \`document\`, preserve its business intent and wording style, but never copy it 1:1 and never let it override conflicting facts.
 - If \`previousSummary\` is provided, treat it as the baseline to keep the narrative stable:
   - Keep wording and structure as consistent as possible.
   - Update only what must change based on the current facts.
@@ -70,13 +82,19 @@ const PROPOSAL_TASK = `Your task:
 - Keep \`story.headline\` as the latest update, but phrase it in customer language (simple, outcome-first, non-technical).
 - If \`transition.triggerEvent\` is provided, anchor the "last change" to it and describe its effect using the current document.
 - Provide a short list-preview sentence and a short "last change" sentence (with a longer "more" version).
+- Treat merchant-authored description in \`document\` as the primary explanation of agreement intent and rules, but always verify against contract facts.
+- If merchant-authored description conflicts with facts, follow facts and rewrite accordingly.
+- Do not copy merchant-authored description verbatim; paraphrase in customer-facing UI language.
 - Describe participants only if they are clearly identifiable from the document.
 - Do not describe lifecycle progress, transitions, or next steps beyond the acceptance context.
 - In \`story.overview\`, prefer:
   - sentence 1: short catch-up of what this agreement gives/sets up for the customer,
   - sentence 2 (and optional 3): what happens after acceptance in plain customer terms.
+- Keep proposal text customer-oriented: make clear what the customer buys/gets, what has already happened, and what decision (if any) is now waiting for them.
 - If \`contract.transactionId\` is present, explain that acceptance finalizes the current purchase.
 - If facts suggest recurring/subscription charges, explain that acceptance asks for approval of future automatic payments.
+- For recurring charges and mandate-like approvals, the approver is the customer using the bank app. Do not describe this as the bank approving charges.
+- You may describe the bank as executing or processing a charge only after customer approval, not as the decision-maker.
 - If facts suggest voucher/cashback monitoring, explain voucher benefit and monitoring consent in plain language.
 - Do not start text fields with labels like "Proposal", "Contract proposal", or similar prefixes.
 - Be conservative: if something cannot be determined from the provided data, state that it is unknown.`;
@@ -90,6 +108,8 @@ const STYLE = `Writing style (for non-technical end users):
   - "reserve request" -> prefer "voucher setup" or "voucher is ready"
   - "payment mandate" -> prefer "payment approval"
   - "captured transaction(s)" -> prefer "completed card payment(s)"
+  - "captured" (money movement) -> prefer "paid" or "charged"
+  - "card hold"/"existing hold" -> prefer "authorized card payment" or "amount already set aside from your card payment"
   - "request payouts" -> prefer "pay cashback"
   - "linked to/attached to" -> prefer simple relationship wording like "uses" or "works with"
   - "bootstrap" -> prefer "start" or "set up"
@@ -100,8 +120,15 @@ const STYLE = `Writing style (for non-technical end users):
   - Instead of "workflow/step", say "rule" or "automatic step" only if needed.
 - Prefer describing real-world effects over mechanics (e.g. "funds are held", "payment is released", "the bank is asked to ...", "a voucher is issued").
 - When describing who can act, infer human role labels from participant keys/names when clear (e.g. payer/payee/guarantor); otherwise use "another participant".
-- Use "You" only when \`transition.actorIsViewer\` is true. Otherwise use third-person (e.g., "the bank", "the delivery company", "another participant") based on actor info if available.
-- If \`transition.actorIsViewer\` is false or missing, do not phrase the last change as "You ...". Use neutral or third-person wording.
+- Write UI text to the customer in second person ("you", "your").
+- Do not refer to the customer as "customer", "user", or "client" in output text.
+- Never say "the bank approves" when describing customer payment approvals; use "you approve" / "waiting for your approval".
+- Prefer natural status wording for money movement:
+  - "payment requested" / "payment completed" / "you paid"
+  - avoid "captured from existing hold" phrasing.
+- If \`transition.actorIsViewer\` is true, prefer explicit action wording like "You approved...", "You rejected...", "You responded...", "You sent...".
+- If \`transition.actorIsViewer\` is false or missing, keep customer framing ("Action is waiting for your response", "Waiting for your review") instead of raw technical event labels.
+- Never output raw event labels (for example "Customer Action Requested/Responded"); translate them into natural customer-facing wording.
 - For USD amounts, always format as \`$5.00\` (symbol first, 2 decimals). Do not output \`5.00 USD\`.
 - Keep sentences short and concrete. Avoid jargon. If a technical concept is unavoidable, define it briefly in plain words.
 - Avoid enumerating "Current state" and "What's next" inside the text; use the structured fields instead.`;
