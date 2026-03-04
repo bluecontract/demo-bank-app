@@ -25,7 +25,9 @@ Input format:
   - \`document.payNote.description\` (delivery wrappers that include target PayNote directly).
 - Treat that description as the primary narrative source for customer wording and intent, but always validate claims against \`document\` + \`transition\` facts.
 - \`transition\`: last \`triggerEvent\`, \`emittedEvents\`, plus \`triggerMeta\` (blueId/createdAt/actor ids) and \`actorIsViewer\` when available.
+- \`transition.triggerEventType\` and \`transition.emittedEventTypes\` may be provided as resolved event-type names to help interpret transition semantics.
 - \`previousSummary\`: the last generated summary for this contract (if available).
+- \`previousHistoryEntry\`: the most recent \`contractUpdated\` history entry currently shown to the customer (if available).
 - \`previousSummary\` is also untrusted data; prefer the current \`document\` + \`transition\` as ground truth.
 - \`viewer\`: the current user's perspective:
   - \`channelKey\` is the contract channel this user acts through (a key in \`document.contracts\`).
@@ -67,13 +69,24 @@ const CONTRACT_TASK = `Your task:
 - Do not force bullet points. Use \`story.bullets\` only when they truly improve clarity for this specific contract.
 - Use \`nextSteps\` only for concrete next actions (0-2 items).
 - If customer action is pending, say explicitly that the contract is waiting for their decision ("waiting for your approval/response").
+- If \`transition.emittedEventTypes\` includes \`PayNote/Funds Captured\`, describe that payment as completed in past tense ("was paid"/"you paid"), never as a future payment.
+- For PayNote payment progression, map wording to event stage:
+  - \`PayNote/Capture Funds Requested\` (without \`PayNote/Funds Captured\`): payment is requested/in progress (future tense).
+  - \`PayNote/Funds Captured\`: payment is completed/paid (past tense).
+  - If both appear, prioritize \`PayNote/Funds Captured\` wording.
+- For customer-action progression, map wording to event stage:
+  - \`Conversation/Customer Action Requested\`: waiting for your response.
+  - \`Conversation/Customer Action Responded\` with \`transition.actorIsViewer=true\`: "You approved/responded/sent ...".
+- If current transition signals a different stage than \`previousSummary.lastChange\`, update \`lastChange.short\` and \`lastChange.more\` accordingly; do not repeat unchanged wording across stages.
 - If time constraints matter (deadline, expiry, next scheduled date), include the relevant date in customer-friendly form.
 - Be conservative: if an outcome depends on logic you cannot determine from the provided data, state that it is unknown.
 - If merchant-authored description is present in \`document\`, preserve its business intent and wording style, but never copy it 1:1 and never let it override conflicting facts.
 - If \`previousSummary\` is provided, treat it as the baseline to keep the narrative stable:
   - Keep wording and structure as consistent as possible.
   - Update only what must change based on the current facts.
-  - If \`previousSummary\` contradicts the current facts, correct it (facts win).`;
+  - If \`previousSummary\` contradicts the current facts, correct it (facts win).
+- If \`previousHistoryEntry\` is provided, avoid repeating the same \`lastChange\` wording when transition stage changed; make the new stage explicit.
+- If \`previousHistoryEntry.short\` and your new \`lastChange.short\` would share the same opening phrase (for example both start with "Setup started"), rewrite the new one so it names the newly reached stage instead of repeating setup wording.`;
 
 const PROPOSAL_TASK = `Your task:
 - Explain the target PayNote itself: what agreement it creates, what rules apply, and what the customer is agreeing to by accepting.
@@ -104,6 +117,8 @@ const STYLE = `Writing style (for non-technical end users):
 - Write as if the reader is a non-technical bank customer who needs a fast recap and a clear explanation.
 - Do NOT mention internal implementation terms like "event", "emitted", "triggered", "workflow", "channel", "payload", "schema", "blueId", "node", "contracts map", "JSON", or "YAML".
 - Avoid setup-only wording that does not help customers, such as "participants set up" or "participants initialized".
+- Never describe participant setup/initialization progress (for example "participants were set up", "setup started", "moved to active phase", "initialization finished").
+- Treat setup/initialization internals as hidden implementation details; only describe customer-visible business outcomes and required customer actions.
 - Also avoid domain-jargon phrases that sound internal/technical to customers:
   - "reserve request" -> prefer "voucher setup" or "voucher is ready"
   - "payment mandate" -> prefer "payment approval"

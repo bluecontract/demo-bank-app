@@ -21,11 +21,20 @@ describe('summary prompts', () => {
     expect(prompt).toContain(
       'Treat that description as the primary narrative source for customer wording and intent'
     );
+    expect(prompt).toContain(
+      '`previousHistoryEntry`: the most recent `contractUpdated` history entry currently shown to the customer'
+    );
     expect(prompt).toContain('what they are buying/agreeing to');
     expect(prompt).toContain('what has just happened');
     expect(prompt).toContain('what (if anything) is required from them now');
     expect(prompt).toContain(
       'Avoid setup-only wording that does not help customers'
+    );
+    expect(prompt).toContain(
+      'Never describe participant setup/initialization progress'
+    );
+    expect(prompt).toContain(
+      'Treat setup/initialization internals as hidden implementation details'
     );
     expect(prompt).toContain('"reserve request" -> prefer');
     expect(prompt).toContain('"payment mandate" -> prefer');
@@ -42,6 +51,20 @@ describe('summary prompts', () => {
     expect(prompt).toContain(
       'Never say "the bank approves" when describing customer payment approvals; use "you approve" / "waiting for your approval".'
     );
+    expect(prompt).toContain(
+      '`PayNote/Capture Funds Requested` (without `PayNote/Funds Captured`): payment is requested/in progress (future tense).'
+    );
+    expect(prompt).toContain(
+      '`PayNote/Funds Captured`: payment is completed/paid (past tense).'
+    );
+    expect(prompt).toContain(
+      '`Conversation/Customer Action Responded` with `transition.actorIsViewer=true`: "You approved/responded/sent ...".'
+    );
+    expect(prompt).toContain(
+      'avoid repeating the same `lastChange` wording when transition stage changed'
+    );
+    expect(prompt).toContain('both start with "Setup started"');
+    expect(prompt).toContain('do not repeat unchanged wording across stages');
     expect(prompt).toContain('avoid "captured from existing hold" phrasing.');
     expect(prompt).toContain(
       '"card hold"/"existing hold" -> prefer "authorized card payment" or "amount already set aside from your card payment"'

@@ -5,6 +5,7 @@ import {
 } from './generateContractSummary';
 import { summaryBlue } from './summaryUtils';
 import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
+import myOsBlueIds from '@blue-repository/types/packages/myos/blue-ids';
 
 const hoistedOpenAI = vi.hoisted(() => {
   const responsesParseMock = vi.fn();
@@ -54,6 +55,10 @@ const extractFactsFromFirstParseCall = (): Record<string, unknown> => {
 
 describe('generateContractSummaryHandler', () => {
   const payNoteTypeBlueId = paynoteBlueIds['PayNote/PayNote'];
+  const fundsCapturedBlueId = paynoteBlueIds['PayNote/Funds Captured'];
+  const participantResolvedBlueId = myOsBlueIds['MyOS/Participant Resolved'];
+  const allParticipantsReadyBlueId = myOsBlueIds['MyOS/All Participants Ready'];
+  const textBlueId = 'DLRQwz7MQeCrzjy9bohPNwtCxKEBbKaMK65KBrwjfG6K';
   const documentProcessingInitiatedBlueId =
     'BrpmpNt5JkapeUvPqYcxgXZrHNZX3R757dRwuXXdfNM2';
   const summaryFixture = {
@@ -567,6 +572,9 @@ describe('generateContractSummaryHandler', () => {
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:02:00.000Z',
     });
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
 
     const result = await generateContractSummaryHandler(
       {
@@ -611,7 +619,13 @@ describe('generateContractSummaryHandler', () => {
         contracts: {},
       },
       emittedEvents: [
-        { type: { blueId: documentProcessingInitiatedBlueId } },
+        {
+          type: {
+            type: { blueId: textBlueId },
+            value: 'Core/Document Processing Initiated',
+          },
+          documentId: 'doc-1',
+        },
         { type: { value: 'Conversation/Customer Action Requested' } },
       ],
       userId: 'user-123',
@@ -644,6 +658,197 @@ describe('generateContractSummaryHandler', () => {
     expect(JSON.stringify(emittedEvents)).toContain(
       'Conversation/Customer Action Requested'
     );
+    const transition = facts.transition as
+      | { emittedEventTypes?: string[] }
+      | undefined;
+    expect(transition?.emittedEventTypes).toContain(
+      'Conversation/Customer Action Requested'
+    );
+    expect(
+      transition?.emittedEventTypes?.includes(
+        'Core/Document Processing Initiated'
+      ) ?? false
+    ).toBe(false);
+  });
+
+  it('adds static "Contract is ready." history entry and still runs LLM when epoch 0 has initiated plus business events', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      emittedEvents: [
+        {
+          type: {
+            type: { blueId: textBlueId },
+            value: 'Core/Document Processing Initiated',
+          },
+        },
+        { type: { value: 'Conversation/Customer Action Requested' } },
+      ],
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:02:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'init:sess-1',
+        short: 'Contract is ready.',
+      })
+    );
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(1);
+    const facts = extractFactsFromFirstParseCall();
+    const emittedEvents = ((
+      facts.transition as { emittedEvents?: unknown[] } | undefined
+    )?.emittedEvents ?? []) as unknown[];
+    expect(JSON.stringify(emittedEvents)).toContain(
+      'Conversation/Customer Action Requested'
+    );
+    expect(JSON.stringify(emittedEvents)).not.toContain(
+      'Core/Document Processing Initiated'
+    );
+  });
+
+  it('skips LLM and history for pre-init technical-only emitted events', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      emittedEvents: [
+        { type: { blueId: participantResolvedBlueId } },
+        { type: { blueId: allParticipantsReadyBlueId } },
+      ],
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:02:00.000Z',
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
+    expect(contractRepository.updateContractSummary).not.toHaveBeenCalled();
+  });
+
+  it('includes resolved emitted event type names for blueId-only events', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      emittedEvents: [{ type: { blueId: fundsCapturedBlueId } }],
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:02:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    const facts = extractFactsFromFirstParseCall();
+    const transition = facts.transition as
+      | { emittedEventTypes?: string[] }
+      | undefined;
+    expect(transition?.emittedEventTypes).toContain('PayNote/Funds Captured');
+  });
+
+  it('passes previous contractUpdated history entry in facts', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:02:00.000Z',
+    });
+    contractRepository.listContractHistory
+      .mockResolvedValueOnce([
+        {
+          id: 'hist-prev',
+          contractId: 'sess-1',
+          kind: 'contractUpdated',
+          short: 'Previous short',
+          more: 'Previous more',
+          createdAt: '2026-01-02T00:00:00.000Z',
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    const facts = extractFactsFromFirstParseCall();
+    const previousHistoryEntry = facts.previousHistoryEntry as
+      | { short?: string; more?: string; createdAt?: string }
+      | undefined;
+    expect(previousHistoryEntry).toEqual({
+      short: 'Previous short',
+      more: 'Previous more',
+      createdAt: '2026-01-02T00:00:00.000Z',
+    });
   });
 
   it('does not use static ready fallback when epoch 0 has only one non-initiated emitted event', async () => {
@@ -688,7 +893,7 @@ describe('generateContractSummaryHandler', () => {
     );
   });
 
-  it('keeps Document Processing Initiated in LLM facts when summarySourceEpoch is greater than 0 and there are no business events', async () => {
+  it('skips LLM and history for initiated-only technical transitions when summarySourceEpoch is greater than 0', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
       typeBlueId: payNoteTypeBlueId,
@@ -706,10 +911,6 @@ describe('generateContractSummaryHandler', () => {
       updatedAt: '2026-01-02T00:02:00.000Z',
     });
 
-    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
-      output_parsed: summaryFixture,
-    });
-
     const result = await generateContractSummaryHandler(
       {
         params: { sessionId: 'sess-1' },
@@ -719,14 +920,9 @@ describe('generateContractSummaryHandler', () => {
     );
 
     expect(result.status).toBe(200);
-    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(1);
-    const facts = extractFactsFromFirstParseCall();
-    const emittedEvents = ((
-      facts.transition as { emittedEvents?: unknown[] } | undefined
-    )?.emittedEvents ?? []) as unknown[];
-    expect(JSON.stringify(emittedEvents)).toContain(
-      documentProcessingInitiatedBlueId
-    );
+    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
+    expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
+    expect(contractRepository.updateContractSummary).not.toHaveBeenCalled();
   });
 
   it('does not use static ready fallback when trigger event is present', async () => {

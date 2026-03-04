@@ -41,11 +41,18 @@ export type ContractFactsV2 = {
     statusTimestamps?: Record<string, string>;
     updatedAt: string;
   };
+  previousHistoryEntry?: {
+    short?: string;
+    more?: string;
+    createdAt?: string;
+  };
   previousSummary?: z.infer<typeof ContractDocumentSummaryDto>;
   document: Record<string, unknown>;
   transition?: {
     triggerEvent?: unknown;
     emittedEvents?: unknown[];
+    triggerEventType?: string;
+    emittedEventTypes?: string[];
     triggerMeta?: TriggerEventMeta;
     actorIsViewer?: boolean;
   };
@@ -90,6 +97,11 @@ type BuildFactsInput = {
     triggerEvent?: unknown;
     emittedEvents?: unknown[];
     previousSummary?: z.infer<typeof ContractDocumentSummaryDto>;
+    previousHistoryEntry?: {
+      short?: string;
+      more?: string;
+      createdAt?: string;
+    };
   };
 };
 
@@ -124,6 +136,42 @@ const getNumberValue = (value: unknown): number | undefined => {
       return getNumberValue(record.value);
     }
   }
+  return undefined;
+};
+
+const getEventTypeName = (
+  value: unknown,
+  typeNameByBlueId: Record<string, string>
+): string | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const type = (value as Record<string, unknown>).type;
+  if (typeof type === 'string') {
+    const trimmed = type.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  if (!type || typeof type !== 'object' || Array.isArray(type)) {
+    return undefined;
+  }
+
+  const typeRecord = type as Record<string, unknown>;
+  const directBlueId = getStringValue(typeRecord.blueId);
+  if (directBlueId) {
+    return typeNameByBlueId[directBlueId] ?? directBlueId;
+  }
+
+  const name = getStringValue(typeRecord.name);
+  if (name) {
+    return name;
+  }
+
+  const valueLabel = getStringValue(typeRecord.value);
+  if (valueLabel) {
+    return valueLabel;
+  }
+
   return undefined;
 };
 
@@ -433,6 +481,13 @@ export const buildContractSummaryFacts = (
   );
 
   const typesPack = buildTypeDefinitionPack(referencedTypeIds);
+  const triggerEventType = getEventTypeName(
+    triggerSimple,
+    typesPack.typeNameByBlueId
+  );
+  const emittedEventTypes = emittedSimple
+    .map(event => getEventTypeName(event, typesPack.typeNameByBlueId))
+    .filter((eventType): eventType is string => Boolean(eventType));
 
   const payNoteSummarySource =
     (document as { payNoteBootstrapRequest?: { document?: unknown } })
@@ -485,6 +540,9 @@ export const buildContractSummaryFacts = (
         statusTimestamps: input.contract.statusTimestamps,
         updatedAt: input.contract.updatedAt,
       },
+      ...(input.contract.previousHistoryEntry
+        ? { previousHistoryEntry: input.contract.previousHistoryEntry }
+        : {}),
       ...(input.contract.previousSummary
         ? { previousSummary: input.contract.previousSummary }
         : {}),
@@ -494,6 +552,8 @@ export const buildContractSummaryFacts = (
             transition: {
               ...(triggerSimple ? { triggerEvent: triggerSimple } : {}),
               ...(emittedSimple.length ? { emittedEvents: emittedSimple } : {}),
+              ...(triggerEventType ? { triggerEventType } : {}),
+              ...(emittedEventTypes.length ? { emittedEventTypes } : {}),
               ...(triggerEventMeta ? { triggerMeta: triggerEventMeta } : {}),
               ...(actorIsViewer !== undefined ? { actorIsViewer } : {}),
             },
