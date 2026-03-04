@@ -70,3 +70,8 @@ Skills live in `agents/skills/*` and include:
 - Design: `docs/design/`
 - ADRs: `docs/adr/`
 - Plan updates: `docs/plan.md`
+
+## Blue Objects (Required)
+
+- Before implementing or reviewing flows that parse, validate, or transform Blue payloads/events/documents, read and follow `docs/adr/009-blue-document-handling.md`.
+- Do not introduce raw JSON fallbacks/workarounds for Blue objects when `blue.*` APIs and schema-based flows are required by the ADR.
