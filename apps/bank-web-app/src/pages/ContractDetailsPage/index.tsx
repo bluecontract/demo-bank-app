@@ -1248,7 +1248,7 @@ export function ContractDetailsPage() {
         </div>
       }
     >
-      <div className="flex w-full max-w-[720px] flex-col gap-4">
+      <div className="flex w-full max-w-[1120px] flex-col gap-4">
         <section className="app-surface w-full rounded-none p-4 shadow-none sm:rounded-[20px] sm:shadow-[var(--shadow-soft)]">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -1289,8 +1289,16 @@ export function ContractDetailsPage() {
             )}
           </div>
 
-          <div className="mt-4 flex flex-col gap-4">
-            <div>
+          <div
+            className={`mt-4 flex flex-col gap-4 ${
+              pendingActionsContent ? 'lg:flex-row lg:items-start' : ''
+            }`}
+          >
+            <div
+              className={
+                pendingActionsContent ? 'min-w-0 flex-1 lg:max-w-[720px]' : ''
+              }
+            >
               <div className="w-full rounded-xl border border-slate-200 bg-white p-4 sm:rounded-2xl sm:p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
@@ -1370,7 +1378,11 @@ export function ContractDetailsPage() {
               </div>
             </div>
 
-            {pendingActionsContent ? <div>{pendingActionsContent}</div> : null}
+            {pendingActionsContent ? (
+              <div className="w-full lg:w-[384px] lg:shrink-0">
+                {pendingActionsContent}
+              </div>
+            ) : null}
           </div>
         </section>
 
