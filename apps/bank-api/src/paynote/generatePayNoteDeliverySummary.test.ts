@@ -245,6 +245,61 @@ describe('generatePayNoteDeliverySummaryHandler', () => {
     expect(payNoteDeliveryRepository.updateDeliverySummary).toHaveBeenCalled();
   });
 
+  it('overrides headline from payNote initial message while preserving LLM description', async () => {
+    const payNoteDocument = {
+      type: { blueId: payNoteTypeBlueId },
+      name: 'Test PayNote',
+      payNoteInitialStateDescription: {
+        initialMessage: 'This is my limited offer for you',
+      },
+      contracts: {},
+    };
+
+    payNoteDeliveryRepository.getDeliveryBySessionId.mockResolvedValueOnce({
+      deliveryId: 'delivery-1',
+      deliverySessionId: 'session-1',
+      userId: 'user-1',
+      transactionIdentificationStatus: 'identified',
+      deliveryDocument: {
+        payNoteBootstrapRequest: {
+          document: payNoteDocument,
+        },
+      },
+      deliveryUpdatedAt: '2026-01-02T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generatePayNoteDeliverySummaryHandler(
+      { params: { sessionId: 'session-1' }, body: { force: true } } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body.cached).toBe(false);
+    expect(result.body.summary.story.headline).toBe(
+      'This is my limited offer for you'
+    );
+    expect(result.body.summary.listPreview).toBe('PayNote proposal received.');
+    expect(result.body.summary.story.overview).toEqual(
+      summaryFixture.story.overview
+    );
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalled();
+    expect(getOpenAiApiKey).toHaveBeenCalled();
+    expect(
+      payNoteDeliveryRepository.updateDeliverySummary
+    ).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryId: 'delivery-1',
+        summaryError: null,
+      })
+    );
+  });
+
   it('uses PayNote mock summary fields when LLM summary is disabled', async () => {
     const payNoteDocument = {
       type: { blueId: payNoteTypeBlueId },

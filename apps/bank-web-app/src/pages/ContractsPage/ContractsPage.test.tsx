@@ -269,13 +269,13 @@ describe('ContractsPage', () => {
     ).toHaveLength(0);
   });
 
-  it('renders proposal preview with payer-channel proposal description', () => {
+  it('uses summary headline/preview for proposal row text', () => {
     mockUseProposals.mockReturnValue({
       data: [
         {
           ...proposalSummary,
           proposalDescription: 'Please review and accept this PayNote.',
-          summaryPreview: 'Fallback summary should not be used.',
+          summaryPreview: 'LLM generated summary should be preferred.',
         },
       ],
       isLoading: false,
@@ -287,7 +287,7 @@ describe('ContractsPage', () => {
 
     expect(
       screen.getAllByText(
-        'Contract proposal: Please review and accept this PayNote.'
+        'Contract proposal: LLM generated summary should be preferred.'
       ).length
     ).toBeGreaterThan(0);
   });

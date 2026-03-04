@@ -17,6 +17,7 @@ import type { CardTransactionDetails } from '@demo-bank-app/banking';
 import { buildCardTransactionDetailsKey } from '@demo-bank-app/banking';
 import {
   getDeliveryNameFromDocument,
+  getPayNoteInitialMessageFromDocument,
   getProposalDescriptionFromDeliveryDocument,
   getPayNoteSummaryFromDocument,
 } from '../application/payNoteDelivery/blueUtils';
@@ -904,9 +905,11 @@ export class DynamoPayNoteDeliveryRepository
               payNote?: unknown;
             }
           | undefined;
-        const payNotePayload =
+        const payNotePayloadFromDelivery =
           deliveryDocument?.payNoteBootstrapRequest?.document ??
           deliveryDocument?.payNote;
+        const payNotePayload =
+          payNotePayloadFromDelivery ?? record.payNoteDocument;
         const payNoteSummary = getPayNoteSummaryFromDocument(payNotePayload);
         const deliveryName = record.deliveryDocument
           ? getDeliveryNameFromDocument(record.deliveryDocument)
@@ -919,11 +922,13 @@ export class DynamoPayNoteDeliveryRepository
           record.summary as Record<string, unknown> | undefined
         );
         const proposalDescription =
-          record.summarySourceEpoch === 0 && record.deliveryDocument
+          getPayNoteInitialMessageFromDocument(payNotePayloadFromDelivery) ??
+          getPayNoteInitialMessageFromDocument(record.payNoteDocument) ??
+          (record.deliveryDocument
             ? getProposalDescriptionFromDeliveryDocument(
                 record.deliveryDocument
               )
-            : undefined;
+            : undefined);
 
         return {
           deliveryId: record.deliveryId,

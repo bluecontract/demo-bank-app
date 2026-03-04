@@ -311,28 +311,36 @@ export const getPayNoteSummaryFromDocument = (
   };
 };
 
-const resolveInitialMessageDescription = (
-  initialMessages?:
-    | {
-        defaultMessage?: unknown;
-        perChannel?: Record<string, unknown>;
-      }
-    | undefined
+export const getPayNoteInitialMessageFromDocument = (
+  payNote?: unknown
 ): string | undefined => {
-  if (!initialMessages) {
+  const parsed = parsePayNote(payNote);
+  const sourceSimple = toSimpleRecord(payNote);
+  const sourceParsed = parsed?.output as Record<string, unknown> | undefined;
+  const initialStateDescription =
+    toSimpleRecord(sourceSimple?.payNoteInitialStateDescription) ??
+    toSimpleRecord(sourceParsed?.payNoteInitialStateDescription);
+  return getRecordString(
+    initialStateDescription ?? undefined,
+    'initialMessage'
+  );
+};
+
+const resolveInitialMessageDescription = (
+  initialMessages?: unknown
+): string | undefined => {
+  const source = toSimpleRecord(initialMessages);
+  if (!source) {
     return undefined;
   }
 
-  const perChannel =
-    initialMessages.perChannel && typeof initialMessages.perChannel === 'object'
-      ? initialMessages.perChannel
-      : undefined;
-  const payerMessage = getRecordString(perChannel, 'payerChannel');
+  const perChannel = toSimpleRecord(source.perChannel);
+  const payerMessage = getRecordString(perChannel ?? undefined, 'payerChannel');
   if (payerMessage) {
     return payerMessage;
   }
 
-  return getString(initialMessages.defaultMessage);
+  return getRecordString(source, 'defaultMessage');
 };
 
 export const getProposalDescriptionFromDeliveryDocument = (
@@ -343,8 +351,29 @@ export const getProposalDescriptionFromDeliveryDocument = (
     return undefined;
   }
 
+  const simple = parsed.simple as
+    | {
+        payNoteBootstrapRequest?: {
+          document?: unknown;
+          initialMessages?: unknown;
+        };
+        payNote?: unknown;
+      }
+    | undefined;
+
+  const payNoteDocument =
+    simple?.payNoteBootstrapRequest?.document ??
+    simple?.payNote ??
+    parsed.output.payNoteBootstrapRequest?.document;
+  const payNoteInitialMessage =
+    getPayNoteInitialMessageFromDocument(payNoteDocument);
+  if (payNoteInitialMessage) {
+    return payNoteInitialMessage;
+  }
+
   return resolveInitialMessageDescription(
-    parsed.output.payNoteBootstrapRequest?.initialMessages
+    simple?.payNoteBootstrapRequest?.initialMessages ??
+      parsed.output.payNoteBootstrapRequest?.initialMessages
   );
 };
 

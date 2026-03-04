@@ -3,7 +3,13 @@ import { PAYNOTE_DELIVERY_BLUE_ID } from './schema';
 import { blue } from '../../blue';
 import { getProposalDescriptionFromDeliveryDocument } from './blueUtils';
 
-const buildDeliveryDocument = (initialMessagesYaml = '') => {
+const buildDeliveryDocument = (input?: {
+  initialMessagesYaml?: string;
+  payNoteInitialStateDescriptionYaml?: string;
+}) => {
+  const initialMessagesYaml = input?.initialMessagesYaml ?? '';
+  const payNoteInitialStateDescriptionYaml =
+    input?.payNoteInitialStateDescriptionYaml ?? '';
   const yaml = `name: Delivery for Invoice
 payNoteBootstrapRequest:
   type: Conversation/Document Bootstrap Requested
@@ -13,7 +19,7 @@ ${initialMessagesYaml}  document:
     currency: USD
     amount:
       total: 1200
-cardTransactionDetails:
+${payNoteInitialStateDescriptionYaml}cardTransactionDetails:
   retrievalReferenceNumber: "123456789012"
   systemTraceAuditNumber: "654321"
   transmissionDateTime: "0101123456"
@@ -32,12 +38,31 @@ contracts:
 };
 
 describe('getProposalDescriptionFromDeliveryDocument', () => {
-  it('prefers payerChannel message over default message', () => {
-    const document = buildDeliveryDocument(`  initialMessages:
+  it('prefers payNote initial message over bootstrap initial messages', () => {
+    const document = buildDeliveryDocument({
+      initialMessagesYaml: `  initialMessages:
     defaultMessage: Default proposal message
     perChannel:
       payerChannel: Payer specific proposal message
-`);
+`,
+      payNoteInitialStateDescriptionYaml: `    payNoteInitialStateDescription:
+      initialMessage: Preferred proposal message
+`,
+    });
+
+    expect(getProposalDescriptionFromDeliveryDocument(document)).toBe(
+      'Preferred proposal message'
+    );
+  });
+
+  it('prefers payerChannel message over default message', () => {
+    const document = buildDeliveryDocument({
+      initialMessagesYaml: `  initialMessages:
+    defaultMessage: Default proposal message
+    perChannel:
+      payerChannel: Payer specific proposal message
+`,
+    });
 
     expect(getProposalDescriptionFromDeliveryDocument(document)).toBe(
       'Payer specific proposal message'
@@ -45,9 +70,26 @@ describe('getProposalDescriptionFromDeliveryDocument', () => {
   });
 
   it('falls back to default message when payerChannel is missing', () => {
-    const document = buildDeliveryDocument(`  initialMessages:
+    const document = buildDeliveryDocument({
+      initialMessagesYaml: `  initialMessages:
     defaultMessage: Default proposal message
-`);
+`,
+    });
+
+    expect(getProposalDescriptionFromDeliveryDocument(document)).toBe(
+      'Default proposal message'
+    );
+  });
+
+  it('falls back to bootstrap message when payNote initial message is empty', () => {
+    const document = buildDeliveryDocument({
+      initialMessagesYaml: `  initialMessages:
+    defaultMessage: Default proposal message
+`,
+      payNoteInitialStateDescriptionYaml: `    payNoteInitialStateDescription:
+      initialMessage: "   "
+`,
+    });
 
     expect(getProposalDescriptionFromDeliveryDocument(document)).toBe(
       'Default proposal message'

@@ -7,7 +7,10 @@ import {
 } from '@demo-bank-app/shared-bank-api-contract';
 import { formatMinorAmountWithCurrency } from '@demo-bank-app/shared-core';
 import type { PayNoteDeliveryRecord } from '@demo-bank-app/paynotes';
-import { getPayNoteSummaryFromDocument } from '@demo-bank-app/paynotes';
+import {
+  getPayNoteInitialMessageFromDocument,
+  getPayNoteSummaryFromDocument,
+} from '@demo-bank-app/paynotes';
 import {
   extractAuthInfo,
   type MaybeAuthenticatedTsRestRequestContext,
@@ -285,6 +288,24 @@ const parseSummary = (response: OpenAiResponsesParseResult) => {
   return ContractDocumentSummaryDto.parse(parsed);
 };
 
+const applyHeadlineFromInitialMessage = (
+  summary: z.infer<typeof ContractDocumentSummaryDto>,
+  payNoteDocument: Record<string, unknown>
+): z.infer<typeof ContractDocumentSummaryDto> => {
+  const initialMessage = getPayNoteInitialMessageFromDocument(payNoteDocument);
+  if (!initialMessage) {
+    return summary;
+  }
+
+  return {
+    ...summary,
+    story: {
+      ...summary.story,
+      headline: initialMessage,
+    },
+  };
+};
+
 type ProposalSummaryGenerationResult = {
   summary: z.infer<typeof ContractDocumentSummaryDto>;
   summaryUpdatedAt: string;
@@ -321,10 +342,13 @@ const generateOrLoadProposalSummary = async (input: {
 
   if (mockConfig.enabled) {
     const payNoteSummary = getPayNoteSummaryFromDocument(payNoteDocument);
-    const summary = buildMockProposalSummary({
-      config: mockConfig,
-      fallbackHeadline: payNoteSummary.name || 'PayNote proposal',
-    });
+    const summary = applyHeadlineFromInitialMessage(
+      buildMockProposalSummary({
+        config: mockConfig,
+        fallbackHeadline: payNoteSummary.name || 'PayNote proposal',
+      }),
+      payNoteDocument
+    );
     const now = new Date().toISOString();
     const sourceUpdatedAt = record.deliveryUpdatedAt ?? record.updatedAt;
 
@@ -372,8 +396,12 @@ const generateOrLoadProposalSummary = async (input: {
       (hasMatchingSummaryInput || hasMatchingTimestamp) &&
       hasMatchingEpoch
     ) {
+      const summary = applyHeadlineFromInitialMessage(
+        parsedSummary.data,
+        payNoteDocument
+      );
       return {
-        summary: parsedSummary.data,
+        summary,
         summaryUpdatedAt: record.summaryUpdatedAt,
         summarySourceUpdatedAt:
           record.summarySourceUpdatedAt ??
@@ -417,7 +445,10 @@ const generateOrLoadProposalSummary = async (input: {
       },
     });
 
-    const summary = parseSummary(response);
+    const summary = applyHeadlineFromInitialMessage(
+      parseSummary(response),
+      payNoteDocument
+    );
     const now = new Date().toISOString();
     const sourceUpdatedAt = record.deliveryUpdatedAt ?? record.updatedAt;
 

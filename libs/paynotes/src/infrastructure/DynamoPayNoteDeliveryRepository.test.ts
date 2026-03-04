@@ -291,6 +291,9 @@ contracts:
                 name: 'Invoice 42',
                 amount: { total: 1200 },
                 currency: 'USD',
+                payNoteInitialStateDescription: {
+                  initialMessage: 'Preferred proposal description',
+                },
               },
             },
           },
@@ -310,7 +313,7 @@ contracts:
       expect.objectContaining({
         deliveryId: 'delivery-1',
         name: 'Invoice 42',
-        proposalDescription: 'Payer-specific proposal description',
+        proposalDescription: 'Preferred proposal description',
         amountMinor: 1200,
         currency: 'USD',
         transactionId: 'txn-1',
@@ -319,7 +322,7 @@ contracts:
     ]);
   });
 
-  it('omits proposalDescription for non-initial summary epochs', async () => {
+  it('keeps proposalDescription for non-initial summary epochs', async () => {
     mockSend
       .mockResolvedValueOnce({
         Items: [
@@ -382,7 +385,79 @@ contracts:
     const result = await repository.listDeliveriesByUserId('user-1');
 
     expect(result).toHaveLength(1);
-    expect(result[0]?.proposalDescription).toBeUndefined();
+    expect(result[0]?.proposalDescription).toBe('Payer initial message');
+  });
+
+  it('uses payNote initial message from payNoteDocument when delivery document lacks it', async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            PK: 'USER#user-1',
+            SK: 'PAYNOTE_DELIVERY#2024-01-01T00:00:00.000Z#delivery-1',
+            entityType: 'PAYNOTE_DELIVERY_USER',
+            deliveryId: 'delivery-1',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-01T00:00:00.000Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'PAYNOTE_DELIVERY#delivery-1',
+          SK: 'META',
+          entityType: 'PAYNOTE_DELIVERY',
+          deliveryId: 'delivery-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+          summary: {
+            story: {
+              headline: 'Generated headline',
+              overview: ['Generated overview'],
+              bullets: [],
+            },
+            listPreview: 'Generated list preview',
+            nextSteps: {
+              title: 'Next steps',
+              items: [],
+            },
+            lastChange: {
+              short: 'Generated list preview',
+              more: 'Generated list preview',
+            },
+          },
+          summaryUpdatedAt: '2024-01-02T00:00:00.000Z',
+          deliveryDocument: {
+            type: { blueId: PAYNOTE_DELIVERY_BLUE_ID },
+            payNoteBootstrapRequest: {
+              initialMessages: {
+                defaultMessage: 'Legacy fallback message',
+              },
+              document: {
+                name: 'Invoice 42',
+                amount: { total: 1200 },
+                currency: 'USD',
+              },
+            },
+          },
+          payNoteDocument: {
+            name: 'Invoice 42',
+            amount: { total: 1200 },
+            currency: 'USD',
+            payNoteInitialStateDescription: {
+              initialMessage: 'super nice offer only for you',
+            },
+          },
+        },
+      });
+
+    const repository = createRepository();
+    const result = await repository.listDeliveriesByUserId('user-1');
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.proposalDescription).toBe(
+      'super nice offer only for you'
+    );
   });
 
   it('uses consistent read for session lookup mapping', async () => {
