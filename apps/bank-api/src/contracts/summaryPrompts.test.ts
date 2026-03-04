@@ -13,7 +13,7 @@ describe('summary prompts', () => {
     expect(prompt).toContain('Do not force bullet points');
     expect(prompt).toContain('non-technical bank customer');
     expect(prompt).toContain(
-      'plain readiness wording like "Contract is ready."'
+      'Treat lifecycle-only setup events (for example `Core/Document Processing Initiated`) as technical noise'
     );
     expect(prompt).toContain(
       'Avoid setup-only wording that does not help customers'

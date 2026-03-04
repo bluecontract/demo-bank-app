@@ -46,7 +46,7 @@ const CONTRACT_TASK = `Your task:
 - Write a short, human headline describing the most recent change or status update (the "last change"). It should read like a notification update.
 - The "last change" MUST be anchored to \`transition.triggerEvent\` when provided. Use the current document to explain its effect, but do not pick a different event as the latest change.
 - If the trigger event represents a concrete action (e.g., an operation call) with a specific value, describe that change explicitly (e.g., "Counter increased by 9") instead of a generic "status update recorded".
-- If the trigger event is only lifecycle/initialization setup (for example document processing initiated) and there is no clear customer-visible business action yet, use plain readiness wording like "Contract is ready." for \`story.headline\`, \`listPreview\`, and \`lastChange.short\`.
+- Focus on customer-visible business events in \`transition\` (trigger + emitted). Treat lifecycle-only setup events (for example \`Core/Document Processing Initiated\`) as technical noise and do not anchor \`story.headline\`, \`listPreview\`, or \`lastChange.short\` to them when business events are present.
 - For voucher/cashback contracts, keep wording outcome-first: "voucher is ready", "bank will report card payments", "cashback is paid from reserved amount".
 - In \`story.overview\`, build a two-layer explanation of the contract:
   - \`story.overview[0]\`: a short catch-up sentence saying what this contract is about in real-world terms.
