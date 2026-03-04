@@ -32,14 +32,73 @@ const buildCustomerActionPendingActionId = (input: {
 
 const parseCustomerActionRequest = (event: WebhookEmittedEvent) => {
   try {
-    const node = blue.jsonValueToNode(event);
-    if (!blue.isTypeOf(node, CustomerActionRequestedSchema)) {
+    const node = blue.resolve(blue.jsonValueToNode(event));
+    if (
+      !blue.isTypeOf(node, CustomerActionRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return null;
     }
-    return blue.nodeToSchemaOutput(node, CustomerActionRequestedSchema);
+    const parsed = blue.nodeToSchemaOutput(node, CustomerActionRequestedSchema);
+    const actionDescriptions = extractActionDescriptions(node);
+    if (
+      !Array.isArray(parsed.actions) ||
+      !actionDescriptions.some(description => Boolean(description))
+    ) {
+      return parsed;
+    }
+    return {
+      ...parsed,
+      actions: parsed.actions.map((action, index) => {
+        if (!action || typeof action !== 'object' || Array.isArray(action)) {
+          return action;
+        }
+        const description = actionDescriptions[index];
+        if (!description) {
+          return action;
+        }
+        return {
+          ...action,
+          description,
+        };
+      }),
+    };
   } catch {
     return null;
   }
+};
+
+const extractActionDescriptions = (
+  requestNode: BlueNode
+): Array<string | undefined> => {
+  const actionsNode = requestNode.getProperties()?.actions;
+  if (!actionsNode || typeof actionsNode.getItems !== 'function') {
+    return [];
+  }
+  const items = actionsNode.getItems();
+  if (!items) {
+    return [];
+  }
+
+  return items.map(item => {
+    const descriptionFromProperty = item
+      .getProperties()
+      ?.description?.getValue();
+    if (typeof descriptionFromProperty === 'string') {
+      const trimmed = descriptionFromProperty.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+
+    const description = item.getDescription();
+    if (typeof description !== 'string') {
+      return undefined;
+    }
+    const trimmed = description.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  });
 };
 
 const toInputSchemaJson = (value: unknown): unknown | undefined => {
@@ -93,6 +152,9 @@ const normalizeCustomerActionOptions = (
         reason: 'missing-action-label',
       };
     }
+    const description = getString(
+      (item as { description?: unknown }).description
+    );
 
     if (labels.has(label)) {
       return {
@@ -139,6 +201,7 @@ const normalizeCustomerActionOptions = (
 
     normalized.push({
       label,
+      ...(description ? { description } : {}),
       ...(variant ? { variant } : {}),
       ...(inputSchema !== undefined ? { inputSchema } : {}),
       ...(inputRequired !== undefined ? { inputRequired } : {}),

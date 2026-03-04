@@ -577,6 +577,7 @@ const CustomerActionVariantDto = z.enum(['primary', 'secondary', 'reject']);
 
 const CustomerActionOptionDto = z.object({
   label: z.string(),
+  description: z.string().optional(),
   variant: CustomerActionVariantDto.optional(),
   inputSchema: z.unknown().optional(),
   inputRequired: z.boolean().optional(),

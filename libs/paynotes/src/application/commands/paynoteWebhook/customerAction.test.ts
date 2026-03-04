@@ -154,6 +154,7 @@ describe('handleCustomerActionRequestEvents', () => {
               {
                 label: 'I have a concern',
                 variant: 'secondary',
+                description: 'Describe what is missing or incorrect.',
                 inputRequired: false,
                 inputSchema: { type: 'Text' },
                 inputTitle: 'Tell us what is wrong',
@@ -181,6 +182,7 @@ describe('handleCustomerActionRequestEvents', () => {
             actions: expect.arrayContaining([
               expect.objectContaining({
                 label: 'I have a concern',
+                description: 'Describe what is missing or incorrect.',
                 inputRequired: false,
                 inputSchema: expect.any(Object),
               }),

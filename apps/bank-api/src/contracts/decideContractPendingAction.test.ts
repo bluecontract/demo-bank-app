@@ -575,7 +575,13 @@ describe('decideContractPendingActionHandler', () => {
           title: 'Milestone 1',
           message: 'Confirm milestone 1.',
           requestId: 'request-1',
-          actions: [{ label: 'Accept', variant: 'primary' }],
+          actions: [
+            {
+              label: 'Accept',
+              description: 'Confirm milestone completion.',
+              variant: 'primary',
+            },
+          ],
           createdAt: '2024-01-01T00:00:00.000Z',
         },
       ],
@@ -615,6 +621,12 @@ describe('decideContractPendingActionHandler', () => {
           expect.objectContaining({
             actionId: 'customer-action:event-1:0',
             status: 'accepted',
+            actions: expect.arrayContaining([
+              expect.objectContaining({
+                label: 'Accept',
+                description: 'Confirm milestone completion.',
+              }),
+            ]),
             decisionPayload: expect.objectContaining({
               actionLabel: 'Accept',
             }),

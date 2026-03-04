@@ -15,6 +15,7 @@ export type ContractPendingCustomerActionVariant =
 
 export type ContractPendingCustomerAction = {
   label: string;
+  description?: string;
   variant?: ContractPendingCustomerActionVariant;
   inputSchema?: unknown;
   inputRequired?: boolean;

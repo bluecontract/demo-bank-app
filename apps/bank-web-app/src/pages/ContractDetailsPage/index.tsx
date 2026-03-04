@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -270,6 +271,7 @@ type CustomerContractPendingAction = Extract<
 
 type PendingActionOption = {
   label: string;
+  description?: string;
   variant?: 'primary' | 'secondary' | 'reject';
   inputSchema?: unknown;
   inputRequired?: boolean;
@@ -324,8 +326,13 @@ function ContractPendingActionCard({
           option.variant === 'reject'
             ? option.variant
             : undefined;
+        const description =
+          typeof option.description === 'string'
+            ? option.description.trim()
+            : undefined;
         acc.push({
           label,
+          ...(description ? { description } : {}),
           ...(variant ? { variant } : {}),
           ...(option.inputSchema !== undefined
             ? { inputSchema: option.inputSchema }
@@ -371,18 +378,35 @@ function ContractPendingActionCard({
       return null;
     }
   }, [activeInputAction]);
+  const activeInputDescription =
+    activeInputAction?.description || activeInputModel?.description;
 
-  const resetInputState = () => {
+  const resetInputState = useCallback(() => {
     setInputError(null);
     setTextInputValue('');
     setBooleanInputValue(false);
     setJsonInputValue('');
-  };
+  }, []);
 
-  const closeInputEditor = () => {
+  const closeInputEditor = useCallback(() => {
     setActiveInputActionLabel(null);
     resetInputState();
-  };
+  }, [resetInputState]);
+
+  useEffect(() => {
+    if (!activeInputAction) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isPending) {
+        closeInputEditor();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeInputAction, closeInputEditor, isPending]);
 
   const runApproveRejectDecision = (decision: 'accepted' | 'rejected') => {
     if (!sessionId || isPending) {
@@ -531,15 +555,15 @@ function ContractPendingActionCard({
       : undefined;
 
   return (
-    <div className="rounded-xl sm:rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
-      <h3 className="text-lg font-semibold text-slate-900">{action.title}</h3>
-      {description && (
-        <p className="mt-2 whitespace-pre-line text-sm text-slate-600">
-          {description}
-        </p>
-      )}
-      {isCustomerAction ? (
-        <>
+    <>
+      <div className="rounded-xl sm:rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
+        <h3 className="text-lg font-semibold text-slate-900">{action.title}</h3>
+        {description && (
+          <p className="mt-2 whitespace-pre-line text-sm text-slate-600">
+            {description}
+          </p>
+        )}
+        {isCustomerAction ? (
           <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
             {options.map(option => {
               const look = resolveButtonLook(option.variant);
@@ -561,107 +585,157 @@ function ContractPendingActionCard({
               );
             })}
           </div>
-          {activeInputAction && (
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-              <p className="text-sm font-semibold text-slate-900">
+        ) : (
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-rose-500 text-rose-500 hover:bg-rose-50 focus:ring-rose-500"
+              onClick={() => runApproveRejectDecision('rejected')}
+              disabled={isPending}
+            >
+              Reject
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => runApproveRejectDecision('accepted')}
+              disabled={isPending}
+            >
+              Accept
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {activeInputAction && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => {
+            if (!isPending) {
+              closeInputEditor();
+            }
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={activeInputAction.inputTitle ?? activeInputAction.label}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-lg font-semibold text-slate-900">
                 {activeInputAction.inputTitle ?? activeInputAction.label}
               </p>
-              {activeInputModel?.kind === 'boolean' ? (
-                <div className="mt-2 flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant={booleanInputValue ? 'secondary' : 'primary'}
-                    onClick={() => setBooleanInputValue(false)}
-                    disabled={isPending}
-                  >
-                    False
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={booleanInputValue ? 'primary' : 'secondary'}
-                    onClick={() => setBooleanInputValue(true)}
-                    disabled={isPending}
-                  >
-                    True
-                  </Button>
-                </div>
-              ) : activeInputModel &&
-                ['text', 'integer', 'double', 'timestamp'].includes(
-                  activeInputModel.kind
-                ) ? (
-                <input
-                  type={
-                    activeInputModel.kind === 'integer' ||
-                    activeInputModel.kind === 'double'
-                      ? 'number'
-                      : activeInputModel.kind === 'timestamp'
-                      ? 'datetime-local'
-                      : 'text'
-                  }
-                  className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
-                  placeholder={activeInputAction.inputPlaceholder}
-                  value={textInputValue}
-                  onChange={event => setTextInputValue(event.target.value)}
-                  disabled={isPending}
-                />
-              ) : (
-                <textarea
-                  className="mt-2 min-h-[120px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
-                  placeholder={
-                    activeInputAction.inputPlaceholder ??
-                    'Provide input as JSON (for example: {"message":"..."})'
-                  }
-                  value={jsonInputValue}
-                  onChange={event => setJsonInputValue(event.target.value)}
-                  disabled={isPending}
-                />
-              )}
-              {inputError && (
-                <p className="mt-2 text-xs text-rose-600">{inputError}</p>
-              )}
-              <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                aria-label="Close input dialog"
+                className="rounded-full p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+                onClick={closeInputEditor}
+                disabled={isPending}
+              >
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M5 5L15 15M15 5L5 15"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            {activeInputDescription ? (
+              <p className="mt-1 text-sm text-slate-500">
+                {activeInputDescription}
+              </p>
+            ) : null}
+            {activeInputModel?.kind === 'boolean' ? (
+              <div className="mt-4 flex items-center gap-2">
                 <Button
-                  variant="secondary"
                   size="sm"
-                  onClick={closeInputEditor}
+                  variant={booleanInputValue ? 'secondary' : 'primary'}
+                  onClick={() => setBooleanInputValue(false)}
                   disabled={isPending}
                 >
-                  Cancel
+                  False
                 </Button>
                 <Button
-                  variant="primary"
                   size="sm"
-                  onClick={submitInputDecision}
+                  variant={booleanInputValue ? 'primary' : 'secondary'}
+                  onClick={() => setBooleanInputValue(true)}
                   disabled={isPending}
                 >
-                  Submit
+                  True
                 </Button>
               </div>
+            ) : activeInputModel?.kind === 'text' ? (
+              <textarea
+                className="mt-4 min-h-[160px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
+                placeholder={activeInputAction.inputPlaceholder}
+                value={textInputValue}
+                onChange={event => setTextInputValue(event.target.value)}
+                disabled={isPending}
+              />
+            ) : activeInputModel &&
+              ['integer', 'double', 'timestamp'].includes(
+                activeInputModel.kind
+              ) ? (
+              <input
+                type={
+                  activeInputModel.kind === 'integer' ||
+                  activeInputModel.kind === 'double'
+                    ? 'number'
+                    : 'datetime-local'
+                }
+                className="mt-4 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
+                placeholder={activeInputAction.inputPlaceholder}
+                value={textInputValue}
+                onChange={event => setTextInputValue(event.target.value)}
+                disabled={isPending}
+              />
+            ) : (
+              <textarea
+                className="mt-4 min-h-[160px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
+                placeholder={
+                  activeInputAction.inputPlaceholder ??
+                  'Provide input as JSON (for example: {"message":"..."})'
+                }
+                value={jsonInputValue}
+                onChange={event => setJsonInputValue(event.target.value)}
+                disabled={isPending}
+              />
+            )}
+            {inputError && (
+              <p className="mt-2 text-xs text-rose-600">{inputError}</p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={closeInputEditor}
+                disabled={isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={submitInputDecision}
+                disabled={isPending}
+              >
+                Submit
+              </Button>
             </div>
-          )}
-        </>
-      ) : (
-        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-rose-500 text-rose-500 hover:bg-rose-50 focus:ring-rose-500"
-            onClick={() => runApproveRejectDecision('rejected')}
-            disabled={isPending}
-          >
-            Reject
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => runApproveRejectDecision('accepted')}
-            disabled={isPending}
-          >
-            Accept
-          </Button>
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

@@ -4,6 +4,7 @@ import {
   fireEvent,
   act,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { vi } from 'vitest';
 import { ContractDetailsPage } from './index';
@@ -12,6 +13,7 @@ import { useAuth } from '../../app/providers/AuthProvider';
 import {
   useActiveContractSession,
   useContractDetails,
+  useDecideContractPendingAction,
   useContractHistory,
   useContractReviewState,
   useRelatedContracts,
@@ -47,6 +49,7 @@ vi.mock('../../features/contracts/components/ContractAiChatDrawer', () => ({
 vi.mock('../../features/contracts/hooks', () => ({
   useActiveContractSession: vi.fn(),
   useContractDetails: vi.fn(),
+  useDecideContractPendingAction: vi.fn(),
   useContractHistory: vi.fn(),
   useContractReviewState: vi.fn(),
   useRelatedContracts: vi.fn(),
@@ -80,6 +83,8 @@ vi.mock('react-router-dom', async () => {
 
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
 const mockUseContractDetails = useContractDetails as ReturnType<typeof vi.fn>;
+const mockUseDecideContractPendingAction =
+  useDecideContractPendingAction as ReturnType<typeof vi.fn>;
 const mockUseContractHistory = useContractHistory as ReturnType<typeof vi.fn>;
 const mockUseContractReviewState = useContractReviewState as ReturnType<
   typeof vi.fn
@@ -116,6 +121,11 @@ describe('ContractDetailsPage', () => {
     mockUseActiveContractSession.mockReturnValue({
       activeSessionId: null,
       setActiveSession: vi.fn(),
+    });
+
+    mockUseDecideContractPendingAction.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
     });
 
     mockUseProposalDecision.mockReturnValue({
@@ -597,6 +607,125 @@ describe('ContractDetailsPage', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Payer')).toBeInTheDocument();
     expect(screen.getByText(/Alice/)).toBeInTheDocument();
+  });
+
+  it('opens customer action input in a modal and submits text payload', async () => {
+    const mutate = vi.fn((_, options?: { onSuccess?: () => void }) => {
+      options?.onSuccess?.();
+    });
+    mockUseDecideContractPendingAction.mockReturnValue({
+      mutate,
+      isPending: false,
+    });
+
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'Milestone Contract',
+        document: { name: 'Milestone Contract' },
+        summary: {
+          story: {
+            headline: 'Milestone Contract',
+            overview: ['Please review milestone details.'],
+            bullets: [],
+          },
+          listPreview: 'Milestone awaiting your response.',
+          nextSteps: {
+            title: 'Next steps',
+            items: ['Respond to the pending action.'],
+          },
+          lastChange: {
+            short: 'Milestone pending response.',
+            more: 'The contractor requested milestone confirmation.',
+          },
+        },
+        pendingActions: [
+          {
+            actionId: 'pending-1',
+            type: 'customerActionInput',
+            status: 'pending',
+            title: 'Milestone 1 Confirmation',
+            message: 'Confirm completion of milestone 1.',
+            actions: [
+              {
+                label: 'Approve milestone 1',
+                variant: 'primary',
+              },
+              {
+                label: 'I have a concern',
+                variant: 'secondary',
+                inputTitle: 'Concern details',
+                description: 'Describe what is missing or incorrect.',
+                inputPlaceholder: 'Provide concern details...',
+                inputSchema: {
+                  type: {
+                    blueId: 'DLRQwz7MQeCrzjy9bohPNwtCxKEBbKaMK65KBrwjfG6K',
+                  },
+                },
+              },
+            ],
+            createdAt: '2026-02-01T10:00:00.000Z',
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    fireEvent.click(screen.getByRole('button', { name: 'I have a concern' }));
+
+    const dialog = screen.getByRole('dialog', { name: 'Concern details' });
+    const textarea = within(dialog).getByRole('textbox');
+    expect(
+      within(dialog).getByText('Describe what is missing or incorrect.')
+    ).toBeInTheDocument();
+    expect(textarea).toHaveAttribute(
+      'placeholder',
+      'Provide concern details...'
+    );
+    fireEvent.change(textarea, {
+      target: { value: 'Please verify installation quality before capture.' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Submit' }));
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        sessionId: 'session-1',
+        actionId: 'pending-1',
+        decision: {
+          kind: 'submitInput',
+          input: {
+            actionLabel: 'I have a concern',
+            value: 'Please verify installation quality before capture.',
+          },
+        },
+      },
+      expect.any(Object)
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: 'Concern details' })
+      ).not.toBeInTheDocument();
+    });
   });
 
   it('does not render history section in proposal view', () => {

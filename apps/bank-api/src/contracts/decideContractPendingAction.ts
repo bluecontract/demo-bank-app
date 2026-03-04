@@ -117,6 +117,7 @@ const normalizeCustomerActionOptions = (
       if (!label) {
         return acc;
       }
+      const description = getString(option.description);
       const variant =
         option.variant === 'primary' ||
         option.variant === 'secondary' ||
@@ -125,6 +126,7 @@ const normalizeCustomerActionOptions = (
           : undefined;
       acc.push({
         label,
+        ...(description ? { description } : {}),
         ...(variant ? { variant } : {}),
         ...(option.inputSchema !== undefined
           ? { inputSchema: option.inputSchema }
