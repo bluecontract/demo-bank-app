@@ -3749,12 +3749,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       'Valid until December 31, 2027, and can be revoked anytime.'
     );
     expect(savedAction?.summary).toContain('\n\n');
-    expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'pendingActionRequested',
-        short: 'Payment Mandate approval requested.',
-      })
-    );
+    expect(contractRepository.addContractHistoryEntry).not.toHaveBeenCalled();
   });
 
   it('records pending action when mandate granterType is provided as typed scalar node', async () => {

@@ -3251,12 +3251,7 @@ describe('handleWebhookEvent', () => {
     );
     expect(
       deps.contractRepository.addContractHistoryEntry
-    ).toHaveBeenCalledWith(
-      expect.objectContaining({
-        contractId: 'contract-1',
-        kind: 'pendingActionRequested',
-      })
-    );
+    ).not.toHaveBeenCalled();
     expect(deps.myOsClient.runDocumentOperation).not.toHaveBeenCalled();
   });
 

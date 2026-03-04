@@ -993,14 +993,6 @@ const queuePaymentMandateBootstrapPendingAction = async (input: {
     updatedAt: now,
   });
 
-  await deps.contractRepository.addContractHistoryEntry({
-    contractId: contract.contractId,
-    kind: 'pendingActionRequested',
-    short: 'Payment Mandate approval requested.',
-    more: summary,
-    createdAt: now,
-  });
-
   log(
     logs,
     'info',

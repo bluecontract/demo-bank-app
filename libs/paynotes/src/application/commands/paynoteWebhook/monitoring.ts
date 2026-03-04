@@ -202,14 +202,6 @@ export const handleMonitoringRequestEvents = async (input: {
       updatedAt: now,
     });
 
-    await deps.contractRepository.addContractHistoryEntry({
-      contractId: contract.contractId,
-      kind: 'pendingActionRequested',
-      short: 'Monitoring consent requested.',
-      more: `Contract requested monitoring for merchant ${targetMerchantId}.`,
-      createdAt: now,
-    });
-
     logs.push({
       level: 'info',
       message: 'Monitoring request recorded as pending action',

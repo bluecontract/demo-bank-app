@@ -1143,14 +1143,6 @@ export const decideContractPendingActionHandler = async (
     updatedAt,
   });
 
-  await contractRepository.addContractHistoryEntry({
-    contractId: contract.contractId,
-    kind: 'bankLifecycle',
-    short: decisionOutcome.outcome.historyShort,
-    more: decisionOutcome.outcome.historyMore,
-    createdAt: updatedAt,
-  });
-
   return {
     status: 200 as const,
     body: {
