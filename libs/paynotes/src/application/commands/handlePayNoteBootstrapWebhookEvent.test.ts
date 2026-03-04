@@ -38,6 +38,22 @@ const buildTargetSessionStartedEvent = (sessionIdsInput: string | string[]) => {
   return blue.nodeToJson(node) as Record<string, unknown>;
 };
 
+const buildTargetSessionStartedEventWithWrappedItems = (
+  sessionIdsInput: string | string[]
+) => {
+  const sessionIds = Array.isArray(sessionIdsInput)
+    ? sessionIdsInput
+    : [sessionIdsInput];
+  return {
+    type: {
+      blueId: myosBlueIds['MyOS/Target Document Session Started'],
+    },
+    initiatorSessionIds: {
+      items: sessionIds.map(sessionId => ({ value: sessionId })),
+    },
+  } as Record<string, unknown>;
+};
+
 const buildPayNoteDocument = () => {
   const node = blue.yamlToNode('name: Test PayNote');
   node.setType(
@@ -311,6 +327,77 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
     ).not.toHaveBeenCalled();
   });
 
+  it('links PayNote records when target session ids are wrapped in items/value nodes', async () => {
+    const {
+      deps,
+      myOsClient,
+      payNoteRepository,
+      payNoteDeliveryRepository,
+      payNoteBootstrapRepository,
+      bootstrapContextRepository,
+      pendingBootstrapEventRepository,
+    } = createDependencies();
+
+    payNoteDeliveryRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(true);
+    payNoteDeliveryRepository.getDeliveryByBootstrapSessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    payNoteBootstrapRepository.getBootstrapBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-wrapped-1',
+        userId: 'user-1',
+        accountNumber: 'acct-1',
+        payerAccountNumber: 'acct-1',
+        payeeAccountNumber: 'acct-2',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+    bootstrapContextRepository.getContextBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-wrapped-1',
+        merchantId: 'merchant-1',
+        customerChannelKey: 'payerChannel',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+
+    myOsClient.fetchDocument = vi.fn().mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'doc-wrapped-1',
+        sessionId: 'session-wrapped-1',
+        document: buildPayNoteDocument(),
+      },
+    } as MyOsFetchDocumentResult);
+    payNoteRepository.getPayNote = vi.fn().mockResolvedValue(null);
+
+    const payload: HandlePayNoteBootstrapWebhookInput['payload'] = {
+      id: 'event-wrapped-1',
+      object: {
+        sessionId: 'bootstrap-wrapped-1',
+        document: buildBootstrapDocument(),
+        emitted: [
+          buildTargetSessionStartedEventWithWrappedItems('session-wrapped-1'),
+        ],
+        created: '2024-01-01T00:00:00.000Z',
+      },
+    };
+
+    const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
+
+    expect(result.handled).toBe(true);
+    expect(myOsClient.fetchDocument).toHaveBeenCalledWith('session-wrapped-1');
+    expect(payNoteRepository.savePayNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payNoteDocumentId: 'doc-wrapped-1',
+        sessionIds: ['session-wrapped-1'],
+      })
+    );
+    expect(pendingBootstrapEventRepository.addPending).not.toHaveBeenCalled();
+  });
+
   it('fetches target document once and links all target sessions from bootstrap event', async () => {
     const {
       deps,
@@ -385,6 +472,80 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
       bootstrapSessionId: 'bootstrap-multi-1',
       createdAt: '2024-01-01T00:00:00.000Z',
     });
+  });
+
+  it('saves delivery once with merged paynote session ids for multi-session bootstrap', async () => {
+    const {
+      deps,
+      myOsClient,
+      payNoteRepository,
+      payNoteDeliveryRepository,
+      payNoteBootstrapRepository,
+      bootstrapContextRepository,
+    } = createDependencies();
+
+    payNoteDeliveryRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(true);
+    payNoteDeliveryRepository.getDeliveryByBootstrapSessionId = vi
+      .fn()
+      .mockResolvedValue({
+        deliveryId: 'delivery-multi-save-1',
+        payNoteSessionIds: ['existing-session'],
+        accountNumber: 'acct-1',
+        userId: 'user-1',
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+    payNoteBootstrapRepository.getBootstrapBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-multi-save-1',
+        userId: 'user-1',
+        accountNumber: 'acct-1',
+        payerAccountNumber: 'acct-1',
+        payeeAccountNumber: 'acct-2',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+    bootstrapContextRepository.getContextBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-multi-save-1',
+        merchantId: 'merchant-1',
+        customerChannelKey: 'payerChannel',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+    myOsClient.fetchDocument = vi.fn().mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'doc-multi-save-1',
+        sessionId: 'session-a',
+        document: buildPayNoteDocument(),
+      },
+    } as MyOsFetchDocumentResult);
+    payNoteRepository.getPayNote = vi.fn().mockResolvedValue(null);
+
+    const payload: HandlePayNoteBootstrapWebhookInput['payload'] = {
+      id: 'event-multi-save-1',
+      object: {
+        sessionId: 'bootstrap-multi-save-1',
+        document: buildBootstrapDocument(),
+        emitted: [buildTargetSessionStartedEvent(['session-a', 'session-b'])],
+        created: '2024-01-01T00:00:00.000Z',
+      },
+    };
+
+    const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
+
+    expect(result.handled).toBe(true);
+    expect(payNoteDeliveryRepository.saveDelivery).toHaveBeenCalledTimes(1);
+    expect(payNoteDeliveryRepository.saveDelivery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryId: 'delivery-multi-save-1',
+        payNoteDocumentId: 'doc-multi-save-1',
+        payNoteSessionIds: ['existing-session', 'session-a', 'session-b'],
+      })
+    );
   });
 
   it('releases event claim when bootstrap processing fails', async () => {
@@ -1222,6 +1383,7 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
     const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
 
     expect(result.handled).toBe(true);
+    expect(payNoteDeliveryRepository.saveDelivery).toHaveBeenCalledTimes(1);
     const guarantorUpdateCalls = getDocumentOperationCalls(myOsClient).filter(
       call => call.operation === 'guarantorUpdate'
     );

@@ -39,8 +39,8 @@ const blue = new Blue({
   mergingProcessor: createDefaultMergingProcessor(),
 });
 
-const UNKNOWN_SESSION_RETRY_ATTEMPTS = 1;
-const UNKNOWN_SESSION_RETRY_DELAY_MS = 5_000;
+const UNKNOWN_SESSION_RETRY_ATTEMPTS = 3;
+const UNKNOWN_SESSION_RETRY_DELAY_MS = 2_000;
 
 let cachedLambdaClient: LambdaClient | null = null;
 let cachedSqsClient: SQSClient | null = null;

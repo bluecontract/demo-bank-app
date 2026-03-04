@@ -418,6 +418,9 @@ const reportDeliveryMandateAttachmentToPayNotes = async (input: {
   }
 };
 
+const dedupeSessionIds = (ids: string[]): string[] =>
+  Array.from(new Set(ids.filter(id => id && id.trim().length > 0)));
+
 const getTargetSessionIds = (event: unknown): string[] | null => {
   const node = toBlueNode(event);
   if (
@@ -433,25 +436,7 @@ const getTargetSessionIds = (event: unknown): string[] | null => {
     node,
     TargetDocumentSessionStartedSchema
   );
-  if (output.initiatorSessionIds?.length) {
-    return output.initiatorSessionIds.filter(id => id && id.trim().length > 0);
-  }
-
-  const simple = blue.nodeToJson(node, 'simple') as
-    | Record<string, unknown>
-    | undefined;
-  const fallbackSingle = simple?.initiatorSessionId;
-  if (typeof fallbackSingle === 'string' && fallbackSingle.trim().length > 0) {
-    return [fallbackSingle];
-  }
-  const fallbackArray = simple?.initiatorSessionIds;
-  if (Array.isArray(fallbackArray)) {
-    const ids = fallbackArray.filter(
-      (id): id is string => typeof id === 'string' && id.trim().length > 0
-    );
-    return ids.length ? ids : [];
-  }
-  return [];
+  return dedupeSessionIds(output.initiatorSessionIds ?? []);
 };
 
 const isDocumentSessionBootstrap = (document: unknown): boolean => {
@@ -805,6 +790,9 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         isPaymentMandate,
       });
 
+      const linkedPayNoteSessionIds: string[] = [];
+      let linkedPaymentMandate = false;
+
       for (const sessionId of targetSessionIds) {
         if (!isPayNote) {
           if (isPaymentMandate) {
@@ -826,42 +814,7 @@ export const handlePayNoteBootstrapWebhookEvent = async (
               now,
             });
 
-            if (deliveryRecord) {
-              const updatedDelivery = {
-                ...deliveryRecord,
-                paymentMandateDocumentId:
-                  deliveryRecord.paymentMandateDocumentId ??
-                  resolvedPrimary.documentId,
-                paymentMandateBootstrapSessionId:
-                  deliveryRecord.paymentMandateBootstrapSessionId ??
-                  bootstrapSessionId,
-                paymentMandateStatus: 'attached' as const,
-                updatedAt: now,
-              };
-              await deps.payNoteDeliveryRepository.saveDelivery(
-                updatedDelivery
-              );
-              await reportDeliveryMandateAttachmentToPayNotes({
-                eventId,
-                bootstrapSessionId,
-                deliveryRecord: updatedDelivery,
-                deps,
-                logs,
-                reportedSessionIds: reportedMandateAttachmentSessionIds,
-              });
-              log(
-                logs,
-                'info',
-                'Payment mandate bootstrap linked to delivery',
-                {
-                  eventId,
-                  deliveryId: deliveryRecord.deliveryId,
-                  sessionId,
-                  paymentMandateDocumentId: resolvedPrimary.documentId,
-                  bootstrapSessionId: bootstrapSessionId ?? null,
-                }
-              );
-            }
+            linkedPaymentMandate = true;
           }
 
           log(logs, 'info', 'Bootstrap target is not a PayNote document', {
@@ -931,44 +884,7 @@ export const handlePayNoteBootstrapWebhookEvent = async (
           now,
         });
 
-        if (deliveryRecord) {
-          const updatedDelivery = {
-            ...deliveryRecord,
-            payNoteDocumentId:
-              deliveryRecord.payNoteDocumentId ?? payNoteDocumentId,
-            payNoteSessionIds: mergeSessionIds(
-              deliveryRecord.payNoteSessionIds,
-              [sessionId]
-            ),
-            payNoteDocument:
-              resolvedPrimary.document ?? deliveryRecord.payNoteDocument,
-            payNoteUpdatedAt: eventObject?.created ?? now,
-            payNoteBootstrapSessionId:
-              deliveryRecord.payNoteBootstrapSessionId ?? bootstrapSessionId,
-            updatedAt: now,
-          };
-
-          await deps.payNoteDeliveryRepository.saveDelivery(updatedDelivery);
-          await reportDeliveryMandateAttachmentToPayNotes({
-            eventId,
-            bootstrapSessionId,
-            deliveryRecord: updatedDelivery,
-            payNoteSessionIdHint: sessionId,
-            deps,
-            logs,
-            reportedSessionIds: reportedMandateAttachmentSessionIds,
-          });
-        }
-
-        if (deliveryRecord?.holdId) {
-          await updateHoldPayNoteDocumentIdForBootstrap(
-            logs,
-            deliveryRecord.holdId,
-            payNoteDocumentId,
-            deps,
-            { eventId, deliveryId: deliveryRecord.deliveryId }
-          );
-        }
+        linkedPayNoteSessionIds.push(sessionId);
 
         if (!completionReported && bootstrapContext?.requestingSessionId) {
           completionReported = await reportBootstrapCompleted({
@@ -989,6 +905,79 @@ export const handlePayNoteBootstrapWebhookEvent = async (
           sessionId,
           deliveryId: deliveryRecord?.deliveryId,
         });
+      }
+
+      if (
+        !isPayNote &&
+        isPaymentMandate &&
+        deliveryRecord &&
+        linkedPaymentMandate
+      ) {
+        const updatedDelivery = {
+          ...deliveryRecord,
+          paymentMandateDocumentId:
+            deliveryRecord.paymentMandateDocumentId ??
+            resolvedPrimary.documentId,
+          paymentMandateBootstrapSessionId:
+            deliveryRecord.paymentMandateBootstrapSessionId ??
+            bootstrapSessionId,
+          paymentMandateStatus: 'attached' as const,
+          updatedAt: now,
+        };
+        await deps.payNoteDeliveryRepository.saveDelivery(updatedDelivery);
+        await reportDeliveryMandateAttachmentToPayNotes({
+          eventId,
+          bootstrapSessionId,
+          deliveryRecord: updatedDelivery,
+          deps,
+          logs,
+          reportedSessionIds: reportedMandateAttachmentSessionIds,
+        });
+        log(logs, 'info', 'Payment mandate bootstrap linked to delivery', {
+          eventId,
+          deliveryId: deliveryRecord.deliveryId,
+          paymentMandateDocumentId: resolvedPrimary.documentId,
+          bootstrapSessionId: bootstrapSessionId ?? null,
+        });
+      }
+
+      if (isPayNote && deliveryRecord && linkedPayNoteSessionIds.length > 0) {
+        const payNoteDocumentId = resolvedPrimary.documentId;
+        const updatedDelivery = {
+          ...deliveryRecord,
+          payNoteDocumentId:
+            deliveryRecord.payNoteDocumentId ?? payNoteDocumentId,
+          payNoteSessionIds: mergeSessionIds(
+            deliveryRecord.payNoteSessionIds,
+            linkedPayNoteSessionIds
+          ),
+          payNoteDocument:
+            resolvedPrimary.document ?? deliveryRecord.payNoteDocument,
+          payNoteUpdatedAt: eventObject?.created ?? now,
+          payNoteBootstrapSessionId:
+            deliveryRecord.payNoteBootstrapSessionId ?? bootstrapSessionId,
+          updatedAt: now,
+        };
+
+        await deps.payNoteDeliveryRepository.saveDelivery(updatedDelivery);
+        await reportDeliveryMandateAttachmentToPayNotes({
+          eventId,
+          bootstrapSessionId,
+          deliveryRecord: updatedDelivery,
+          deps,
+          logs,
+          reportedSessionIds: reportedMandateAttachmentSessionIds,
+        });
+
+        if (updatedDelivery.holdId) {
+          await updateHoldPayNoteDocumentIdForBootstrap(
+            logs,
+            updatedDelivery.holdId,
+            payNoteDocumentId,
+            deps,
+            { eventId, deliveryId: updatedDelivery.deliveryId }
+          );
+        }
       }
 
       return { handled: true, logs };
