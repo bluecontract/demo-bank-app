@@ -54,6 +54,8 @@ const extractFactsFromFirstParseCall = (): Record<string, unknown> => {
 
 describe('generateContractSummaryHandler', () => {
   const payNoteTypeBlueId = paynoteBlueIds['PayNote/PayNote'];
+  const documentProcessingInitiatedBlueId =
+    'BrpmpNt5JkapeUvPqYcxgXZrHNZX3R757dRwuXXdfNM2';
   const summaryFixture = {
     story: {
       headline: 'PayNote',
@@ -544,7 +546,7 @@ describe('generateContractSummaryHandler', () => {
     );
   });
 
-  it('uses static ready fallback without LLM for epoch 0 with one emitted event and empty trigger', async () => {
+  it('uses static ready fallback without LLM for epoch 0 with only Document Processing Initiated', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
       typeBlueId: payNoteTypeBlueId,
@@ -558,7 +560,7 @@ describe('generateContractSummaryHandler', () => {
       },
       emittedEvents: [
         {
-          type: { blueId: 'BrpmpNt5JkapeUvPqYcxgXZrHNZX3R757dRwuXXdfNM2' },
+          type: { blueId: documentProcessingInitiatedBlueId },
         },
       ],
       userId: 'user-123',
@@ -597,7 +599,7 @@ describe('generateContractSummaryHandler', () => {
     );
   });
 
-  it('does not use static ready fallback when epoch 0 has more than one emitted event', async () => {
+  it('filters out Document Processing Initiated from LLM facts when other emitted events are present', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
       typeBlueId: payNoteTypeBlueId,
@@ -609,8 +611,8 @@ describe('generateContractSummaryHandler', () => {
         contracts: {},
       },
       emittedEvents: [
-        { type: { blueId: 'BrpmpNt5JkapeUvPqYcxgXZrHNZX3R757dRwuXXdfNM2' } },
-        { type: { blueId: 'BJvjorbC5ed5KTV7SxoV3CvrJXjrFPcFxY9QT4jHBbXi' } },
+        { type: { blueId: documentProcessingInitiatedBlueId } },
+        { type: { value: 'Conversation/Customer Action Requested' } },
       ],
       userId: 'user-123',
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -632,6 +634,99 @@ describe('generateContractSummaryHandler', () => {
     expect(result.status).toBe(200);
     expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(1);
     expect(getOpenAiApiKey).toHaveBeenCalledTimes(1);
+    const facts = extractFactsFromFirstParseCall();
+    const emittedEvents = ((
+      facts.transition as { emittedEvents?: unknown[] } | undefined
+    )?.emittedEvents ?? []) as unknown[];
+    expect(JSON.stringify(emittedEvents)).not.toContain(
+      documentProcessingInitiatedBlueId
+    );
+    expect(JSON.stringify(emittedEvents)).toContain(
+      'Conversation/Customer Action Requested'
+    );
+  });
+
+  it('does not use static ready fallback when epoch 0 has only one non-initiated emitted event', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      emittedEvents: [
+        { type: { value: 'Conversation/Customer Action Requested' } },
+      ],
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:02:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(1);
+    const facts = extractFactsFromFirstParseCall();
+    const emittedEvents = ((
+      facts.transition as { emittedEvents?: unknown[] } | undefined
+    )?.emittedEvents ?? []) as unknown[];
+    expect(JSON.stringify(emittedEvents)).toContain(
+      'Conversation/Customer Action Requested'
+    );
+  });
+
+  it('keeps Document Processing Initiated in LLM facts when summarySourceEpoch is greater than 0 and there are no business events', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValueOnce({
+      contractId: 'sess-1',
+      typeBlueId: payNoteTypeBlueId,
+      displayName: 'PayNote',
+      sessionId: 'sess-1',
+      summarySourceEpoch: 1,
+      document: {
+        type: { blueId: payNoteTypeBlueId },
+        name: 'Test PayNote',
+        contracts: {},
+      },
+      emittedEvents: [{ type: { blueId: documentProcessingInitiatedBlueId } }],
+      userId: 'user-123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:02:00.000Z',
+    });
+
+    hoistedOpenAI.responsesParseMock.mockResolvedValueOnce({
+      output_parsed: summaryFixture,
+    });
+
+    const result = await generateContractSummaryHandler(
+      {
+        params: { sessionId: 'sess-1' },
+        body: { force: true },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(result.status).toBe(200);
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(1);
+    const facts = extractFactsFromFirstParseCall();
+    const emittedEvents = ((
+      facts.transition as { emittedEvents?: unknown[] } | undefined
+    )?.emittedEvents ?? []) as unknown[];
+    expect(JSON.stringify(emittedEvents)).toContain(
+      documentProcessingInitiatedBlueId
+    );
   });
 
   it('does not use static ready fallback when trigger event is present', async () => {

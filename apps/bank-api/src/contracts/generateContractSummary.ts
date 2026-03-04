@@ -1,6 +1,7 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import OpenAI from 'openai';
 import { z } from 'zod';
+import { DocumentProcessingInitiatedSchema } from '@blue-repository/types/packages/core/schemas';
 import {
   bankApiContract,
   ContractDocumentSummaryDto,
@@ -20,6 +21,7 @@ import { buildContractSummaryPrompt } from './summaryPrompts';
 import {
   ContractSummaryInputError,
   isOpenAiContextLimitError,
+  summaryBlue,
 } from './summaryUtils';
 import { buildContractSummaryFacts } from './summary/buildFacts';
 import {
@@ -104,6 +106,20 @@ const buildInitReadySummary = (): z.infer<
     more: 'Contract was set up successfully.',
   },
 });
+
+const isCoreDocumentProcessingInitiatedEvent = (event: unknown): boolean => {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) {
+    return false;
+  }
+  try {
+    const node = summaryBlue.jsonValueToNode(event);
+    return summaryBlue.isTypeOf(node, DocumentProcessingInitiatedSchema, {
+      checkSchemaExtensions: true,
+    });
+  } catch {
+    return false;
+  }
+};
 
 const parseSourceEpoch = (value: unknown): number | undefined => {
   if (typeof value === 'number' && isFiniteInteger(value)) {
@@ -195,10 +211,25 @@ const generateOrLoadContractSummary = async (input: {
   const previousSummary = cachedSummary ?? undefined;
   const model = process.env.CONTRACT_SUMMARY_MODEL || DEFAULT_MODEL;
   const summarySourceEpoch = resolveSummarySourceEpoch(contract);
+  const emittedEvents = contract.emittedEvents ?? [];
+  const initiatedEvents: unknown[] = [];
+  const nonInitiatedEmittedEvents: unknown[] = [];
+  for (const event of emittedEvents) {
+    if (isCoreDocumentProcessingInitiatedEvent(event)) {
+      initiatedEvents.push(event);
+    } else {
+      nonInitiatedEmittedEvents.push(event);
+    }
+  }
+  const emittedEventsForSummary =
+    nonInitiatedEmittedEvents.length > 0
+      ? nonInitiatedEmittedEvents
+      : emittedEvents;
   const shouldUseReadyFallback =
     summarySourceEpoch === 0 &&
     (contract.triggerEvent === undefined || contract.triggerEvent === null) &&
-    (contract.emittedEvents?.length ?? 0) === 1;
+    initiatedEvents.length > 0 &&
+    nonInitiatedEmittedEvents.length === 0;
   const mockConfig = getPayNoteSummaryMockConfig(contract.document);
 
   if (mockConfig.enabled) {
@@ -328,7 +359,7 @@ const generateOrLoadContractSummary = async (input: {
           updatedAt: contract.updatedAt,
           document: contract.document,
           triggerEvent: contract.triggerEvent,
-          emittedEvents: contract.emittedEvents,
+          emittedEvents: emittedEventsForSummary,
           previousSummary,
         },
       });
