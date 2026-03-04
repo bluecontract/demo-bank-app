@@ -96,11 +96,15 @@ Task:
 Scope:
 Key files:
 Relevant docs:
+- docs/adr/009-blue-document-handling.md (required check)
 Tests run:
 Primary risks:
 Review instructions:
 - Review staged files only (ignore unstaged/untracked).
 - Do not propose code changes; report issues only.
+- Enforce ADR-009 for any Blue object handling.
+- Flag ad-hoc raw JSON type checks for Blue objects/events when `blue.*` APIs should be used.
+- Verify Blue object flows use proper methods (`jsonValueToNode`, `isTypeOf(..., { checkSchemaExtensions: true })`, `nodeToSchemaOutput`) where applicable.
 Focus areas: High-priority issues only (DRY/SRP, reuse opportunities, regressions, missing tests, security).
 
 Staged files (review only these):

@@ -21,6 +21,9 @@ Primary risks:
 Review instructions:
 - Review staged files only (ignore unstaged/untracked).
 - Do not propose code changes; report issues only.
+- Enforce ADR-009 (`docs/adr/009-blue-document-handling.md`) for any Blue object handling.
+- Flag ad-hoc raw JSON type checks for Blue objects/events (e.g. manual `type.blueId/name/value` branching) when `blue.*` APIs should be used.
+- Verify Blue object flows use proper methods (`jsonValueToNode`, `isTypeOf(..., { checkSchemaExtensions: true })`, `nodeToSchemaOutput`) where applicable.
 Focus areas: High-priority issues only (DRY/SRP, reuse opportunities, regressions, missing tests, security).
 ```
 
@@ -92,11 +95,15 @@ Task:
 Scope:
 Key files:
 Relevant docs:
+- docs/adr/009-blue-document-handling.md (required check)
 Tests run:
 Primary risks:
 Review instructions:
 - Review staged files only (ignore unstaged/untracked).
 - Do not propose code changes; report issues only.
+- Enforce ADR-009 for any Blue object handling.
+- Flag ad-hoc raw JSON type checks for Blue objects/events when `blue.*` APIs should be used.
+- Verify Blue object flows use proper methods (`jsonValueToNode`, `isTypeOf(..., { checkSchemaExtensions: true })`, `nodeToSchemaOutput`) where applicable.
 Focus areas: High-priority issues only (DRY/SRP, reuse opportunities, regressions, missing tests, security).
 
 Staged files (review only these):
@@ -149,3 +156,5 @@ EOF
 - Record decisions and rationale in `result.md`, including what was changed or why it was skipped.
 - Prioritize DRY/SRP and reuse opportunities.
 - Call out any behavior changes or missing tests.
+- Always include ADR-009 compliance in the review when staged changes touch Blue objects/documents/events.
+- Treat manual JSON-based Blue type discrimination as a review finding unless explicitly allowed by ADR/docs.
