@@ -33,20 +33,24 @@ Out of scope:
    - not `PayNote/Reverse Card Charge and Capture Immediately Requested`.
 2. Voucher hold represents reserved payout pool.
 3. Voucher captures are partial and can happen repeatedly from that hold.
-4. Payment Mandate is additional protection layer (expiry/revocation/counterparty/paynote policy).
-5. Bank must not emit accepted charge response until Payment Mandate authorization is actually confirmed.
+4. Payment Mandate is additional protection layer for operations that create new
+   exposure (new holds/charges), with optional reporting for existing-hold
+   capture.
+5. Bank must not emit accepted mandate-gated charge response until Payment
+   Mandate authorization is actually confirmed.
 
 ## Current mismatches to fix
 
-1. Bootstrap response session id is currently treated as Payment Mandate session id in
-   pending-action outcome storage, which is not guaranteed correct for async
-   bootstrap lifecycle.
+1. Bootstrap response session id is currently treated as Payment Mandate session
+   id in pending-action outcome storage, which is not guaranteed correct for
+   async bootstrap lifecycle.
 2. Charge flow still uses hardcoded polling window as a decision gate.
 3. Missing `paymentMandateDocumentId` path currently infers Payment Mandate defaults
    (`amountLimit = request amount`) instead of consuming explicit definition.
 4. Voucher tests currently validate reverse immediate-capture path, not
    authorize-only hold-first path.
-5. Capture path is not consistently Payment Mandate-gated for voucher double-protection.
+5. Capture path does not distinguish existing-hold capture from new-exposure
+   requests, so mandate applicability is inconsistent.
 
 ## Target behavior
 
@@ -54,29 +58,39 @@ Out of scope:
 
 1. Bank receives linked/reverse charge request and dedupes by
    `(webhookEventId, emittedEventIndex)`.
-2. Bank validates `paymentMandateDocumentId`:
+2. Bank evaluates applicability:
+   - new exposure request (linked/reverse/new reserve) -> mandate required,
+   - existing-hold capture -> mandate optional.
+3. For mandate-required requests, bank validates `paymentMandateDocumentId`:
    - missing id -> reject,
    - document not found/inactive/revoked/policy mismatch -> reject.
-3. Bank emits `PayNote/Payment Mandate Spend Authorization Requested`.
-4. After authorization is confirmed:
+4. For mandate-required requests, bank emits
+   `PayNote/Payment Mandate Spend Authorization Requested`.
+5. After authorization is confirmed:
    - emit `PayNote/Card Charge Responded` with `status: accepted`,
    - execute reserve (and optional capture-immediate only for relevant event types),
    - emit `PayNote/Card Charge Completed`.
-5. If Payment Mandate authorization is rejected:
+6. If Payment Mandate authorization is rejected:
    - emit `PayNote/Card Charge Responded` with `status: rejected` and reason.
-6. If linked paynote payload exists, startup response stream remains separate:
+7. Existing-hold capture path:
+   - execute capture regardless of mandate presence,
+   - if mandate id exists, send settlement report best-effort,
+   - failed mandate report does not roll back successful capture.
+8. If linked paynote payload exists, startup response stream remains separate:
    - `PayNote/Linked PayNote Start Responded|Started|Failed`.
 
 ### B) Payment Mandate orchestration reliability
 
-1. Payment Mandate identity source of truth:
-   - `paymentMandateDocumentId` plus resolved Payment Mandate session from document lifecycle.
-2. No decision-critical fixed polling window.
-3. Retry policy for technical failures:
+1. Payment Mandate identity source of truth is final linked identity:
+   - `paymentMandateDocumentId` + resolved `paymentMandateSessionId`.
+2. Bootstrap response session is tracked separately as
+   `paymentMandateBootstrapSessionId` and must not be treated as final session.
+3. No decision-critical fixed polling window.
+4. Retry policy for technical failures:
    - transient Payment Mandate fetch/operation failures are retried,
    - terminal timeout/retry exhaustion returns explicit technical reject reason.
-4. `chargeAttemptId` remains stable correlation key across request ->
-   authorization -> settlement.
+5. `authorizationId` is preferred correlation key across authorization ->
+   settlement (`chargeAttemptId` retained as legacy alias).
 
 ### C) Explicit Payment Mandate bootstrap flow
 
@@ -133,9 +147,12 @@ WP-4 Voucher authorize-only flow alignment:
 - adjust voucher examples/tests to reverse authorize-only path,
 - verify hold-first then partial capture behavior.
 
-WP-5 Capture Payment Mandate gating:
+WP-5 Applicability matrix + capture optional-report path:
 
-- add Payment Mandate validation/orchestration for voucher capture requests.
+- enforce mandate gating only for new exposure requests,
+- support existing-hold capture without mandate requirement,
+- when existing-hold capture has mandate id, report settlement best-effort
+  without affecting capture outcome.
 
 WP-6 Test matrix expansion:
 
@@ -149,7 +166,8 @@ WP-6 Test matrix expansion:
    partial captures from one hold.
 2. Subscription can run repeated cycles under one Payment Mandate limit without
    implicit Payment Mandate inference.
-3. Bank never emits accepted charge response before Payment Mandate approval.
+3. For mandate-required requests, bank never emits accepted charge response
+   before Payment Mandate approval.
 4. Technical Payment Mandate failures are surfaced as bank-technical rejects
    (clear reason), not Payment Mandate-policy rejects.
 5. Webhook lag/retries do not cause duplicate execution or inconsistent Payment Mandate totals.

@@ -62,9 +62,18 @@ For current scope, bank MUST NOT create/bootstrap Payment Mandate from
 `paymentMandate` in charge request payload. Payment Mandate provisioning is
 explicit via `Conversation/Document Bootstrap Requested`.
 
-### FR-4 Payment Mandate gating
+### FR-4 Payment Mandate applicability matrix
 
-When request requires Payment Mandate:
+Bank MUST enforce the following applicability matrix:
+
+- `PayNote/Linked ... Requested` and `PayNote/Reverse ... Requested` that create
+  new holds/charges are mandate-gated.
+- `PayNote/Reserve Funds Requested` that creates a new hold is mandate-gated in
+  mandate-protected flows.
+- `PayNote/Capture Funds Requested` against an already existing hold is not
+  mandate-gated by default.
+
+For mandate-gated requests:
 
 - valid active Payment Mandate -> bank MAY proceed,
 - missing/invalid Payment Mandate -> bank MUST reject explicitly.
@@ -79,9 +88,9 @@ Payment Mandate-gated charge/capture requests.
 
 Bank MUST NOT auto-create Payment Mandate from charge request fallback policy.
 
-### FR-5 Payment Mandate orchestration events (required)
+### FR-5 Payment Mandate orchestration events
 
-For Payment Mandate-gated charge requests bank MUST use:
+For mandate-gated requests bank MUST use:
 
 - `PayNote/Payment Mandate Spend Authorization Requested`
 - `PayNote/Payment Mandate Spend Authorization Responded`
@@ -90,12 +99,22 @@ For Payment Mandate-gated charge requests bank MUST use:
 
 Bank MUST execute reserve/capture only after authorization status `approved`.
 
+For capture on existing hold:
+
+- without mandate -> bank executes capture directly,
+- with `paymentMandateDocumentId` -> bank executes capture directly and then
+  attempts mandate settlement reporting best-effort.
+
+Failed/timeout mandate reporting for existing-hold capture MUST NOT roll back a
+successful capture result.
+
 ### FR-6 Correlation and idempotency keys
 
 - Bank MUST derive stable `chargeAttemptId` from source emitted event identity
   (`webhookEventId + emittedEventIndex + sourceDocumentId`).
-- `chargeAttemptId` MUST be used across all Payment Mandate orchestration events
-  and internal attempt persistence.
+- Payment Mandate v2 SHOULD use `authorizationId` as the primary mandate
+  correlation id. `chargeAttemptId` remains supported as legacy alias and should
+  match `authorizationId` when both are present.
 - `requestId` remains optional business correlation only and MUST NOT be used as
   idempotency key.
 
@@ -107,7 +126,7 @@ document state:
 - `amountLimit`
 - `amountReserved`
 - `amountCaptured`
-- per-attempt state under `chargeAttempts[chargeAttemptId]`
+- per-attempt state under `chargeAttempts[authorizationId]`
 
 Settlement retries MUST be idempotent and MUST NOT double-apply deltas.
 
@@ -116,7 +135,8 @@ Settlement retries MUST be idempotent and MUST NOT double-apply deltas.
 `PayNote/Payment Mandate` MUST be modeled with:
 
 - cumulative totals: `amountLimit`, `amountReserved`, `amountCaptured`,
-- per-attempt state: `chargeAttempts[chargeAttemptId]`.
+- per-attempt state: `chargeAttempts[authorizationId]` (`chargeAttemptId`
+  accepted as legacy key).
 
 The implementation MUST treat `chargeAttempts` as the canonical per-attempt
 state store (no split per-attempt maps in bank state).
@@ -232,6 +252,16 @@ Bank MUST:
   accepted charge response),
 - execute charge only after Payment Mandate authorization is confirmed,
 - return explicit technical reject when retry policy is exhausted.
+
+### FR-15 Bootstrap lifecycle identity semantics
+
+For `paymentMandateBootstrapApproval`, bank MUST track identities separately:
+
+- `paymentMandateBootstrapSessionId`: bootstrap response session (intermediate),
+- `paymentMandateSessionId`: final linked mandate session,
+- `paymentMandateDocumentId`: final linked mandate document.
+
+Bank MUST NOT treat bootstrap session id as final mandate session id.
 
 ## Non-functional Requirements
 
