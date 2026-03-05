@@ -3,6 +3,7 @@ import type {
   ReserveFundsRequest,
   TransferFundsRequest,
   CaptureHoldRequest,
+  ReleaseHoldRequest,
 } from '../application/ports';
 import {
   Money,
@@ -10,6 +11,8 @@ import {
   reserveFunds,
   captureHold,
   partialCaptureHold,
+  releaseHold,
+  partialReleaseHold,
 } from '@demo-bank-app/banking';
 import type { BankingRepository, HoldRepository } from '@demo-bank-app/banking';
 import type { PowertoolsLogger } from '@demo-bank-app/shared-observability';
@@ -67,6 +70,25 @@ const buildCaptureRequest = (request: CaptureHoldRequest) => ({
   userId: request.userId,
   idempotencyKey: request.idempotencyKey,
   counterpartyAccountNumber: request.counterpartyAccountNumber,
+  payNoteDocumentId: request.payNoteDocumentId,
+});
+
+const buildReleaseRequest = (request: ReleaseHoldRequest) => ({
+  holdId: request.holdId,
+  userId: request.userId,
+  idempotencyKey: request.idempotencyKey,
+  reason: request.reason,
+  payNoteDocumentId: request.payNoteDocumentId,
+});
+
+const buildPartialReleaseRequest = (
+  request: ReleaseHoldRequest & { amountMinor: number }
+) => ({
+  holdId: request.holdId,
+  userId: request.userId,
+  idempotencyKey: request.idempotencyKey,
+  amountMinor: request.amountMinor,
+  reason: request.reason,
   payNoteDocumentId: request.payNoteDocumentId,
 });
 
@@ -204,6 +226,27 @@ export const createBankingFacade = (
       }
 
       return captureHold(buildCaptureRequest(request), {
+        bankingRepository: deps.bankingRepository,
+        holdRepository: deps.holdRepository,
+        logger: deps.logger,
+      });
+    },
+
+    async releaseHold(request) {
+      if (typeof request.amountMinor === 'number') {
+        return partialReleaseHold(
+          buildPartialReleaseRequest(
+            request as ReleaseHoldRequest & { amountMinor: number }
+          ),
+          {
+            bankingRepository: deps.bankingRepository,
+            holdRepository: deps.holdRepository,
+            logger: deps.logger,
+          }
+        );
+      }
+
+      return releaseHold(buildReleaseRequest(request), {
         bankingRepository: deps.bankingRepository,
         holdRepository: deps.holdRepository,
         logger: deps.logger,

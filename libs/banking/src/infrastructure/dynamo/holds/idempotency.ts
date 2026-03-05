@@ -11,7 +11,8 @@ export type HoldIdempotencyCommand =
   | 'RESERVE'
   | 'CAPTURE'
   | 'CAPTURE_PARTIAL'
-  | 'RELEASE';
+  | 'RELEASE'
+  | 'RELEASE_PARTIAL';
 
 export interface HoldIdempotencyItem {
   PK: string;

@@ -36,6 +36,25 @@ export interface ReleaseHoldResult {
   created: boolean;
 }
 
+export interface PartialReleaseHoldRequest {
+  accountId: string;
+  accountBalanceVersion: number;
+  availableBalanceMinor: number;
+  releaseAmountMinor: number;
+  hold: Hold;
+  holdEvent: Extract<HoldEvent, { type: 'RELEASED' }>;
+  expectedAmountMinor: number;
+  expectedCapturedAmountMinor: number;
+  idempotencyKey: string;
+  idempotencyKeyHash: string;
+  userId: string;
+}
+
+export interface PartialReleaseHoldResult {
+  hold: Hold;
+  created: boolean;
+}
+
 export interface CaptureHoldRequest {
   payerAccountId: string;
   payerAccountBalanceVersion: number;
@@ -114,6 +133,9 @@ export interface HoldRepository {
   ): Promise<PaginatedResult<HoldActivityRecord>>;
   reserveHold(request: ReserveHoldRequest): Promise<ReserveHoldResult>;
   releaseHold(request: ReleaseHoldRequest): Promise<ReleaseHoldResult>;
+  partialReleaseHold(
+    request: PartialReleaseHoldRequest
+  ): Promise<PartialReleaseHoldResult>;
   captureHold(request: CaptureHoldRequest): Promise<CaptureHoldResult>;
   partialCaptureHold(
     request: PartialCaptureHoldRequest

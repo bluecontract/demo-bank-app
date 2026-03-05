@@ -16,12 +16,15 @@ import {
   ReverseCardChargeRequestedSchema,
   StartCardTransactionMonitoringRequestedSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
+import type { BlueNode } from '@blue-labs/language';
 import { blue } from '../../../blue';
 import type { WebhookEmittedEvent } from './types';
 import { getString } from './utils';
 
 export const RESERVE_FUNDS_EVENT_NAME = 'PayNote/Reserve Funds Requested';
 export const CAPTURE_FUNDS_EVENT_NAME = 'PayNote/Capture Funds Requested';
+export const RESERVATION_RELEASE_EVENT_NAME =
+  'PayNote/Reservation Release Requested';
 export const CAPTURE_IMMEDIATELY_EVENT_NAME =
   'PayNote/Reserve Funds and Capture Immediately Requested';
 export const CAPTURE_LOCK_REQUESTED_EVENT_NAME =
@@ -111,57 +114,141 @@ const resolveEventType = (event: unknown): string | undefined => {
   }
 
   try {
-    const node = blue.jsonValueToNode(event);
-    if (blue.isTypeOf(node, CardTransactionCaptureLockRequestedSchema)) {
+    const node = blue.resolve(blue.jsonValueToNode(event));
+    if (
+      blue.isTypeOf(node, CardTransactionCaptureLockRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return CAPTURE_LOCK_REQUESTED_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, CardTransactionCaptureUnlockRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, CardTransactionCaptureUnlockRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return CAPTURE_UNLOCK_REQUESTED_EVENT_NAME;
     }
     if (
-      blue.isTypeOf(node, LinkedCardChargeAndCaptureImmediatelyRequestedSchema)
+      blue.isTypeOf(
+        node,
+        LinkedCardChargeAndCaptureImmediatelyRequestedSchema,
+        {
+          checkSchemaExtensions: true,
+        }
+      )
     ) {
       return LINKED_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, LinkedCardChargeRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, LinkedCardChargeRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return LINKED_CARD_CHARGE_REQUESTED_EVENT_NAME;
     }
     if (
-      blue.isTypeOf(node, ReverseCardChargeAndCaptureImmediatelyRequestedSchema)
+      blue.isTypeOf(
+        node,
+        ReverseCardChargeAndCaptureImmediatelyRequestedSchema,
+        {
+          checkSchemaExtensions: true,
+        }
+      )
     ) {
       return REVERSE_CARD_CHARGE_AND_CAPTURE_IMMEDIATELY_REQUESTED_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, ReverseCardChargeRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, ReverseCardChargeRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return REVERSE_CARD_CHARGE_REQUESTED_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, PaymentMandateSpendAuthorizationRespondedSchema)) {
+    if (
+      blue.isTypeOf(node, PaymentMandateSpendAuthorizationRespondedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return MANDATE_SPEND_AUTHORIZATION_RESPONDED_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, PaymentMandateSpendSettlementRespondedSchema)) {
+    if (
+      blue.isTypeOf(node, PaymentMandateSpendSettlementRespondedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return MANDATE_SPEND_SETTLEMENT_RESPONDED_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, DocumentBootstrapRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, DocumentBootstrapRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return DOCUMENT_BOOTSTRAP_REQUESTED_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, CustomerActionRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, CustomerActionRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return CUSTOMER_ACTION_REQUESTED_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return CAPTURE_IMMEDIATELY_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, CaptureFundsRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, CaptureFundsRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return CAPTURE_FUNDS_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, ReserveFundsRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, ReserveFundsRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return RESERVE_FUNDS_EVENT_NAME;
     }
-    if (blue.isTypeOf(node, StartCardTransactionMonitoringRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, StartCardTransactionMonitoringRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return START_CARD_TRANSACTION_MONITORING_REQUESTED_EVENT_NAME;
     }
   } catch {
     // ignore parse failures; the label fallback is handled separately
   }
 
+  return undefined;
+};
+
+const getNodeTextProperty = (
+  node: BlueNode,
+  propertyName: string
+): string | undefined => {
+  const property = node.getProperties()?.[propertyName];
+  if (!property) {
+    return undefined;
+  }
+  const value = property.getValue();
+  const direct = getString(value);
+  if (direct) {
+    return direct;
+  }
+  if (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    'value' in value
+  ) {
+    return getString((value as { value?: unknown }).value);
+  }
   return undefined;
 };
 
@@ -183,19 +270,35 @@ export const resolveTransferRequestId = (
   event: WebhookEmittedEvent
 ): string | undefined => {
   try {
-    const node = blue.jsonValueToNode(event);
+    const node = blue.resolve(blue.jsonValueToNode(event));
+    const direct = getNodeTextProperty(node, 'requestId');
+    if (direct) {
+      return direct;
+    }
 
-    if (blue.isTypeOf(node, ReserveFundsRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, ReserveFundsRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       const output = blue.nodeToSchemaOutput(node, ReserveFundsRequestedSchema);
       return getString(output.requestId);
     }
 
-    if (blue.isTypeOf(node, CaptureFundsRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, CaptureFundsRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       const output = blue.nodeToSchemaOutput(node, CaptureFundsRequestedSchema);
       return getString(output.requestId);
     }
 
-    if (blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       const output = blue.nodeToSchemaOutput(
         node,
         ReserveFundsAndCaptureImmediatelyRequestedSchema
@@ -212,16 +315,17 @@ export const resolveTransferPaymentMandateDocumentId = (
   event: WebhookEmittedEvent
 ): string | undefined => {
   try {
-    const node = blue.jsonValueToNode(event);
-    const simple = blue.nodeToJson(node, 'simple') as
-      | Record<string, unknown>
-      | undefined;
-    const direct = getString(simple?.paymentMandateDocumentId);
+    const node = blue.resolve(blue.jsonValueToNode(event));
+    const direct = getNodeTextProperty(node, 'paymentMandateDocumentId');
     if (direct) {
       return direct;
     }
 
-    if (blue.isTypeOf(node, ReserveFundsRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, ReserveFundsRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       const output = blue.nodeToSchemaOutput(
         node,
         ReserveFundsRequestedSchema
@@ -229,7 +333,11 @@ export const resolveTransferPaymentMandateDocumentId = (
       return getString(output?.paymentMandateDocumentId);
     }
 
-    if (blue.isTypeOf(node, CaptureFundsRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, CaptureFundsRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       const output = blue.nodeToSchemaOutput(
         node,
         CaptureFundsRequestedSchema
@@ -237,7 +345,11 @@ export const resolveTransferPaymentMandateDocumentId = (
       return getString(output?.paymentMandateDocumentId);
     }
 
-    if (blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema)) {
+    if (
+      blue.isTypeOf(node, ReserveFundsAndCaptureImmediatelyRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       const output = blue.nodeToSchemaOutput(
         node,
         ReserveFundsAndCaptureImmediatelyRequestedSchema
@@ -250,21 +362,34 @@ export const resolveTransferPaymentMandateDocumentId = (
   return undefined;
 };
 
+export const resolveTransferHoldId = (
+  event: WebhookEmittedEvent
+): string | undefined => {
+  try {
+    const node = blue.resolve(blue.jsonValueToNode(event));
+    return getNodeTextProperty(node, 'holdId');
+  } catch {
+    // unsupported structure or unparsable event
+  }
+  return undefined;
+};
+
 export const resolveCaptureRequestId = (
   event: WebhookEmittedEvent
 ): string | undefined => {
   try {
-    const node = blue.jsonValueToNode(event);
+    const node = blue.resolve(blue.jsonValueToNode(event));
     const isCaptureRequest =
-      blue.isTypeOf(node, CardTransactionCaptureLockRequestedSchema) ||
-      blue.isTypeOf(node, CardTransactionCaptureUnlockRequestedSchema);
+      blue.isTypeOf(node, CardTransactionCaptureLockRequestedSchema, {
+        checkSchemaExtensions: true,
+      }) ||
+      blue.isTypeOf(node, CardTransactionCaptureUnlockRequestedSchema, {
+        checkSchemaExtensions: true,
+      });
     if (!isCaptureRequest) {
       return undefined;
     }
-    const simple = blue.nodeToJson(node, 'simple') as
-      | Record<string, unknown>
-      | undefined;
-    return getString(simple?.requestId);
+    return getNodeTextProperty(node, 'requestId');
   } catch {
     // unsupported structure or unparsable event
   }
@@ -275,8 +400,12 @@ export const resolveMonitoringRequestId = (
   event: WebhookEmittedEvent
 ): string | undefined => {
   try {
-    const node = blue.jsonValueToNode(event);
-    if (!blue.isTypeOf(node, StartCardTransactionMonitoringRequestedSchema)) {
+    const node = blue.resolve(blue.jsonValueToNode(event));
+    if (
+      !blue.isTypeOf(node, StartCardTransactionMonitoringRequestedSchema, {
+        checkSchemaExtensions: true,
+      })
+    ) {
       return undefined;
     }
     const output = blue.nodeToSchemaOutput(
@@ -294,11 +423,8 @@ export const resolveChargeRequestId = (
   event: WebhookEmittedEvent
 ): string | undefined => {
   try {
-    const node = blue.jsonValueToNode(event);
-    const simple = blue.nodeToJson(node, 'simple') as
-      | Record<string, unknown>
-      | undefined;
-    return getString(simple?.requestId);
+    const node = blue.resolve(blue.jsonValueToNode(event));
+    return getNodeTextProperty(node, 'requestId');
   } catch {
     // unsupported structure or unparsable event
   }

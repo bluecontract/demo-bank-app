@@ -401,7 +401,9 @@ describe('decideContractPendingActionHandler', () => {
     expect(payload).toContain('Conversation/Document Bootstrap Responded');
     expect(payload).not.toContain('Conversation/Document Bootstrap Completed');
     expect(payload).not.toContain('PayNote/Payment Mandate Attached');
-    expect(myOsClient.fetchDocument).not.toHaveBeenCalled();
+    expect(myOsClient.fetchDocument).toHaveBeenCalledWith(
+      'payment-mandate-session-1'
+    );
 
     expect(contractRepository.saveContract).toHaveBeenCalledWith(
       expect.objectContaining({

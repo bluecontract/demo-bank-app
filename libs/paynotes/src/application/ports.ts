@@ -378,6 +378,15 @@ export interface CaptureHoldRequest {
   payNoteDocumentId?: string;
 }
 
+export interface ReleaseHoldRequest {
+  holdId: string;
+  userId: string;
+  idempotencyKey: string;
+  amountMinor?: number;
+  reason?: string;
+  payNoteDocumentId?: string;
+}
+
 export interface BankingFacade {
   /**
    * Resolves account details associated with the provided account number.
@@ -414,6 +423,12 @@ export interface BankingFacade {
    * Captures a previously reserved hold.
    */
   captureHold(request: CaptureHoldRequest): Promise<Hold>;
+
+  /**
+   * Releases funds from a previously reserved hold.
+   * When amountMinor is provided, release is partial.
+   */
+  releaseHold?(request: ReleaseHoldRequest): Promise<Hold>;
 }
 
 export interface ClockPort {

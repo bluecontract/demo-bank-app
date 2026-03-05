@@ -43,6 +43,9 @@ type PaymentMandateBootstrapPayload = {
   requestId?: string;
   channelBindings?: Record<string, { accountId?: string; email?: string }>;
   paymentMandateDocument: Record<string, unknown>;
+  paymentMandateDocumentId?: string;
+  paymentMandateBootstrapSessionId?: string;
+  paymentMandateSessionId?: string;
 };
 
 type MonitoringDecisionOutcome = {
@@ -309,6 +312,11 @@ const parsePaymentMandateBootstrapPayload = (
     requestId: getString(payload.requestId) ?? action.requestId,
     channelBindings: normalizeChannelBindings(payload.channelBindings),
     paymentMandateDocument,
+    paymentMandateDocumentId: getString(payload.paymentMandateDocumentId),
+    paymentMandateBootstrapSessionId: getString(
+      payload.paymentMandateBootstrapSessionId
+    ),
+    paymentMandateSessionId: getString(payload.paymentMandateSessionId),
   };
 };
 
@@ -429,6 +437,7 @@ const applyPaymentMandateBootstrapDecisionToContract = (input: {
   decision: PendingActionDecision;
   decidedAt: string;
   paymentMandateDocumentId?: string;
+  paymentMandateBootstrapSessionId?: string;
   paymentMandateSessionId?: string;
 }):
   | { ok: true; contract: ContractRecord; action: ContractPendingAction }
@@ -442,6 +451,7 @@ const applyPaymentMandateBootstrapDecisionToContract = (input: {
     decision,
     decidedAt,
     paymentMandateDocumentId,
+    paymentMandateBootstrapSessionId,
     paymentMandateSessionId,
   } = input;
 
@@ -463,6 +473,11 @@ const applyPaymentMandateBootstrapDecisionToContract = (input: {
     ...(paymentMandateDocumentId
       ? {
           paymentMandateDocumentId,
+        }
+      : {}),
+    ...(paymentMandateBootstrapSessionId
+      ? {
+          paymentMandateBootstrapSessionId,
         }
       : {}),
     ...(paymentMandateSessionId
@@ -653,6 +668,7 @@ const resolveDecisionOutcome = async (input: {
       }
 
       let paymentMandateDocumentId: string | undefined;
+      let paymentMandateBootstrapSessionId: string | undefined;
       let paymentMandateSessionId: string | undefined;
       if (decision === 'accepted') {
         const mandateIdentityMaterialization =
@@ -698,9 +714,20 @@ const resolveDecisionOutcome = async (input: {
           };
         }
 
-        paymentMandateSessionId = getString(
+        paymentMandateBootstrapSessionId = getString(
           toRecord(bootstrapResponse.body)?.sessionId
         );
+
+        if (paymentMandateBootstrapSessionId) {
+          const mandateDocumentResult = await input.myOsClient.fetchDocument(
+            paymentMandateBootstrapSessionId
+          );
+          if (mandateDocumentResult?.kind === 'success') {
+            paymentMandateDocumentId = getString(
+              mandateDocumentResult.document.documentId
+            );
+          }
+        }
       }
 
       const decisionResult = applyPaymentMandateBootstrapDecisionToContract({
@@ -709,6 +736,7 @@ const resolveDecisionOutcome = async (input: {
         decision,
         decidedAt: input.decidedAt,
         paymentMandateDocumentId,
+        paymentMandateBootstrapSessionId,
         paymentMandateSessionId,
       });
       if (!decisionResult.ok) {
@@ -750,9 +778,9 @@ const resolveDecisionOutcome = async (input: {
           kind: 'payment-mandate-bootstrap',
           contract: decisionResult.contract,
           requestId,
-          ...(decision === 'accepted' && paymentMandateSessionId
+          ...(decision === 'accepted' && paymentMandateBootstrapSessionId
             ? {
-                paymentMandateBootstrapSessionId: paymentMandateSessionId,
+                paymentMandateBootstrapSessionId,
               }
             : {}),
           responseEvents,

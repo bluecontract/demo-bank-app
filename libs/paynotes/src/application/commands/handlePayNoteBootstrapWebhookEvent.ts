@@ -29,6 +29,9 @@ import { logMyOsFetchError } from './paynoteWebhook/myosErrors';
 import { getPayloadSummary, toBlueNode } from './webhookUtils';
 import { upsertContractRecord } from '../contracts';
 
+const PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE =
+  'paymentMandateBootstrapApproval';
+
 export interface HandlePayNoteBootstrapWebhookInput {
   payload: unknown;
   eventId?: string;
@@ -108,6 +111,14 @@ const withInResponseTo = (
     },
   };
 };
+
+const toRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const getString = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 
 const supportsGuarantorUpdateResponses = (document: unknown): boolean => {
   if (isPayNoteDocument(document)) {
@@ -416,6 +427,106 @@ const reportDeliveryMandateAttachmentToPayNotes = async (input: {
   if (reported) {
     reportedSessionIds.add(selectedSessionId);
   }
+};
+
+const patchAcceptedMandateBootstrapPendingActionIdentity = async (input: {
+  deps: HandlePayNoteBootstrapWebhookDependencies;
+  logs: LogEntry[];
+  eventId: string;
+  now: string;
+  requestingSessionId?: string;
+  requestId?: string;
+  bootstrapSessionId?: string;
+  paymentMandateDocumentId: string;
+  paymentMandateSessionId: string;
+}): Promise<void> => {
+  const {
+    deps,
+    logs,
+    eventId,
+    now,
+    requestingSessionId,
+    requestId,
+    bootstrapSessionId,
+    paymentMandateDocumentId,
+    paymentMandateSessionId,
+  } = input;
+
+  if (!requestingSessionId) {
+    return;
+  }
+
+  const contract = await deps.contractRepository.getContractBySessionId(
+    requestingSessionId
+  );
+  if (!contract || !contract.pendingActions?.length) {
+    return;
+  }
+
+  let patched = false;
+  const nextPendingActions = contract.pendingActions.map(action => {
+    if (patched) {
+      return action;
+    }
+    if (
+      action.type !== PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE ||
+      action.status !== 'accepted'
+    ) {
+      return action;
+    }
+
+    const payload = toRecord(action.payload) ?? {};
+    const payloadBootstrapSessionId = getString(
+      payload.paymentMandateBootstrapSessionId
+    );
+    const payloadSessionId = getString(payload.paymentMandateSessionId);
+    const payloadDocumentId = getString(payload.paymentMandateDocumentId);
+
+    const matchesBootstrap =
+      !!bootstrapSessionId && payloadBootstrapSessionId === bootstrapSessionId;
+    const matchesRequest = !!requestId && action.requestId === requestId;
+    const isBestCandidate =
+      !payloadSessionId &&
+      !payloadDocumentId &&
+      (!payloadBootstrapSessionId ||
+        payloadBootstrapSessionId === bootstrapSessionId);
+
+    if (!matchesBootstrap && !matchesRequest && !isBestCandidate) {
+      return action;
+    }
+
+    patched = true;
+    return {
+      ...action,
+      payload: {
+        ...payload,
+        ...(bootstrapSessionId
+          ? { paymentMandateBootstrapSessionId: bootstrapSessionId }
+          : {}),
+        paymentMandateDocumentId,
+        paymentMandateSessionId,
+      },
+    };
+  });
+
+  if (!patched) {
+    return;
+  }
+
+  await deps.contractRepository.saveContract({
+    ...contract,
+    pendingActions: nextPendingActions,
+    updatedAt: now,
+  });
+
+  trace(logs, 'Updated accepted mandate bootstrap pending action identity', {
+    eventId,
+    requestingSessionId,
+    requestId: requestId ?? null,
+    bootstrapSessionId: bootstrapSessionId ?? null,
+    paymentMandateDocumentId,
+    paymentMandateSessionId,
+  });
 };
 
 const dedupeSessionIds = (ids: string[]): string[] =>
@@ -812,6 +923,18 @@ export const handlePayNoteBootstrapWebhookEvent = async (
               merchantId:
                 deliveryRecord?.merchantId ?? bootstrapContext?.merchantId,
               now,
+            });
+
+            await patchAcceptedMandateBootstrapPendingActionIdentity({
+              deps,
+              logs,
+              eventId,
+              now,
+              requestingSessionId: bootstrapContext?.requestingSessionId,
+              requestId: bootstrapContext?.requestId,
+              bootstrapSessionId,
+              paymentMandateDocumentId: resolvedPrimary.documentId,
+              paymentMandateSessionId: sessionId,
             });
 
             linkedPaymentMandate = true;

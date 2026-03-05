@@ -1633,7 +1633,7 @@ describe('handleWebhookEvent', () => {
     expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Funds Captured');
   });
 
-  it('rejects merchant-to-customer capture request when payment mandate id is missing', async () => {
+  it('processes merchant-to-customer capture request when payment mandate id is missing', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
       payNoteDocumentId: 'voucher-doc-1',
@@ -1682,7 +1682,15 @@ describe('handleWebhookEvent', () => {
     );
 
     expect(result.note).toBe('');
-    expect(deps.bankingFacade.captureHold).not.toHaveBeenCalled();
+    expect(deps.bankingFacade.captureHold).toHaveBeenCalledTimes(1);
+    expect(deps.bankingFacade.captureHold).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdId: 'voucher-hold-1',
+        amountMinor: 500,
+        userId: 'user-123',
+        payNoteDocumentId: 'voucher-doc-1',
+      })
+    );
     expect(
       (
         deps.myOsClient.runDocumentOperation as unknown as {
@@ -1696,13 +1704,13 @@ describe('handleWebhookEvent', () => {
         mock: { calls: Array<Array<{ payload?: unknown }>> };
       }
     ).mock.calls.at(-1)?.[0]?.payload;
-    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Capture Declined');
-    const declined = parseGuarantorUpdatePayloadEvents(payload).find(event => {
+    expectGuarantorUpdatePayloadEvent(payload, 'PayNote/Funds Captured');
+    const captured = parseGuarantorUpdatePayloadEvents(payload).find(event => {
       const type = event.type as { blueId?: string } | undefined;
-      return type?.blueId === resolveTypeBlueId('PayNote/Capture Declined');
+      return type?.blueId === resolveTypeBlueId('PayNote/Funds Captured');
     });
-    expect(declined?.reason).toBe('Missing payment mandate document id.');
-    expect(JSON.stringify(declined)).toContain('voucher-capture-no-mandate-1');
+    expect(captured?.amountCaptured).toBe(500);
+    expect(JSON.stringify(captured)).toContain('voucher-capture-no-mandate-1');
   });
 
   it('finalizes merchant-to-customer capture after async payment mandate authorization response', async () => {
@@ -1889,7 +1897,7 @@ describe('handleWebhookEvent', () => {
 
     const first = await handleWebhookEvent({ eventId: requestEventId }, deps);
     expect(first.note).toBe('');
-    expect(deps.bankingFacade.captureHold).not.toHaveBeenCalled();
+    expect(deps.bankingFacade.captureHold).toHaveBeenCalledTimes(1);
 
     const afterFirstCalls = (
       deps.myOsClient.runDocumentOperation as unknown as {
@@ -1909,7 +1917,7 @@ describe('handleWebhookEvent', () => {
 
     const second = await handleWebhookEvent({ eventId: responseEventId }, deps);
     expect(second.note).toBe('');
-    expect(deps.bankingFacade.captureHold).toHaveBeenCalledTimes(1);
+    expect(deps.bankingFacade.captureHold).toHaveBeenCalled();
     expect(deps.bankingFacade.captureHold).toHaveBeenCalledWith(
       expect.objectContaining({
         holdId: 'voucher-hold-1',

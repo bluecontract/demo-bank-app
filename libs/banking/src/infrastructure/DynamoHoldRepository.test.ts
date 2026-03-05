@@ -10,6 +10,7 @@ import { DynamoHoldRepository } from './DynamoHoldRepository';
 import type {
   ReserveHoldRequest,
   ReleaseHoldRequest,
+  PartialReleaseHoldRequest,
   CaptureHoldRequest,
   PartialCaptureHoldRequest,
 } from '../application/HoldRepository';
@@ -83,6 +84,37 @@ const baseReleaseRequest = (): ReleaseHoldRequest => {
       at: '2024-01-03T00:00:00.000Z',
       type: 'RELEASED',
       reason: 'Customer request',
+    },
+    idempotencyKey,
+    idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
+    userId: 'user-1',
+  };
+};
+
+const basePartialReleaseRequest = (): PartialReleaseHoldRequest => {
+  const idempotencyKey = 'partial-release-idem-key';
+
+  return {
+    accountId: 'acc-123',
+    accountBalanceVersion: 3,
+    availableBalanceMinor: 6_000,
+    releaseAmountMinor: 2_000,
+    expectedAmountMinor: 6_000,
+    expectedCapturedAmountMinor: 2_000,
+    hold: {
+      holdId: 'hold-partial-release',
+      payerAccountNumber: '1234567890',
+      amountMinor: 4_000,
+      capturedAmountMinor: 2_000,
+      currency: 'USD',
+      status: 'PARTIALLY_CAPTURED',
+      description: 'Partial release test hold',
+      createdAt: '2024-01-02T00:00:00.000Z',
+    },
+    holdEvent: {
+      at: '2024-01-03T00:00:00.000Z',
+      type: 'RELEASED',
+      reason: 'Adjust reserve amount',
     },
     idempotencyKey,
     idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
@@ -275,6 +307,32 @@ describe('DynamoHoldRepository', () => {
       '#status = :pendingStatus'
     );
     expect(transactItems[3]?.Put?.Item?.command).toBe('RELEASE');
+  });
+
+  it('performs partial release transact write successfully', async () => {
+    const { repository, send } = createRepository();
+    send.mockResolvedValue({});
+
+    const request = basePartialReleaseRequest();
+    const result = await repository.partialReleaseHold(request);
+
+    expect(result.created).toBe(true);
+    expect(result.hold).toEqual(request.hold);
+    const command = send.mock.calls[0][0];
+    expect(command).toBeInstanceOf(TransactWriteCommand);
+    const transactItems =
+      (command as TransactWriteCommand).input.TransactItems ?? [];
+    expect(transactItems).toHaveLength(4);
+    expect(transactItems[0]?.Update?.UpdateExpression).toContain(
+      'availableBalanceMinor = availableBalanceMinor + :amount'
+    );
+    expect(
+      transactItems[0]?.Update?.ExpressionAttributeValues?.[':amount']
+    ).toBe(request.releaseAmountMinor);
+    expect(transactItems[1]?.Update?.ConditionExpression).toContain(
+      '#status = :pendingStatus OR #status = :partiallyCapturedStatus'
+    );
+    expect(transactItems[3]?.Put?.Item?.command).toBe('RELEASE_PARTIAL');
   });
 
   it('throws InsufficientFundsError when balance check fails', async () => {

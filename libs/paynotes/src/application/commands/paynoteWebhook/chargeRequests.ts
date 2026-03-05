@@ -493,6 +493,7 @@ type ParsedPaymentMandate = {
 
 type AcceptedMandatePendingActionPayload = {
   paymentMandateDocumentId?: string;
+  paymentMandateBootstrapSessionId?: string;
   paymentMandateSessionId?: string;
 };
 
@@ -585,11 +586,13 @@ const parseMandateAuthorizationResponse = (
       node,
       PaymentMandateSpendAuthorizationRespondedSchema
     ) as {
+      authorizationId?: unknown;
       chargeAttemptId?: unknown;
       status?: unknown;
       reason?: unknown;
     };
-    const chargeAttemptId = getString(output.chargeAttemptId);
+    const chargeAttemptId =
+      getString(output.authorizationId) ?? getString(output.chargeAttemptId);
     const status = getString(output.status);
     if (!chargeAttemptId || (status !== 'approved' && status !== 'rejected')) {
       return null;
@@ -745,7 +748,11 @@ const parsePaymentMandate = (value: unknown): ParsedPaymentMandate | null => {
 const resolveLocalPaymentMandateFromPendingActions = async (input: {
   context: ChargeRequestContext;
   mandateDocumentId: string;
-}): Promise<{ ok: true; mandateSessionId?: string } | null> => {
+}): Promise<{
+  ok: true;
+  mandateSessionId?: string;
+  paymentMandateBootstrapSessionId?: string;
+} | null> => {
   const contract =
     await input.context.deps.contractRepository.getContractBySessionId(
       input.context.sessionId
@@ -754,33 +761,58 @@ const resolveLocalPaymentMandateFromPendingActions = async (input: {
     return null;
   }
 
-  const matchedAction = (contract.pendingActions ?? []).find(action => {
-    if (action.type !== PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE) {
-      return false;
-    }
-    if (action.status !== 'accepted') {
-      return false;
-    }
+  const acceptedActions = (contract.pendingActions ?? []).filter(
+    action =>
+      action.type === PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE &&
+      action.status === 'accepted'
+  );
+  if (acceptedActions.length === 0) {
+    return null;
+  }
+
+  const matchedByDocumentId = acceptedActions.find(action => {
     const payload = toSimpleRecord(
       action.payload
     ) as AcceptedMandatePendingActionPayload | null;
     return payload?.paymentMandateDocumentId === input.mandateDocumentId;
   });
 
-  if (
-    !matchedAction ||
-    matchedAction.type !== PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE
-  ) {
+  if (matchedByDocumentId) {
+    const payload = toSimpleRecord(
+      matchedByDocumentId.payload
+    ) as AcceptedMandatePendingActionPayload | null;
+    return {
+      ok: true,
+      mandateSessionId: getString(payload?.paymentMandateSessionId),
+      paymentMandateBootstrapSessionId: getString(
+        payload?.paymentMandateBootstrapSessionId
+      ),
+    };
+  }
+
+  const pendingLinkageAction = acceptedActions.find(action => {
+    const payload = toSimpleRecord(
+      action.payload
+    ) as AcceptedMandatePendingActionPayload | null;
+    return (
+      Boolean(getString(payload?.paymentMandateBootstrapSessionId)) &&
+      !getString(payload?.paymentMandateDocumentId) &&
+      !getString(payload?.paymentMandateSessionId)
+    );
+  });
+  if (!pendingLinkageAction) {
     return null;
   }
 
-  const payload = toSimpleRecord(
-    matchedAction.payload
+  const pendingPayload = toSimpleRecord(
+    pendingLinkageAction.payload
   ) as AcceptedMandatePendingActionPayload | null;
 
   return {
     ok: true,
-    mandateSessionId: getString(payload?.paymentMandateSessionId),
+    paymentMandateBootstrapSessionId: getString(
+      pendingPayload?.paymentMandateBootstrapSessionId
+    ),
   };
 };
 
@@ -1033,7 +1065,9 @@ const validatePaymentMandate = async (input: {
   if (!mandateSessionId) {
     return {
       ok: false,
-      reason: 'Unable to resolve payment mandate session id.',
+      reason: localMandate?.paymentMandateBootstrapSessionId
+        ? 'Payment mandate bootstrap accepted, but target mandate session is not linked yet.'
+        : 'Unable to resolve payment mandate session id.',
       retryable: true,
     };
   }
@@ -1187,6 +1221,7 @@ const runMandateAuthorization = async (input: {
 
   const authorizePayload = {
     type: MANDATE_SPEND_AUTHORIZATION_REQUESTED_EVENT_NAME,
+    authorizationId: chargeAttemptId,
     chargeAttemptId,
     requestingDocumentId: context.payNoteDocumentId,
     requestingSessionId: context.sessionId,
@@ -1653,6 +1688,7 @@ const runMandateSettlement = async (
 
   const settlePayload = {
     type: MANDATE_SPEND_SETTLED_EVENT_NAME,
+    authorizationId: chargeAttemptId,
     chargeAttemptId,
     status: settlementStatus,
     settledAt: context.deps.clock.now().toISOString(),
