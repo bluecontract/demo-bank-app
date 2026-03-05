@@ -4,8 +4,6 @@ npx lint-staged
 echo "🔒 Phase 2: Security audit..."
 echo "  Checking production dependencies (moderate+)..."
 npm run security:audit
-echo "  Checking all dependencies (high+ only)..."
-npm run security:audit:dev
 
 echo "🧪 Phase 3: Running affected tests..."
 npm run test

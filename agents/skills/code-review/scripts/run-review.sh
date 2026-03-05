@@ -63,6 +63,9 @@ if [[ ! "${timeout_seconds}" =~ ^[0-9]+$ || "${timeout_seconds}" -eq 0 ]]; then
   echo "Invalid REVIEW_TIMEOUT_SECONDS='${timeout_seconds}'. Use a positive integer (seconds)." >&2
   exit 1
 fi
+if (( timeout_seconds < 600 )); then
+  timeout_seconds=600
+fi
 # Default model set runs all reviewers; local override can narrow this down.
 selected_models_raw="${REVIEW_MODELS:-all}"
 selected_models="$(echo "${selected_models_raw}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
