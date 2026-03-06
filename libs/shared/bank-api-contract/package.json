@@ -40,7 +40,7 @@
   "dependencies": {
     "@blue-labs/document-processor": "3.5.0",
     "@blue-labs/language": "3.5.0",
-    "@blue-repository/types": "^0.18.0",
+    "@blue-repository/types": "^0.19.0",
     "@ts-rest/core": "^3.52.1",
     "xss": "^1.0.15",
     "zod": "^3.25.67"
