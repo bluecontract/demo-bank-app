@@ -57,8 +57,6 @@ const MANDATE_SPEND_AUTHORIZATION_REQUESTED_EVENT_NAME =
 const MANDATE_SPEND_SETTLED_EVENT_NAME =
   'PayNote/Payment Mandate Spend Settled';
 
-type TransferMandateChargeMode = 'authorize_only' | 'authorize_and_capture';
-
 type TransferMandateAuthorization = {
   chargeAttemptId: string;
   mandateDocumentId: string;
@@ -308,12 +306,10 @@ const parseTransferMandateAuthorizationResponse = (
       PaymentMandateSpendAuthorizationRespondedSchema
     ) as {
       authorizationId?: unknown;
-      chargeAttemptId?: unknown;
       status?: unknown;
       reason?: unknown;
     };
-    const chargeAttemptId =
-      getString(output.authorizationId) ?? getString(output.chargeAttemptId);
+    const chargeAttemptId = getString(output.authorizationId);
     const status = getString(output.status);
     if (!chargeAttemptId || (status !== 'approved' && status !== 'rejected')) {
       return null;
@@ -428,7 +424,6 @@ const authorizeTransferViaMandateIfRequired = async (input: {
   const {
     context,
     event,
-    eventType,
     eventIndex,
     amountMinor,
     payerAccountNumber,
@@ -547,11 +542,6 @@ const authorizeTransferViaMandateIfRequired = async (input: {
     eventId: context.eventId,
     eventIndex,
   });
-  const mode: TransferMandateChargeMode =
-    eventType === RESERVE_FUNDS_EVENT_NAME
-      ? 'authorize_only'
-      : 'authorize_and_capture';
-
   const authorizeResponse = await context.deps.myOsClient.runDocumentOperation({
     credentials,
     sessionId: mandateSessionId,
@@ -559,7 +549,6 @@ const authorizeTransferViaMandateIfRequired = async (input: {
     payload: {
       type: MANDATE_SPEND_AUTHORIZATION_REQUESTED_EVENT_NAME,
       authorizationId: chargeAttemptId,
-      chargeAttemptId,
       requestingDocumentId: context.payNoteDocumentId,
       requestingSessionId: context.sessionId,
       amountMinor,
@@ -567,7 +556,6 @@ const authorizeTransferViaMandateIfRequired = async (input: {
       requestedAt: context.deps.clock.now().toISOString(),
       counterpartyType: counterparty.counterpartyType,
       counterpartyId: counterparty.counterpartyId,
-      chargeMode: mode,
     },
   });
   if (!authorizeResponse.ok) {
@@ -727,7 +715,6 @@ const runTransferMandateSettlement = async (input: {
       payload: {
         type: MANDATE_SPEND_SETTLED_EVENT_NAME,
         authorizationId: authorization.chargeAttemptId,
-        chargeAttemptId: authorization.chargeAttemptId,
         status,
         settledAt: context.deps.clock.now().toISOString(),
         reservedDeltaMinor,

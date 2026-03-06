@@ -587,12 +587,10 @@ const parseMandateAuthorizationResponse = (
       PaymentMandateSpendAuthorizationRespondedSchema
     ) as {
       authorizationId?: unknown;
-      chargeAttemptId?: unknown;
       status?: unknown;
       reason?: unknown;
     };
-    const chargeAttemptId =
-      getString(output.authorizationId) ?? getString(output.chargeAttemptId);
+    const chargeAttemptId = getString(output.authorizationId);
     const status = getString(output.status);
     if (!chargeAttemptId || (status !== 'approved' && status !== 'rejected')) {
       return null;
@@ -1160,16 +1158,10 @@ const resolveMandateCounterparty = async (input: {
   return null;
 };
 
-const toMandateChargeMode = (
-  mode: ChargeMode
-): 'authorize_only' | 'authorize_and_capture' =>
-  mode === 'authorize-and-capture' ? 'authorize_and_capture' : 'authorize_only';
-
 const runMandateAuthorization = async (input: {
   context: ChargeRequestContext;
   sourcePayNoteType: SourcePayNoteType;
   direction: ChargeDirection;
-  mode: ChargeMode;
   amountMinor: number;
   mandateSessionId?: string;
   chargeAttemptId: string;
@@ -1180,7 +1172,6 @@ const runMandateAuthorization = async (input: {
     context,
     sourcePayNoteType,
     direction,
-    mode,
     amountMinor,
     mandateSessionId,
     chargeAttemptId,
@@ -1222,7 +1213,6 @@ const runMandateAuthorization = async (input: {
   const authorizePayload = {
     type: MANDATE_SPEND_AUTHORIZATION_REQUESTED_EVENT_NAME,
     authorizationId: chargeAttemptId,
-    chargeAttemptId,
     requestingDocumentId: context.payNoteDocumentId,
     requestingSessionId: context.sessionId,
     amountMinor,
@@ -1230,7 +1220,6 @@ const runMandateAuthorization = async (input: {
     requestedAt: context.deps.clock.now().toISOString(),
     counterpartyType: counterparty.counterpartyType,
     counterpartyId: counterparty.counterpartyId,
-    chargeMode: toMandateChargeMode(mode),
   };
 
   const authorizeResponse = await context.deps.myOsClient.runDocumentOperation({
@@ -1296,7 +1285,6 @@ const dispatchMandateAuthorizationForCharge = async (input: {
     context: input.context,
     sourcePayNoteType: input.sourcePayNoteType,
     direction: input.direction,
-    mode: input.mode,
     amountMinor: input.amountMinor,
     mandateSessionId: mandateValidation.mandateSessionId,
     chargeAttemptId: input.chargeAttemptId,
@@ -1689,7 +1677,6 @@ const runMandateSettlement = async (
   const settlePayload = {
     type: MANDATE_SPEND_SETTLED_EVENT_NAME,
     authorizationId: chargeAttemptId,
-    chargeAttemptId,
     status: settlementStatus,
     settledAt: context.deps.clock.now().toISOString(),
     reservedDeltaMinor,

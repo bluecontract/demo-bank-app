@@ -207,7 +207,7 @@ const attachPaymentMandate = (input: {
       args.operation === 'authorizeSpend'
     ) {
       const payloadRecord = toSimpleRecord(args.payload);
-      const chargeAttemptId = getString(payloadRecord?.chargeAttemptId);
+      const chargeAttemptId = getString(payloadRecord?.authorizationId);
       if (chargeAttemptId && autoApproveAuthorization) {
         chargeAttemptsById.set(chargeAttemptId, {
           authorizationStatus: 'approved',
@@ -224,7 +224,7 @@ const attachPaymentMandate = (input: {
       args.operation === 'settleSpend'
     ) {
       const payloadRecord = toSimpleRecord(args.payload);
-      const chargeAttemptId = getString(payloadRecord?.chargeAttemptId);
+      const chargeAttemptId = getString(payloadRecord?.authorizationId);
       if (chargeAttemptId) {
         const existing = chargeAttemptsById.get(chargeAttemptId) ?? {};
         chargeAttemptsById.set(chargeAttemptId, {
@@ -1839,7 +1839,7 @@ describe('handleWebhookEvent', () => {
               emitted: [
                 toOfficialBlue({
                   type: 'PayNote/Payment Mandate Spend Authorization Responded',
-                  chargeAttemptId,
+                  authorizationId: chargeAttemptId,
                   status: 'approved',
                   remainingAmountMinor: 49_500,
                   respondedAt: '2024-01-01T00:00:01.000Z',
@@ -2380,7 +2380,6 @@ describe('handleWebhookEvent', () => {
     expect(authorizeCalls[0]?.[0]?.payload).toEqual(
       expect.objectContaining({
         type: 'PayNote/Payment Mandate Spend Authorization Requested',
-        chargeMode: 'authorize_only',
       })
     );
 
@@ -2413,8 +2412,8 @@ describe('handleWebhookEvent', () => {
         capturedDeltaMinor: 700,
       })
     );
-    expect(captureSettlePayload?.chargeAttemptId).toBe(
-      reserveSettlePayload?.chargeAttemptId
+    expect(captureSettlePayload?.authorizationId).toBe(
+      reserveSettlePayload?.authorizationId
     );
   });
 
@@ -2520,7 +2519,6 @@ describe('handleWebhookEvent', () => {
     expect(authorizeCall?.[0]?.payload).toEqual(
       expect.objectContaining({
         type: 'PayNote/Payment Mandate Spend Authorization Requested',
-        chargeMode: 'authorize_and_capture',
       })
     );
 
@@ -3445,7 +3443,7 @@ describe('handleWebhookEvent', () => {
             'PayNote/Payment Mandate Spend Authorization Requested'
           ),
         }),
-        chargeAttemptId: 'doc-1:event-1:0',
+        authorizationId: 'doc-1:event-1:0',
       })
     );
     const settleMandateCall = runOperationCalls.find(
@@ -3465,7 +3463,7 @@ describe('handleWebhookEvent', () => {
         type: expect.objectContaining({
           blueId: resolveTypeBlueId('PayNote/Payment Mandate Spend Settled'),
         }),
-        chargeAttemptId: 'doc-1:event-1:0',
+        authorizationId: 'doc-1:event-1:0',
         status: 'succeeded',
       })
     );
@@ -4581,7 +4579,7 @@ describe('handleWebhookEvent', () => {
           emitted: [
             toOfficialBlue({
               type: 'PayNote/Payment Mandate Spend Authorization Responded',
-              chargeAttemptId: 'doc-1:event-1:0',
+              authorizationId: 'doc-1:event-1:0',
               status: 'approved',
             }),
           ],
@@ -4692,7 +4690,7 @@ describe('handleWebhookEvent', () => {
           emitted: [
             toOfficialBlue({
               type: 'PayNote/Payment Mandate Spend Authorization Responded',
-              chargeAttemptId,
+              authorizationId: chargeAttemptId,
               status: 'approved',
             }),
           ],
@@ -4879,7 +4877,7 @@ describe('handleWebhookEvent', () => {
           emitted: [
             toOfficialBlue({
               type: 'PayNote/Payment Mandate Spend Authorization Responded',
-              chargeAttemptId: 'doc-1:event-origin:0',
+              authorizationId: 'doc-1:event-origin:0',
               status: 'approved',
             }),
           ],
@@ -5019,7 +5017,7 @@ describe('handleWebhookEvent', () => {
           emitted: [
             toOfficialBlue({
               type: 'PayNote/Payment Mandate Spend Authorization Responded',
-              chargeAttemptId: 'doc-1:event-1:0',
+              authorizationId: 'doc-1:event-1:0',
               status: 'rejected',
               reason: 'Denied by mandate policy.',
             }),
