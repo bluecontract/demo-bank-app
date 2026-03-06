@@ -17,7 +17,7 @@ Blue concepts (high level):
 - If \`payNoteSummary.amountDisplay\` is present, use it verbatim and do not compute currency conversions yourself.
 
 Input format:
-- \`contract\`: record metadata (ids, timestamps).
+- \`contract\`: record metadata (ids, timestamps), including \`summarySourceEpoch\` (0-based transition epoch used for this summary).
 - \`document\`: the current document instance in a minimal (unresolved) form, including the \`contracts\` map as provided.
 - Merchant-authored business description may appear in:
   - \`document.description\` (direct PayNote/document),
@@ -54,6 +54,9 @@ const CONTRACT_TASK = `Your task:
 - The "last change" MUST be anchored to \`transition.triggerEvent\` when provided. Use the current document to explain its effect, but do not pick a different event as the latest change.
 - If the trigger event represents a concrete action (e.g., an operation call) with a specific value, describe that change explicitly (e.g., "Counter increased by 9") instead of a generic "status update recorded".
 - Focus on customer-visible business events in \`transition\` (trigger + emitted). Treat lifecycle-only setup events (for example \`Core/Document Processing Initiated\`) as technical noise and do not anchor \`story.headline\`, \`listPreview\`, or \`lastChange.short\` to them when business events are present.
+- Special init-only rule (must follow):
+  - If \`contract.summarySourceEpoch === 0\`, \`transition.triggerEvent\` is missing, and \`transition.emittedEventTypes\` contains only \`Core/Document Processing Initiated\`, then \`story.headline\`, \`listPreview\`, and \`lastChange\` must describe the nearest expected business step in this contract.
+  - In that init-only case, do not use generic setup wording such as "Contract is ready", "setup complete", or "participants initialized".
 - For voucher/cashback contracts, keep wording outcome-first: "voucher is ready", "bank will report card payments", "cashback is paid from reserved amount".
 - In \`story.overview\`, build a two-layer explanation of the contract:
   - \`story.overview[0]\`: a short catch-up sentence saying what this contract is about in real-world terms.
@@ -136,8 +139,11 @@ const STYLE = `Writing style (for non-technical end users):
 - Prefer describing real-world effects over mechanics (e.g. "funds are held", "payment is released", "the bank is asked to ...", "a voucher is issued").
 - When describing who can act, infer human role labels from participant keys/names when clear (e.g. payer/payee/guarantor); otherwise use "another participant".
 - Write UI text to the customer in second person ("you", "your").
-- Do not refer to the customer as "customer", "user", or "client" in output text.
+- Use "you/your" only when facts indicate the action is done by the viewer or waiting for the viewer.
+- If facts indicate another participant is acting (or must act next), describe that participant neutrally (for example "the merchant", "the shipment company", "another participant") instead of forcing "you".
+- Do not refer to the viewer as "customer", "user", or "client" in output text.
 - Never say "the bank approves" when describing customer payment approvals; use "you approve" / "waiting for your approval".
+- \`story.headline\`, \`listPreview\`, \`lastChange.short\`, and \`lastChange.more\` must avoid setup/init wording (for example "setup started", "participants set up", "moved to active phase", "contract initialized"), unless the facts explicitly expose that as a customer-visible business milestone.
 - Prefer natural status wording for money movement:
   - "payment requested" / "payment completed" / "you paid"
   - avoid "captured from existing hold" phrasing.

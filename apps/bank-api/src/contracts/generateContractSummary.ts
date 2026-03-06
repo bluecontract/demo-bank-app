@@ -1,15 +1,22 @@
 import { ServerInferRequest } from '@ts-rest/core';
 import OpenAI from 'openai';
 import { z } from 'zod';
+import type { BlueNode } from '@blue-labs/language';
 import { DocumentProcessingInitiatedSchema } from '@blue-repository/types/packages/core/schemas';
-import conversationBlueIds from '@blue-repository/types/packages/conversation/blue-ids';
-import myOsBlueIds from '@blue-repository/types/packages/myos/blue-ids';
+import {
+  DocumentBootstrapRequestedSchema,
+  StatusChangeSchema,
+} from '@blue-repository/types/packages/conversation/schemas';
+import {
+  AllParticipantsReadySchema,
+  ParticipantResolvedSchema,
+  TargetDocumentSessionStartedSchema,
+} from '@blue-repository/types/packages/myos/schemas';
 import {
   bankApiContract,
   ContractDocumentSummaryDto,
 } from '@demo-bank-app/shared-bank-api-contract';
 import type {
-  ContractHistoryEntry,
   ContractRecord,
   ContractRepository,
 } from '@demo-bank-app/contracts';
@@ -25,6 +32,7 @@ import {
   ContractSummaryInputError,
   isOpenAiContextLimitError,
   summaryBlue,
+  toBlueNode,
 } from './summaryUtils';
 import { buildContractSummaryFacts } from './summary/buildFacts';
 import {
@@ -52,43 +60,6 @@ const normalizeSummaryText = (value?: string | null): string | undefined => {
   }
   const trimmed = value.trim();
   return trimmed.length ? trimmed : undefined;
-};
-
-const parseTypeLabel = (value: unknown): string | undefined => {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-};
-
-const resolveEventTypeLabel = (event: unknown): string | undefined => {
-  if (!event || typeof event !== 'object' || Array.isArray(event)) {
-    return undefined;
-  }
-
-  const type = (event as { type?: unknown }).type;
-  const direct = parseTypeLabel(type);
-  if (direct) {
-    return direct;
-  }
-  if (!type || typeof type !== 'object' || Array.isArray(type)) {
-    return undefined;
-  }
-  const typeRecord = type as { name?: unknown; value?: unknown };
-  return parseTypeLabel(typeRecord.value) ?? parseTypeLabel(typeRecord.name);
-};
-
-const resolveEventTypeBlueId = (event: unknown): string | undefined => {
-  if (!event || typeof event !== 'object' || Array.isArray(event)) {
-    return undefined;
-  }
-  const type = (event as { type?: unknown }).type;
-  if (!type || typeof type !== 'object' || Array.isArray(type)) {
-    return undefined;
-  }
-  const typeRecord = type as { blueId?: unknown };
-  return parseTypeLabel(typeRecord.blueId);
 };
 
 const resolveSummaryPreview = (input: {
@@ -125,119 +96,38 @@ const isDynamoItemSizeError = (error: unknown): boolean => {
 const isFiniteInteger = (value: number) =>
   Number.isFinite(value) && Number.isInteger(value);
 
-const buildInitReadySummary = (): z.infer<
-  typeof ContractDocumentSummaryDto
-> => ({
-  story: {
-    headline: 'Contract is ready.',
-    overview: [
-      'This contract is ready to use.',
-      'Contract was set up successfully.',
-    ],
-    bullets: [],
-  },
-  listPreview: 'Contract is ready.',
-  nextSteps: {
-    title: 'Next steps',
-    items: ['No action required.'],
-  },
-  lastChange: {
-    short: 'Contract is ready.',
-    more: 'Contract was set up successfully.',
-  },
-});
-
-const isCoreDocumentProcessingInitiatedEvent = (event: unknown): boolean => {
-  if (!event || typeof event !== 'object' || Array.isArray(event)) {
-    return false;
-  }
-  try {
-    const node = summaryBlue.jsonValueToNode(event);
-    if (
-      summaryBlue.isTypeOf(node, DocumentProcessingInitiatedSchema, {
-        checkSchemaExtensions: true,
-      })
-    ) {
-      return true;
-    }
-  } catch {
-    // ignore parse failures and fall back to type-label matching
-  }
-
-  const typeLabel = resolveEventTypeLabel(event);
-  return (
-    typeLabel === 'Core/Document Processing Initiated' ||
-    typeLabel === 'Document Processing Initiated'
-  );
-};
-
-const TECHNICAL_SETUP_EVENT_LABELS = new Set<string>([
-  'Conversation/Document Bootstrap Requested',
-  'Conversation/Status Change',
-  'MyOS/Participant Resolved',
-  'MyOS/All Participants Ready',
-  'MyOS/Target Document Session Started',
-]);
-
-const TECHNICAL_SETUP_EVENT_BLUE_IDS = new Set<string>([
-  conversationBlueIds['Conversation/Document Bootstrap Requested'],
-  conversationBlueIds['Conversation/Status Change'],
-  myOsBlueIds['MyOS/Participant Resolved'],
-  myOsBlueIds['MyOS/All Participants Ready'],
-  myOsBlueIds['MyOS/Target Document Session Started'],
-]);
-
-const isTechnicalSetupEvent = (event: unknown): boolean => {
-  if (isCoreDocumentProcessingInitiatedEvent(event)) {
-    return true;
-  }
-
-  const typeLabel = resolveEventTypeLabel(event);
-  if (typeLabel && TECHNICAL_SETUP_EVENT_LABELS.has(typeLabel)) {
-    return true;
-  }
-
-  const typeBlueId = resolveEventTypeBlueId(event);
-  return Boolean(typeBlueId && TECHNICAL_SETUP_EVENT_BLUE_IDS.has(typeBlueId));
-};
-
-const INIT_READY_SHORT = 'Contract is ready.';
-const INIT_READY_MORE = 'Contract was set up successfully.';
-
-const maybeAddInitReadyHistoryEntry = async (input: {
-  contractId: string;
-  documentId?: string;
-  createdAt: string;
-  historyEntries: ContractHistoryEntry[];
-  contractRepository: Pick<ContractRepository, 'addContractHistoryEntry'>;
-}): Promise<string | null> => {
-  const historyId = `init:${input.documentId ?? input.contractId}`;
-  const hasExistingId = input.historyEntries.some(
-    entry => entry.id === historyId
-  );
-  if (hasExistingId) {
-    return null;
-  }
-
-  await input.contractRepository.addContractHistoryEntry({
-    contractId: input.contractId,
-    kind: 'contractUpdated',
-    short: INIT_READY_SHORT,
-    more: INIT_READY_MORE,
-    createdAt: input.createdAt,
-    id: historyId,
+const isTypeOfSummaryEvent = (input: {
+  node: BlueNode;
+  schema: Parameters<typeof summaryBlue.isTypeOf>[1];
+}) =>
+  summaryBlue.isTypeOf(input.node, input.schema, {
+    checkSchemaExtensions: true,
   });
 
-  input.historyEntries.unshift({
-    id: historyId,
-    contractId: input.contractId,
-    kind: 'contractUpdated',
-    short: INIT_READY_SHORT,
-    more: INIT_READY_MORE,
-    createdAt: input.createdAt,
+const isCoreDocumentProcessingInitiatedEvent = (node: BlueNode): boolean => {
+  return isTypeOfSummaryEvent({
+    node,
+    schema: DocumentProcessingInitiatedSchema,
   });
+};
 
-  return historyId;
+const TECHNICAL_SETUP_EVENT_SCHEMAS: Array<
+  Parameters<typeof summaryBlue.isTypeOf>[1]
+> = [
+  DocumentBootstrapRequestedSchema,
+  StatusChangeSchema,
+  ParticipantResolvedSchema,
+  AllParticipantsReadySchema,
+  TargetDocumentSessionStartedSchema,
+];
+
+const isTechnicalSetupEvent = (node: BlueNode): boolean => {
+  return TECHNICAL_SETUP_EVENT_SCHEMAS.some(schema =>
+    isTypeOfSummaryEvent({
+      node,
+      schema,
+    })
+  );
 };
 
 const parseSourceEpoch = (value: unknown): number | undefined => {
@@ -335,33 +225,35 @@ const generateOrLoadContractSummary = async (input: {
   const nonInitiatedEmittedEvents: unknown[] = [];
   const businessEmittedEvents: unknown[] = [];
   for (const event of emittedEvents) {
-    if (isCoreDocumentProcessingInitiatedEvent(event)) {
+    const node = toBlueNode(event);
+    const isInitiated = node
+      ? isCoreDocumentProcessingInitiatedEvent(node)
+      : false;
+    if (isInitiated) {
       initiatedEvents.push(event);
       continue;
     }
     nonInitiatedEmittedEvents.push(event);
-    if (!isTechnicalSetupEvent(event)) {
+    const isTechnicalSetup = node ? isTechnicalSetupEvent(node) : false;
+    if (!isTechnicalSetup) {
       businessEmittedEvents.push(event);
     }
   }
-  const emittedEventsForSummary = nonInitiatedEmittedEvents;
-  const shouldUseReadyFallback =
-    summarySourceEpoch === 0 &&
-    (contract.triggerEvent === undefined || contract.triggerEvent === null) &&
-    initiatedEvents.length > 0 &&
-    emittedEvents.length <= 1;
-  const shouldRunLlmForEpochZeroMultiEvent =
-    summarySourceEpoch === 0 &&
-    initiatedEvents.length > 0 &&
-    emittedEvents.length > 1;
   const hasTriggerEvent =
     contract.triggerEvent !== undefined && contract.triggerEvent !== null;
+  const isInitOnlyEpochZeroTransition =
+    summarySourceEpoch === 0 &&
+    !hasTriggerEvent &&
+    emittedEvents.length === 1 &&
+    initiatedEvents.length === 1;
+  const emittedEventsForSummary = isInitOnlyEpochZeroTransition
+    ? emittedEvents
+    : nonInitiatedEmittedEvents;
+  const hasOnlyTechnicalNonInitiatedEvents =
+    nonInitiatedEmittedEvents.length > 0 && businessEmittedEvents.length === 0;
   const shouldSkipTechnicalOnlyTransition =
-    !shouldUseReadyFallback &&
-    !shouldRunLlmForEpochZeroMultiEvent &&
-    businessEmittedEvents.length === 0 &&
-    ((nonInitiatedEmittedEvents.length > 0 &&
-      nonInitiatedEmittedEvents.every(event => isTechnicalSetupEvent(event))) ||
+    !isInitOnlyEpochZeroTransition &&
+    (hasOnlyTechnicalNonInitiatedEvents ||
       (nonInitiatedEmittedEvents.length === 0 &&
         initiatedEvents.length > 0 &&
         !hasTriggerEvent));
@@ -387,15 +279,6 @@ const generateOrLoadContractSummary = async (input: {
         model: contract.summaryModel,
       };
     }
-
-    return {
-      summary: buildInitReadySummary(),
-      summaryUpdatedAt: contract.summaryUpdatedAt ?? contract.updatedAt,
-      summarySourceUpdatedAt: contract.updatedAt,
-      summaryInputBlueId: contract.summaryInputBlueId ?? undefined,
-      cached: true,
-      model: contract.summaryModel,
-    };
   }
 
   if (mockConfig.enabled) {
@@ -452,86 +335,12 @@ const generateOrLoadContractSummary = async (input: {
     };
   }
 
-  if (shouldUseReadyFallback) {
-    const summary = buildInitReadySummary();
-    const now = new Date().toISOString();
-    const summaryPreview = resolveSummaryPreview({ summary });
-
-    await input.contractRepository.updateContractSummary({
-      contractId: contract.contractId,
-      summary,
-      summaryPreview,
-      summaryUpdatedAt: now,
-      summarySourceUpdatedAt: contract.updatedAt,
-      summarySourceEpoch,
-      summaryInputBlueId: null,
-      summaryModel: null,
-      summaryError: null,
-      summaryDocumentName: contract.documentName,
-      summaryStatus: contract.status,
-      summaryStatusUpdatedAt: contract.statusUpdatedAt,
-      summaryStatusTimestamps: contract.statusTimestamps,
-      userId: contract.userId,
-      relatedTransactionIds: contract.relatedTransactionIds,
-      relatedHoldIds: contract.relatedHoldIds,
-    });
-
-    const historyShort = summary.lastChange.short || summary.listPreview;
-    const historyMore = summary.lastChange.more;
-    const historyKind = 'contractUpdated' as const;
-    const historyEntries = await input.contractRepository.listContractHistory(
-      contract.contractId
-    );
-    const historyId =
-      input.historyEventId ??
-      `init:${contract.documentId ?? contract.contractId}`;
-    const historyCreatedAt = contract.createdAt ?? contract.updatedAt;
-    const hasExistingId = historyEntries.some(entry => entry.id === historyId);
-
-    if (!hasExistingId) {
-      await input.contractRepository.addContractHistoryEntry({
-        contractId: contract.contractId,
-        kind: historyKind,
-        short: historyShort,
-        more: historyMore,
-        createdAt: historyCreatedAt,
-        id: historyId,
-      });
-    }
-
-    return {
-      summary,
-      summaryUpdatedAt: now,
-      summarySourceUpdatedAt: contract.updatedAt,
-      summaryInputBlueId: undefined,
-      cached: false,
-      model: undefined,
-    };
-  }
-
   try {
     const historyEntriesForContext =
       await input.contractRepository.listContractHistory(contract.contractId);
     const previousContractUpdatedEntry = historyEntriesForContext.find(
       entry => entry.kind === 'contractUpdated'
     );
-    const hasContractUpdatedHistory = historyEntriesForContext.some(
-      entry => entry.kind === 'contractUpdated'
-    );
-    const shouldEmitInitReadyHistory =
-      summarySourceEpoch === 0 &&
-      initiatedEvents.length > 0 &&
-      emittedEvents.length > 1 &&
-      !hasContractUpdatedHistory;
-    if (shouldEmitInitReadyHistory) {
-      await maybeAddInitReadyHistoryEntry({
-        contractId: contract.contractId,
-        documentId: contract.documentId,
-        createdAt: contract.createdAt ?? contract.updatedAt,
-        historyEntries: historyEntriesForContext,
-        contractRepository: input.contractRepository,
-      });
-    }
 
     const { facts, summaryInputBlueId, triggerEventMeta } =
       buildContractSummaryFacts({
@@ -539,6 +348,7 @@ const generateOrLoadContractSummary = async (input: {
           contractId: contract.contractId,
           typeBlueId: contract.typeBlueId,
           displayName: contract.displayName,
+          summarySourceEpoch,
           sessionId: contract.sessionId,
           documentId: contract.documentId,
           merchantId: contract.merchantId,

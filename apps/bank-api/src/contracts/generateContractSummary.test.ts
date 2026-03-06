@@ -58,7 +58,6 @@ describe('generateContractSummaryHandler', () => {
   const fundsCapturedBlueId = paynoteBlueIds['PayNote/Funds Captured'];
   const participantResolvedBlueId = myOsBlueIds['MyOS/Participant Resolved'];
   const allParticipantsReadyBlueId = myOsBlueIds['MyOS/All Participants Ready'];
-  const textBlueId = 'DLRQwz7MQeCrzjy9bohPNwtCxKEBbKaMK65KBrwjfG6K';
   const documentProcessingInitiatedBlueId =
     'BrpmpNt5JkapeUvPqYcxgXZrHNZX3R757dRwuXXdfNM2';
   const summaryFixture = {
@@ -551,7 +550,7 @@ describe('generateContractSummaryHandler', () => {
     );
   });
 
-  it('uses static ready fallback without LLM for epoch 0 with only Document Processing Initiated', async () => {
+  it('runs LLM for epoch 0 with only Document Processing Initiated and uses model output', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
       typeBlueId: payNoteTypeBlueId,
@@ -586,25 +585,40 @@ describe('generateContractSummaryHandler', () => {
 
     expect(result.status).toBe(200);
     expect(result.body.cached).toBe(false);
-    expect(result.body.summary.story.headline).toBe('Contract is ready.');
-    expect(result.body.summary.lastChange.short).toBe('Contract is ready.');
-    expect(result.body.summary.lastChange.more).toBe(
-      'Contract was set up successfully.'
+    expect(result.body.summary.story.headline).toBe(
+      summaryFixture.story.headline
     );
-    expect(hoistedOpenAI.responsesParseMock).not.toHaveBeenCalled();
-    expect(getOpenAiApiKey).not.toHaveBeenCalled();
+    expect(result.body.summary.lastChange.short).toBe(
+      summaryFixture.lastChange.short
+    );
+    expect(result.body.summary.lastChange.more).toBe(
+      summaryFixture.lastChange.more
+    );
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(1);
+    expect(getOpenAiApiKey).toHaveBeenCalledTimes(1);
     expect(contractRepository.updateContractSummary).toHaveBeenCalledWith(
       expect.objectContaining({
-        summaryModel: null,
+        summaryModel: 'gpt-5',
         summaryError: null,
       })
     );
     expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'init:doc-1',
-        short: 'Contract is ready.',
+        short: summaryFixture.lastChange.short,
       })
     );
+    const facts = extractFactsFromFirstParseCall();
+    const contractFacts = facts.contract as
+      | { summarySourceEpoch?: number }
+      | undefined;
+    expect(contractFacts?.summarySourceEpoch).toBe(0);
+    const transition = facts.transition as
+      | { emittedEventTypes?: string[] }
+      | undefined;
+    expect(transition?.emittedEventTypes).toEqual([
+      'Core/Document Processing Initiated',
+    ]);
   });
 
   it('filters out Document Processing Initiated from LLM facts when other emitted events are present', async () => {
@@ -620,13 +634,10 @@ describe('generateContractSummaryHandler', () => {
       },
       emittedEvents: [
         {
-          type: {
-            type: { blueId: textBlueId },
-            value: 'Core/Document Processing Initiated',
-          },
+          type: 'Core/Document Processing Initiated',
           documentId: 'doc-1',
         },
-        { type: { value: 'Conversation/Customer Action Requested' } },
+        { type: 'Conversation/Customer Action Requested' },
       ],
       userId: 'user-123',
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -655,9 +666,6 @@ describe('generateContractSummaryHandler', () => {
     expect(JSON.stringify(emittedEvents)).not.toContain(
       documentProcessingInitiatedBlueId
     );
-    expect(JSON.stringify(emittedEvents)).toContain(
-      'Conversation/Customer Action Requested'
-    );
     const transition = facts.transition as
       | { emittedEventTypes?: string[] }
       | undefined;
@@ -671,7 +679,7 @@ describe('generateContractSummaryHandler', () => {
     ).toBe(false);
   });
 
-  it('adds static "Contract is ready." history entry and still runs LLM when epoch 0 has initiated plus business events', async () => {
+  it('does not add static init history entry when epoch 0 has initiated plus business events', async () => {
     contractRepository.getContractBySessionId.mockResolvedValueOnce({
       contractId: 'sess-1',
       typeBlueId: payNoteTypeBlueId,
@@ -684,12 +692,9 @@ describe('generateContractSummaryHandler', () => {
       },
       emittedEvents: [
         {
-          type: {
-            type: { blueId: textBlueId },
-            value: 'Core/Document Processing Initiated',
-          },
+          type: 'Core/Document Processing Initiated',
         },
-        { type: { value: 'Conversation/Customer Action Requested' } },
+        { type: 'Conversation/Customer Action Requested' },
       ],
       userId: 'user-123',
       createdAt: '2026-01-01T00:00:00.000Z',
@@ -709,22 +714,25 @@ describe('generateContractSummaryHandler', () => {
     );
 
     expect(result.status).toBe(200);
+    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(1);
     expect(contractRepository.addContractHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'init:sess-1',
-        short: 'Contract is ready.',
+        short: summaryFixture.lastChange.short,
       })
     );
-    expect(hoistedOpenAI.responsesParseMock).toHaveBeenCalledTimes(1);
     const facts = extractFactsFromFirstParseCall();
     const emittedEvents = ((
       facts.transition as { emittedEvents?: unknown[] } | undefined
     )?.emittedEvents ?? []) as unknown[];
-    expect(JSON.stringify(emittedEvents)).toContain(
-      'Conversation/Customer Action Requested'
-    );
     expect(JSON.stringify(emittedEvents)).not.toContain(
       'Core/Document Processing Initiated'
+    );
+    const transition = facts.transition as
+      | { emittedEventTypes?: string[] }
+      | undefined;
+    expect(transition?.emittedEventTypes).toContain(
+      'Conversation/Customer Action Requested'
     );
   });
 
@@ -746,6 +754,9 @@ describe('generateContractSummaryHandler', () => {
       userId: 'user-123',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:02:00.000Z',
+      summary: summaryFixture,
+      summaryUpdatedAt: '2026-01-02T00:02:01.000Z',
+      summarySourceUpdatedAt: '2026-01-02T00:02:00.000Z',
     });
 
     const result = await generateContractSummaryHandler(
@@ -909,6 +920,9 @@ describe('generateContractSummaryHandler', () => {
       userId: 'user-123',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-02T00:02:00.000Z',
+      summary: summaryFixture,
+      summaryUpdatedAt: '2026-01-02T00:02:01.000Z',
+      summarySourceUpdatedAt: '2026-01-02T00:02:00.000Z',
     });
 
     const result = await generateContractSummaryHandler(

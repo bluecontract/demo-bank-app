@@ -46,10 +46,19 @@ describe('summary prompts', () => {
     );
     expect(prompt).toContain('Do not show raw merchant IDs.');
     expect(prompt).toContain(
-      'Write UI text to the customer in second person ("you", "your").'
+      'Use "you/your" only when facts indicate the action is done by the viewer or waiting for the viewer.'
+    );
+    expect(prompt).toContain(
+      'If facts indicate another participant is acting (or must act next), describe that participant neutrally'
     );
     expect(prompt).toContain(
       'Never say "the bank approves" when describing customer payment approvals; use "you approve" / "waiting for your approval".'
+    );
+    expect(prompt).toContain(
+      'If `contract.summarySourceEpoch === 0`, `transition.triggerEvent` is missing, and `transition.emittedEventTypes` contains only `Core/Document Processing Initiated`'
+    );
+    expect(prompt).toContain(
+      'do not use generic setup wording such as "Contract is ready", "setup complete", or "participants initialized".'
     );
     expect(prompt).toContain(
       '`PayNote/Capture Funds Requested` (without `PayNote/Funds Captured`): payment is requested/in progress (future tense).'

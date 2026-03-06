@@ -33,6 +33,7 @@ export type ContractFactsV2 = {
     contractId: string;
     displayName: string;
     typeBlueId: string;
+    summarySourceEpoch?: number;
     sessionId?: string;
     documentId?: string;
     merchantId?: string;
@@ -84,6 +85,7 @@ type BuildFactsInput = {
     contractId: string;
     typeBlueId: string;
     displayName: string;
+    summarySourceEpoch?: number;
     customerChannelKey?: string;
     sessionId?: string;
     documentId?: string;
@@ -140,36 +142,38 @@ const getNumberValue = (value: unknown): number | undefined => {
 };
 
 const getEventTypeName = (
-  value: unknown,
+  node: BlueNode | null | undefined,
   typeNameByBlueId: Record<string, string>
 ): string | undefined => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!node) {
     return undefined;
   }
 
-  const type = (value as Record<string, unknown>).type;
-  if (typeof type === 'string') {
-    const trimmed = type.trim();
-    return trimmed.length > 0 ? trimmed : undefined;
-  }
-  if (!type || typeof type !== 'object' || Array.isArray(type)) {
+  const typeNode = node.getType();
+  if (!typeNode) {
     return undefined;
   }
-
-  const typeRecord = type as Record<string, unknown>;
-  const directBlueId = getStringValue(typeRecord.blueId);
+  const directBlueId = typeNode?.getBlueId();
   if (directBlueId) {
     return typeNameByBlueId[directBlueId] ?? directBlueId;
   }
 
-  const name = getStringValue(typeRecord.name);
-  if (name) {
-    return name;
+  const typeValue = typeNode?.getValue();
+  if (typeof typeValue === 'string') {
+    const trimmed = typeValue.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   }
 
-  const valueLabel = getStringValue(typeRecord.value);
-  if (valueLabel) {
-    return valueLabel;
+  try {
+    const typeSimple = summaryBlue.nodeToJson(typeNode, 'simple');
+    if (typeof typeSimple === 'string') {
+      const trimmed = typeSimple.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  } catch {
+    // no-op
   }
 
   return undefined;
@@ -482,10 +486,10 @@ export const buildContractSummaryFacts = (
 
   const typesPack = buildTypeDefinitionPack(referencedTypeIds);
   const triggerEventType = getEventTypeName(
-    triggerSimple,
+    triggerNode,
     typesPack.typeNameByBlueId
   );
-  const emittedEventTypes = emittedSimple
+  const emittedEventTypes = emittedNodes
     .map(event => getEventTypeName(event, typesPack.typeNameByBlueId))
     .filter((eventType): eventType is string => Boolean(eventType));
 
@@ -532,6 +536,7 @@ export const buildContractSummaryFacts = (
         contractId: input.contract.contractId,
         displayName: input.contract.displayName,
         typeBlueId: input.contract.typeBlueId,
+        summarySourceEpoch: input.contract.summarySourceEpoch,
         sessionId: input.contract.sessionId,
         documentId: input.contract.documentId,
         merchantId: input.contract.merchantId,
