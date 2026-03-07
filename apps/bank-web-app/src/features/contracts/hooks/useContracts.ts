@@ -6,7 +6,6 @@ import type { ContractSummary } from '../../../types/api';
 type UseContractsOptions = {
   updatedSince?: string;
   enabled?: boolean;
-  refetchInterval?: number | false;
 };
 
 type ContractsError = Error & { status?: number };
@@ -36,7 +35,7 @@ export function useContracts(options: UseContractsOptions = {}) {
       return response.body.items;
     },
     enabled: options.enabled ?? true,
-    refetchInterval: options.refetchInterval ?? false,
+    refetchInterval: false,
     refetchOnMount: 'always',
     staleTime: 5 * 1000,
     gcTime: 2 * 60 * 1000,

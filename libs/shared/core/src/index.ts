@@ -19,3 +19,8 @@ export {
   formatMinorAmountWithCurrency,
   parseMinorAmount,
 } from './formatting';
+export {
+  buildTouchPollingMarkerUpdateInput,
+  mapPollingMarkerItem,
+  type PollingMarker,
+} from './pollingMarker';

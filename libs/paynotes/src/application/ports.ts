@@ -189,6 +189,11 @@ export interface PayNoteDeliverySummary {
   updatedAt: string;
 }
 
+export interface PayNoteDeliveryPollingMarker {
+  revision: number;
+  latestUpdatedAt?: string;
+}
+
 export interface PayNoteDeliveryRepository {
   markEventProcessed(eventId: string): Promise<boolean>;
   finalizeEventProcessing?(eventId: string): Promise<void>;
@@ -219,8 +224,12 @@ export interface PayNoteDeliveryRepository {
     summaryInputBlueId?: string;
     summaryModel?: string;
     summaryError?: string | null;
+    userId?: string;
   }): Promise<void>;
   listDeliveriesByUserId(userId: string): Promise<PayNoteDeliverySummary[]>;
+  getDeliveryPollingMarkerByUserId(
+    userId: string
+  ): Promise<PayNoteDeliveryPollingMarker>;
 }
 
 export interface PayNoteRecord {

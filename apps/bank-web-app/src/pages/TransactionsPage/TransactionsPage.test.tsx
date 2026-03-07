@@ -6,6 +6,7 @@ import { useAuth } from '../../app/providers/AuthProvider';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import { useCards } from '../../features/cards/hooks/useCards';
 import { TransactionHistory } from '../../features/transfer';
+import { DashboardShell } from '../../features/dashboard/components';
 
 vi.mock('../../app/providers/AuthProvider', () => ({
   useAuth: vi.fn(),
@@ -38,6 +39,7 @@ const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
 const mockUseAccounts = useAccounts as ReturnType<typeof vi.fn>;
 const mockUseCards = useCards as ReturnType<typeof vi.fn>;
 const mockTransactionHistory = TransactionHistory as ReturnType<typeof vi.fn>;
+const mockDashboardShell = DashboardShell as ReturnType<typeof vi.fn>;
 
 const mockAccounts = [
   {
@@ -131,11 +133,24 @@ describe('TransactionsPage', () => {
     // Auto-selects the first account and renders the shared TransactionHistory panel.
     expect(mockTransactionHistory).toHaveBeenCalled();
     expect(screen.getByTestId('transaction-history')).toHaveTextContent('all');
+    expect(
+      mockDashboardShell.mock.calls.some(
+        ([props]) => props.pollingActivityAccountNumber === '1234567890'
+      )
+    ).toBe(true);
 
     fireEvent.click(cardSelect);
     fireEvent.click(screen.getByRole('option', { name: '**** 5678' }));
     expect(screen.getByTestId('transaction-history')).toHaveTextContent(
       'card-2'
     );
+
+    fireEvent.click(accountSelect);
+    fireEvent.click(screen.getByRole('option', { name: 'Savings Account' }));
+    expect(
+      mockDashboardShell.mock.calls.some(
+        ([props]) => props.pollingActivityAccountNumber === '9876543210'
+      )
+    ).toBe(true);
   });
 });

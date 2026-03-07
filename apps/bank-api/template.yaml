@@ -21,6 +21,10 @@ Parameters:
     Type: Number
     Default: 3
     MinValue: 1
+  ApiGatewayEndpointType:
+    Type: String
+    Default: EDGE
+    AllowedValues: [EDGE, REGIONAL]
 
 Conditions:
   IsLocalStackDeployment: !Not [!Equals [!Ref AwsEndpointUrl, '']]
@@ -228,7 +232,7 @@ Resources:
       Name: !Sub 'bank-api-${Environment}'
       StageName: !Ref Environment
       EndpointConfiguration:
-        Type: REGIONAL
+        Type: !Ref ApiGatewayEndpointType
 
   BankLambdaFunction:
     Type: AWS::Serverless::Function

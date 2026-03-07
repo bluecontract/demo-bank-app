@@ -130,6 +130,7 @@ describe('getPayNoteDetailsHandler', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
 
     const blueIdCalculator = {

@@ -64,6 +64,28 @@ export const HealthCheckSchema = z.object({
   environment: z.string(),
 });
 
+const PollCursorSchema = z.string().min(1);
+
+const PollChangeSummarySchema = z.object({
+  cursor: PollCursorSchema,
+  changed: z.boolean(),
+  latestUpdatedAt: z.string().datetime({ offset: true }).optional(),
+});
+
+const PollActivitySummarySchema = z.object({
+  accountNumber: z.string().length(10),
+  cursor: PollCursorSchema,
+  changed: z.boolean(),
+  latestActivityAt: z.string().datetime({ offset: true }).optional(),
+});
+
+const PollChangesResponseSchema = z.object({
+  serverTime: z.string().datetime({ offset: true }),
+  contracts: PollChangeSummarySchema.optional(),
+  proposals: PollChangeSummarySchema.optional(),
+  activity: PollActivitySummarySchema.optional(),
+});
+
 // Auth schemas
 const MAX_AVATAR_DATA_URL_LENGTH = 200_000;
 const MerchantNameSchema = createSanitizedStringSchema(
@@ -434,6 +456,29 @@ export const bankApiContract = c.router(
           401: ProblemDto,
         },
         summary: 'List PayNote deliveries identified for the current user.',
+      },
+
+      pollChanges: {
+        method: 'GET',
+        path: '/v1/poll/changes',
+        query: z
+          .object({
+            includeContracts: z.coerce.boolean().optional(),
+            includeProposals: z.coerce.boolean().optional(),
+            includeActivity: z.coerce.boolean().optional(),
+            activityAccountNumber: z.string().length(10).optional(),
+            contractsCursor: z.string().optional(),
+            proposalsCursor: z.string().optional(),
+            activityCursor: z.string().optional(),
+          })
+          .optional(),
+        responses: {
+          200: PollChangesResponseSchema,
+          400: ProblemDto,
+          401: ProblemDto,
+        },
+        summary:
+          'Poll lightweight change markers for contracts, proposals, and optional activity.',
       },
 
       getPayNoteDelivery: {

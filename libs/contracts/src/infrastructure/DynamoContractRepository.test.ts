@@ -22,9 +22,12 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
   UpdateCommand: vi.fn(payload => payload),
 }));
 
-const { PutCommand, GetCommand } = await import('@aws-sdk/lib-dynamodb');
+const { PutCommand, GetCommand, UpdateCommand } = await import(
+  '@aws-sdk/lib-dynamodb'
+);
 const mockPutCommand = vi.mocked(PutCommand);
 const mockGetCommand = vi.mocked(GetCommand);
+const mockUpdateCommand = vi.mocked(UpdateCommand);
 
 const createRepository = () =>
   new DynamoContractRepository({
@@ -89,6 +92,31 @@ describe('DynamoContractRepository', () => {
 
     const holdItem = savedItems.find(item => item.PK === 'HOLD#hold-1');
     expect(holdItem?.merchantId).toBe('merchant-1');
+  });
+
+  it('touches contract polling marker when saving a user contract', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+
+    await repository.saveContract({
+      contractId: 'contract-1',
+      typeBlueId: 'type-1',
+      displayName: 'PayNote',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-02T00:00:00.000Z',
+    });
+
+    expect(mockUpdateCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Key: {
+          PK: 'USER#user-1',
+          SK: 'POLL_MARKER#CONTRACTS',
+        },
+      })
+    );
   });
 
   it('uses consistent read for session lookup mapping', async () => {
@@ -517,6 +545,50 @@ describe('DynamoContractRepository', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]?.hasPendingAction).toBe(true);
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns contract polling marker with defaults when marker is missing', async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: undefined,
+    });
+    const repository = createRepository();
+
+    const result = await repository.getContractPollingMarkerByUserId('user-1');
+
+    expect(result).toEqual({ revision: 0 });
+    expect(mockGetCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Key: {
+          PK: 'USER#user-1',
+          SK: 'POLL_MARKER#CONTRACTS',
+        },
+        ConsistentRead: true,
+      })
+    );
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns contract polling marker when marker exists', async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        PK: 'USER#user-1',
+        SK: 'POLL_MARKER#CONTRACTS',
+        entityType: 'CONTRACT_POLL_MARKER',
+        revision: 4,
+        latestUpdatedAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+      },
+    });
+    const repository = createRepository();
+
+    const result = await repository.getContractPollingMarkerByUserId('user-1');
+
+    expect(result).toEqual({
+      revision: 4,
+      latestUpdatedAt: '2024-01-02T00:00:00.000Z',
+    });
     expect(mockSend).toHaveBeenCalledTimes(1);
   });
 });

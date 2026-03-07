@@ -150,6 +150,67 @@ ensure_aws_endpoint_override_arg() {
   deploy_args+=(--parameter-overrides "AwsEndpointUrl=${LAMBDA_AWS_ENDPOINT_URL}")
 }
 
+has_api_gateway_endpoint_type_override_arg() {
+  local arg
+  for arg in "${deploy_args[@]}"; do
+    if [[ "${arg}" == *"ApiGatewayEndpointType="* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+replace_api_gateway_endpoint_type_override_value() {
+  local new_value="$1"
+  local index next arg updated
+
+  for ((index = 0; index < ${#deploy_args[@]}; index++)); do
+    arg="${deploy_args[${index}]}"
+    if [[ "${arg}" == --parameter-overrides=* ]]; then
+      updated="$(printf '%s' "${arg}" | sed -E "s#ApiGatewayEndpointType=[^[:space:]]+#ApiGatewayEndpointType=${new_value}#g")"
+      deploy_args[${index}]="${updated}"
+      return 0
+    fi
+
+    if [[ "${arg}" == "--parameter-overrides" ]]; then
+      next=$((index + 1))
+      if ((next < ${#deploy_args[@]})); then
+        updated="$(printf '%s' "${deploy_args[${next}]}" | sed -E "s#ApiGatewayEndpointType=[^[:space:]]+#ApiGatewayEndpointType=${new_value}#g")"
+        deploy_args[${next}]="${updated}"
+      fi
+      return 0
+    fi
+  done
+}
+
+ensure_api_gateway_endpoint_type_override_arg() {
+  local index next
+
+  if has_api_gateway_endpoint_type_override_arg; then
+    replace_api_gateway_endpoint_type_override_value "REGIONAL"
+    return 0
+  fi
+
+  for ((index = 0; index < ${#deploy_args[@]}; index++)); do
+    if [[ "${deploy_args[${index}]}" == --parameter-overrides=* ]]; then
+      deploy_args[${index}]="${deploy_args[${index}]} ApiGatewayEndpointType=REGIONAL"
+      return 0
+    fi
+
+    if [[ "${deploy_args[${index}]}" == "--parameter-overrides" ]]; then
+      next=$((index + 1))
+      if ((next < ${#deploy_args[@]})); then
+        deploy_args[${next}]="${deploy_args[${next}]} ApiGatewayEndpointType=REGIONAL"
+      else
+        deploy_args+=("ApiGatewayEndpointType=REGIONAL")
+      fi
+      return 0
+    fi
+  done
+
+  deploy_args+=(--parameter-overrides "ApiGatewayEndpointType=REGIONAL")
+}
+
 ensure_localstack_endpoint_reachable() {
   local health_url="${AWS_ENDPOINT_URL%/}/_localstack/health"
 
@@ -552,6 +613,7 @@ echo "Running samlocal deploy..."
 deploy_args=("$@")
 ensure_localstack_endpoint_reachable
 ensure_aws_endpoint_override_arg
+ensure_api_gateway_endpoint_type_override_arg
 ensure_stack_name_arg
 prepare_local_template_file
 preflight_recover_sam_managed_stack

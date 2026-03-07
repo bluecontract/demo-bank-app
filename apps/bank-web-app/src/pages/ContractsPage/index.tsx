@@ -27,7 +27,6 @@ import {
   getItemUpdatedAt,
   isProposalItem,
 } from '../../features/contracts/lib/contractsAndProposals';
-import { getContractsPollingInterval } from '../../features/contracts/lib/contractsPolling';
 import {
   getProposalDecisionStatus,
   isContractArchived,
@@ -325,9 +324,8 @@ export function ContractsPage({ view = 'inbox' }: ContractsPageProps) {
   const location = useLocation();
   const queryClient = useQueryClient();
 
-  const refreshInterval = getContractsPollingInterval();
-  const contractsQuery = useContracts({ refetchInterval: refreshInterval });
-  const proposalsQuery = useProposals({ refetchInterval: refreshInterval });
+  const contractsQuery = useContracts();
+  const proposalsQuery = useProposals();
   const dedupedContracts = useMemo(
     () => (contractsQuery.data ? dedupeContracts(contractsQuery.data) : []),
     [contractsQuery.data]

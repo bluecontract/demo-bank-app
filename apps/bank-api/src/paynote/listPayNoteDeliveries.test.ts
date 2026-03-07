@@ -21,6 +21,7 @@ describe('listPayNoteDeliveriesHandler', () => {
 
   const payNoteDeliveryRepository = {
     listDeliveriesByUserId: vi.fn(),
+    getDeliveryPollingMarkerByUserId: vi.fn(),
   };
   const merchantDirectoryRepository = {
     getMerchantsByIds: vi.fn(),

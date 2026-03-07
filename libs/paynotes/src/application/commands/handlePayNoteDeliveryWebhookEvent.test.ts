@@ -323,6 +323,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -435,6 +436,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -537,6 +539,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
         getDeliveryByPayNoteDocumentId: vi.fn(),
         getDeliveryByCardTransactionDetails: vi.fn(),
         listDeliveriesByUserId: vi.fn(),
+        getDeliveryPollingMarkerByUserId: vi.fn(),
       };
 
       const contractRepository = {
@@ -650,6 +653,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -747,6 +751,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -850,6 +855,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -945,6 +951,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -1069,6 +1076,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -1192,6 +1200,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -1276,6 +1285,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -1371,6 +1381,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -1493,6 +1504,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           getDeliveryByCardTransactionDetails: vi.fn(),
           saveDelivery: vi.fn(),
           listDeliveriesByUserId: vi.fn(),
+          getDeliveryPollingMarkerByUserId: vi.fn(),
         } as any,
         contractRepository: {
           getContract: vi.fn(),
@@ -1594,6 +1606,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           getDeliveryByCardTransactionDetails: vi.fn(),
           saveDelivery: vi.fn(),
           listDeliveriesByUserId: vi.fn(),
+          getDeliveryPollingMarkerByUserId: vi.fn(),
         } as any,
         contractRepository: {
           getContract: vi.fn(),
@@ -1710,6 +1723,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           getDeliveryByCardTransactionDetails: vi.fn(),
           saveDelivery: vi.fn(),
           listDeliveriesByUserId: vi.fn(),
+          getDeliveryPollingMarkerByUserId: vi.fn(),
         } as any,
         contractRepository: {
           getContract: vi.fn(),
@@ -1819,6 +1833,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           getDeliveryByCardTransactionDetails: vi.fn(),
           saveDelivery: vi.fn(),
           listDeliveriesByUserId: vi.fn(),
+          getDeliveryPollingMarkerByUserId: vi.fn(),
         } as any,
         contractRepository: {
           getContract: vi.fn(),
@@ -1905,6 +1920,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -2043,6 +2059,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           getDeliveryByCardTransactionDetails: vi.fn(),
           saveDelivery: vi.fn(),
           listDeliveriesByUserId: vi.fn(),
+          getDeliveryPollingMarkerByUserId: vi.fn(),
         } as any,
         contractRepository: {
           getContract: vi.fn(),
@@ -2107,6 +2124,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -2211,6 +2229,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -2307,6 +2326,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -2403,6 +2423,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -2500,6 +2521,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -2609,6 +2631,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           getDeliveryByPayNoteDocumentId: vi.fn(),
           getDeliveryByCardTransactionDetails: vi.fn(),
           listDeliveriesByUserId: vi.fn(),
+          getDeliveryPollingMarkerByUserId: vi.fn(),
         } as any,
         contractRepository: contractRepository as any,
         bankingRepository: {} as any,
@@ -2688,6 +2711,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           getDeliveryByPayNoteDocumentId: vi.fn(),
           getDeliveryByCardTransactionDetails: vi.fn(),
           listDeliveriesByUserId: vi.fn(),
+          getDeliveryPollingMarkerByUserId: vi.fn(),
         } as any,
         contractRepository: contractRepository as any,
         bankingRepository: {} as any,
@@ -2773,6 +2797,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           getDeliveryByPayNoteDocumentId: vi.fn(),
           getDeliveryByCardTransactionDetails: vi.fn(),
           listDeliveriesByUserId: vi.fn(),
+          getDeliveryPollingMarkerByUserId: vi.fn(),
         } as any,
         contractRepository: contractRepository as any,
         bankingRepository: {} as any,
@@ -2858,6 +2883,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
           getDeliveryByPayNoteDocumentId: vi.fn(),
           getDeliveryByCardTransactionDetails: vi.fn(),
           listDeliveriesByUserId: vi.fn(),
+          getDeliveryPollingMarkerByUserId: vi.fn(),
         } as any,
         contractRepository: contractRepository as any,
         bankingRepository: {} as any,
@@ -3227,6 +3253,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -3298,6 +3325,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -3365,6 +3393,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -3538,6 +3567,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByPayNoteDocumentId: vi.fn(),
       getDeliveryByCardTransactionDetails: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
     const contractRepository = {
       getContract: vi.fn(),
@@ -3634,6 +3664,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       getDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
 
     const contractRepository = {
@@ -3785,6 +3816,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       getDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
 
     const contractRepository = {
@@ -3905,6 +3937,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       getDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
 
     const contractRepository = {
@@ -4014,6 +4047,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       getDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
 
     const contractRepository = {
@@ -4126,6 +4160,7 @@ describe('handlePayNoteDeliveryWebhookEvent', () => {
       getDelivery: vi.fn().mockResolvedValue(null),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn().mockResolvedValue([]),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
 
     const contractRepository = {

@@ -10,14 +10,12 @@ import {
   getItemSessionId,
 } from '../lib/contractsAndProposals';
 import { isInboxItem } from '../lib/contractListFilters';
-import { getContractsPollingInterval } from '../lib/contractsPolling';
 
 export function useContractsBadgeCount() {
   const { reviewedMap } = useContractReviewState();
   const { activeSessionId } = useActiveContractSession();
-  const refetchInterval = getContractsPollingInterval();
-  const contractsQuery = useContracts({ refetchInterval });
-  const proposalsQuery = useProposals({ refetchInterval });
+  const contractsQuery = useContracts();
+  const proposalsQuery = useProposals();
 
   return useMemo(() => {
     const contracts = contractsQuery.data

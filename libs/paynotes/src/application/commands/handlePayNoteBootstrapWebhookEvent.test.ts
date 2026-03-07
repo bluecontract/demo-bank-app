@@ -160,6 +160,7 @@ const createDependencies = () => {
       saveDelivery: vi.fn(),
       updateDeliverySummary: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
 
   const payNoteBootstrapRepository: HandlePayNoteBootstrapWebhookDependencies['payNoteBootstrapRepository'] =
@@ -195,6 +196,7 @@ const createDependencies = () => {
       updateContractArchive: vi.fn(),
       updateContractSummary: vi.fn(),
       listContractsByUserId: vi.fn(),
+      getContractPollingMarkerByUserId: vi.fn(),
       listContractsByTransactionId: vi.fn(),
       listContractsByHoldId: vi.fn(),
     };

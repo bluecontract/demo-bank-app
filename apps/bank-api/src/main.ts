@@ -45,6 +45,7 @@ import { getPayNoteDeliverySummaryHandler } from './paynote/getPayNoteDeliverySu
 import { acceptPayNoteDeliveryHandler } from './paynote/acceptPayNoteDelivery';
 import { rejectPayNoteDeliveryHandler } from './paynote/rejectPayNoteDelivery';
 import { generatePayNoteDeliverySummaryHandler } from './paynote/generatePayNoteDeliverySummary';
+import { pollChangesHandler } from './polling/pollChanges';
 import { runContractOperationHandler } from './contracts/runContractOperation';
 import { decideContractPendingActionHandler } from './contracts/decideContractPendingAction';
 import { listContractsHandler } from './contracts/listContracts';
@@ -129,6 +130,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       getPayNoteDetails: getPayNoteDetailsHandler,
       payNoteWebhook: payNoteWebhookHandler,
       listPayNoteDeliveries: listPayNoteDeliveriesHandler,
+      pollChanges: pollChangesHandler,
       getPayNoteDelivery: getPayNoteDeliveryHandler,
       getPayNoteDeliveryBySessionId: getPayNoteDeliveryBySessionIdHandler,
       getPayNoteDeliverySummary: getPayNoteDeliverySummaryHandler,
@@ -203,6 +205,9 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
         return response;
       },
       async (response, request) => {
+        if (request.method.toUpperCase() === 'OPTIONS') {
+          response.headers.set('Access-Control-Max-Age', '600');
+        }
         logger.debug('Sending response', {
           status: response.status,
           method: request.method,

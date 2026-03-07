@@ -173,6 +173,28 @@ describe('DynamoPayNoteDeliveryRepository', () => {
     ).toBe('merchant-1');
   });
 
+  it('touches delivery polling marker when saving a user delivery', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+
+    await repository.saveDelivery({
+      deliveryId: 'delivery-1',
+      userId: 'user-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-02T00:00:00.000Z',
+    });
+
+    expect(mockUpdateCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Key: {
+          PK: 'USER#user-1',
+          SK: 'POLL_MARKER#PROPOSALS',
+        },
+      })
+    );
+  });
+
   it('compacts delivery and paynote documents before persistence', async () => {
     mockSend.mockResolvedValue({});
     const repository = createRepository();
@@ -534,5 +556,49 @@ contracts:
         ConsistentRead: true,
       })
     );
+  });
+
+  it('returns delivery polling marker with defaults when marker is missing', async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: undefined,
+    });
+    const repository = createRepository();
+
+    const result = await repository.getDeliveryPollingMarkerByUserId('user-1');
+
+    expect(result).toEqual({ revision: 0 });
+    expect(mockGetCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'test-table',
+        Key: {
+          PK: 'USER#user-1',
+          SK: 'POLL_MARKER#PROPOSALS',
+        },
+        ConsistentRead: true,
+      })
+    );
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns delivery polling marker when marker exists', async () => {
+    mockSend.mockResolvedValueOnce({
+      Item: {
+        PK: 'USER#user-1',
+        SK: 'POLL_MARKER#PROPOSALS',
+        entityType: 'PAYNOTE_DELIVERY_POLL_MARKER',
+        revision: 9,
+        latestUpdatedAt: '2024-01-03T00:00:00.000Z',
+        updatedAt: '2024-01-03T00:00:00.000Z',
+      },
+    });
+    const repository = createRepository();
+
+    const result = await repository.getDeliveryPollingMarkerByUserId('user-1');
+
+    expect(result).toEqual({
+      revision: 9,
+      latestUpdatedAt: '2024-01-03T00:00:00.000Z',
+    });
+    expect(mockSend).toHaveBeenCalledTimes(1);
   });
 });

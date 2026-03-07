@@ -61,12 +61,24 @@ vi.mock('../../features/contracts/hooks', () => ({
 }));
 
 vi.mock('../../features/dashboard/components', () => ({
-  DashboardShell: vi.fn(({ header, children, 'data-testid': testId }) => (
-    <div data-testid={testId || 'dashboard-shell'}>
-      {header}
-      {children}
-    </div>
-  )),
+  DashboardShell: vi.fn(
+    ({
+      header,
+      children,
+      'data-testid': testId,
+      pollingActivityAccountNumber,
+    }) => (
+      <div
+        data-testid={testId || 'dashboard-shell'}
+        data-polling-activity-account-number={
+          pollingActivityAccountNumber ?? ''
+        }
+      >
+        {header}
+        {children}
+      </div>
+    )
+  ),
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -984,6 +996,57 @@ describe('ContractDetailsPage', () => {
 
     expect(screen.queryByText('Linked contracts')).not.toBeInTheDocument();
     expect(screen.queryByText('Linked transactions')).not.toBeInTheDocument();
+  });
+
+  it('passes linked activity account number to dashboard polling when related activity exists', () => {
+    mockUseParams.mockReturnValue({ sessionId: 'session-1' });
+    mockUseLocation.mockReturnValue({
+      state: { from: '/contracts', kind: 'contract' },
+      pathname: '/contracts/session-1',
+      search: '',
+    });
+
+    mockUseContractDetails.mockReturnValue({
+      data: {
+        sessionId: 'session-1',
+        contractId: 'contract-1',
+        typeBlueId: 'PayNote/Contract',
+        displayName: 'GE Refrigerator Order',
+        accountNumber: 'PL001234567890',
+        document: { name: 'GE Refrigerator Order' },
+        relatedTransactionIds: ['txn-1'],
+        summary: {
+          story: {
+            headline: 'GE Refrigerator Order',
+            overview: ['Funds will be held until delivery is confirmed.'],
+            bullets: [],
+          },
+          listPreview: 'Funds are held until delivery.',
+          nextSteps: { title: 'Next steps', items: [] },
+          lastChange: {
+            short: 'Proposal received.',
+            more: 'A new proposal is awaiting client approval.',
+          },
+        },
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    mockUseProposalDetails.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+
+    render(<ContractDetailsPage />, { wrapper: createQueryWrapper() });
+
+    expect(screen.getByTestId('contract-details-page')).toHaveAttribute(
+      'data-polling-activity-account-number',
+      'PL001234567890'
+    );
   });
 
   it('does not show linked proposal items when contract view is active', () => {

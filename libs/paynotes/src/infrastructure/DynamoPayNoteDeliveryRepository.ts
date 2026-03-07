@@ -8,9 +8,14 @@ import {
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
+import {
+  buildTouchPollingMarkerUpdateInput,
+  mapPollingMarkerItem,
+} from '@demo-bank-app/shared-core';
 import type {
   PayNoteDeliveryRepository,
   PayNoteDeliveryRecord,
+  PayNoteDeliveryPollingMarker,
   PayNoteDeliverySummary,
 } from '../application/ports';
 import type { CardTransactionDetails } from '@demo-bank-app/banking';
@@ -32,6 +37,7 @@ const ENTITY_TYPES = {
   BOOTSTRAP: 'PAYNOTE_DELIVERY_BOOTSTRAP',
   EVENT: 'PAYNOTE_DELIVERY_EVENT',
   USER: 'PAYNOTE_DELIVERY_USER',
+  POLL_MARKER: 'PAYNOTE_DELIVERY_POLL_MARKER',
 } as const;
 
 const TABLE_PREFIXES = {
@@ -50,6 +56,7 @@ const SORT_KEYS = {
 } as const;
 
 const USER_SORT_KEY_PREFIX = 'PAYNOTE_DELIVERY#';
+const DELIVERY_POLL_MARKER_SK = 'POLL_MARKER#PROPOSALS';
 
 const resolveSummaryPreview = (summary?: Record<string, unknown>) => {
   if (!summary || typeof summary !== 'object') {
@@ -236,6 +243,27 @@ export class DynamoPayNoteDeliveryRepository
 
   private buildUserSk(deliveryId: string, createdAt: string) {
     return `${USER_SORT_KEY_PREFIX}${createdAt}#${deliveryId}`;
+  }
+
+  private buildDeliveryPollMarkerSk() {
+    return DELIVERY_POLL_MARKER_SK;
+  }
+
+  private async touchDeliveryPollingMarker(input: {
+    userId: string;
+    latestUpdatedAt: string;
+  }): Promise<void> {
+    await this.client.send(
+      new UpdateCommand({
+        ...buildTouchPollingMarkerUpdateInput({
+          tableName: this.tableName,
+          userPk: this.buildUserPk(input.userId),
+          markerSk: this.buildDeliveryPollMarkerSk(),
+          markerEntityType: ENTITY_TYPES.POLL_MARKER,
+          latestUpdatedAt: input.latestUpdatedAt,
+        }),
+      })
+    );
   }
 
   private mapItemToRecord(item: PayNoteDeliveryItem): PayNoteDeliveryRecord {
@@ -766,6 +794,12 @@ export class DynamoPayNoteDeliveryRepository
           new PutCommand({ TableName: this.tableName, Item: userItem })
         )
       );
+      writes.push(
+        this.touchDeliveryPollingMarker({
+          userId: record.userId,
+          latestUpdatedAt: record.updatedAt ?? now,
+        })
+      );
     }
 
     if (writes.length) {
@@ -782,6 +816,7 @@ export class DynamoPayNoteDeliveryRepository
     summaryInputBlueId?: string;
     summaryModel?: string;
     summaryError?: string | null;
+    userId?: string;
   }): Promise<void> {
     const {
       deliveryId,
@@ -792,6 +827,7 @@ export class DynamoPayNoteDeliveryRepository
       summaryInputBlueId,
       summaryModel,
       summaryError,
+      userId,
     } = input;
 
     const names: Record<string, string> = {};
@@ -866,6 +902,16 @@ export class DynamoPayNoteDeliveryRepository
           : undefined,
       })
     );
+
+    if (userId) {
+      await this.touchDeliveryPollingMarker({
+        userId,
+        latestUpdatedAt:
+          summarySourceUpdatedAt ??
+          summaryUpdatedAt ??
+          new Date().toISOString(),
+      });
+    }
   }
 
   async listDeliveriesByUserId(
@@ -953,6 +999,23 @@ export class DynamoPayNoteDeliveryRepository
           updatedAt: summaryUpdatedAt,
         };
       });
+  }
+
+  async getDeliveryPollingMarkerByUserId(
+    userId: string
+  ): Promise<PayNoteDeliveryPollingMarker> {
+    const response = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: this.buildUserPk(userId),
+          SK: this.buildDeliveryPollMarkerSk(),
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    return mapPollingMarkerItem(response.Item);
   }
 }
 

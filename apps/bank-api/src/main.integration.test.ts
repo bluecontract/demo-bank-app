@@ -211,8 +211,76 @@ describe('Bank API Integration Tests', () => {
           'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
           'access-control-allow-headers':
             'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,Authorization,idempotency-key',
+          'access-control-max-age': '600',
         });
       }
+    });
+  });
+
+  describe('Unified Poll Changes Endpoint', () => {
+    it('returns contracts and proposals scopes by default', async () => {
+      const creds = await signupUniqueTestUser('poll-default-scopes');
+      const response = await invokeApi({
+        method: 'GET',
+        path: '/v1/poll/changes',
+        jwtCookie: creds.jwtCookie,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          serverTime: expect.any(String),
+          contracts: expect.objectContaining({
+            cursor: expect.any(String),
+            changed: expect.any(Boolean),
+          }),
+          proposals: expect.objectContaining({
+            cursor: expect.any(String),
+            changed: expect.any(Boolean),
+          }),
+        })
+      );
+      expect(response.body.activity).toBeUndefined();
+    });
+
+    it('returns validation error when activity scope is requested without account number', async () => {
+      const creds = await signupUniqueTestUser('poll-activity-validation');
+      const response = await invokeApi({
+        method: 'GET',
+        path: '/v1/poll/changes?includeActivity=true',
+        jwtCookie: creds.jwtCookie,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.body).toMatchObject({
+        error: ERROR_CODES.VALIDATION_ERROR,
+      });
+    });
+
+    it('returns activity scope when includeActivity and activityAccountNumber are provided', async () => {
+      const creds = await signupUniqueTestUser('poll-activity-scope');
+      const account = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: creds.jwtCookie,
+        body: { name: 'Polling Activity Account' },
+      });
+      expect(account.statusCode).toBe(201);
+
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/poll/changes?includeActivity=true&activityAccountNumber=${account.body.accountNumber}`,
+        jwtCookie: creds.jwtCookie,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.activity).toEqual(
+        expect.objectContaining({
+          accountNumber: account.body.accountNumber,
+          cursor: expect.any(String),
+          changed: expect.any(Boolean),
+        })
+      );
     });
   });
 

@@ -7,7 +7,6 @@ type ProposalsError = Error & { status?: number };
 
 type UseProposalsOptions = {
   enabled?: boolean;
-  refetchInterval?: number | false;
 };
 
 const makeError = (message: string, status?: number): ProposalsError => {
@@ -34,7 +33,7 @@ export function useProposals(options: UseProposalsOptions = {}) {
       return response.body.items;
     },
     enabled: options.enabled ?? true,
-    refetchInterval: options.refetchInterval ?? 5000,
+    refetchInterval: false,
     refetchOnMount: 'always',
     staleTime: 5 * 1000,
     gcTime: 2 * 60 * 1000,

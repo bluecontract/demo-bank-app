@@ -145,6 +145,7 @@ describe('payNoteWebhookHandler', () => {
       saveContract: vi.fn(),
       updateContractSummary: vi.fn(),
       listContractsByUserId: vi.fn(),
+      getContractPollingMarkerByUserId: vi.fn(),
     };
     const summaryInputStore = {
       save: vi.fn(),
@@ -184,6 +185,7 @@ describe('payNoteWebhookHandler', () => {
         getDeliveryByCardTransactionDetails: vi.fn(),
         saveDelivery: vi.fn(),
         listDeliveriesByUserId: vi.fn(),
+        getDeliveryPollingMarkerByUserId: vi.fn(),
       },
       payNoteBootstrapRepository: {
         getBootstrapBySessionId: vi.fn(),

@@ -42,6 +42,7 @@ const createContract = (): ContractRecord => ({
 describe('reportCardTransactionToMonitoringSubscribers', () => {
   const contractRepository = {
     listContractsByUserId: vi.fn(),
+    getContractPollingMarkerByUserId: vi.fn(),
     getContract: vi.fn(),
     saveContract: vi.fn(),
   };

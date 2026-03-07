@@ -22,6 +22,7 @@ describe('listContractsHandler', () => {
 
   const contractRepository = {
     listContractsByUserId: vi.fn(),
+    getContractPollingMarkerByUserId: vi.fn(),
   };
   const merchantDirectoryRepository = {
     getMerchantsByIds: vi.fn(),

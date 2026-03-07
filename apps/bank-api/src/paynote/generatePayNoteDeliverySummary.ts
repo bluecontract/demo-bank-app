@@ -331,6 +331,7 @@ const generateOrLoadProposalSummary = async (input: {
       summaryInputBlueId?: string;
       summaryModel?: string;
       summaryError?: string | null;
+      userId?: string;
     }) => Promise<void>;
   };
   logger?: PowertoolsLogger;
@@ -359,6 +360,7 @@ const generateOrLoadProposalSummary = async (input: {
       summarySourceUpdatedAt: sourceUpdatedAt,
       summarySourceEpoch: sourceEpoch,
       summaryError: null,
+      userId: record.userId,
     });
 
     return {
@@ -461,6 +463,7 @@ const generateOrLoadProposalSummary = async (input: {
       summaryInputBlueId,
       summaryModel: model,
       summaryError: null,
+      userId: record.userId,
     });
 
     return {
@@ -484,6 +487,7 @@ const generateOrLoadProposalSummary = async (input: {
       summarySourceEpoch: record.summarySourceEpoch ?? sourceEpoch,
       summaryInputBlueId: record.summaryInputBlueId ?? summaryInputBlueId,
       summaryModel: record.summaryModel ?? model,
+      userId: record.userId,
     });
 
     throw error;

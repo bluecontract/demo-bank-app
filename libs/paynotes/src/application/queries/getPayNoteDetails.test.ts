@@ -49,6 +49,7 @@ describe('getPayNoteDetails', () => {
       saveDelivery: vi.fn(),
       updateDeliverySummary: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
       markEventProcessed: vi.fn(),
     };
 

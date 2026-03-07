@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react';
 import { SidebarNav } from './SidebarNav';
 import { MobileNav } from './MobileNav';
+import { useUnifiedPollChanges } from '../../polling/useUnifiedPollChanges';
 
 interface DashboardShellProps {
   header: ReactNode;
   children: ReactNode;
   contentWidth?: 'constrained' | 'full';
+  pollingActivityAccountNumber?: string | null;
   'data-testid'?: string;
 }
 
@@ -13,8 +15,13 @@ export function DashboardShell({
   header,
   children,
   contentWidth = 'constrained',
+  pollingActivityAccountNumber = null,
   'data-testid': testId,
 }: DashboardShellProps) {
+  useUnifiedPollChanges({
+    activityAccountNumber: pollingActivityAccountNumber,
+  });
+
   const contentContainerClassName =
     contentWidth === 'full' ? 'w-full' : 'mx-auto w-full max-w-[1152px]';
 

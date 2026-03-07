@@ -893,11 +893,12 @@ export function ContractDetailsPage() {
   const relatedHoldIds = relatedActivitySource?.relatedHoldIds ?? [];
   const hasRelatedContractIds =
     relatedTransactionIds.length > 0 || relatedHoldIds.length > 0;
+  const pollingActivityAccountNumber =
+    hasRelatedContractIds && relatedActivitySource?.accountNumber
+      ? relatedActivitySource.accountNumber
+      : null;
   const linkedActivityQuery = useActivity({
-    accountNumber:
-      hasRelatedContractIds && relatedActivitySource?.accountNumber
-        ? relatedActivitySource.accountNumber
-        : null,
+    accountNumber: pollingActivityAccountNumber,
   });
   const linkedActivityItems = linkedActivityQuery.data?.items ?? [];
   const { groupedRelatedItems: linkedGroupedRelatedItems } =
@@ -1277,6 +1278,7 @@ export function ContractDetailsPage() {
     <DashboardShell
       data-testid="contract-details-page"
       contentWidth="full"
+      pollingActivityAccountNumber={pollingActivityAccountNumber}
       header={
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">

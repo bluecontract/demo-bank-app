@@ -12,11 +12,16 @@ import {
   UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
+import {
+  buildTouchPollingMarkerUpdateInput,
+  mapPollingMarkerItem,
+} from '@demo-bank-app/shared-core';
 import type {
   ContractMonitoringSubscription,
   ContractRecord,
   ContractRepository,
   ContractSummary,
+  ContractPollingMarker,
   ContractDocumentSummary,
   ContractPendingAction,
   ContractHistoryEntry,
@@ -40,6 +45,7 @@ const ENTITY_TYPES = {
   SUMMARY_EVENT: 'CONTRACT_SUMMARY_EVENT',
   SUMMARY_SNAPSHOT: 'CONTRACT_SUMMARY_SNAPSHOT',
   CONTRACT_DOCUMENT: 'CONTRACT_DOCUMENT',
+  POLL_MARKER: 'CONTRACT_POLL_MARKER',
 } as const;
 
 const TABLE_PREFIXES = {
@@ -61,6 +67,7 @@ const SORT_KEYS = {
 const USER_SORT_KEY_PREFIX = 'CONTRACT#';
 const RELATIONSHIP_SORT_KEY_PREFIX = 'CONTRACT#';
 const HISTORY_SORT_KEY_PREFIX = 'HISTORY#';
+const CONTRACT_POLL_MARKER_SK = 'POLL_MARKER#CONTRACTS';
 
 const normalizeSummaryText = (value?: string | null): string | undefined => {
   if (typeof value !== 'string') {
@@ -376,6 +383,10 @@ export class DynamoContractRepository implements ContractRepository {
     return `${USER_SORT_KEY_PREFIX}${contractId}`;
   }
 
+  private buildContractPollMarkerSk() {
+    return CONTRACT_POLL_MARKER_SK;
+  }
+
   private buildTransactionPk(transactionId: string) {
     return `${TABLE_PREFIXES.TRANSACTION}${transactionId}`;
   }
@@ -398,6 +409,23 @@ export class DynamoContractRepository implements ContractRepository {
 
   private buildHistorySk(createdAt: string, historyId: string) {
     return `${HISTORY_SORT_KEY_PREFIX}${createdAt}#${historyId}`;
+  }
+
+  private async touchContractPollingMarker(input: {
+    userId: string;
+    latestUpdatedAt: string;
+  }): Promise<void> {
+    await this.client.send(
+      new UpdateCommand({
+        ...buildTouchPollingMarkerUpdateInput({
+          tableName: this.tableName,
+          userPk: this.buildUserPk(input.userId),
+          markerSk: this.buildContractPollMarkerSk(),
+          markerEntityType: ENTITY_TYPES.POLL_MARKER,
+          latestUpdatedAt: input.latestUpdatedAt,
+        }),
+      })
+    );
   }
 
   private async hydratePendingActionFlags(
@@ -870,6 +898,15 @@ export class DynamoContractRepository implements ContractRepository {
           new PutCommand({ TableName: this.tableName, Item: userItem })
         )
       );
+      writes.push(
+        this.touchContractPollingMarker({
+          userId: record.userId,
+          latestUpdatedAt:
+            record.summarySourceUpdatedAt ??
+            record.summaryUpdatedAt ??
+            record.updatedAt,
+        })
+      );
     }
 
     const relationshipItems: ContractRelationshipItem[] = [];
@@ -1164,6 +1201,13 @@ export class DynamoContractRepository implements ContractRepository {
     if (updates.length) {
       await Promise.all(updates);
     }
+
+    if (update.userId) {
+      await this.touchContractPollingMarker({
+        userId: update.userId,
+        latestUpdatedAt: update.updatedAt,
+      });
+    }
   }
 
   async updateContractSummary(update: ContractSummaryUpdate): Promise<void> {
@@ -1246,6 +1290,13 @@ export class DynamoContractRepository implements ContractRepository {
     if (updateRequests.length) {
       await Promise.all(updateRequests);
     }
+
+    if (update.userId) {
+      await this.touchContractPollingMarker({
+        userId: update.userId,
+        latestUpdatedAt: update.summarySourceUpdatedAt,
+      });
+    }
   }
 
   async listContractsByUserId(
@@ -1309,6 +1360,23 @@ export class DynamoContractRepository implements ContractRepository {
           updatedAt: item.updatedAt,
         };
       });
+  }
+
+  async getContractPollingMarkerByUserId(
+    userId: string
+  ): Promise<ContractPollingMarker> {
+    const response = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: this.buildUserPk(userId),
+          SK: this.buildContractPollMarkerSk(),
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    return mapPollingMarkerItem(response.Item);
   }
 
   async listContractsByTransactionId(

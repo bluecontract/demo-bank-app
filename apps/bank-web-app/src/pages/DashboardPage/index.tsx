@@ -1,6 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
-import { SelectedAccountProvider } from '../../app/providers/SelectedAccountProvider';
+import {
+  SelectedAccountProvider,
+  useSelectedAccount,
+} from '../../app/providers/SelectedAccountProvider';
 import {
   DashboardHeader,
   DashboardShell,
@@ -14,6 +17,47 @@ import { useAccountModals } from '../../features/accounts/hooks/useAccountModals
 import { FundModal, TransactionHistory } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import { SpinnerWithText } from '../../ui/Spinner';
+
+interface DashboardPageContentProps {
+  userEmail: string;
+  accounts: NonNullable<ReturnType<typeof useAccounts>['data']>;
+  onCreateAccount: () => void;
+  onTransfer: (accountId: string) => void;
+  onFund: (accountId: string) => void;
+  onEditCreditLimit: (accountId: string) => void;
+}
+
+function DashboardPageContent({
+  userEmail,
+  accounts,
+  onCreateAccount,
+  onTransfer,
+  onFund,
+  onEditCreditLimit,
+}: DashboardPageContentProps) {
+  const { selectedAccount } = useSelectedAccount();
+
+  return (
+    <DashboardShell
+      header={<DashboardHeader userEmail={userEmail} />}
+      data-testid="dashboard-main-container"
+      contentWidth="full"
+      pollingActivityAccountNumber={selectedAccount?.accountNumber ?? null}
+    >
+      <AccountsSection
+        accounts={accounts}
+        onCreateAccount={onCreateAccount}
+        onTransfer={onTransfer}
+        onFund={onFund}
+        onEditCreditLimit={onEditCreditLimit}
+      />
+
+      <section className="flex-1 min-h-0">
+        <TransactionHistory />
+      </section>
+    </DashboardShell>
+  );
+}
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -64,23 +108,14 @@ export function DashboardPage() {
 
   return (
     <SelectedAccountProvider>
-      <DashboardShell
-        header={<DashboardHeader userEmail={user?.email || 'Guest'} />}
-        data-testid="dashboard-main-container"
-        contentWidth="full"
-      >
-        <AccountsSection
-          accounts={accounts || []}
-          onCreateAccount={openAccountCreationModal}
-          onTransfer={handleTransfer}
-          onFund={openFundModal}
-          onEditCreditLimit={openCreditLimitModal}
-        />
-
-        <section className="flex-1 min-h-0">
-          <TransactionHistory />
-        </section>
-      </DashboardShell>
+      <DashboardPageContent
+        userEmail={user?.email || 'Guest'}
+        accounts={accounts || []}
+        onCreateAccount={openAccountCreationModal}
+        onTransfer={handleTransfer}
+        onFund={openFundModal}
+        onEditCreditLimit={openCreditLimitModal}
+      />
 
       {/* Account Creation Modal */}
       <AccountCreationModal

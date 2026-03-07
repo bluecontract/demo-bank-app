@@ -38,6 +38,7 @@ describe('bootstrapPayNoteHandler', () => {
     saveContract: vi.fn(),
     updateContractSummary: vi.fn(),
     listContractsByUserId: vi.fn(),
+    getContractPollingMarkerByUserId: vi.fn(),
   };
 
   const createPayNote = () => ({

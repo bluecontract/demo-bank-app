@@ -238,6 +238,11 @@ export interface ContractSummary {
   createdAt: string;
 }
 
+export interface ContractPollingMarker {
+  revision: number;
+  latestUpdatedAt?: string;
+}
+
 export interface ContractRepository {
   getContract(contractId: string): Promise<ContractRecord | null>;
   getContractBySessionId(sessionId: string): Promise<ContractRecord | null>;
@@ -271,6 +276,9 @@ export interface ContractRepository {
     userId: string,
     options?: { updatedSince?: string }
   ): Promise<ContractSummary[]>;
+  getContractPollingMarkerByUserId(
+    userId: string
+  ): Promise<ContractPollingMarker>;
   listContractsByTransactionId(
     transactionId: string,
     options?: { userId?: string }
