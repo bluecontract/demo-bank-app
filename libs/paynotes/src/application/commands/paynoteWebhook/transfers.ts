@@ -41,6 +41,7 @@ import {
 } from './utils';
 import { resolveRuntimeDocument } from '../blueRuntime';
 import { resolveWebhookContext } from './payload';
+import { upsertTransferMandateAttemptByHoldId } from './transferMandateAttemptByHold';
 
 const FUNDS_RESERVED_EVENT_NAME = 'PayNote/Funds Reserved';
 const RESERVATION_DECLINED_EVENT_NAME = 'PayNote/Reservation Declined';
@@ -62,6 +63,10 @@ type TransferMandateAuthorization = {
   mandateDocumentId: string;
   mandateSessionId: string;
 };
+
+type TransferMandateAuthorizationResolution =
+  | { ok: true; authorization?: TransferMandateAuthorization }
+  | { ok: false; reason: string; pending?: boolean };
 
 type TransferMandateAuthorizationResponse = {
   chargeAttemptId: string;
@@ -375,37 +380,6 @@ const resolveStoredTransferMandateAuthorization = (input: {
   };
 };
 
-const upsertTransferMandateHoldAttempt = (input: {
-  updatedRecord: PayNoteRecord;
-  holdId: string;
-  authorization: TransferMandateAuthorization;
-  updatedAt: string;
-}): boolean => {
-  const nextEntry = {
-    mandateDocumentId: input.authorization.mandateDocumentId,
-    mandateSessionId: input.authorization.mandateSessionId,
-    chargeAttemptId: input.authorization.chargeAttemptId,
-    updatedAt: input.updatedAt,
-  };
-  const currentEntries =
-    input.updatedRecord.transferMandateAttemptsByHoldId ?? {};
-  const currentEntry = currentEntries[input.holdId];
-  const isUnchanged =
-    currentEntry?.mandateDocumentId === nextEntry.mandateDocumentId &&
-    currentEntry?.mandateSessionId === nextEntry.mandateSessionId &&
-    currentEntry?.chargeAttemptId === nextEntry.chargeAttemptId;
-
-  if (isUnchanged) {
-    return false;
-  }
-
-  input.updatedRecord.transferMandateAttemptsByHoldId = {
-    ...currentEntries,
-    [input.holdId]: nextEntry,
-  };
-  return true;
-};
-
 const authorizeTransferViaMandateIfRequired = async (input: {
   context: TransferContext;
   event: WebhookEmittedEvent;
@@ -417,10 +391,7 @@ const authorizeTransferViaMandateIfRequired = async (input: {
   amountMinor: number;
   payerAccountNumber: string;
   payeeAccountNumber?: string;
-}): Promise<
-  | { ok: true; authorization?: TransferMandateAuthorization }
-  | { ok: false; reason: string; pending?: boolean }
-> => {
+}): Promise<TransferMandateAuthorizationResolution> => {
   const {
     context,
     event,
@@ -1112,98 +1083,51 @@ const emitDeclinedDueToMandate = async (input: {
   });
 };
 
-const reportExistingHoldCaptureToMandateBestEffort = async (input: {
+const resolveTransferMandateAuthorizationOrReturn = async (input: {
   context: TransferContext;
-  account: BankingAccount & { ownerUserId: string };
-  event: WebhookEmittedEvent;
-  eventIndex: number;
+  authorization: TransferMandateAuthorizationResolution;
+  eventType:
+    | typeof RESERVE_FUNDS_EVENT_NAME
+    | typeof CAPTURE_FUNDS_EVENT_NAME
+    | typeof CAPTURE_IMMEDIATELY_EVENT_NAME;
   requestId?: string;
-  transferAmountMinor: number;
-  payeeAccountNumber?: string;
-  status: 'succeeded' | 'failed';
-  reason?: string;
-  holdId: string;
-  transactionId?: string;
-}): Promise<void> => {
-  const requestedMandateDocumentId = resolveTransferPaymentMandateDocumentId(
-    input.event
-  );
-  if (!requestedMandateDocumentId) {
-    return;
-  }
-
+  eventIndex: number;
+  pendingLogMessage: string;
+}): Promise<TransferMandateAuthorization | undefined | null> => {
   const {
     context: { eventId, payNoteDocumentId, logs },
+    authorization,
+    eventType,
+    requestId,
+    eventIndex,
+    pendingLogMessage,
   } = input;
 
-  try {
-    const authorization = await authorizeTransferViaMandateIfRequired({
-      context: input.context,
-      event: input.event,
-      eventType: CAPTURE_FUNDS_EVENT_NAME,
-      eventIndex: input.eventIndex,
-      amountMinor: input.transferAmountMinor,
-      payerAccountNumber: input.account.accountNumber,
-      payeeAccountNumber: input.payeeAccountNumber,
-    });
+  if (authorization.ok) {
+    return authorization.authorization;
+  }
 
-    if (!authorization.ok || !authorization.authorization) {
-      logs.push({
-        level: authorization.ok ? 'info' : 'warn',
-        message:
-          'Skipped optional mandate settlement reporting for existing-hold capture',
-        context: {
-          eventId,
-          payNoteDocumentId,
-          requestId: input.requestId ?? null,
-          eventIndex: input.eventIndex,
-          reason: authorization.ok
-            ? 'Authorization id not resolved'
-            : authorization.reason,
-          status: input.status,
-        },
-      });
-      return;
-    }
-
-    const firstProcess = await reserveTransferMandateAttemptProcessing({
-      context: input.context,
-      eventType: CAPTURE_FUNDS_EVENT_NAME,
-      eventIndex: input.eventIndex,
-      requestId: input.requestId,
-      authorization: authorization.authorization,
-    });
-    if (!firstProcess) {
-      return;
-    }
-
-    await runTransferMandateSettlement({
-      context: input.context,
-      eventType: CAPTURE_FUNDS_EVENT_NAME,
-      eventIndex: input.eventIndex,
-      requestId: input.requestId,
-      authorization: authorization.authorization,
-      amountMinor: input.transferAmountMinor,
-      status: input.status,
-      reason: input.reason,
-      holdId: input.holdId,
-      transactionId: input.transactionId,
-    });
-  } catch (error) {
+  if (authorization.pending) {
     logs.push({
-      level: 'warn',
-      message:
-        'Optional mandate settlement reporting failed for existing-hold capture',
+      level: 'info',
+      message: pendingLogMessage,
       context: {
         eventId,
         payNoteDocumentId,
-        requestId: input.requestId ?? null,
-        eventIndex: input.eventIndex,
-        status: input.status,
-        error: error instanceof Error ? error.message : String(error),
+        requestId: requestId ?? null,
+        eventIndex,
       },
     });
+    return null;
   }
+
+  await emitDeclinedDueToMandate({
+    context: input.context,
+    eventType,
+    requestId,
+    reason: authorization.reason,
+  });
+  return null;
 };
 
 const handleCaptureImmediately = async (input: {
@@ -1270,7 +1194,7 @@ const handleCaptureImmediately = async (input: {
     return;
   }
 
-  const mandateAuthorization = input.authorizedMandate
+  const mandateAuthorizationResult = input.authorizedMandate
     ? ({
         ok: true,
         authorization: input.authorizedMandate,
@@ -1284,37 +1208,27 @@ const handleCaptureImmediately = async (input: {
         payerAccountNumber: account.accountNumber,
         payeeAccountNumber,
       });
-  if (!mandateAuthorization.ok) {
-    if (mandateAuthorization.pending) {
-      logs.push({
-        level: 'info',
-        message:
-          'Deferred PayNote capture immediately request until payment mandate authorization response',
-        context: {
-          eventId,
-          payNoteDocumentId,
-          requestId: requestId ?? null,
-          eventIndex,
-        },
-      });
-      return;
-    }
-    await emitDeclinedDueToMandate({
+  const mandateAuthorization =
+    await resolveTransferMandateAuthorizationOrReturn({
       context: input.context,
+      authorization: mandateAuthorizationResult,
       eventType,
       requestId,
-      reason: mandateAuthorization.reason,
+      eventIndex,
+      pendingLogMessage:
+        'Deferred PayNote capture immediately request until payment mandate authorization response',
     });
+  if (mandateAuthorization === null) {
     return;
   }
 
-  if (mandateAuthorization.authorization) {
+  if (mandateAuthorization) {
     const firstProcess = await reserveTransferMandateAttemptProcessing({
       context: input.context,
       eventType,
       eventIndex,
       requestId,
-      authorization: mandateAuthorization.authorization,
+      authorization: mandateAuthorization,
     });
     if (!firstProcess) {
       return;
@@ -1352,13 +1266,13 @@ const handleCaptureImmediately = async (input: {
       'Unable to capture funds immediately'
     );
 
-    if (mandateAuthorization.authorization) {
+    if (mandateAuthorization) {
       await runTransferMandateSettlement({
         context: input.context,
         eventType,
         eventIndex,
         requestId,
-        authorization: mandateAuthorization.authorization,
+        authorization: mandateAuthorization,
         amountMinor: transferAmountMinor,
         status: 'failed',
         reason,
@@ -1396,13 +1310,13 @@ const handleCaptureImmediately = async (input: {
     return;
   }
 
-  if (mandateAuthorization.authorization) {
+  if (mandateAuthorization) {
     await runTransferMandateSettlement({
       context: input.context,
       eventType,
       eventIndex,
       requestId,
-      authorization: mandateAuthorization.authorization,
+      authorization: mandateAuthorization,
       amountMinor: transferAmountMinor,
       status: 'succeeded',
     });
@@ -1488,7 +1402,7 @@ const handleReserveFundsRequest = async (input: {
     throw new Error('Missing payer account number');
   }
 
-  const mandateAuthorization = input.authorizedMandate
+  const mandateAuthorizationResult = input.authorizedMandate
     ? ({
         ok: true,
         authorization: input.authorizedMandate,
@@ -1502,37 +1416,27 @@ const handleReserveFundsRequest = async (input: {
         payerAccountNumber,
         payeeAccountNumber,
       });
-  if (!mandateAuthorization.ok) {
-    if (mandateAuthorization.pending) {
-      logs.push({
-        level: 'info',
-        message:
-          'Deferred PayNote reserve funds request until payment mandate authorization response',
-        context: {
-          eventId,
-          payNoteDocumentId,
-          requestId: requestId ?? null,
-          eventIndex,
-        },
-      });
-      return;
-    }
-    await emitDeclinedDueToMandate({
+  const mandateAuthorization =
+    await resolveTransferMandateAuthorizationOrReturn({
       context: input.context,
+      authorization: mandateAuthorizationResult,
       eventType,
       requestId,
-      reason: mandateAuthorization.reason,
+      eventIndex,
+      pendingLogMessage:
+        'Deferred PayNote reserve funds request until payment mandate authorization response',
     });
+  if (mandateAuthorization === null) {
     return;
   }
 
-  if (mandateAuthorization.authorization) {
+  if (mandateAuthorization) {
     const firstProcess = await reserveTransferMandateAttemptProcessing({
       context: input.context,
       eventType,
       eventIndex,
       requestId,
-      authorization: mandateAuthorization.authorization,
+      authorization: mandateAuthorization,
     });
     if (!firstProcess) {
       return;
@@ -1552,13 +1456,13 @@ const handleReserveFundsRequest = async (input: {
   } catch (error) {
     const reason = resolveFailureReason(error, 'Unable to reserve funds');
 
-    if (mandateAuthorization.authorization) {
+    if (mandateAuthorization) {
       await runTransferMandateSettlement({
         context: input.context,
         eventType,
         eventIndex,
         requestId,
-        authorization: mandateAuthorization.authorization,
+        authorization: mandateAuthorization,
         amountMinor: transferAmountMinor,
         status: 'failed',
         reason,
@@ -1598,13 +1502,13 @@ const handleReserveFundsRequest = async (input: {
     return;
   }
 
-  if (mandateAuthorization.authorization) {
+  if (mandateAuthorization) {
     await runTransferMandateSettlement({
       context: input.context,
       eventType,
       eventIndex,
       requestId,
-      authorization: mandateAuthorization.authorization,
+      authorization: mandateAuthorization,
       amountMinor: transferAmountMinor,
       status: 'succeeded',
       holdId: reserveHoldId,
@@ -1620,11 +1524,11 @@ const handleReserveFundsRequest = async (input: {
   }
 
   const updatedAt = deps.clock.now().toISOString();
-  if (mandateAuthorization.authorization) {
-    const mappingUpdated = upsertTransferMandateHoldAttempt({
+  if (mandateAuthorization) {
+    const mappingUpdated = upsertTransferMandateAttemptByHoldId({
       updatedRecord,
       holdId: reserveHoldId,
-      authorization: mandateAuthorization.authorization,
+      authorization: mandateAuthorization,
       updatedAt,
     });
     shouldPersistRecord = shouldPersistRecord || mappingUpdated;
@@ -1784,27 +1688,39 @@ const handleCaptureFundsRequest = async (input: {
     return;
   }
 
-  const mandateAuthorization: TransferMandateAuthorization | undefined =
-    input.authorizedMandate ??
-    (storedMandateAuthorization && storedMandateAuthorization.ok
-      ? storedMandateAuthorization.authorization
-      : undefined);
-  const requiresMandateGate = Boolean(mandateAuthorization);
-
-  if (!requiresMandateGate && requestedMandateDocumentId) {
-    logs.push({
-      level: 'info',
-      message:
-        'Capture against existing hold will proceed without mandate gating (optional settlement reporting enabled)',
-      context: {
-        eventId,
-        payNoteDocumentId,
-        requestId: requestId ?? null,
+  const mandateAuthorizationResult = input.authorizedMandate
+    ? ({
+        ok: true,
+        authorization: input.authorizedMandate,
+      } as const)
+    : storedMandateAuthorization && storedMandateAuthorization.ok
+    ? ({
+        ok: true,
+        authorization: storedMandateAuthorization.authorization,
+      } as const)
+    : requestedMandateDocumentId
+    ? await authorizeTransferViaMandateIfRequired({
+        context: input.context,
+        event,
+        eventType,
         eventIndex,
-        holdId: captureHoldId,
-        paymentMandateDocumentId: requestedMandateDocumentId,
-      },
+        amountMinor: transferAmountMinor,
+        payerAccountNumber: account.accountNumber,
+        payeeAccountNumber: counterpartyAccountNumber,
+      })
+    : ({ ok: true } as const);
+  const mandateAuthorization =
+    await resolveTransferMandateAuthorizationOrReturn({
+      context: input.context,
+      authorization: mandateAuthorizationResult,
+      eventType,
+      requestId,
+      eventIndex,
+      pendingLogMessage:
+        'Deferred PayNote capture funds request until payment mandate authorization response',
     });
+  if (mandateAuthorization === null) {
+    return;
   }
 
   if (mandateAuthorization) {
@@ -1886,22 +1802,6 @@ const handleCaptureFundsRequest = async (input: {
             ? capturedTransactionId
             : undefined,
       });
-    } else if (requestedMandateDocumentId) {
-      await reportExistingHoldCaptureToMandateBestEffort({
-        context: input.context,
-        account,
-        event,
-        eventIndex,
-        requestId,
-        transferAmountMinor,
-        payeeAccountNumber: counterpartyAccountNumber,
-        status: 'succeeded',
-        holdId: capturedHoldId,
-        transactionId:
-          typeof capturedTransactionId === 'string'
-            ? capturedTransactionId
-            : undefined,
-      });
     }
   } catch (error) {
     const reason = resolveFailureReason(error, 'Unable to capture funds');
@@ -1914,19 +1814,6 @@ const handleCaptureFundsRequest = async (input: {
         requestId,
         authorization: mandateAuthorization,
         amountMinor: transferAmountMinor,
-        status: 'failed',
-        reason,
-        holdId: captureHoldId,
-      });
-    } else if (requestedMandateDocumentId) {
-      await reportExistingHoldCaptureToMandateBestEffort({
-        context: input.context,
-        account,
-        event,
-        eventIndex,
-        requestId,
-        transferAmountMinor,
-        payeeAccountNumber: counterpartyAccountNumber,
         status: 'failed',
         reason,
         holdId: captureHoldId,
@@ -2558,6 +2445,7 @@ export const handleTransferMandateResponseEvents = async (input: {
         transferAmountMinor: resolved.transferAmountMinor,
         authorizedMandate: authorization,
       });
+      continue;
     }
   }
 

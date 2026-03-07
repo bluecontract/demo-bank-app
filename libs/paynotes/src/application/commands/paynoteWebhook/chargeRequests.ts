@@ -48,6 +48,7 @@ import { resolveDeliveryRecord, upsertPayNoteContract } from './records';
 import { trace } from './logging';
 import { resolveRuntimeContracts } from '../blueRuntime';
 import { isRecord } from '../typeGuards';
+import { upsertTransferMandateAttemptByHoldId } from './transferMandateAttemptByHold';
 
 const CARD_CHARGE_RESPONDED_EVENT_NAME = 'PayNote/Card Charge Responded';
 const CARD_CHARGE_COMPLETED_EVENT_NAME = 'PayNote/Card Charge Completed';
@@ -1510,6 +1511,11 @@ const finalizeAuthorizedChargeAttemptImmediately = async (input: {
             context,
             eventType,
             chargeResult: { holdId: chargeResult.holdId },
+            mandateAuthorization: {
+              mandateDocumentId,
+              mandateSessionId,
+              chargeAttemptId,
+            },
           });
         }
         return { handled: true };
@@ -1555,6 +1561,11 @@ const finalizeAuthorizedChargeAttemptImmediately = async (input: {
         context,
         eventType,
         chargeResult,
+        mandateAuthorization: {
+          mandateDocumentId,
+          mandateSessionId,
+          chargeAttemptId,
+        },
       });
 
       return { handled: true };
@@ -1596,6 +1607,12 @@ type ChargeExecutionFailure = {
   reason: string;
   holdId?: string;
   reserveSucceeded: boolean;
+};
+
+type MandateAuthorizationReference = {
+  mandateDocumentId: string;
+  mandateSessionId?: string;
+  chargeAttemptId: string;
 };
 
 type MandateSettlementInput = {
@@ -2209,13 +2226,40 @@ const persistChargeExecutionArtifacts = async (input: {
   context: ChargeRequestContext;
   eventType: ChargeRequestEventType;
   chargeResult: { holdId: string; transactionId?: string };
+  mandateAuthorization?: MandateAuthorizationReference;
 }): Promise<void> => {
-  const { context, eventType, chargeResult } = input;
+  const { context, eventType, chargeResult, mandateAuthorization } = input;
   const now = context.deps.clock.now().toISOString();
 
-  context.updatedRecord.holdId = chargeResult.holdId;
-  if (chargeResult.transactionId) {
+  let changed = false;
+
+  if (context.updatedRecord.holdId !== chargeResult.holdId) {
+    context.updatedRecord.holdId = chargeResult.holdId;
+    changed = true;
+  }
+  if (
+    chargeResult.transactionId &&
+    context.updatedRecord.transactionId !== chargeResult.transactionId
+  ) {
     context.updatedRecord.transactionId = chargeResult.transactionId;
+    changed = true;
+  }
+  if (mandateAuthorization?.mandateSessionId) {
+    const mappingUpdated = upsertTransferMandateAttemptByHoldId({
+      updatedRecord: context.updatedRecord,
+      holdId: chargeResult.holdId,
+      authorization: {
+        mandateDocumentId: mandateAuthorization.mandateDocumentId,
+        mandateSessionId: mandateAuthorization.mandateSessionId,
+        chargeAttemptId: mandateAuthorization.chargeAttemptId,
+      },
+      updatedAt: now,
+    });
+    changed = changed || mappingUpdated;
+  }
+
+  if (!changed) {
+    return;
   }
   context.updatedRecord.updatedAt = now;
 
@@ -3040,6 +3084,11 @@ export const handleMandateResponseEvents = async (input: {
               context: resolved.context,
               eventType: resolved.eventType,
               chargeResult: { holdId: chargeResult.holdId },
+              mandateAuthorization: {
+                mandateDocumentId: payNoteDocumentId,
+                mandateSessionId: sessionId,
+                chargeAttemptId: response.chargeAttemptId,
+              },
             });
           }
           return;
@@ -3089,6 +3138,11 @@ export const handleMandateResponseEvents = async (input: {
           context: resolved.context,
           eventType: resolved.eventType,
           chargeResult,
+          mandateAuthorization: {
+            mandateDocumentId: payNoteDocumentId,
+            mandateSessionId: sessionId,
+            chargeAttemptId: response.chargeAttemptId,
+          },
         });
       },
     });
