@@ -106,6 +106,48 @@ describe('DynamoPayNoteRepository', () => {
     expect(result?.merchantId).toBe('merchant-1');
   });
 
+  it('uses strongly consistent read when loading paynote by document id', async () => {
+    mockSend.mockResolvedValueOnce({ Item: undefined });
+    const repository = createRepository();
+
+    await repository.getPayNote('paynote-doc-consistent');
+
+    const getPayload = mockGetCommand.mock.calls[0]?.[0];
+    expect(getPayload?.ConsistentRead).toBe(true);
+  });
+
+  it('uses strongly consistent reads when loading paynote by session id', async () => {
+    mockSend
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'PAYNOTE_SESSION#session-consistent',
+          SK: 'META',
+          entityType: 'PAYNOTE_SESSION',
+          sessionId: 'session-consistent',
+          payNoteDocumentId: 'paynote-doc-consistent',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'PAYNOTE#paynote-doc-consistent',
+          SK: 'META',
+          entityType: 'PAYNOTE',
+          payNoteDocumentId: 'paynote-doc-consistent',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      });
+    const repository = createRepository();
+
+    await repository.getPayNoteBySessionId('session-consistent');
+
+    const sessionLookupPayload = mockGetCommand.mock.calls[0]?.[0];
+    const payNoteLookupPayload = mockGetCommand.mock.calls[1]?.[0];
+    expect(sessionLookupPayload?.ConsistentRead).toBe(true);
+    expect(payNoteLookupPayload?.ConsistentRead).toBe(true);
+  });
+
   it('does not remove last capture lock id when omitted in subsequent save', async () => {
     mockSend.mockResolvedValue({});
     const repository = createRepository();
@@ -173,6 +215,39 @@ describe('DynamoPayNoteRepository', () => {
     );
     expect(updatePayload?.ExpressionAttributeNames).not.toHaveProperty(
       '#lastCaptureUnlockEventId'
+    );
+  });
+
+  it('does not remove transfer mandate attempt mapping when omitted in subsequent save', async () => {
+    mockSend.mockResolvedValue({});
+    const repository = createRepository();
+
+    await repository.savePayNote({
+      payNoteDocumentId: 'paynote-doc-transfer-map',
+      sessionIds: ['session-transfer-map'],
+      transferMandateAttemptsByHoldId: {
+        'hold-1': {
+          chargeAttemptId: 'attempt-1',
+          mandateDocumentId: 'mandate-doc-1',
+          mandateSessionId: 'mandate-session-1',
+        },
+      },
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    await repository.savePayNote({
+      payNoteDocumentId: 'paynote-doc-transfer-map',
+      sessionIds: ['session-transfer-map'],
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:01.000Z',
+    });
+
+    const secondUpdatePayload = mockUpdateCommand.mock.calls[1]?.[0];
+    const updateExpression = String(secondUpdatePayload?.UpdateExpression);
+    expect(updateExpression).not.toContain('#transferMandateAttemptsByHoldId');
+    expect(updateExpression).not.toContain(
+      'REMOVE #transferMandateAttemptsByHoldId'
     );
   });
 

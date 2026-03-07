@@ -162,6 +162,7 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
           PK: this.buildPayNotePk(documentId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -182,6 +183,7 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
           PK: this.buildSessionPk(sessionId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -363,6 +365,7 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       valueKey: ':transferMandateAttemptsByHoldId',
       attributeName: 'transferMandateAttemptsByHoldId',
       value: record.transferMandateAttemptsByHoldId,
+      preserveOnUndefined: true,
     });
 
     const updateExpressionParts: string[] = [];

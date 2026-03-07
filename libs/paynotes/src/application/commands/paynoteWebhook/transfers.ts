@@ -34,12 +34,16 @@ import type { DispatchedTransferEvent } from './eventDispatcher';
 import { blue } from '../../../blue';
 import {
   getString,
+  getStringOrNestedValue,
   toSimpleRecord,
   resolveOperationFailureReason,
   resolveCredentials,
   parseChargeAttemptId,
 } from './utils';
-import { resolveRuntimeDocument } from '../blueRuntime';
+import {
+  isPaymentMandateDocumentNode,
+  resolveRuntimeDocument,
+} from '../blueRuntime';
 import { resolveWebhookContext } from './payload';
 import { upsertTransferMandateAttemptByHoldId } from './transferMandateAttemptByHold';
 
@@ -67,6 +71,13 @@ type TransferMandateAuthorization = {
 type TransferMandateAuthorizationResolution =
   | { ok: true; authorization?: TransferMandateAuthorization }
   | { ok: false; reason: string; pending?: boolean };
+
+type TransferMandateAuthorizationSource =
+  | 'provided'
+  | 'stored-mapping'
+  | 'mandate-hold-attempt'
+  | 'fresh-authorization'
+  | 'none';
 
 type TransferMandateAuthorizationResponse = {
   chargeAttemptId: string;
@@ -380,6 +391,178 @@ const resolveStoredTransferMandateAuthorization = (input: {
   };
 };
 
+const resolveTransferMandateDocumentIdFromPayNoteState = (
+  payNoteDocument: unknown
+): string | undefined => {
+  const runtimeDocument = resolveRuntimeDocument(payNoteDocument);
+  return getStringOrNestedValue(
+    runtimeDocument?.record.paymentMandateDocumentId
+  );
+};
+
+const resolveTransferMandateDocumentIdForEvent = (input: {
+  event: WebhookEmittedEvent;
+  context: TransferContext;
+}): string | undefined => {
+  const fromEvent = resolveTransferPaymentMandateDocumentId(input.event);
+  if (fromEvent) {
+    return fromEvent;
+  }
+
+  const fromPayNoteState = resolveTransferMandateDocumentIdFromPayNoteState(
+    input.context.updatedRecord.document
+  );
+  if (fromPayNoteState) {
+    return fromPayNoteState;
+  }
+
+  return getString(input.context.deliveryRecord?.paymentMandateDocumentId);
+};
+
+const normalizeTransferMandateChargeAttempts = (
+  value: unknown
+): Record<string, Record<string, unknown>> | undefined => {
+  const attemptsRecord = toSimpleRecord(value);
+  if (!attemptsRecord) {
+    return undefined;
+  }
+
+  const normalized = Object.entries(attemptsRecord).reduce<
+    Record<string, Record<string, unknown>>
+  >((acc, [chargeAttemptId, attempt]) => {
+    const attemptRecord = toSimpleRecord(attempt);
+    if (!attemptRecord) {
+      return acc;
+    }
+
+    const wrappedValue = toSimpleRecord(attemptRecord.value);
+    acc[chargeAttemptId] = wrappedValue ?? attemptRecord;
+    return acc;
+  }, {});
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
+const resolveTransferMandateChargeAttempts = (
+  value: unknown
+): Record<string, Record<string, unknown>> | undefined => {
+  const parsedMandate = parseTransferPaymentMandate(value);
+  const parsedAttempts = normalizeTransferMandateChargeAttempts(
+    parsedMandate?.chargeAttempts
+  );
+  if (parsedAttempts) {
+    return parsedAttempts;
+  }
+
+  const runtimeDocument = resolveRuntimeDocument(value);
+  const runtimeAttempts = normalizeTransferMandateChargeAttempts(
+    runtimeDocument?.record.chargeAttempts
+  );
+  if (runtimeAttempts) {
+    return runtimeAttempts;
+  }
+  return undefined;
+};
+
+const resolveApprovedTransferMandateAuthorizationByHold = async (input: {
+  context: TransferContext;
+  holdId: string;
+  mandateDocumentId: string;
+}): Promise<TransferMandateAuthorization | null> => {
+  const mandateContract =
+    await input.context.deps.contractRepository.getContractByDocumentId(
+      input.mandateDocumentId
+    );
+  const mandateSessionId = getString(mandateContract?.sessionId);
+  if (!mandateSessionId) {
+    return null;
+  }
+
+  const mandateDocumentResult =
+    await input.context.deps.myOsClient.fetchDocument(mandateSessionId);
+  if (
+    mandateDocumentResult.kind !== 'success' ||
+    !mandateDocumentResult.document.document
+  ) {
+    return null;
+  }
+  const mandateRuntimeDocument = resolveRuntimeDocument(
+    mandateDocumentResult.document.document
+  );
+  if (
+    !mandateRuntimeDocument ||
+    !isPaymentMandateDocumentNode(mandateRuntimeDocument.node)
+  ) {
+    return null;
+  }
+
+  const attempts = resolveTransferMandateChargeAttempts(
+    mandateRuntimeDocument.record
+  );
+  if (!attempts) {
+    return null;
+  }
+
+  let selected:
+    | {
+        chargeAttemptId: string;
+        authorizationRespondedAtMs?: number;
+      }
+    | undefined;
+
+  for (const [chargeAttemptId, attempt] of Object.entries(attempts)) {
+    const attemptRecord = toSimpleRecord(attempt);
+    if (!attemptRecord) {
+      continue;
+    }
+
+    const attemptHoldId = getStringOrNestedValue(attemptRecord.holdId);
+    const holdMatches =
+      attemptHoldId === input.holdId || chargeAttemptId === input.holdId;
+    if (!holdMatches) {
+      continue;
+    }
+
+    if (
+      getStringOrNestedValue(attemptRecord.authorizationStatus) !== 'approved'
+    ) {
+      continue;
+    }
+
+    const authorizationRespondedAtMs = parseIsoTimestampMs(
+      getStringOrNestedValue(attemptRecord.authorizationRespondedAt)
+    );
+
+    if (!selected) {
+      selected = {
+        chargeAttemptId,
+        authorizationRespondedAtMs,
+      };
+      continue;
+    }
+
+    const selectedMs =
+      selected.authorizationRespondedAtMs ?? Number.NEGATIVE_INFINITY;
+    const candidateMs = authorizationRespondedAtMs ?? Number.NEGATIVE_INFINITY;
+    if (candidateMs > selectedMs) {
+      selected = {
+        chargeAttemptId,
+        authorizationRespondedAtMs,
+      };
+    }
+  }
+
+  if (!selected) {
+    return null;
+  }
+
+  return {
+    chargeAttemptId: selected.chargeAttemptId,
+    mandateDocumentId: input.mandateDocumentId,
+    mandateSessionId,
+  };
+};
+
 const authorizeTransferViaMandateIfRequired = async (input: {
   context: TransferContext;
   event: WebhookEmittedEvent;
@@ -391,6 +574,7 @@ const authorizeTransferViaMandateIfRequired = async (input: {
   amountMinor: number;
   payerAccountNumber: string;
   payeeAccountNumber?: string;
+  overrideMandateDocumentId?: string;
 }): Promise<TransferMandateAuthorizationResolution> => {
   const {
     context,
@@ -405,7 +589,9 @@ const authorizeTransferViaMandateIfRequired = async (input: {
     return { ok: true };
   }
 
-  const mandateDocumentId = resolveTransferPaymentMandateDocumentId(event);
+  const mandateDocumentId =
+    input.overrideMandateDocumentId ??
+    resolveTransferPaymentMandateDocumentId(event);
   if (!mandateDocumentId) {
     return {
       ok: false,
@@ -1154,6 +1340,10 @@ const handleCaptureImmediately = async (input: {
     transferAmountMinor,
   } = input;
   const requestId = resolveRequestId(event);
+  const effectiveMandateDocumentId = resolveTransferMandateDocumentIdForEvent({
+    event,
+    context: input.context,
+  });
   const idempotencyKey = buildTransferOperationIdempotencyKey({
     payNoteDocumentId,
     eventId,
@@ -1207,7 +1397,10 @@ const handleCaptureImmediately = async (input: {
         amountMinor: transferAmountMinor,
         payerAccountNumber: account.accountNumber,
         payeeAccountNumber,
+        overrideMandateDocumentId: effectiveMandateDocumentId,
       });
+  const mandateAuthorizationSource: TransferMandateAuthorizationSource =
+    input.authorizedMandate ? 'provided' : 'fresh-authorization';
   const mandateAuthorization =
     await resolveTransferMandateAuthorizationOrReturn({
       context: input.context,
@@ -1222,7 +1415,11 @@ const handleCaptureImmediately = async (input: {
     return;
   }
 
-  if (mandateAuthorization) {
+  if (
+    mandateAuthorization &&
+    (mandateAuthorizationSource === 'provided' ||
+      mandateAuthorizationSource === 'fresh-authorization')
+  ) {
     const firstProcess = await reserveTransferMandateAttemptProcessing({
       context: input.context,
       eventType,
@@ -1373,6 +1570,10 @@ const handleReserveFundsRequest = async (input: {
   } = input;
 
   const requestId = resolveRequestId(event);
+  const effectiveMandateDocumentId = resolveTransferMandateDocumentIdForEvent({
+    event,
+    context: input.context,
+  });
   const idempotencyKey = buildTransferOperationIdempotencyKey({
     payNoteDocumentId,
     eventId,
@@ -1415,7 +1616,10 @@ const handleReserveFundsRequest = async (input: {
         amountMinor: transferAmountMinor,
         payerAccountNumber,
         payeeAccountNumber,
+        overrideMandateDocumentId: effectiveMandateDocumentId,
       });
+  const mandateAuthorizationSource: TransferMandateAuthorizationSource =
+    input.authorizedMandate ? 'provided' : 'fresh-authorization';
   const mandateAuthorization =
     await resolveTransferMandateAuthorizationOrReturn({
       context: input.context,
@@ -1430,7 +1634,11 @@ const handleReserveFundsRequest = async (input: {
     return;
   }
 
-  if (mandateAuthorization) {
+  if (
+    mandateAuthorization &&
+    (mandateAuthorizationSource === 'provided' ||
+      mandateAuthorizationSource === 'fresh-authorization')
+  ) {
     const firstProcess = await reserveTransferMandateAttemptProcessing({
       context: input.context,
       eventType,
@@ -1671,12 +1879,14 @@ const handleCaptureFundsRequest = async (input: {
     return;
   }
 
-  const requestedMandateDocumentId =
-    resolveTransferPaymentMandateDocumentId(event);
+  const effectiveMandateDocumentId = resolveTransferMandateDocumentIdForEvent({
+    event,
+    context: input.context,
+  });
   const storedMandateAuthorization = resolveStoredTransferMandateAuthorization({
     updatedRecord,
     holdId: captureHoldId,
-    requestedMandateDocumentId,
+    requestedMandateDocumentId: effectiveMandateDocumentId,
   });
   if (storedMandateAuthorization && !storedMandateAuthorization.ok) {
     await emitDeclinedDueToMandate({
@@ -1688,17 +1898,50 @@ const handleCaptureFundsRequest = async (input: {
     return;
   }
 
+  const mandateAuthorizationByHold =
+    !storedMandateAuthorization &&
+    effectiveMandateDocumentId &&
+    !input.authorizedMandate
+      ? await resolveApprovedTransferMandateAuthorizationByHold({
+          context: input.context,
+          holdId: captureHoldId,
+          mandateDocumentId: effectiveMandateDocumentId,
+        })
+      : null;
+
+  if (mandateAuthorizationByHold) {
+    logs.push({
+      level: 'info',
+      message:
+        'Reused approved payment mandate authorization by hold mapping from mandate document',
+      context: {
+        eventId,
+        payNoteDocumentId,
+        requestId: requestId ?? null,
+        holdId: captureHoldId,
+        chargeAttemptId: mandateAuthorizationByHold.chargeAttemptId,
+        mandateDocumentId: mandateAuthorizationByHold.mandateDocumentId,
+      },
+    });
+  }
+
+  let mandateAuthorizationSource: TransferMandateAuthorizationSource = 'none';
   const mandateAuthorizationResult = input.authorizedMandate
     ? ({
         ok: true,
         authorization: input.authorizedMandate,
+      } as const)
+    : mandateAuthorizationByHold
+    ? ({
+        ok: true,
+        authorization: mandateAuthorizationByHold,
       } as const)
     : storedMandateAuthorization && storedMandateAuthorization.ok
     ? ({
         ok: true,
         authorization: storedMandateAuthorization.authorization,
       } as const)
-    : requestedMandateDocumentId
+    : effectiveMandateDocumentId
     ? await authorizeTransferViaMandateIfRequired({
         context: input.context,
         event,
@@ -1707,8 +1950,18 @@ const handleCaptureFundsRequest = async (input: {
         amountMinor: transferAmountMinor,
         payerAccountNumber: account.accountNumber,
         payeeAccountNumber: counterpartyAccountNumber,
+        overrideMandateDocumentId: effectiveMandateDocumentId,
       })
     : ({ ok: true } as const);
+  if (input.authorizedMandate) {
+    mandateAuthorizationSource = 'provided';
+  } else if (mandateAuthorizationByHold) {
+    mandateAuthorizationSource = 'mandate-hold-attempt';
+  } else if (storedMandateAuthorization && storedMandateAuthorization.ok) {
+    mandateAuthorizationSource = 'stored-mapping';
+  } else if (effectiveMandateDocumentId) {
+    mandateAuthorizationSource = 'fresh-authorization';
+  }
   const mandateAuthorization =
     await resolveTransferMandateAuthorizationOrReturn({
       context: input.context,
@@ -1723,7 +1976,11 @@ const handleCaptureFundsRequest = async (input: {
     return;
   }
 
-  if (mandateAuthorization) {
+  if (
+    mandateAuthorization &&
+    (mandateAuthorizationSource === 'provided' ||
+      mandateAuthorizationSource === 'fresh-authorization')
+  ) {
     const firstProcess = await reserveTransferMandateAttemptProcessing({
       context: input.context,
       eventType,

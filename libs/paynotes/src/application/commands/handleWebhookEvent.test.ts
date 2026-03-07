@@ -2302,6 +2302,165 @@ describe('handleWebhookEvent', () => {
     );
   });
 
+  it('reuses approved mandate attempt by hold when local transfer mapping is missing', async () => {
+    const { deps, fetchEvent, fetchDocument } = createDependencies();
+    const approvedChargeAttemptId = 'legacy-doc:event-linked-1:4';
+    const reusedHoldId = 'paynote-card-charge:legacy-doc:event-linked-1:4';
+    const { mandateDocumentId, mandateSessionId } = attachPaymentMandate({
+      deps,
+      fetchDocument,
+      payNoteDocumentId: 'voucher-doc-1',
+      mandateDocument: {
+        ...buildPaymentMandateDocument({
+          granteeId: 'voucher-doc-1',
+        }),
+        chargeAttempts: {
+          [approvedChargeAttemptId]: {
+            authorizationStatus: 'approved',
+            authorizationRespondedAt: '2026-03-07T22:00:00.000Z',
+            holdId: reusedHoldId,
+          },
+        },
+      },
+    });
+    const previousFetchDocumentImpl = fetchDocument.getMockImplementation();
+    fetchDocument.mockImplementation(async sessionId => {
+      if (sessionId === 'session-1') {
+        return {
+          kind: 'success',
+          document: {
+            documentId: 'voucher-doc-1',
+            sessionId: 'session-1',
+            document: toOfficialBlue({
+              type: 'PayNote/Merchant To Customer PayNote',
+              paymentMandateDocumentId: mandateDocumentId,
+            }),
+          },
+        } as MyOsFetchDocumentResult;
+      }
+
+      if (previousFetchDocumentImpl) {
+        const result = await previousFetchDocumentImpl(sessionId);
+        return result as MyOsFetchDocumentResult;
+      }
+
+      return {
+        kind: 'not-found',
+        status: 404,
+      } as MyOsFetchDocumentResult;
+    });
+    deps.payNoteDeliveryRepository.getDeliveryByPayNoteDocumentId = vi
+      .fn()
+      .mockResolvedValue({
+        deliveryId: 'delivery-1',
+        payNoteDocumentId: 'voucher-doc-1',
+        accountNumber: '1234567890',
+        userId: 'user-123',
+        merchantId: 'merchant-123',
+        holdId: reusedHoldId,
+        paymentMandateDocumentId: mandateDocumentId,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+      });
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'voucher-doc-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      holdId: reusedHoldId,
+      transactionId: 'txn-root-1',
+      payerAccountNumber: '4444444444',
+      payeeAccountNumber: '1234567890',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+    deps.bankingFacade.getAccountByNumber = vi
+      .fn()
+      .mockImplementation(async accountNumber => {
+        if (accountNumber === '4444444444') {
+          return {
+            id: 'merchant-credit-line-id',
+            accountNumber,
+            ownerUserId: 'merchant-owner',
+          };
+        }
+        return {
+          id: 'customer-account-id',
+          accountNumber,
+          ownerUserId: 'customer-owner',
+        };
+      });
+    deps.bankingFacade.captureHold = vi.fn().mockResolvedValue({
+      holdId: reusedHoldId,
+      relatedTransactionId: 'voucher-txn-1',
+    } as any);
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: {
+            type: 'PayNote/Merchant To Customer PayNote',
+          },
+          emitted: [
+            toOfficialBlue({
+              type: 'PayNote/Capture Funds Requested',
+              requestId: 'voucher-capture-reuse-by-hold-1',
+              amount: 2000,
+              paymentMandateDocumentId: mandateDocumentId,
+            }),
+          ],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    const result = await handleWebhookEvent(
+      { eventId: 'event-voucher-capture-reuse-by-hold-1' },
+      deps
+    );
+
+    expect(result.note).toBe('');
+    expect(deps.bankingFacade.captureHold).toHaveBeenCalledWith(
+      expect.objectContaining({
+        holdId: reusedHoldId,
+        amountMinor: 2000,
+        userId: 'merchant-owner',
+        payNoteDocumentId: 'voucher-doc-1',
+      })
+    );
+
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: {
+          calls: Array<
+            Array<{ operation?: string; sessionId?: string; payload?: unknown }>
+          >;
+        };
+      }
+    ).mock.calls;
+    const authorizeCalls = runOperationCalls.filter(
+      call =>
+        call[0]?.operation === 'authorizeSpend' &&
+        call[0]?.sessionId === mandateSessionId
+    );
+    expect(authorizeCalls).toHaveLength(0);
+
+    const settleCall = runOperationCalls.find(
+      call =>
+        call[0]?.operation === 'settleSpend' &&
+        call[0]?.sessionId === mandateSessionId
+    );
+    expect(settleCall).toBeTruthy();
+    expect(settleCall?.[0]?.payload).toEqual(
+      expect.objectContaining({
+        authorizationId: approvedChargeAttemptId,
+        status: 'succeeded',
+      })
+    );
+  });
+
   it('authorizes and settles merchant-to-customer capture request when mandate chargeAttempts are wrapped', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     const mandateDocumentId = 'mandate-doc-official-1';

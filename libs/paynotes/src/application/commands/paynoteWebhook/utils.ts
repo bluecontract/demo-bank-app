@@ -69,6 +69,16 @@ export const getString = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
+export const getStringOrNestedValue = (value: unknown): string | undefined => {
+  const direct = getString(value);
+  if (direct) {
+    return direct;
+  }
+
+  const record = toSimpleRecord(value);
+  return record ? getString(record.value) : undefined;
+};
+
 export const getRecordString = (
   record: Record<string, unknown> | undefined,
   key: string

@@ -19,7 +19,7 @@ import {
 import type { BlueNode } from '@blue-labs/language';
 import { blue } from '../../../blue';
 import type { WebhookEmittedEvent } from './types';
-import { getString } from './utils';
+import { getString, getStringOrNestedValue } from './utils';
 
 export const RESERVE_FUNDS_EVENT_NAME = 'PayNote/Reserve Funds Requested';
 export const CAPTURE_FUNDS_EVENT_NAME = 'PayNote/Capture Funds Requested';
@@ -236,20 +236,7 @@ const getNodeTextProperty = (
   if (!property) {
     return undefined;
   }
-  const value = property.getValue();
-  const direct = getString(value);
-  if (direct) {
-    return direct;
-  }
-  if (
-    value &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    'value' in value
-  ) {
-    return getString((value as { value?: unknown }).value);
-  }
-  return undefined;
+  return getStringOrNestedValue(property.getValue());
 };
 
 export const resolveEmittedEventType = (
