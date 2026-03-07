@@ -329,6 +329,102 @@ describe('handlePayNoteBootstrapWebhookEvent', () => {
     ).not.toHaveBeenCalled();
   });
 
+  it('preserves mandate processing fields when linking bootstrap target sessions', async () => {
+    const {
+      deps,
+      myOsClient,
+      payNoteRepository,
+      payNoteDeliveryRepository,
+      payNoteBootstrapRepository,
+      bootstrapContextRepository,
+    } = createDependencies();
+
+    payNoteDeliveryRepository.markEventProcessed = vi
+      .fn()
+      .mockResolvedValue(true);
+    payNoteDeliveryRepository.getDeliveryByBootstrapSessionId = vi
+      .fn()
+      .mockResolvedValue(null);
+    payNoteBootstrapRepository.getBootstrapBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-preserve-1',
+        userId: 'user-1',
+        accountNumber: 'acct-1',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+    bootstrapContextRepository.getContextBySessionId = vi
+      .fn()
+      .mockResolvedValue({
+        bootstrapSessionId: 'bootstrap-preserve-1',
+        merchantId: 'merchant-1',
+        createdAt: '2024-01-01T00:00:00.000Z',
+      });
+
+    myOsClient.fetchDocument = vi.fn().mockResolvedValue({
+      kind: 'success',
+      document: {
+        documentId: 'doc-preserve-1',
+        sessionId: 'session-new-1',
+        document: buildPayNoteDocument(),
+      },
+    } as MyOsFetchDocumentResult);
+
+    payNoteRepository.getPayNote = vi.fn().mockResolvedValue({
+      payNoteDocumentId: 'doc-preserve-1',
+      sessionIds: ['session-old-1'],
+      holdId: 'hold-old-1',
+      accountNumber: 'acct-1',
+      userId: 'user-1',
+      pendingMandateChargeAttempts: {
+        'charge-attempt-1': {
+          mandateDocumentId: 'mandate-doc-1',
+          eventType: 'PayNote/Linked Card Charge Requested',
+          queuedAt: '2024-01-01T00:00:00.000Z',
+          retryCount: 1,
+        },
+      },
+      transferMandateAttemptsByHoldId: {
+        'hold-old-1': {
+          mandateDocumentId: 'mandate-doc-1',
+          mandateSessionId: 'mandate-session-1',
+          chargeAttemptId: 'charge-attempt-1',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      },
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    const payload: HandlePayNoteBootstrapWebhookInput['payload'] = {
+      id: 'event-preserve-1',
+      object: {
+        sessionId: 'bootstrap-preserve-1',
+        document: buildBootstrapDocument(),
+        emitted: [buildTargetSessionStartedEvent('session-new-1')],
+        created: '2024-01-01T00:00:00.000Z',
+      },
+    };
+
+    const result = await handlePayNoteBootstrapWebhookEvent({ payload }, deps);
+
+    expect(result.handled).toBe(true);
+    expect(payNoteRepository.savePayNote).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payNoteDocumentId: 'doc-preserve-1',
+        sessionIds: ['session-old-1', 'session-new-1'],
+        pendingMandateChargeAttempts: expect.objectContaining({
+          'charge-attempt-1': expect.any(Object),
+        }),
+        transferMandateAttemptsByHoldId: expect.objectContaining({
+          'hold-old-1': expect.objectContaining({
+            chargeAttemptId: 'charge-attempt-1',
+          }),
+        }),
+      })
+    );
+  });
+
   it('links PayNote records when target session ids are wrapped in items/value nodes', async () => {
     const {
       deps,

@@ -628,9 +628,24 @@ const mergePayNoteRecord = (
       updates.payerAccountNumber ?? existing?.payerAccountNumber,
     payeeAccountNumber:
       updates.payeeAccountNumber ?? existing?.payeeAccountNumber,
+    lastSourceEventCreatedAt:
+      updates.lastSourceEventCreatedAt ?? existing?.lastSourceEventCreatedAt,
+    lastSourceEventEpoch:
+      updates.lastSourceEventEpoch ?? existing?.lastSourceEventEpoch,
+    lastCaptureLockEventId:
+      updates.lastCaptureLockEventId ?? existing?.lastCaptureLockEventId,
+    lastCaptureUnlockEventId:
+      updates.lastCaptureUnlockEventId ?? existing?.lastCaptureUnlockEventId,
     document: updates.document ?? existing?.document,
-    transactionRequest: existing?.transactionRequest ?? null,
-    triggerEvent: existing?.triggerEvent ?? null,
+    transactionRequest:
+      updates.transactionRequest ?? existing?.transactionRequest ?? null,
+    triggerEvent: updates.triggerEvent ?? existing?.triggerEvent ?? null,
+    pendingMandateChargeAttempts:
+      updates.pendingMandateChargeAttempts ??
+      existing?.pendingMandateChargeAttempts,
+    transferMandateAttemptsByHoldId:
+      updates.transferMandateAttemptsByHoldId ??
+      existing?.transferMandateAttemptsByHoldId,
     createdAt,
     updatedAt: updates.updatedAt,
   };
