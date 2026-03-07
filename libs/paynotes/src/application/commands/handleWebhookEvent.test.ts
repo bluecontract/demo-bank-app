@@ -4485,6 +4485,183 @@ describe('handleWebhookEvent', () => {
     );
   });
 
+  it('drops deferred charge attempt when attempt processing is already completed', async () => {
+    const { deps, fetchEvent } = createDependencies();
+    deps.clock.now = () => new Date('2024-01-01T00:00:02.000Z');
+
+    const chargeAttemptId = 'doc-1:event-1:0';
+    let payNoteRecord: Record<string, unknown> = {
+      payNoteDocumentId: 'doc-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      pendingMandateChargeAttempts: {
+        [chargeAttemptId]: {
+          mandateDocumentId: 'mandate-doc-1',
+          eventType: 'PayNote/Linked Card Charge Requested',
+          requestId: 'charge-pending-completed-1',
+          queuedAt: '2024-01-01T00:00:00.000Z',
+          retryCount: 1,
+          nextRetryAt: '2024-01-01T00:00:01.000Z',
+          lastReason: 'Payment mandate authorization not yet confirmed.',
+        },
+      },
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi
+      .fn()
+      .mockImplementation(async (sessionId: string) =>
+        sessionId === 'session-1' ? payNoteRecord : null
+      );
+    deps.payNoteRepository.savePayNote = vi
+      .fn()
+      .mockImplementation(async next => {
+        payNoteRecord = {
+          ...payNoteRecord,
+          ...(next as Record<string, unknown>),
+        };
+      });
+    deps.payNoteRepository.getEventProcessingStatus = vi
+      .fn()
+      .mockImplementation(async (eventId: string) =>
+        eventId === `paynote-card-charge-attempt-processed:${chargeAttemptId}`
+          ? 'completed'
+          : null
+      );
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: { type: 'PayNote/Card Transaction PayNote' },
+          emitted: [],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-2' }, deps);
+    expect(result.note).toBe('');
+
+    expect(deps.bankingFacade.reserveFunds).not.toHaveBeenCalled();
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls;
+    const respondedEvent = findRunOperationEventByType(
+      runOperationCalls,
+      'PayNote/Card Charge Responded'
+    );
+    expect(respondedEvent).toBeUndefined();
+
+    expect(deps.payNoteRepository.savePayNote).toHaveBeenCalled();
+    expect(
+      toSimpleRecord(payNoteRecord.pendingMandateChargeAttempts)
+    ).toBeNull();
+    expect(
+      (
+        deps.payNoteRepository.getEventProcessingStatus as ReturnType<
+          typeof vi.fn
+        >
+      ).mock.calls.some(
+        call =>
+          call[0] === `paynote-card-charge-attempt-processed:${chargeAttemptId}`
+      )
+    ).toBe(true);
+  });
+
+  it('skips deferred charge attempt when attempt processing is already in-flight', async () => {
+    const { deps, fetchEvent } = createDependencies();
+    deps.clock.now = () => new Date('2024-01-01T00:00:02.000Z');
+
+    const chargeAttemptId = 'doc-1:event-1:0';
+    let payNoteRecord: Record<string, unknown> = {
+      payNoteDocumentId: 'doc-1',
+      accountNumber: '1234567890',
+      userId: 'user-123',
+      merchantId: 'merchant-123',
+      pendingMandateChargeAttempts: {
+        [chargeAttemptId]: {
+          mandateDocumentId: 'mandate-doc-1',
+          eventType: 'PayNote/Linked Card Charge Requested',
+          requestId: 'charge-pending-processing-1',
+          queuedAt: '2024-01-01T00:00:00.000Z',
+          retryCount: 1,
+          nextRetryAt: '2024-01-01T00:00:01.000Z',
+          lastReason: 'Payment mandate authorization not yet confirmed.',
+        },
+      },
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+
+    deps.payNoteRepository.getPayNoteBySessionId = vi
+      .fn()
+      .mockImplementation(async (sessionId: string) =>
+        sessionId === 'session-1' ? payNoteRecord : null
+      );
+    deps.payNoteRepository.savePayNote = vi
+      .fn()
+      .mockImplementation(async next => {
+        payNoteRecord = {
+          ...payNoteRecord,
+          ...(next as Record<string, unknown>),
+        };
+      });
+    deps.payNoteRepository.getEventProcessingStatus = vi
+      .fn()
+      .mockImplementation(async (eventId: string) =>
+        eventId === `paynote-card-charge-attempt-processed:${chargeAttemptId}`
+          ? 'processing'
+          : null
+      );
+
+    fetchEvent.mockResolvedValueOnce({
+      kind: 'success',
+      payload: {
+        object: {
+          sessionId: 'session-1',
+          document: { type: 'PayNote/Card Transaction PayNote' },
+          emitted: [],
+        },
+      },
+    } as MyOsFetchEventResult);
+
+    const result = await handleWebhookEvent({ eventId: 'event-2' }, deps);
+    expect(result.note).toBe('');
+
+    expect(deps.bankingFacade.reserveFunds).not.toHaveBeenCalled();
+    const runOperationCalls = (
+      deps.myOsClient.runDocumentOperation as unknown as {
+        mock: { calls: Array<Array<{ payload?: unknown }>> };
+      }
+    ).mock.calls;
+    const respondedEvent = findRunOperationEventByType(
+      runOperationCalls,
+      'PayNote/Card Charge Responded'
+    );
+    expect(respondedEvent).toBeUndefined();
+
+    expect(
+      toSimpleRecord(payNoteRecord.pendingMandateChargeAttempts)?.[
+        chargeAttemptId
+      ]
+    ).toBeDefined();
+    expect(
+      (
+        deps.payNoteRepository.getEventProcessingStatus as ReturnType<
+          typeof vi.fn
+        >
+      ).mock.calls.some(
+        call =>
+          call[0] === `paynote-card-charge-attempt-processed:${chargeAttemptId}`
+      )
+    ).toBe(true);
+  });
+
   it('ignores duplicate mandate response when charge attempt was already finalized immediately', async () => {
     const { deps, fetchEvent, fetchDocument } = createDependencies();
     const { mandateDocumentId, mandateSessionId } = attachPaymentMandate({

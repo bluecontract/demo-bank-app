@@ -3261,6 +3261,47 @@ export const handleChargeRequestEvents = async (input: {
         continue;
       }
 
+      const attemptProcessingKey =
+        buildChargeAttemptProcessingKey(chargeAttemptId);
+      const attemptProcessingStatus =
+        await deps.payNoteRepository.getEventProcessingStatus?.(
+          attemptProcessingKey
+        );
+
+      if (attemptProcessingStatus === 'completed') {
+        delete pendingAttempts[chargeAttemptId];
+        pendingAttemptsDirty = true;
+        logs.push({
+          level: 'info',
+          message:
+            'Dropped stale deferred card charge attempt (already completed)',
+          context: {
+            eventId,
+            payNoteDocumentId,
+            sessionId,
+            chargeAttemptId,
+            dedupeKey: attemptProcessingKey,
+          },
+        });
+        continue;
+      }
+
+      if (attemptProcessingStatus === 'processing') {
+        logs.push({
+          level: 'info',
+          message:
+            'Skipped deferred card charge attempt (processing already in-flight)',
+          context: {
+            eventId,
+            payNoteDocumentId,
+            sessionId,
+            chargeAttemptId,
+            dedupeKey: attemptProcessingKey,
+          },
+        });
+        continue;
+      }
+
       const resolved = await resolveChargeRequestContextFromAttempt({
         chargeAttemptId,
         mandateDocumentId: pendingAttempt.mandateDocumentId,
