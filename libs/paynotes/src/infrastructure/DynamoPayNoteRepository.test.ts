@@ -230,6 +230,7 @@ describe('DynamoPayNoteRepository', () => {
           chargeAttemptId: 'attempt-1',
           mandateDocumentId: 'mandate-doc-1',
           mandateSessionId: 'mandate-session-1',
+          updatedAt: '2024-01-01T00:00:00.000Z',
         },
       },
       createdAt: '2024-01-01T00:00:00.000Z',
