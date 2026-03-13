@@ -2018,29 +2018,42 @@ const handleCaptureFundsRequest = async (input: {
       updatedRecord.transactionId = capturedTransactionId;
     }
 
-    if (shouldUpdateHoldId || shouldUpdateTransactionId) {
-      const updatedAt = deps.clock.now().toISOString();
+    const updatedAt = deps.clock.now().toISOString();
+    const resolvedPersistedHoldId =
+      (typeof capturedHoldId === 'string' && capturedHoldId) || captureHoldId;
+    const mappingUpdated = mandateAuthorization
+      ? upsertTransferMandateAttemptByHoldId({
+          updatedRecord,
+          holdId: resolvedPersistedHoldId,
+          authorization: mandateAuthorization,
+          updatedAt,
+        })
+      : false;
+
+    if (shouldUpdateHoldId || shouldUpdateTransactionId || mappingUpdated) {
       updatedRecord.updatedAt = updatedAt;
       await deps.payNoteRepository.savePayNote(updatedRecord);
 
-      await upsertPayNoteContract({
-        updatedRecord,
-        deliveryRecord,
-        sessionId,
-        payNoteDocumentId,
-        eventType,
-        triggerEvent: eventObject?.triggeredBy,
-        emittedEvents,
-        now: updatedAt,
-        deps,
-      });
-
-      if (deliveryRecord && shouldUpdateTransactionId) {
-        await deps.payNoteDeliveryRepository.saveDelivery({
-          ...deliveryRecord,
-          transactionId: updatedRecord.transactionId,
-          updatedAt,
+      if (shouldUpdateHoldId || shouldUpdateTransactionId) {
+        await upsertPayNoteContract({
+          updatedRecord,
+          deliveryRecord,
+          sessionId,
+          payNoteDocumentId,
+          eventType,
+          triggerEvent: eventObject?.triggeredBy,
+          emittedEvents,
+          now: updatedAt,
+          deps,
         });
+
+        if (deliveryRecord && shouldUpdateTransactionId) {
+          await deps.payNoteDeliveryRepository.saveDelivery({
+            ...deliveryRecord,
+            transactionId: updatedRecord.transactionId,
+            updatedAt,
+          });
+        }
       }
     }
 
@@ -2064,6 +2077,18 @@ const handleCaptureFundsRequest = async (input: {
     const reason = resolveFailureReason(error, 'Unable to capture funds');
 
     if (mandateAuthorization) {
+      const updatedAt = deps.clock.now().toISOString();
+      const mappingUpdated = upsertTransferMandateAttemptByHoldId({
+        updatedRecord,
+        holdId: captureHoldId,
+        authorization: mandateAuthorization,
+        updatedAt,
+      });
+      if (mappingUpdated) {
+        updatedRecord.updatedAt = updatedAt;
+        await deps.payNoteRepository.savePayNote(updatedRecord);
+      }
+
       await runTransferMandateSettlement({
         context: input.context,
         eventType,

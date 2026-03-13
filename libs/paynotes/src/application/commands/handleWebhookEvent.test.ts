@@ -1,7 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { handleWebhookEvent } from './handleWebhookEvent';
 import type { HandleWebhookEventDependencies } from './handleWebhookEvent';
-import type { MyOsFetchEventResult, MyOsFetchDocumentResult } from '../ports';
+import type {
+  MyOsFetchEventResult,
+  MyOsFetchDocumentResult,
+  PayNoteRecord,
+} from '../ports';
 import { blue } from '../../blue';
 
 const toSimpleRecord = (value: unknown): Record<string, unknown> | null =>
@@ -2363,7 +2367,7 @@ describe('handleWebhookEvent', () => {
         updatedAt: '2024-01-01T00:00:00.000Z',
       });
 
-    deps.payNoteRepository.getPayNoteBySessionId = vi.fn().mockResolvedValue({
+    let payNoteRecord: PayNoteRecord = {
       payNoteDocumentId: 'voucher-doc-1',
       accountNumber: '1234567890',
       userId: 'user-123',
@@ -2374,7 +2378,19 @@ describe('handleWebhookEvent', () => {
       payeeAccountNumber: '1234567890',
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-01T00:00:00.000Z',
-    });
+    };
+    deps.payNoteRepository.getPayNoteBySessionId = vi
+      .fn()
+      .mockImplementation(async sessionId =>
+        sessionId === 'session-1' ? payNoteRecord : null
+      );
+    deps.payNoteRepository.savePayNote = vi
+      .fn()
+      .mockImplementation(async record => {
+        payNoteRecord = {
+          ...record,
+        };
+      });
     deps.bankingFacade.getAccountByNumber = vi
       .fn()
       .mockImplementation(async accountNumber => {
@@ -2457,6 +2473,16 @@ describe('handleWebhookEvent', () => {
       expect.objectContaining({
         authorizationId: approvedChargeAttemptId,
         status: 'succeeded',
+      })
+    );
+    expect(deps.payNoteRepository.savePayNote).toHaveBeenCalled();
+    expect(payNoteRecord.transferMandateAttemptsByHoldId).toEqual(
+      expect.objectContaining({
+        [reusedHoldId]: expect.objectContaining({
+          chargeAttemptId: approvedChargeAttemptId,
+          mandateDocumentId,
+          mandateSessionId,
+        }),
       })
     );
   });
