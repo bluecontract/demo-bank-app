@@ -77,6 +77,10 @@ Notes:
   - `CODEX_REVIEW_FALLBACK_MODEL` (default: `gpt-5-codex`)
   - `CODEX_REVIEW_REASONING_EFFORT` (default: `low`)
 - If a model fails or times out, its output file will contain the error details.
+- If all enabled reviewer CLIs are unavailable in `PATH`, the script records the
+  skips in reviewer artifacts and writes a `self-review` fallback to `result.md`.
+  In that case the implementing agent must manually review the staged diff and
+  report that self-review in the handoff/final response.
 
 # Command Template (manual fallback)
 

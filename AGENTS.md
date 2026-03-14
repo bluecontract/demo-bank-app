@@ -66,6 +66,9 @@ Parallel agents should use per-worktree LocalStack settings:
 - Work in reasonable increments; avoid micro-commits and avoid one giant commit for a large change.
 - Use Conventional Commits (e.g., `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`) with an optional scope.
 - Before each commit, stage the intended changes and run the staged-only code review (see `agents/skills/code-review`).
+- If external reviewer CLIs (`claude`, `gemini`, `codex`) are unavailable in the
+  current sandbox, the code-review step falls back to self-review; call that out
+  explicitly in the handoff/final response or note that external review is delivered separately.
 - Before each commit, ensure Quick Verify passes (husky will enforce formatting/tests on commit).
 - If tests cannot run, state why in the commit body and in the final response.
 
