@@ -55,6 +55,9 @@ was switched to `x86_64`.
 ### Added bootstrap
 
 - `scripts/setup-sandbox-env.sh`
+- `.cursor/environment.json`
+- `.cursor/Dockerfile.cloud`
+- `scripts/start-cursor-cloud.sh`
 
 What it does:
 
@@ -119,6 +122,8 @@ Impact:
 
 - local `sam local start-api` works in this sandbox while production deploy
   settings remain unchanged in `template.yaml`
+- Cursor Cloud can now bootstrap the required Docker + SAM toolchain at the repo
+  environment level instead of depending on per-run manual setup
 
 ## Verified sandbox path
 

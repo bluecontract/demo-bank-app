@@ -45,6 +45,22 @@ Parallel agents should use per-worktree LocalStack settings:
   current worktree label.
 - Stop helper: `scripts/stop-worktree-localstack.sh`.
 
+## Cursor Cloud specific instructions
+
+- This repo provides a repo-level Cursor Cloud environment via:
+  - `.cursor/environment.json`
+  - `.cursor/Dockerfile.cloud`
+- Cloud startup runs `scripts/start-cursor-cloud.sh`, which:
+  - starts Docker for the cloud VM
+  - prepares `.localstack.env` with the correct Docker-host endpoint for SAM containers
+- In fresh shells, run `source .localstack.env` before LocalStack/SAM/Nx commands.
+- For local full-stack verification in cloud agents:
+  1. `source .localstack.env`
+  2. `npm run serve:all`
+  3. `npm run verify:full`
+- `npm run e2e` and the final E2E phase of `npm run verify:full` expect the local stack to already be running.
+- Prefer Cursor Secrets / workspace secrets for API keys and env vars required by local verification.
+
 ## Git Commits (Required)
 
 - Work in reasonable increments; avoid micro-commits and avoid one giant commit for a large change.
