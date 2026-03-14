@@ -102,7 +102,6 @@ root:
 find apps libs -type d -name node_modules -prune -exec rm -rf {} +
 npm install
 ```
-
 The app will be available at:
 
 - **Frontend**: http://localhost:4200
