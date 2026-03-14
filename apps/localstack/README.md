@@ -1,6 +1,7 @@
 # LocalStack Service
 
-LocalStack provides local AWS cloud service emulation for development and testing.
+LocalStack provides the **native** local AWS emulation path for development and testing.
+It is still used whenever Docker + SAM tooling are available.
 
 ## Prerequisites
 
@@ -8,7 +9,22 @@ LocalStack provides local AWS cloud service emulation for development and testin
 
 ## Usage
 
-### Via Nx (Recommended)
+### Via top-level commands (recommended)
+
+```bash
+# Start the full local stack
+npm run serve:all
+
+# Start only the backend/AWS stack
+npm run serve:stack
+```
+
+These commands auto-detect whether to use:
+
+- the native Docker + LocalStack + SAM path, or
+- the sandbox fallback path
+
+### Via Nx (native-only)
 
 ```bash
 # Start LocalStack
@@ -36,4 +52,4 @@ All services are available at: `http://localhost:4566`
 - Endpoint: http://localhost:4566
 - AWS Access Key: test
 - AWS Secret Key: test
-- Region: us-east-1
+- Region: eu-west-1 (project default)

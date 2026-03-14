@@ -2,6 +2,7 @@
 
 ## LLM summaries for Blue contract documents
 
+- `docs/research/sandbox-environment-verification.md` – baseline blockers for this sandbox, the fallback runtime design, and the final end-to-end verification evidence.
 - `docs/research/contract-summary-ui-current-implementation.md` – current Contracts UI/API and where the raw YAML view lives.
 - `docs/research/demo-bank-app-llm-patterns-and-guardrails.md` – existing OpenAI usage patterns in demo-bank-app and reusable guardrails.
 - `docs/research/blue-labs-frontend-document-ui-lessons.md` – lessons from blue-labs-frontend’s AI document UI (rules-based prompts + schema outputs).

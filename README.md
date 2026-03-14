@@ -25,9 +25,25 @@ Everyone sees the same terms and same timeline.
 
 - **Node.js 22+ (LTS)** - JavaScript runtime environment
 - **npm** - Package manager
-- **Docker** - Required for LocalStack (AWS service emulation)
-- **AWS SAM CLI** - Required for local Lambda development and testing
-- **Localstack samlocal** - Required for local Lambda development and testing
+- **Docker** - Required for the native LocalStack path
+- **AWS SAM CLI** - Required for the native local Lambda path
+- **Localstack samlocal** - Required for the native local Lambda path
+- **Python 3 + pip** - Used only by the sandbox fallback when Docker/SAM are unavailable
+
+### Local runtime modes
+
+Top-level local commands auto-detect the best runtime for the current machine:
+
+- **Native mode** - Docker + LocalStack + SAM
+- **Fallback mode** - sandbox-compatible AWS emulation plus a lightweight local HTTP bridge for the Lambda handler
+
+Both modes expose the same local URLs:
+
+- **Frontend**: http://localhost:4200
+- **Backend API**: http://localhost:3000
+- **AWS emulator**: http://localhost:4566
+
+Runtime logs are written to `tmp/environment-verification/`.
 
 #### Install AWS SAM CLI
 
@@ -82,75 +98,70 @@ samlocal --version
 # 1. Install dependencies
 npm install
 
-# 2. Ensure Docker is running
-npm run docker:check
-
-# 3. Start all services (frontend, backend, localstack)
+# 2. Start all services (frontend, backend, AWS emulator)
 npm run serve:all
 ```
 
-The app will be available at:
-
-- **Frontend**: http://localhost:4200
-- **Backend API**: http://localhost:3000
-- **LocalStack**: http://localhost:4566
+If Docker + SAM + samlocal are present, `serve:all` uses the native LocalStack/SAM path.
+Otherwise it automatically falls back to the sandbox-compatible mode.
 
 ### Available Scripts
 
-| Command                        | Description                                    |
-| ------------------------------ | ---------------------------------------------- |
-| `npm start`                    | Start development server                       |
-| `npm run dev`                  | Start development server (alias)               |
-| `npm test`                     | Run tests for affected projects                |
-| `npm run test:all`             | Run tests for all projects                     |
-| `npm run test:integration`     | Run integration tests for affected projects    |
-| `npm run test:integration:all` | Run integration tests for all projects         |
-| `npm run test:watch`           | Run tests in watch mode                        |
-| `npm run e2e`                  | Run E2E tests locally                          |
-| `npm run e2e:dev`              | Run E2E tests against dev environment          |
-| `npm run e2e:prod`             | Run E2E tests against production environment   |
-| `npm run build`                | Build affected projects                        |
-| `npm run build:all`            | Build all projects                             |
-| `npm run lint`                 | Lint affected projects                         |
-| `npm run lint:all`             | Lint all projects                              |
-| `npm run lint:fix`             | Lint and auto-fix affected issues              |
-| `npm run typecheck`            | Run TypeScript type checking for all projects  |
-| `npm run format`               | Format code with Prettier                      |
-| `npm run format:check`         | Check code formatting                          |
-| `npm run format:staged`        | Format only staged files with Prettier         |
-| `npm run security:audit`       | Run security audit on production dependencies  |
-| `npm run security:audit:dev`   | Run security audit on development dependencies |
-| `npm run security:audit:fix`   | Fix security vulnerabilities                   |
-| `npm run pre-commit`           | Run pre-commit checks manually                 |
-| `npm run validate-commit`      | Validate commit message format                 |
-| `npm run generate-docs`        | Generate OpenAPI docs from TypeScript          |
-| `npm run wait-for-backend`     | Wait for backend to be ready                   |
-| `npm run clean`                | Reset Nx cache                                 |
-| `npm run graph`                | View dependency graph                          |
-| `npm run serve:all`            | Start all services with Nx                     |
-| `npm run serve:stack`          | Start backend stack (LocalStack + Lambda)      |
-| `npm run docker:check`         | Verify Docker is running                       |
+| Command                        | Description                                                        |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `npm start`                    | Start development server                                           |
+| `npm run dev`                  | Start development server (alias)                                   |
+| `npm test`                     | Run tests for affected projects                                    |
+| `npm run test:all`             | Run tests for all projects                                         |
+| `npm run test:integration`     | Run integration tests for affected projects                        |
+| `npm run test:integration:all` | Run integration tests for all projects                             |
+| `npm run test:watch`           | Run tests in watch mode                                            |
+| `npm run e2e`                  | Run E2E tests locally                                              |
+| `npm run e2e:dev`              | Run E2E tests against dev environment                              |
+| `npm run e2e:prod`             | Run E2E tests against production environment                       |
+| `npm run build`                | Build affected projects                                            |
+| `npm run build:all`            | Build all projects                                                 |
+| `npm run lint`                 | Lint affected projects                                             |
+| `npm run lint:all`             | Lint all projects                                                  |
+| `npm run lint:fix`             | Lint and auto-fix affected issues                                  |
+| `npm run typecheck`            | Run TypeScript type checking for all projects                      |
+| `npm run format`               | Format code with Prettier                                          |
+| `npm run format:check`         | Check code formatting                                              |
+| `npm run format:staged`        | Format only staged files with Prettier                             |
+| `npm run security:audit`       | Run security audit on production dependencies                      |
+| `npm run security:audit:dev`   | Run security audit on development dependencies                     |
+| `npm run security:audit:fix`   | Fix security vulnerabilities                                       |
+| `npm run pre-commit`           | Run pre-commit checks manually                                     |
+| `npm run validate-commit`      | Validate commit message format                                     |
+| `npm run generate-docs`        | Generate OpenAPI docs from TypeScript                              |
+| `npm run wait-for-backend`     | Wait for backend to be ready                                       |
+| `npm run clean`                | Reset Nx cache                                                     |
+| `npm run graph`                | View dependency graph                                              |
+| `npm run serve:all`            | Start the full local stack with auto-selected runtime mode         |
+| `npm run serve:stack`          | Start the backend/AWS stack with auto-selected runtime mode        |
+| `npm run verify:full`          | Run lint, typecheck, unit, integration, and local e2e verification |
+| `npm run docker:check`         | Verify Docker is running                                           |
 
 > **💡 Affected vs All**: By default, commands run only on "affected" projects (those changed since the last commit). Use `:all` variants to run on all projects.
 
 ### 🎯 Multi-Service Development
 
-Start all services with Nx orchestration:
+Start all services with auto-detected orchestration:
 
 ```bash
-# Start all services with dependency management
+# Start all services
 npm run serve:all
 
-# Start individual services
-nx serve localstack           # ensures LocalStack is running
-nx serve @demo-bank-app/bank-api  # Backend API only (starts localstack)
-nx serve @demo-bank-app/bank-web-app # Frontend only
+# Start only the backend/AWS stack
+npm run serve:stack
 
-# Check service status
-docker ps --filter 'name=localstack-demo-bank-app'
+# Run the full verification flow
+npm run verify:full
 
-# Stop services when done
-docker stop localstack-demo-bank-app
+# Native-only low-level commands (require Docker + SAM toolchain)
+nx serve localstack
+nx serve @demo-bank-app/bank-api
+nx serve @demo-bank-app/bank-web-app
 ```
 
 ## 🧪 Testing
@@ -167,12 +178,15 @@ npm run test:watch
 # E2E tests (full-stack local testing)
 npm run e2e
 
+# Full local verification
+npm run verify:full
+
 # E2E tests against remote environments
 npm run e2e:dev   # Test against dev environment
 npm run e2e:prod  # Test against production environment
 ```
 
-**Note:** For local E2E testing, start the backend services first, then run E2E tests:
+**Note:** For local E2E testing, start the full stack first, then run E2E tests:
 
 ```bash
 # Terminal 1: Start the full stack
@@ -183,6 +197,7 @@ npm run e2e
 ```
 
 The E2E command automatically waits for the backend to become healthy before running tests.
+`npm run verify:full` can also start or reuse the required local stack automatically.
 
 **Environment Variables:**
 
