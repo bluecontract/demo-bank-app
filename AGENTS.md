@@ -58,6 +58,17 @@ Parallel agents should use per-worktree LocalStack settings:
   1. `source .localstack.env`
   2. `npm run serve:all`
   3. `npm run verify:full`
+- If `verify:full` is too long-lived for the current cloud session, use
+  `npm run verify:full:stepwise` instead so each phase is visible and resumable.
+- Resume stepwise verify with `VERIFY_FULL_STEP_FROM=<step> npm run verify:full:stepwise`.
+- Step names:
+  - `web-build`
+  - `lint`
+  - `typecheck`
+  - `build-all`
+  - `test-all`
+  - `test-integration-all`
+  - `e2e`
 - `npm run e2e` and the final E2E phase of `npm run verify:full` expect the local stack to already be running.
 - Prefer Cursor Secrets / workspace secrets for API keys and env vars required by local verification.
 

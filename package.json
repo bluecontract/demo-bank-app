@@ -23,6 +23,7 @@
     "deps:blue:check": "tsx scripts/check-blue-deps.ts",
     "verify:quick": "npx tsx scripts/verify-quick.ts",
     "verify:full": "npx tsx scripts/verify-full.ts",
+    "verify:full:stepwise": "bash scripts/verify-full-stepwise.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "format:staged": "lint-staged",

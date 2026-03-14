@@ -131,6 +131,7 @@ The app will be available at:
 | `npm run deps:blue:check`      | Verify all workspaces resolve the same Blue deps |
 | `npm run verify:quick`         | Lint, typecheck, build, and run affected tests   |
 | `npm run verify:full`          | Lint, typecheck, build, and run full test suite  |
+| `npm run verify:full:stepwise` | Run full verify step-by-step for cloud/debugging |
 | `npm run format`               | Format code with Prettier                        |
 | `npm run format:check`         | Check code formatting                            |
 | `npm run format:staged`        | Format only staged files with Prettier           |
@@ -356,6 +357,45 @@ npm run e2e
 ```
 
 The E2E command automatically waits for the backend to become healthy before running tests.
+
+#### Stepwise full verify for cloud / sandbox debugging
+
+`npm run verify:full` remains the local one-shot command. For cloud agents and
+long-running debugging sessions, use the stepwise variant instead:
+
+```bash
+npm run verify:full:stepwise
+```
+
+This runs the same sequence as `verify:full`, but keeps each step as a separate
+command boundary:
+
+```bash
+npx nx run @demo-bank-app/bank-web-app:build
+npm run lint
+npm run typecheck
+npm run build:all
+npm run test:all
+npm run test:integration:all
+npm run e2e
+```
+
+To resume from a later stage after a failure:
+
+```bash
+VERIFY_FULL_STEP_FROM=test-integration-all npm run verify:full:stepwise
+VERIFY_FULL_STEP_FROM=e2e npm run verify:full:stepwise
+```
+
+Allowed `VERIFY_FULL_STEP_FROM` values:
+
+- `web-build`
+- `lint`
+- `typecheck`
+- `build-all`
+- `test-all`
+- `test-integration-all`
+- `e2e`
 
 **Environment Variables:**
 
