@@ -102,6 +102,21 @@ root:
 find apps libs -type d -name node_modules -prune -exec rm -rf {} +
 npm install
 ```
+
+### Cursor Cloud environment
+
+This repo includes a repo-level Cursor Cloud environment:
+
+- `.cursor/environment.json`
+- `.cursor/Dockerfile.cloud`
+
+When a Cursor Cloud agent starts, the environment installs Docker, AWS CLI, SAM
+CLI, Playwright dependencies, and prepares `.localstack.env` automatically.
+No manual bootstrap script is required in Cursor Cloud. In fresh shells, load:
+
+```bash
+source .localstack.env
+```
 The app will be available at:
 
 - **Frontend**: http://localhost:4200
@@ -132,6 +147,7 @@ The app will be available at:
 | `npm run verify:quick`         | Lint, typecheck, build, and run affected tests   |
 | `npm run verify:full`          | Lint, typecheck, build, and run full test suite  |
 | `npm run verify:full:stepwise` | Run full verify step-by-step for cloud/debugging |
+| `npm run verify:full:resume`   | Resume full verify from a named step             |
 | `npm run format`               | Format code with Prettier                        |
 | `npm run format:check`         | Check code formatting                            |
 | `npm run format:staged`        | Format only staged files with Prettier           |
@@ -386,6 +402,22 @@ To resume from a later stage after a failure:
 VERIFY_FULL_STEP_FROM=test-integration-all npm run verify:full:stepwise
 VERIFY_FULL_STEP_FROM=e2e npm run verify:full:stepwise
 ```
+
+For a friendlier resume interface, use:
+
+```bash
+npm run verify:full:resume -- test-integration-all
+npm run verify:full:resume -- e2e
+```
+
+Optional aliases accepted by `verify:full:resume`:
+
+- `frontend-build` -> `web-build`
+- `types` -> `typecheck`
+- `build` -> `build-all`
+- `unit` / `test` -> `test-all`
+- `integration` -> `test-integration-all`
+- `end-to-end` -> `e2e`
 
 Allowed `VERIFY_FULL_STEP_FROM` values:
 

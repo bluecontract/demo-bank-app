@@ -54,7 +54,6 @@ was switched to `x86_64`.
 
 ### Added bootstrap
 
-- `scripts/setup-sandbox-env.sh`
 - `.cursor/environment.json`
 - `.cursor/Dockerfile.cloud`
 - `scripts/start-cursor-cloud.sh`
@@ -127,10 +126,9 @@ Impact:
 
 ## Verified sandbox path
 
-The following sandbox-specific sequence was verified successfully:
+The final Cursor Cloud path is:
 
 ```bash
-scripts/setup-sandbox-env.sh sbx
 source .localstack.env
 npm install
 npm run serve:all

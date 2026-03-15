@@ -61,6 +61,7 @@ Parallel agents should use per-worktree LocalStack settings:
 - If `verify:full` is too long-lived for the current cloud session, use
   `npm run verify:full:stepwise` instead so each phase is visible and resumable.
 - Resume stepwise verify with `VERIFY_FULL_STEP_FROM=<step> npm run verify:full:stepwise`.
+- Prefer `npm run verify:full:resume -- <step>` over the env-var form when resuming from a failure.
 - Step names:
   - `web-build`
   - `lint`
