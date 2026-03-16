@@ -49,6 +49,13 @@ export type MyOsRelevantEvent = {
   epoch?: number;
 };
 
+export type MyOsListedEvent = {
+  id: string;
+  type: MyOsDocumentLifecycleEventType;
+  createdAt: string;
+  ref: string;
+};
+
 const parseEpochFromRef = (ref: string): number | undefined => {
   const epochToken = ref.split(':')[1];
   if (!epochToken) {
@@ -125,14 +132,16 @@ export class MyOsLiveClient {
   }
 
   private async listEventsPage(input: {
-    ref: string;
+    ref?: string;
     type: MyOsDocumentLifecycleEventType;
     from?: string;
     nextPageToken?: string;
     itemsPerPage?: number;
   }): Promise<MyOsListedEventResponse> {
     const search = new URLSearchParams();
-    search.set('ref', input.ref);
+    if (input.ref) {
+      search.set('ref', input.ref);
+    }
     search.set('type', input.type);
     search.set('itemsPerPage', String(input.itemsPerPage ?? 100));
     if (input.from) {
@@ -145,6 +154,52 @@ export class MyOsLiveClient {
     return this.request<MyOsListedEventResponse>(
       `/myos-events?${search.toString()}`
     );
+  }
+
+  async listEvents(input: {
+    ref?: string;
+    type: MyOsDocumentLifecycleEventType;
+    from?: string;
+    itemsPerPage?: number;
+  }): Promise<MyOsListedEvent[]> {
+    const out: MyOsListedEvent[] = [];
+    const seenPageTokens = new Set<string>();
+    let nextPageToken: string | undefined;
+
+    while (true) {
+      const page = await this.listEventsPage({
+        ref: input.ref,
+        type: input.type,
+        from: input.from,
+        nextPageToken,
+        itemsPerPage: input.itemsPerPage,
+      });
+
+      for (const item of page.items ?? []) {
+        const id = typeof item.id === 'string' ? item.id : '';
+        const ref = typeof item.ref === 'string' ? item.ref : '';
+        const createdAt = typeof item.created === 'string' ? item.created : '';
+        if (!id || !ref || !createdAt) {
+          continue;
+        }
+
+        out.push({
+          id,
+          type: input.type,
+          createdAt,
+          ref,
+        });
+      }
+
+      const token = page.nextPageToken;
+      if (!token || seenPageTokens.has(token)) {
+        break;
+      }
+      seenPageTokens.add(token);
+      nextPageToken = token;
+    }
+
+    return out;
   }
 
   private async listEventsForSessionAndType(input: {
