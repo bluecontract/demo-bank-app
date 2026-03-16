@@ -262,6 +262,65 @@ describe('DynamoContractRepository', () => {
     );
   });
 
+  it('relinks provisional self-mapped session to canonical contract', async () => {
+    mockSend
+      .mockRejectedValueOnce(
+        Object.assign(new Error('conditional failed'), {
+          name: 'ConditionalCheckFailedException',
+        })
+      )
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'CONTRACT_SESSION#session-2',
+          SK: 'META',
+          entityType: 'CONTRACT_SESSION',
+          sessionId: 'session-2',
+          contractId: 'session-2',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          PK: 'CONTRACT#session-2',
+          SK: 'META',
+          entityType: 'CONTRACT',
+          contractId: 'session-2',
+          typeBlueId: 'type-1',
+          displayName: 'Contract',
+          sessionId: 'session-2',
+          createdAt: '2024-01-01T00:00:00.000Z',
+          updatedAt: '2024-01-01T00:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+    const repository = createRepository();
+
+    await repository.linkSessionToContract({
+      sessionId: 'session-2',
+      contractId: 'contract-1',
+      createdAt: '2024-02-01T00:00:00.000Z',
+    });
+
+    expect(mockPutCommand).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        TableName: 'test-table',
+        Item: expect.objectContaining({
+          PK: 'CONTRACT_SESSION#session-2',
+          SK: 'META',
+          sessionId: 'session-2',
+          contractId: 'contract-1',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        }),
+        ConditionExpression: 'contractId = :existingContractId',
+        ExpressionAttributeValues: {
+          ':existingContractId': 'session-2',
+        },
+      })
+    );
+  });
+
   it('claims canonical session by document id when mapping is missing', async () => {
     mockSend.mockResolvedValueOnce({});
     const repository = createRepository();

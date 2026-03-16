@@ -697,16 +697,67 @@ export class DynamoContractRepository implements ContractRepository {
       createdAt: input.createdAt,
     };
 
-    await this.client.send(
-      new PutCommand({
-        TableName: this.tableName,
-        Item: sessionItem,
-        ConditionExpression: 'attribute_not_exists(PK) OR contractId = :cid',
-        ExpressionAttributeValues: {
-          ':cid': input.contractId,
-        },
-      })
-    );
+    try {
+      await this.client.send(
+        new PutCommand({
+          TableName: this.tableName,
+          Item: sessionItem,
+          ConditionExpression: 'attribute_not_exists(PK) OR contractId = :cid',
+          ExpressionAttributeValues: {
+            ':cid': input.contractId,
+          },
+        })
+      );
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        error.name !== 'ConditionalCheckFailedException' ||
+        input.contractId === input.sessionId
+      ) {
+        throw error;
+      }
+
+      const existingResponse = await this.client.send(
+        new GetCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: this.buildSessionPk(input.sessionId),
+            SK: SORT_KEYS.META,
+          },
+          ConsistentRead: true,
+        })
+      );
+      const existingSession = existingResponse.Item as
+        | ContractSessionItem
+        | undefined;
+
+      if (existingSession?.contractId !== input.sessionId) {
+        throw error;
+      }
+
+      const provisionalContract = await this.getContract(input.sessionId);
+      if (
+        !provisionalContract ||
+        provisionalContract.sessionId !== input.sessionId ||
+        provisionalContract.documentId
+      ) {
+        throw error;
+      }
+
+      await this.client.send(
+        new PutCommand({
+          TableName: this.tableName,
+          Item: {
+            ...sessionItem,
+            createdAt: existingSession.createdAt ?? input.createdAt,
+          },
+          ConditionExpression: 'contractId = :existingContractId',
+          ExpressionAttributeValues: {
+            ':existingContractId': input.sessionId,
+          },
+        })
+      );
+    }
   }
 
   async getContractSummarySnapshot(

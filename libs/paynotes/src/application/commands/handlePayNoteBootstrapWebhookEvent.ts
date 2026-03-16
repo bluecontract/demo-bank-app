@@ -2,8 +2,11 @@ import {
   DocumentSessionBootstrapSchema,
   TargetDocumentSessionStartedSchema,
 } from '@blue-repository/types/packages/myos/schemas';
-import { PaymentMandateSchema } from '@blue-repository/types/packages/paynote/schemas';
-import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
+import {
+  PayNoteDeliverySchema,
+  PaymentMandateSchema,
+  PayNoteSchema,
+} from '@blue-repository/types/packages/paynote/schemas';
 import type {
   BootstrapContextRepository,
   ClockPort,
@@ -26,7 +29,11 @@ import { updateHoldPayNoteDocumentId } from './payNoteHoldUtils';
 import { mergeSessionIds } from './payNoteSessionUtils';
 import { log, trace } from './paynoteWebhook/logging';
 import { logMyOsFetchError } from './paynoteWebhook/myosErrors';
-import { getPayloadSummary, toBlueNode } from './webhookUtils';
+import {
+  getPayloadSummary,
+  readFetchedDocumentId,
+  toBlueNode,
+} from './webhookUtils';
 import { upsertContractRecord } from '../contracts';
 
 const PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE =
@@ -37,6 +44,7 @@ export interface HandlePayNoteBootstrapWebhookInput {
   eventId?: string;
   skipEventIdempotencyClaim?: boolean;
   skipPendingBuffer?: boolean;
+  skipExternalReporting?: boolean;
 }
 
 export interface HandlePayNoteBootstrapWebhookDependencies {
@@ -120,55 +128,66 @@ const toRecord = (value: unknown): Record<string, unknown> | null =>
 const getString = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 
-const supportsGuarantorUpdateResponses = (document: unknown): boolean => {
-  if (isPayNoteDocument(document)) {
-    return true;
+const getSessionIdFromEventRef = (value: unknown): string | undefined => {
+  const ref = getString(value);
+  if (!ref) {
+    return undefined;
   }
 
-  const node = toBlueNode(document);
-  if (!node) {
-    return false;
-  }
-  const original = blue.nodeToJson(node, 'original');
-  if (!original || typeof original !== 'object' || Array.isArray(original)) {
-    return false;
-  }
-
-  const contracts = (original as { contracts?: unknown }).contracts;
-  if (!contracts || typeof contracts !== 'object' || Array.isArray(contracts)) {
-    return false;
-  }
-
-  const contractsRecord = contracts as Record<string, unknown>;
-  return Boolean(
-    contractsRecord.guarantorUpdate && contractsRecord.guarantorChannel
-  );
+  const separatorIndex = ref.indexOf(':');
+  const sessionId =
+    separatorIndex >= 0 ? ref.slice(0, separatorIndex).trim() : ref;
+  return getString(sessionId);
 };
 
-const supportsGuarantorUpdateByContractType = async (input: {
-  deps: HandlePayNoteBootstrapWebhookDependencies;
-  requestingSessionId: string;
-}): Promise<boolean | null> => {
-  const contract = await input.deps.contractRepository.getContractBySessionId(
-    input.requestingSessionId
-  );
-  if (!contract) {
-    return null;
+type BootstrapCompletionRequesterKind =
+  | 'guarantor-update'
+  | 'paynote-delivery'
+  | 'payment-mandate'
+  | 'unsupported'
+  | 'unresolved';
+
+const classifyBootstrapCompletionRequesterDocument = (
+  document: unknown
+): BootstrapCompletionRequesterKind => {
+  const node = toBlueNode(document);
+  if (!node) {
+    return 'unresolved';
   }
 
-  if (contract.typeBlueId === paynoteBlueIds['PayNote/PayNote']) {
-    return true;
+  if (
+    blue.isTypeOf(node, PayNoteDeliverySchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    return 'paynote-delivery';
   }
 
-  if (contract.typeBlueId === paynoteBlueIds['PayNote/Payment Mandate']) {
-    return true;
+  if (
+    blue.isTypeOf(node, PaymentMandateSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    return 'payment-mandate';
   }
 
-  if (contract.typeBlueId === paynoteBlueIds['PayNote/PayNote Delivery']) {
-    return false;
+  if (
+    blue.isTypeOf(node, PayNoteSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    return 'guarantor-update';
   }
 
-  return null;
+  try {
+    const resolved = blue.resolve(node);
+    const contracts = resolved.getContracts();
+    return contracts?.guarantorUpdate && contracts?.guarantorChannel
+      ? 'guarantor-update'
+      : 'unsupported';
+  } catch {
+    return 'unresolved';
+  }
 };
 
 const reportBootstrapCompleted = async (input: {
@@ -194,26 +213,7 @@ const reportBootstrapCompleted = async (input: {
     return false;
   }
 
-  const supportsByContractType = await supportsGuarantorUpdateByContractType({
-    deps,
-    requestingSessionId,
-  });
-  if (supportsByContractType === false) {
-    log(
-      logs,
-      'info',
-      'Skipped bootstrap completion guarantorUpdate for requester without guarantorUpdate contract',
-      {
-        eventId,
-        bootstrapSessionId: bootstrapSessionId ?? null,
-        requestingSessionId,
-        documentId,
-      }
-    );
-    return true;
-  }
-
-  if (supportsByContractType === true) {
+  const runBootstrapCompletedGuarantorUpdate = async () => {
     const credentials = await deps.myOsClient.getCredentials();
     return runGuarantorUpdate({
       myOsClient: deps.myOsClient,
@@ -243,6 +243,99 @@ const reportBootstrapCompleted = async (input: {
       missingCredentialsMessage:
         'Skipped document bootstrap completion (missing MyOS credentials)',
     });
+  };
+
+  const handleRequesterClassification = (
+    requesterKind: BootstrapCompletionRequesterKind
+  ): boolean => {
+    if (requesterKind === 'guarantor-update') {
+      return false;
+    }
+
+    if (requesterKind === 'paynote-delivery') {
+      log(
+        logs,
+        'info',
+        'Skipped bootstrap completion callback for PayNote Delivery requester',
+        {
+          eventId,
+          bootstrapSessionId: bootstrapSessionId ?? null,
+          requestingSessionId,
+          documentId,
+        }
+      );
+      return true;
+    }
+
+    if (requesterKind === 'payment-mandate') {
+      log(
+        logs,
+        'info',
+        'Skipped bootstrap completion callback for Payment Mandate requester',
+        {
+          eventId,
+          bootstrapSessionId: bootstrapSessionId ?? null,
+          requestingSessionId,
+          documentId,
+        }
+      );
+      return true;
+    }
+
+    if (requesterKind === 'unsupported') {
+      log(
+        logs,
+        'info',
+        'Skipped bootstrap completion guarantorUpdate for requester without guarantorUpdate contract',
+        {
+          eventId,
+          bootstrapSessionId: bootstrapSessionId ?? null,
+          requestingSessionId,
+          documentId,
+        }
+      );
+      return true;
+    }
+
+    return false;
+  };
+
+  const requestingContract =
+    await deps.contractRepository.getContractBySessionId(requestingSessionId);
+  if (requestingContract?.document) {
+    const localRequesterKind = classifyBootstrapCompletionRequesterDocument(
+      requestingContract.document
+    );
+    if (localRequesterKind === 'guarantor-update') {
+      trace(
+        logs,
+        'Resolved bootstrap requester guarantorUpdate from contract snapshot',
+        {
+          eventId,
+          bootstrapSessionId: bootstrapSessionId ?? null,
+          requestingSessionId,
+          documentId,
+        }
+      );
+      return runBootstrapCompletedGuarantorUpdate();
+    }
+
+    const handled = handleRequesterClassification(localRequesterKind);
+    if (handled) {
+      return true;
+    }
+
+    log(
+      logs,
+      'warn',
+      'Requester contract snapshot could not be resolved for bootstrap completion',
+      {
+        eventId,
+        bootstrapSessionId: bootstrapSessionId ?? null,
+        requestingSessionId,
+        documentId,
+      }
+    );
   }
 
   const requestingDocument = await deps.myOsClient.fetchDocument(
@@ -269,11 +362,23 @@ const reportBootstrapCompleted = async (input: {
   }
 
   const requesterDocumentPayload = requestingDocument.document.document;
-  if (!supportsGuarantorUpdateResponses(requesterDocumentPayload)) {
+  const fetchedRequesterKind = classifyBootstrapCompletionRequesterDocument(
+    requesterDocumentPayload
+  );
+  if (fetchedRequesterKind === 'guarantor-update') {
+    return runBootstrapCompletedGuarantorUpdate();
+  }
+
+  const handled = handleRequesterClassification(fetchedRequesterKind);
+  if (handled) {
+    return true;
+  }
+
+  if (fetchedRequesterKind === 'unresolved') {
     log(
       logs,
-      'info',
-      'Skipped bootstrap completion guarantorUpdate for requester without guarantorUpdate contract',
+      'warn',
+      'Skipped bootstrap completion guarantorUpdate (requesting document unresolved)',
       {
         eventId,
         bootstrapSessionId: bootstrapSessionId ?? null,
@@ -284,35 +389,7 @@ const reportBootstrapCompleted = async (input: {
     return true;
   }
 
-  const credentials = await deps.myOsClient.getCredentials();
-  return runGuarantorUpdate({
-    myOsClient: deps.myOsClient,
-    credentials,
-    sessionId: requestingSessionId,
-    request: [
-      withInResponseTo(
-        {
-          type: 'Conversation/Document Bootstrap Completed',
-          documentId,
-        },
-        requestId
-      ),
-    ],
-    logs,
-    logContext: {
-      eventId,
-      bootstrapSessionId: bootstrapSessionId ?? null,
-      requestId: requestId ?? null,
-      requestingSessionId,
-      documentId,
-    },
-    successMessage:
-      'Reported document bootstrap completion via guarantorUpdate',
-    failureMessage:
-      'Failed to report document bootstrap completion via guarantorUpdate',
-    missingCredentialsMessage:
-      'Skipped document bootstrap completion (missing MyOS credentials)',
-  });
+  return true;
 };
 
 const reportPaymentMandateAttached = async (input: {
@@ -601,9 +678,48 @@ const resolvePayNoteDocument = async (
   }
 
   return {
-    documentId: result.document.documentId,
+    documentId:
+      readFetchedDocumentId(result.document) ?? result.document.documentId,
     document: result.document.document,
   };
+};
+
+const resolveDeliveryByRequestingSession = async (input: {
+  requestingSessionId?: string;
+  deps: HandlePayNoteBootstrapWebhookDependencies;
+}): Promise<PayNoteDeliveryRecord | null> => {
+  const { requestingSessionId, deps } = input;
+  if (!requestingSessionId) {
+    return null;
+  }
+
+  const deliveryBySession =
+    await deps.payNoteDeliveryRepository.getDeliveryBySessionId(
+      requestingSessionId
+    );
+  if (deliveryBySession) {
+    return deliveryBySession;
+  }
+
+  const requestingPayNote = await deps.payNoteRepository.getPayNoteBySessionId(
+    requestingSessionId
+  );
+  if (!requestingPayNote) {
+    return null;
+  }
+
+  if (requestingPayNote.deliveryId) {
+    const deliveryById = await deps.payNoteDeliveryRepository.getDelivery(
+      requestingPayNote.deliveryId
+    );
+    if (deliveryById) {
+      return deliveryById;
+    }
+  }
+
+  return await deps.payNoteDeliveryRepository.getDeliveryByPayNoteDocumentId(
+    requestingPayNote.payNoteDocumentId
+  );
 };
 
 const mergePayNoteRecord = (
@@ -696,6 +812,7 @@ export const handlePayNoteBootstrapWebhookEvent = async (
   const logs: LogEntry[] = [];
   const payload = input.payload as {
     id?: string;
+    ref?: string;
     object?: {
       sessionId?: string;
       document?: unknown;
@@ -714,10 +831,13 @@ export const handlePayNoteBootstrapWebhookEvent = async (
 
   const eventObject = payload?.object;
   const documentPayload = eventObject?.document;
+  const bootstrapSessionId =
+    getString(eventObject?.sessionId) ?? getSessionIdFromEventRef(payload?.ref);
 
   trace(logs, 'PayNote bootstrap webhook received', {
     eventId,
-    sessionId: eventObject?.sessionId,
+    sessionId: bootstrapSessionId ?? eventObject?.sessionId,
+    ref: payload?.ref,
     hasDocument: Boolean(documentPayload),
     emittedCount: Array.isArray(eventObject?.emitted)
       ? eventObject?.emitted.length
@@ -727,7 +847,7 @@ export const handlePayNoteBootstrapWebhookEvent = async (
   if (!documentPayload || !isDocumentSessionBootstrap(documentPayload)) {
     trace(logs, 'Bootstrap webhook skipped (not a bootstrap document)', {
       eventId,
-      sessionId: eventObject?.sessionId,
+      sessionId: bootstrapSessionId ?? eventObject?.sessionId,
     });
     return { handled: false, logs };
   }
@@ -750,11 +870,6 @@ export const handlePayNoteBootstrapWebhookEvent = async (
 
   const processBootstrapEvent =
     async (): Promise<HandlePayNoteBootstrapWebhookResult> => {
-      const bootstrapSessionId =
-        typeof eventObject?.sessionId === 'string'
-          ? eventObject.sessionId
-          : undefined;
-
       const emittedEvents = Array.isArray(eventObject?.emitted)
         ? eventObject.emitted
         : undefined;
@@ -765,19 +880,6 @@ export const handlePayNoteBootstrapWebhookEvent = async (
           (item): item is { event: unknown; sessionIds: string[] } =>
             item.sessionIds !== null
         );
-
-      if (!targetEvents.length) {
-        log(
-          logs,
-          'info',
-          'No target session events found in bootstrap update',
-          {
-            eventId,
-            bootstrapSessionId,
-          }
-        );
-        return { handled: true, logs };
-      }
 
       if (!bootstrapSessionId) {
         throw new Error(
@@ -808,11 +910,11 @@ export const handlePayNoteBootstrapWebhookEvent = async (
             bootstrapContext.payeeAccountNumber)) ||
           bootstrapContext?.requestingSessionId
       );
-      const deliveryByRequestingSession = bootstrapContext?.requestingSessionId
-        ? await deps.payNoteDeliveryRepository.getDeliveryBySessionId(
-            bootstrapContext.requestingSessionId
-          )
-        : null;
+      const deliveryByRequestingSession =
+        await resolveDeliveryByRequestingSession({
+          requestingSessionId: bootstrapContext?.requestingSessionId,
+          deps,
+        });
       const deliveryRecord =
         deliveryByBootstrapSession ?? deliveryByRequestingSession;
 
@@ -856,22 +958,26 @@ export const handlePayNoteBootstrapWebhookEvent = async (
       });
 
       let completionReported = false;
+      const shouldReportExternalUpdates = !input.skipExternalReporting;
       const reportedMandateAttachmentSessionIds = new Set<string>();
-      const targetSessionIds = Array.from(
-        new Set(
-          targetEvents.flatMap(({ sessionIds }) => {
-            if (!sessionIds.length) {
-              log(logs, 'warn', 'Target session event missing session ids', {
-                eventId,
-              });
-              return [];
-            }
-            return sessionIds;
-          })
-        )
+      const targetSessionIdsFromEvents = targetEvents.flatMap(
+        ({ sessionIds }) => {
+          if (!sessionIds.length) {
+            log(logs, 'warn', 'Target session event missing session ids', {
+              eventId,
+            });
+            return [];
+          }
+          return sessionIds;
+        }
       );
+      const targetSessionIds = dedupeSessionIds(targetSessionIdsFromEvents);
 
       if (!targetSessionIds.length) {
+        log(logs, 'info', 'No target session ids found in bootstrap update', {
+          eventId,
+          bootstrapSessionId,
+        });
         return { handled: true, logs };
       }
 
@@ -879,15 +985,8 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         eventId,
         bootstrapSessionId,
         sessionIds: targetSessionIds,
+        source: 'target-session-started',
       });
-
-      for (const sessionId of targetSessionIds) {
-        await deps.bootstrapContextRepository.saveTargetSessionBootstrapLink?.({
-          targetSessionId: sessionId,
-          bootstrapSessionId,
-          createdAt: now,
-        });
-      }
 
       const primaryTargetSessionId = targetSessionIds[0];
       const resolvedPrimary = await resolvePayNoteDocument(
@@ -940,17 +1039,19 @@ export const handlePayNoteBootstrapWebhookEvent = async (
               now,
             });
 
-            await patchAcceptedMandateBootstrapPendingActionIdentity({
-              deps,
-              logs,
-              eventId,
-              now,
-              requestingSessionId: bootstrapContext?.requestingSessionId,
-              requestId: bootstrapContext?.requestId,
-              bootstrapSessionId,
-              paymentMandateDocumentId: resolvedPrimary.documentId,
-              paymentMandateSessionId: sessionId,
-            });
+            if (sessionId === primaryTargetSessionId) {
+              await patchAcceptedMandateBootstrapPendingActionIdentity({
+                deps,
+                logs,
+                eventId,
+                now,
+                requestingSessionId: bootstrapContext?.requestingSessionId,
+                requestId: bootstrapContext?.requestId,
+                bootstrapSessionId,
+                paymentMandateDocumentId: resolvedPrimary.documentId,
+                paymentMandateSessionId: sessionId,
+              });
+            }
 
             linkedPaymentMandate = true;
           }
@@ -961,7 +1062,11 @@ export const handlePayNoteBootstrapWebhookEvent = async (
             documentId: resolvedPrimary.documentId,
           });
 
-          if (!completionReported && bootstrapContext?.requestingSessionId) {
+          if (
+            shouldReportExternalUpdates &&
+            !completionReported &&
+            bootstrapContext?.requestingSessionId
+          ) {
             completionReported = await reportBootstrapCompleted({
               eventId,
               bootstrapSessionId,
@@ -992,9 +1097,9 @@ export const handlePayNoteBootstrapWebhookEvent = async (
             deliveryRecord?.userId ??
             bootstrapRecord?.userId ??
             bootstrapContext?.userId,
-          holdId: deliveryRecord?.holdId ?? bootstrapContext?.holdId,
+          holdId: bootstrapContext?.holdId ?? deliveryRecord?.holdId,
           transactionId:
-            deliveryRecord?.transactionId ?? bootstrapContext?.transactionId,
+            bootstrapContext?.transactionId ?? deliveryRecord?.transactionId,
           merchantId:
             deliveryRecord?.merchantId ?? bootstrapContext?.merchantId,
           payerAccountNumber:
@@ -1024,7 +1129,11 @@ export const handlePayNoteBootstrapWebhookEvent = async (
 
         linkedPayNoteSessionIds.push(sessionId);
 
-        if (!completionReported && bootstrapContext?.requestingSessionId) {
+        if (
+          shouldReportExternalUpdates &&
+          !completionReported &&
+          bootstrapContext?.requestingSessionId
+        ) {
           completionReported = await reportBootstrapCompleted({
             eventId,
             bootstrapSessionId,
@@ -1063,14 +1172,16 @@ export const handlePayNoteBootstrapWebhookEvent = async (
           updatedAt: now,
         };
         await deps.payNoteDeliveryRepository.saveDelivery(updatedDelivery);
-        await reportDeliveryMandateAttachmentToPayNotes({
-          eventId,
-          bootstrapSessionId,
-          deliveryRecord: updatedDelivery,
-          deps,
-          logs,
-          reportedSessionIds: reportedMandateAttachmentSessionIds,
-        });
+        if (shouldReportExternalUpdates) {
+          await reportDeliveryMandateAttachmentToPayNotes({
+            eventId,
+            bootstrapSessionId,
+            deliveryRecord: updatedDelivery,
+            deps,
+            logs,
+            reportedSessionIds: reportedMandateAttachmentSessionIds,
+          });
+        }
         log(logs, 'info', 'Payment mandate bootstrap linked to delivery', {
           eventId,
           deliveryId: deliveryRecord.deliveryId,
@@ -1098,14 +1209,16 @@ export const handlePayNoteBootstrapWebhookEvent = async (
         };
 
         await deps.payNoteDeliveryRepository.saveDelivery(updatedDelivery);
-        await reportDeliveryMandateAttachmentToPayNotes({
-          eventId,
-          bootstrapSessionId,
-          deliveryRecord: updatedDelivery,
-          deps,
-          logs,
-          reportedSessionIds: reportedMandateAttachmentSessionIds,
-        });
+        if (shouldReportExternalUpdates) {
+          await reportDeliveryMandateAttachmentToPayNotes({
+            eventId,
+            bootstrapSessionId,
+            deliveryRecord: updatedDelivery,
+            deps,
+            logs,
+            reportedSessionIds: reportedMandateAttachmentSessionIds,
+          });
+        }
 
         if (updatedDelivery.holdId) {
           await updateHoldPayNoteDocumentIdForBootstrap(
@@ -1116,6 +1229,14 @@ export const handlePayNoteBootstrapWebhookEvent = async (
             { eventId, deliveryId: updatedDelivery.deliveryId }
           );
         }
+      }
+
+      for (const sessionId of targetSessionIds) {
+        await deps.bootstrapContextRepository.saveTargetSessionBootstrapLink?.({
+          targetSessionId: sessionId,
+          bootstrapSessionId,
+          createdAt: now,
+        });
       }
 
       return { handled: true, logs };

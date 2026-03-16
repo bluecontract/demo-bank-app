@@ -1,5 +1,4 @@
 import type { BlueNode } from '@blue-labs/language';
-import { DocumentBootstrapRequestedSchema } from '@blue-repository/types/packages/conversation/schemas';
 import {
   CardTransactionPayNoteSchema,
   MerchantToCustomerPayNoteSchema,
@@ -7,7 +6,6 @@ import {
   PaymentMandateSchema,
   PayNoteSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
-import { blueIds as payNoteBlueIds } from '@blue-repository/types/packages/paynote/blue-ids';
 import type { Hold } from '@demo-bank-app/banking';
 import { buildCardTransactionDetailsKey } from '@demo-bank-app/banking';
 import { formatIsoDateHumanReadable } from '@demo-bank-app/shared-core';
@@ -25,8 +23,12 @@ import { log, trace } from '../paynoteWebhook/logging';
 import { getString, toSimpleRecord } from '../paynoteWebhook/utils';
 import { resolveRuntimeContracts } from '../blueRuntime';
 import { isRecord } from '../typeGuards';
-import { toBlueNode } from '../webhookUtils';
-import { mergeSessionIds } from '../payNoteSessionUtils';
+import {
+  readEventObjectDocumentId,
+  readFetchedDocumentId,
+  readInitializedDocumentId,
+  toBlueNode,
+} from '../webhookUtils';
 import type {
   HandlePayNoteDeliveryWebhookDependencies,
   WebhookEventObject,
@@ -66,54 +68,6 @@ type PayNoteBootstrapContext = {
   senderIdentity?: string;
   payeeIdentity?: string;
   payerIdentity?: string;
-};
-
-export const getDocumentBootstrapRequestFromEvent = (
-  event: unknown
-): BootstrapRequest | null => {
-  const rawRecord =
-    event && typeof event === 'object' && !Array.isArray(event)
-      ? (event as Record<string, unknown>)
-      : null;
-  const rawDocument =
-    rawRecord &&
-    rawRecord.document &&
-    typeof rawRecord.document === 'object' &&
-    !Array.isArray(rawRecord.document)
-      ? (rawRecord.document as Record<string, unknown>)
-      : null;
-  const node = toBlueNode(event);
-  if (
-    !node ||
-    !blue.isTypeOf(node, DocumentBootstrapRequestedSchema, {
-      checkSchemaExtensions: true,
-    })
-  ) {
-    return null;
-  }
-
-  const payload = blue.nodeToJson(node, 'simple') as
-    | Record<string, unknown>
-    | undefined;
-  if (!payload || typeof payload !== 'object') {
-    return null;
-  }
-
-  const documentNode = node.getProperties()?.document ?? null;
-  const documentPayload =
-    rawDocument ??
-    (payload.document &&
-    typeof payload.document === 'object' &&
-    !Array.isArray(payload.document)
-      ? (payload.document as Record<string, unknown>)
-      : null);
-
-  return {
-    rawEvent: event,
-    request: payload,
-    documentNode,
-    documentPayload,
-  };
 };
 
 const normalizeChannelBindings = (
@@ -260,6 +214,7 @@ type BootstrapResponseContext = {
   eventId: string;
   bootstrapAssignee?: string;
   requestingSessionId?: string;
+  requestingContractSessionId?: string;
   requestId?: string;
   allowGuarantorUpdateResponse: boolean;
   credentials: Awaited<ReturnType<MyOsClient['getCredentials']>>;
@@ -406,6 +361,11 @@ const normalizeBootstrapRequest = (
 const normalizeBootstrapDocument = (
   document: Record<string, unknown>
 ): Record<string, unknown> => {
+  // Webhook-emitted MyOS documents are already bootstrap-ready; re-expanding
+  // inline types can invalidate them for /documents/bootstrap validation.
+  if (isRecord(document.type)) {
+    return document;
+  }
   const node = toBlueNode(document);
   if (!node) {
     return document;
@@ -895,20 +855,37 @@ const buildPaymentMandateBootstrapPendingActionId = (input: {
 
 const buildDocumentBootstrapIdempotencyKey = (input: {
   scope: 'payment-mandate' | 'existing-doc' | 'delivery-doc' | 'paynote-doc';
-  eventId: string;
-  requestIndex: number;
-}) =>
-  [
+  eventId?: string;
+  requestIndex?: number;
+  stableKey?: string;
+}) => {
+  if (input.stableKey) {
+    return [
+      'paynote-bootstrap',
+      input.scope,
+      'stable',
+      encodeURIComponent(input.stableKey),
+    ].join(':');
+  }
+
+  if (!input.eventId || input.requestIndex === undefined) {
+    throw new Error(
+      `Missing event-based bootstrap idempotency inputs for scope "${input.scope}"`
+    );
+  }
+
+  return [
     'paynote-bootstrap',
     input.scope,
     input.eventId,
     String(input.requestIndex),
   ].join(':');
+};
 
 const queuePaymentMandateBootstrapPendingAction = async (input: {
   request: NormalizedBootstrapRequest;
   requestedDocumentPayload: Record<string, unknown>;
-  requestingSessionId?: string;
+  requestingContractSessionId?: string;
   eventId: string;
   requestIndex: number;
   now: string;
@@ -918,7 +895,7 @@ const queuePaymentMandateBootstrapPendingAction = async (input: {
   const {
     request,
     requestedDocumentPayload,
-    requestingSessionId,
+    requestingContractSessionId,
     eventId,
     requestIndex,
     now,
@@ -926,7 +903,7 @@ const queuePaymentMandateBootstrapPendingAction = async (input: {
     logs,
   } = input;
 
-  if (!requestingSessionId) {
+  if (!requestingContractSessionId) {
     return {
       ok: false,
       reason:
@@ -935,9 +912,9 @@ const queuePaymentMandateBootstrapPendingAction = async (input: {
   }
 
   const contract = await deps.contractRepository.getContractBySessionId(
-    requestingSessionId
+    requestingContractSessionId
   );
-  if (!contract || contract.sessionId !== requestingSessionId) {
+  if (!contract || contract.sessionId !== requestingContractSessionId) {
     return {
       ok: false,
       reason:
@@ -950,13 +927,19 @@ const queuePaymentMandateBootstrapPendingAction = async (input: {
     requestIndex,
   });
   const existingAction = (contract.pendingActions ?? []).find(
-    action => action.actionId === actionId
+    action =>
+      action.actionId === actionId ||
+      (action.type === PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE &&
+        Boolean(request.requestId) &&
+        action.requestId === request.requestId)
   );
   if (existingAction) {
     trace(logs, 'Payment mandate bootstrap pending action already exists', {
       eventId,
-      requestingSessionId,
+      requestingSessionId: requestingContractSessionId,
       actionId,
+      existingActionId: existingAction.actionId,
+      requestId: request.requestId ?? null,
     });
     return { ok: true };
   }
@@ -999,7 +982,7 @@ const queuePaymentMandateBootstrapPendingAction = async (input: {
     'Payment mandate bootstrap request recorded as pending action',
     {
       eventId,
-      requestingSessionId,
+      requestingSessionId: requestingContractSessionId,
       actionId,
       requestId: request.requestId ?? null,
     }
@@ -1041,7 +1024,9 @@ const handlePaymentMandateBootstrapRequest = async (input: {
     const queued = await queuePaymentMandateBootstrapPendingAction({
       request,
       requestedDocumentPayload,
-      requestingSessionId: responseContext.requestingSessionId,
+      requestingContractSessionId:
+        responseContext.requestingContractSessionId ??
+        responseContext.requestingSessionId,
       eventId,
       requestIndex,
       now,
@@ -1181,7 +1166,12 @@ const resolveExistingDocAllowedBootstrapType = (input: {
     return 'PayNote/Merchant To Customer PayNote';
   }
 
-  if (node && blue.isTypeOfBlueId(node, payNoteBlueIds['PayNote/PayNote'])) {
+  if (
+    node &&
+    blue.isTypeOf(node, PayNoteSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
     return 'PayNote/PayNote';
   }
 
@@ -1646,10 +1636,87 @@ const resolveKnownDeliveryBySessionId = async (input: {
   );
 };
 
+const resolveCanonicalRequestingContract = async (input: {
+  eventId: string;
+  sessionId?: string;
+  eventObject?: WebhookEventObject;
+  documentPayload?: Record<string, unknown>;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<{ sessionId?: string; documentId?: string } | null> => {
+  const { eventId, sessionId, eventObject, documentPayload, deps, logs } =
+    input;
+  if (!sessionId) {
+    return null;
+  }
+
+  const contractLookup = deps.contractRepository as {
+    getContractBySessionId?: (
+      sessionId: string
+    ) => Promise<{ sessionId?: string; documentId?: string } | null>;
+    getContractByDocumentId?: (
+      documentId: string
+    ) => Promise<{ sessionId?: string; documentId?: string } | null>;
+  };
+
+  const bySession = await contractLookup.getContractBySessionId?.(sessionId);
+  if (bySession) {
+    return bySession;
+  }
+
+  if (typeof contractLookup.getContractByDocumentId !== 'function') {
+    return null;
+  }
+
+  const knownDocumentId =
+    readEventObjectDocumentId(eventObject) ??
+    readInitializedDocumentId(documentPayload);
+  if (knownDocumentId) {
+    const byKnownDocument = await contractLookup.getContractByDocumentId(
+      knownDocumentId
+    );
+    if (byKnownDocument) {
+      trace(logs, 'Resolved requesting contract via webhook payload document', {
+        eventId,
+        requestingSessionId: sessionId,
+        canonicalRequestingSessionId:
+          getString(byKnownDocument.sessionId) ?? null,
+        documentId: knownDocumentId,
+      });
+      return byKnownDocument;
+    }
+  }
+
+  const fetchedDocument = await deps.myOsClient.fetchDocument(sessionId);
+  if (!fetchedDocument || fetchedDocument.kind !== 'success') {
+    return null;
+  }
+
+  const documentId =
+    readFetchedDocumentId(fetchedDocument.document) ??
+    getString(fetchedDocument.document.documentId);
+  if (!documentId) {
+    return null;
+  }
+
+  const byDocument = await contractLookup.getContractByDocumentId(documentId);
+  if (!byDocument) {
+    return null;
+  }
+
+  trace(logs, 'Resolved requesting contract via document lookup', {
+    eventId,
+    requestingSessionId: sessionId,
+    canonicalRequestingSessionId: getString(byDocument.sessionId) ?? null,
+    documentId,
+  });
+
+  return byDocument;
+};
+
 const handleDeliveryBootstrapRequest = async (input: {
   request: NormalizedBootstrapRequest;
   deliveryDocument: Record<string, unknown>;
-  requestIndex: number;
   responseContext: BootstrapResponseContext;
   eventId: string;
   bootstrapAssignee: string;
@@ -1661,7 +1728,6 @@ const handleDeliveryBootstrapRequest = async (input: {
   const {
     request,
     deliveryDocument,
-    requestIndex,
     responseContext,
     eventId,
     bootstrapAssignee,
@@ -1697,6 +1763,23 @@ const handleDeliveryBootstrapRequest = async (input: {
   });
 
   const existing = await deps.payNoteDeliveryRepository.getDelivery(deliveryId);
+  const requestingSessionId = responseContext.requestingSessionId;
+  if (existing?.deliverySessionId || existing?.deliverySessionIds?.length) {
+    log(
+      logs,
+      'info',
+      'Bootstrap request ignored (delivery already bootstrapped)',
+      {
+        eventId,
+        deliveryId,
+        requestingSessionId: requestingSessionId ?? null,
+        deliverySessionId: existing.deliverySessionId ?? null,
+        deliverySessionIds: existing.deliverySessionIds ?? null,
+      }
+    );
+    return true;
+  }
+
   const deliveryRecord: PayNoteDeliveryRecord = {
     ...(existing ?? {
       deliveryId,
@@ -1761,8 +1844,7 @@ const handleDeliveryBootstrapRequest = async (input: {
     credentials,
     idempotencyKey: buildDocumentBootstrapIdempotencyKey({
       scope: 'delivery-doc',
-      eventId,
-      requestIndex,
+      stableKey: `delivery:${deliveryId}`,
     }),
     payload: {
       channelBindings,
@@ -1795,33 +1877,6 @@ const handleDeliveryBootstrapRequest = async (input: {
     : undefined;
 
   if (response.ok && bootstrapSessionId) {
-    const deliverySessionIds = mergeSessionIds(
-      deliveryRecord.deliverySessionIds ??
-        (deliveryRecord.deliverySessionId
-          ? [deliveryRecord.deliverySessionId]
-          : undefined),
-      bootstrapSessionId
-    );
-
-    await deps.payNoteDeliveryRepository.saveDelivery({
-      ...deliveryRecord,
-      deliverySessionId: deliveryRecord.deliverySessionId ?? bootstrapSessionId,
-      deliverySessionIds,
-      updatedAt: now,
-    });
-
-    const canonicalDeliverySessionId =
-      deliveryRecord.deliverySessionId ?? bootstrapSessionId;
-    if (
-      deps.enqueuePayNoteDeliverySummary &&
-      canonicalDeliverySessionId === bootstrapSessionId
-    ) {
-      void deps.enqueuePayNoteDeliverySummary({
-        sessionId: canonicalDeliverySessionId,
-        reason: 'delivery-bootstrap',
-      });
-    }
-
     await deps.bootstrapContextRepository.saveContext({
       bootstrapSessionId,
       ...(deliveryRecord.merchantId
@@ -1934,6 +1989,30 @@ const handlePayNoteBootstrapRequest = async (input: {
     requestingSessionId,
     deps,
   });
+  const existingPayNoteDocumentId = readNonEmptyString(
+    existingDelivery?.payNoteDocumentId
+  );
+  if (existingPayNoteDocumentId) {
+    log(logs, 'info', 'PayNote bootstrap request already satisfied', {
+      eventId,
+      deliveryId: existingDelivery?.deliveryId ?? deliveryId,
+      requestingSessionId: requestingSessionId ?? null,
+      payNoteDocumentId: existingPayNoteDocumentId,
+    });
+    return true;
+  }
+  const existingPayNoteBootstrapSessionId = readNonEmptyString(
+    existingDelivery?.payNoteBootstrapSessionId
+  );
+  if (existingPayNoteBootstrapSessionId) {
+    log(logs, 'info', 'PayNote bootstrap request already in progress', {
+      eventId,
+      deliveryId: existingDelivery?.deliveryId ?? deliveryId,
+      requestingSessionId: requestingSessionId ?? null,
+      payNoteBootstrapSessionId: existingPayNoteBootstrapSessionId,
+    });
+    return true;
+  }
   const payNoteSummary = getPayNoteSummaryFromDocument(payNoteDocument);
   const payNoteAmountMinor = payNoteSummary.amountMinor;
   const holdForBootstrap =
@@ -2058,8 +2137,9 @@ const handlePayNoteBootstrapRequest = async (input: {
     credentials,
     idempotencyKey: buildDocumentBootstrapIdempotencyKey({
       scope: 'paynote-doc',
-      eventId,
-      requestIndex,
+      ...(deliveryId
+        ? { stableKey: `delivery:${deliveryId}` }
+        : { eventId, requestIndex }),
     }),
     payload: {
       channelBindings,
@@ -2256,9 +2336,14 @@ export const handleBootstrapRequests = async (input: {
     shouldRequireKnownRequestingSession &&
     canResolveCanonicalRequestingSession &&
     requestingSessionId
-      ? await deps.contractRepository.getContractBySessionId?.(
-          requestingSessionId
-        )
+      ? await resolveCanonicalRequestingContract({
+          eventId,
+          sessionId: requestingSessionId,
+          eventObject,
+          documentPayload: requestingDocumentPayload,
+          deps,
+          logs,
+        })
       : null;
   if (
     shouldRequireKnownRequestingSession &&
@@ -2310,6 +2395,9 @@ export const handleBootstrapRequests = async (input: {
       eventId,
       bootstrapAssignee,
       requestingSessionId,
+      requestingContractSessionId:
+        getString(canonicalRequestingContract?.sessionId) ??
+        requestingSessionId,
       requestId: normalized.requestId,
       allowGuarantorUpdateResponse,
       credentials,
@@ -2380,7 +2468,6 @@ export const handleBootstrapRequests = async (input: {
       await handleDeliveryBootstrapRequest({
         request: normalized,
         deliveryDocument: requestedDocumentPayload,
-        requestIndex,
         responseContext,
         eventId,
         bootstrapAssignee,
@@ -2403,12 +2490,13 @@ export const handleBootstrapRequests = async (input: {
         log(
           logs,
           'info',
-          'Bootstrap request ignored (non-canonical delivery session)',
+          'Bootstrap requests ignored (non-canonical delivery session)',
           {
             eventId,
             bootstrapAssignee,
             requestingSessionId,
             canonicalDeliverySessionId,
+            deliveryId: knownDeliveryRecord?.deliveryId ?? null,
           }
         );
         continue;

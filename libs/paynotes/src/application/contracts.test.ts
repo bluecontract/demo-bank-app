@@ -18,6 +18,7 @@ const payNoteDocument = {
 const createContractRepository = () => {
   const repository = {
     getContractByDocumentId: vi.fn().mockResolvedValue(null),
+    getContractBySessionId: vi.fn().mockResolvedValue(null),
     claimCanonicalSessionByDocumentId: vi
       .fn()
       .mockImplementation(async ({ sessionId }: { sessionId: string }) => ({
@@ -167,7 +168,7 @@ describe('upsertContractRecord', () => {
     );
   });
 
-  it('links non-canonical session id when document already exists', async () => {
+  it('links non-canonical session id and updates canonical contract when document already exists', async () => {
     const { repository, mocks } = createContractRepository();
     mocks.getContractByDocumentId.mockResolvedValue(buildExistingContract());
 
@@ -187,7 +188,13 @@ describe('upsertContractRecord', () => {
       contractId: 'session-1',
       createdAt: now,
     });
-    expect(mocks.saveContract).not.toHaveBeenCalled();
+    expect(mocks.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'session-1',
+        sessionId: 'session-1',
+        documentId: 'doc-1',
+      })
+    );
     expect(mocks.claimCanonicalSessionByDocumentId).not.toHaveBeenCalled();
   });
 
@@ -215,6 +222,118 @@ describe('upsertContractRecord', () => {
       contractId: 'session-1',
       createdAt: now,
     });
+  });
+
+  it('tolerates link conflicts when shadow session is already mapped to the same document', async () => {
+    const { repository, mocks } = createContractRepository();
+    mocks.getContractByDocumentId.mockResolvedValue(buildExistingContract());
+    mocks.linkSessionToContract.mockRejectedValue(
+      Object.assign(new Error('conditional failed'), {
+        name: 'ConditionalCheckFailedException',
+      })
+    );
+    mocks.getContractBySessionId.mockResolvedValue({
+      contractId: 'session-shadow',
+      typeBlueId: 'blue-id',
+      displayName: 'PayNote',
+      sessionId: 'session-2',
+      documentId: 'doc-1',
+      document: payNoteDocument,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const result = await upsertContractRecord({
+      contractRepository: repository,
+      document: payNoteDocument,
+      sessionId: 'session-2',
+      documentId: 'doc-1',
+      eventType: 'DOCUMENT_EPOCH_ADVANCED',
+      eventEpoch: 3,
+      now,
+    });
+
+    expect(result).toBe('session-1');
+    expect(mocks.getContractBySessionId).toHaveBeenCalledWith('session-2');
+    expect(mocks.saveContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractId: 'session-1',
+        sessionId: 'session-1',
+        documentId: 'doc-1',
+      })
+    );
+  });
+
+  it('rethrows link conflicts when shadow session is stuck on a provisional self-mapping', async () => {
+    const { repository, mocks } = createContractRepository();
+    mocks.getContractByDocumentId.mockResolvedValue(buildExistingContract());
+    mocks.linkSessionToContract.mockRejectedValue(
+      Object.assign(new Error('conditional failed'), {
+        name: 'ConditionalCheckFailedException',
+      })
+    );
+    mocks.getContractBySessionId.mockResolvedValue({
+      contractId: 'session-2',
+      typeBlueId: 'blue-id',
+      displayName: 'PayNote Delivery',
+      sessionId: 'session-2',
+      documentName: 'Pending Delivery',
+      customerChannelKey: 'payNoteDeliverer',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(
+      upsertContractRecord({
+        contractRepository: repository,
+        document: payNoteDocument,
+        sessionId: 'session-2',
+        documentId: 'doc-1',
+        eventType: 'DOCUMENT_EPOCH_ADVANCED',
+        eventEpoch: 3,
+        now,
+      })
+    ).rejects.toMatchObject({
+      name: 'ConditionalCheckFailedException',
+    });
+    expect(mocks.getContractBySessionId).toHaveBeenCalledWith('session-2');
+  });
+
+  it('tolerates canonical-claim link conflicts when shadow session is already mapped to the same document', async () => {
+    const { repository, mocks } = createContractRepository();
+    mocks.claimCanonicalSessionByDocumentId.mockResolvedValue({
+      canonicalContractId: 'session-1',
+      isCanonicalOwner: false,
+    });
+    mocks.linkSessionToContract.mockRejectedValue(
+      Object.assign(new Error('conditional failed'), {
+        name: 'ConditionalCheckFailedException',
+      })
+    );
+    mocks.getContractBySessionId.mockResolvedValue({
+      contractId: 'session-shadow',
+      typeBlueId: 'blue-id',
+      displayName: 'PayNote',
+      sessionId: 'session-2',
+      documentId: 'doc-1',
+      document: payNoteDocument,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const result = await upsertContractRecord({
+      contractRepository: repository,
+      document: payNoteDocument,
+      sessionId: 'session-2',
+      documentId: 'doc-1',
+      eventType: 'DOCUMENT_EPOCH_ADVANCED',
+      eventEpoch: 0,
+      now,
+    });
+
+    expect(result).toBe('session-1');
+    expect(mocks.getContractBySessionId).toHaveBeenCalledWith('session-2');
+    expect(mocks.saveContract).not.toHaveBeenCalled();
   });
 
   it('stores contract payload fields in compact format', async () => {

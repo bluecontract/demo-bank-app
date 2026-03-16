@@ -33,6 +33,14 @@ const resolveEventField = <T>(
   incoming: T | undefined
 ) => (incoming !== undefined ? incoming : existing);
 
+const isConditionalCheckFailed = (error: unknown): boolean =>
+  Boolean(
+    error &&
+      typeof error === 'object' &&
+      'name' in error &&
+      (error as { name?: string }).name === 'ConditionalCheckFailedException'
+  );
+
 const getDocumentName = (document?: Record<string, unknown>) => {
   if (!document) {
     return undefined;
@@ -77,6 +85,44 @@ const toCompactArray = (
     return compact.items;
   }
   return value;
+};
+
+const linkSessionToCanonicalContract = async (input: {
+  contractRepository: ContractRepository;
+  sessionId: string;
+  contractId: string;
+  createdAt: string;
+  documentId?: string;
+}) => {
+  const { contractRepository, sessionId, contractId, createdAt, documentId } =
+    input;
+
+  try {
+    await contractRepository.linkSessionToContract?.({
+      sessionId,
+      contractId,
+      createdAt,
+    });
+  } catch (error) {
+    if (!isConditionalCheckFailed(error)) {
+      throw error;
+    }
+
+    const existingBySession = await contractRepository.getContractBySessionId(
+      sessionId
+    );
+    if (
+      existingBySession &&
+      (existingBySession.contractId === contractId ||
+        (documentId &&
+          existingBySession.documentId &&
+          existingBySession.documentId === documentId))
+    ) {
+      return;
+    }
+
+    throw error;
+  }
 };
 
 const areJsonValuesEqual = (left: unknown, right: unknown): boolean => {
@@ -146,6 +192,7 @@ export const upsertContractRecord = async (input: {
   const existingByDocumentId = input.documentId
     ? await input.contractRepository.getContractByDocumentId(input.documentId)
     : null;
+  let canonicalSessionIdOverride: string | undefined;
 
   let claimedCanonicalContractId: string | undefined;
   if (
@@ -166,10 +213,12 @@ export const upsertContractRecord = async (input: {
     claimedCanonicalContractId = claimResult.canonicalContractId;
 
     if (!claimResult.isCanonicalOwner) {
-      await input.contractRepository.linkSessionToContract?.({
+      await linkSessionToCanonicalContract({
+        contractRepository: input.contractRepository,
         sessionId: input.sessionId,
         contractId: claimResult.canonicalContractId,
         createdAt: input.now,
+        documentId: input.documentId,
       });
       return claimResult.canonicalContractId;
     }
@@ -181,12 +230,14 @@ export const upsertContractRecord = async (input: {
     existingByDocumentId.sessionId &&
     input.sessionId !== existingByDocumentId.sessionId
   ) {
-    await input.contractRepository.linkSessionToContract?.({
+    await linkSessionToCanonicalContract({
+      contractRepository: input.contractRepository,
       sessionId: input.sessionId,
       contractId: existingByDocumentId.contractId,
       createdAt: existingByDocumentId.createdAt ?? input.now,
+      documentId: existingByDocumentId.documentId ?? input.documentId,
     });
-    return existingByDocumentId.contractId;
+    canonicalSessionIdOverride = existingByDocumentId.sessionId;
   }
 
   const contractId =
@@ -219,7 +270,8 @@ export const upsertContractRecord = async (input: {
   );
   const documentName =
     getDocumentName(input.document) ?? existing?.documentName;
-  const nextSessionId = input.sessionId ?? existing?.sessionId;
+  const nextSessionId =
+    canonicalSessionIdOverride ?? input.sessionId ?? existing?.sessionId;
   const nextDocumentId = input.documentId ?? existing?.documentId;
   const nextDocument = input.document ?? existing?.document;
   const nextTriggerEvent = resolveEventField(
