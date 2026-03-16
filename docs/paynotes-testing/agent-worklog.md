@@ -260,3 +260,48 @@ runnable.
 
 - Continue narrowing the blocked flows where feasible.
 - Prepare the next verification pass and commit the current scaffolding.
+
+---
+
+## Iteration 4 — final verification pass
+
+### Scope
+
+Run the required repository verification commands against the current PayNote
+suite state and capture the result explicitly.
+
+### Commands run
+
+- `npm run format:check`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run test:all`
+- `npx nx run @demo-bank-app/bank-api:test:paynotes:integration`
+- `npx nx run @demo-bank-app/bank-api:test:paynotes:integration:serial`
+- `npx nx run @demo-bank-app/bank-api:test:paynotes:e2e`
+- `npm run security:audit:dev`
+
+### Results
+
+- `format:check` — passed
+- `lint` — passed (with warnings in new PayNote test helpers; no lint errors)
+- `typecheck` — passed
+- `test:all` — passed
+- `test:paynotes:integration` — passed
+- `test:paynotes:integration:serial` — passed with explicit skipped scenarios
+- `test:paynotes:e2e` — passed with explicit skipped canaries unless
+  `MYOS_E2E_ENABLED=1`
+- `security:audit:dev` — failed due pre-existing dependency vulnerabilities in
+  third-party packages (`jsdom` transitive `@tootallnate/once`, `verdaccio`
+  transitive `ajv`, `flatted`, `svgo`)
+
+### Bugs / blockers discovered
+
+- The PayNote scenario blockers remain `BUG-001` through `BUG-003`.
+- The security audit failure appears unrelated to the PayNote test-suite changes
+  and is caused by existing dependency vulnerabilities in the repo.
+
+### Next
+
+- No further implementation is required for the current plan beyond the
+  documented blockers and final commit/push hygiene.
