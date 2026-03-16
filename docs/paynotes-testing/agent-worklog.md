@@ -141,3 +141,57 @@ without touching runtime bank logic:
 
 - Build the reusable helper layer for local live scenarios.
 - Implement the first fast scenarios and align them to the real contract.
+
+---
+
+## Iteration 2 — helper layer and fast scenarios
+
+### Scope
+
+Introduce the reusable helper layer for local live PayNote scenarios and land
+the first fast scenarios with real runtime evidence.
+
+### Changes
+
+- Added reusable local live helpers under `apps/bank-api/tests/paynotes/live/`:
+  - bank invocation helper
+  - bank test driver
+  - LocalStack-backed test context
+  - deterministic MyOS HTTP harness
+  - amount, wait, assertion, setup, and reporting helpers
+  - PayNote document / webhook payload builders
+- Added active fast integration scenarios:
+  - `transfer-reserve-capture.integration.test.ts`
+  - `fetch-by-id-fallback.smoke.integration.test.ts`
+  - `idempotency-and-ordering.integration.test.ts`
+- Added an implemented-but-skipped scenario for:
+  - `card-delivery-capture.integration.test.ts`
+- Documented the blocker in `bug-register.md`.
+
+### Commands run
+
+- `npx nx run @demo-bank-app/bank-api:test:paynotes:integration`
+- targeted single-file reruns for the card delivery scenario while debugging
+
+### Results
+
+- Active fast scenarios now run successfully through the dedicated PayNote
+  target:
+  - transfer reserve → capture
+  - webhook `{ id }` fallback smoke
+  - duplicate-event idempotency on the transfer flow
+- The helper layer now creates isolated Dynamo tables and secrets per test file,
+  uses the in-process bank handler against LocalStack-backed repositories, and
+  exposes a deterministic MyOS harness for runtime evidence.
+- The card delivery happy path remains blocked in local harness mode and has
+  been converted into a skipped scenario with a detailed bug-register entry.
+
+### Bugs / blockers discovered
+
+- `BUG-001` — card delivery acceptance requires a richer follow-up MyOS
+  bootstrap continuation than the current local harness replay provides.
+
+### Next
+
+- Add the remaining planned PayNote scenarios or explicit skipped blockers.
+- Add the serial/complex and real-MyOS canary scaffolding required by the plan.
