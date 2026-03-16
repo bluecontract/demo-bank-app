@@ -57,10 +57,15 @@ RUN python3 -m venv /opt/cursor-python && \
     ln -sf /opt/cursor-python/bin/sam /usr/local/bin/sam && \
     ln -sf /opt/cursor-python/bin/samlocal /usr/local/bin/samlocal
 
-RUN echo 'PasswordAuthentication no\nChallengeResponseAuthentication no\nUsePAM no' > /etc/ssh/sshd_config.d/disable_password_auth.conf && \
-    id -u ubuntu >/dev/null 2>&1 || useradd -m -s /bin/bash ubuntu && \
+RUN install -m 0755 -d /etc/ssh/sshd_config.d /etc/sudoers.d && \
+    printf '%s\n' \
+    'PasswordAuthentication no' \
+    'ChallengeResponseAuthentication no' \
+    'UsePAM no' > /etc/ssh/sshd_config.d/disable_password_auth.conf && \
+    if ! id -u ubuntu >/dev/null 2>&1; then useradd -m -s /bin/bash ubuntu; fi && \
     groupadd -f docker && \
     usermod -aG docker ubuntu && \
     usermod -aG sudo ubuntu && \
-    echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu && \
+    printf '%s\n' 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu && \
+    chmod 0440 /etc/sudoers.d/ubuntu && \
     echo "ubuntu:ubuntu" | chpasswd
