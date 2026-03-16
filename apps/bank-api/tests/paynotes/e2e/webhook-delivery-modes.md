@@ -2,13 +2,15 @@
 
 ## pull-and-post
 
-The test reads events from MyOS, downloads the full event payload, and forwards
-it to the bank. This is the preferred mode.
+The test reads events from MyOS, compacts the pulled Blue nodes to match the
+real MyOS webhook serializer, and then forwards that webhook-shaped payload to
+the bank. This is the preferred mode.
 
 ## sqs-poller
 
 MyOS delivers to an existing stable queue-backed target. The test poller reads
-event IDs from the queue and forwards the full payload to the bank.
+event IDs from the queue and forwards the same webhook-shaped payload the bank
+would receive in production.
 
 ## direct-webhook
 

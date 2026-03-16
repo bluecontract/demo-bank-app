@@ -12,8 +12,8 @@ integration and real MyOS canary coverage.
 
 ## Rules
 
-- keep the main live/E2E event delivery mode as **pull-and-post with the full
-  webhook payload**
+- keep the main live/E2E event delivery mode as **pull-and-post with the same
+  webhook-shaped payload that MyOS sends in production**
 - keep `{ "id": eventId }` as a small compatibility smoke path only
 - use reusable setup helpers for funded accounts, funded cards, and transfer
   pairs

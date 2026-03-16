@@ -14,5 +14,6 @@ This suite must stay small, serial, and intentionally selective.
 - if only one webhook per callback URL is allowed, the suite must stay serial
 - if the MyOS event-read API is stable, do not manage MyOS webhooks in tests
 - forward only `DOCUMENT_CREATED` and `DOCUMENT_EPOCH_ADVANCED`
+- mimic MyOS webhook serialization before forwarding pulled events
 - keep the `{ "id": eventId }` webhook body as a tiny compatibility smoke path,
   not the main live/E2E mechanism

@@ -3,6 +3,7 @@ import {
   MYOS_DOCUMENT_EPOCH_ADVANCED,
   type MyOsRelevantEvent,
 } from './MyOsLiveClient';
+import { toMyOsWebhookPayload } from './myOsWebhookPayload';
 import { sleep } from './wait';
 
 export type EventPumpClient = {
@@ -130,7 +131,9 @@ export class EventPump {
 
       if (unseen.length > 0) {
         for (const item of unseen) {
-          const payload = await this.client.fetchEvent(item.id);
+          const payload = toMyOsWebhookPayload(
+            await this.client.fetchEvent(item.id)
+          );
           this.processedEventIds.add(item.id);
           delivered.push(item.id);
           await this.bank.postPayNoteWebhookPayload(
