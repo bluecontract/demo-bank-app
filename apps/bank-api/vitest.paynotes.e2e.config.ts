@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { resolvePayNoteIncludes } from './vitest.paynotes.integration.shared';
 
 process.env.TZ ??= 'GMT';
 
@@ -6,7 +7,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: ['tests/paynotes/e2e/**/*.e2e.test.ts'],
+    include: resolvePayNoteIncludes(['tests/paynotes/e2e/**/*.e2e.test.ts']),
     setupFiles: ['tests/paynotes/setup/loadAgentEnv.setup.ts'],
     fileParallelism: false,
     maxWorkers: 1,
