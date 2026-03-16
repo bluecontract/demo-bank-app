@@ -7,11 +7,3 @@ export const payNoteLiveTests = [
 export const payNoteSerialTests = [
   'tests/paynotes/live/**/*.integration.serial.test.ts',
 ];
-
-export const payNoteCiOptInEnvVar = 'CI_PAYNOTES_ENABLED';
-
-export const shouldRunPayNoteSuitesInCurrentEnv = () =>
-  process.env.CI !== 'true' || process.env[payNoteCiOptInEnvVar] === '1';
-
-export const resolvePayNoteIncludes = (patterns: string[]) =>
-  shouldRunPayNoteSuitesInCurrentEnv() ? patterns : [];

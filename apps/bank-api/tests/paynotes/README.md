@@ -23,6 +23,8 @@ integration and real MyOS canary coverage.
   fields
 - load MyOS credentials from the repository root `.env.agent` file or compatible
   environment aliases
-- PayNote dedicated suites are disabled by default when `CI=true`; opt in
-  explicitly with `CI_PAYNOTES_ENABLED=1` only on runners that have the required
-  LocalStack/MyOS setup
+- local PayNote live suites are regular Vitest targets and may run in CI on
+  runners that already provide LocalStack
+- real-MyOS canaries under `tests/paynotes/e2e/` are disabled by default when
+  `CI=true`; opt in explicitly with `CI_PAYNOTES_E2E_ENABLED=1` only on runners
+  that also have the required MyOS credentials and account setup

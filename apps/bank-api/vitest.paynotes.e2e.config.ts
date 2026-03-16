@@ -1,5 +1,12 @@
 import { defineConfig } from 'vitest/config';
-import { resolvePayNoteIncludes } from './vitest.paynotes.integration.shared';
+
+const payNoteRealMyOsCiOptInEnvVar = 'CI_PAYNOTES_E2E_ENABLED';
+
+const resolveRealMyOsCanaryIncludes = (patterns: string[]) =>
+  process.env.CI === 'true' &&
+  process.env[payNoteRealMyOsCiOptInEnvVar] !== '1'
+    ? []
+    : patterns;
 
 process.env.TZ ??= 'GMT';
 
@@ -7,7 +14,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: resolvePayNoteIncludes(['tests/paynotes/e2e/**/*.e2e.test.ts']),
+    include: resolveRealMyOsCanaryIncludes([
+      'tests/paynotes/e2e/**/*.e2e.test.ts',
+    ]),
     setupFiles: ['tests/paynotes/setup/loadAgentEnv.setup.ts'],
     fileParallelism: false,
     maxWorkers: 1,

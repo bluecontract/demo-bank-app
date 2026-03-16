@@ -3,7 +3,6 @@ import {
   payNoteIntegrationTimeoutMs,
   payNoteLiveTests,
   payNoteSerialTests,
-  resolvePayNoteIncludes,
 } from './vitest.paynotes.integration.shared';
 
 process.env.TZ ??= 'GMT';
@@ -12,7 +11,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: resolvePayNoteIncludes(payNoteLiveTests),
+    include: payNoteLiveTests,
     exclude: [...configDefaults.exclude, ...payNoteSerialTests],
     testTimeout: payNoteIntegrationTimeoutMs,
     hookTimeout: payNoteIntegrationTimeoutMs,
