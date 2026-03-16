@@ -1,17 +1,29 @@
 import type { PayNoteDeliveryRecord, PayNoteRecord } from '../../ports';
+import type { CardTransactionDetails } from '@demo-bank-app/banking';
 import { blue } from '../../../blue';
 import { upsertPayNoteContractRecord } from '../payNoteContractUtils';
 import { mergeSessionIds } from '../payNoteSessionUtils';
 import type { LogEntry } from '../../ports';
 import { logMyOsFetchError } from './myosErrors';
 import { logAndReturn, trace } from './logging';
+import {
+  readEventObjectDocumentId,
+  readFetchedDocumentId,
+  readInitializedDocumentId,
+} from '../webhookUtils';
 import type {
   HandleWebhookEventDependencies,
   HandleWebhookEventResult,
   WebhookEmittedEvent,
   WebhookEventObject,
 } from './types';
-import { getRecordString, parsePayNoteDocument, toSimpleRecord } from './utils';
+import {
+  getRecordString,
+  getString,
+  getStringOrNestedValue,
+  parsePayNoteDocument,
+  toSimpleRecord,
+} from './utils';
 import { resolvePayNoteCustomerChannelKey } from './customerChannel';
 
 const fetchDocumentMessages = {
@@ -27,9 +39,94 @@ type PayNoteDocumentResolution = {
   resolvedDocumentRaw?: unknown;
 };
 
+const readCardTransactionDetailsFromPayNoteDocument = (
+  value: unknown
+): CardTransactionDetails | null => {
+  const readFromRecord = (
+    record: Record<string, unknown> | null
+  ): CardTransactionDetails | null => {
+    const details = toSimpleRecord(record?.cardTransactionDetails);
+    if (!details) {
+      return null;
+    }
+
+    const retrievalReferenceNumber = getStringOrNestedValue(
+      details.retrievalReferenceNumber
+    );
+    const systemTraceAuditNumber = getStringOrNestedValue(
+      details.systemTraceAuditNumber
+    );
+    const transmissionDateTime = getStringOrNestedValue(
+      details.transmissionDateTime
+    );
+    const authorizationCode = getStringOrNestedValue(details.authorizationCode);
+
+    if (
+      !retrievalReferenceNumber ||
+      !systemTraceAuditNumber ||
+      !transmissionDateTime ||
+      !authorizationCode
+    ) {
+      return null;
+    }
+
+    return {
+      retrievalReferenceNumber,
+      systemTraceAuditNumber,
+      transmissionDateTime,
+      authorizationCode,
+    };
+  };
+
+  return readFromRecord(toSimpleRecord(value));
+};
+
+const resolvePayNoteDocumentIdFromDeliveryCardDetails = async (input: {
+  document: unknown;
+  deps: HandleWebhookEventDependencies;
+}): Promise<string | undefined> => {
+  const cardTransactionDetails = readCardTransactionDetailsFromPayNoteDocument(
+    input.document
+  );
+  if (!cardTransactionDetails) {
+    return undefined;
+  }
+
+  const linkedDelivery =
+    await input.deps.payNoteDeliveryRepository.getDeliveryByCardTransactionDetails(
+      cardTransactionDetails
+    );
+  return linkedDelivery?.payNoteDocumentId;
+};
+
+const isKnownPayNoteDocumentId = async (input: {
+  payloadDocumentId: string;
+  payNoteRecord: PayNoteRecord | null;
+  deps: HandleWebhookEventDependencies;
+}): Promise<boolean> => {
+  const { payloadDocumentId, payNoteRecord, deps } = input;
+
+  if (payNoteRecord?.payNoteDocumentId === payloadDocumentId) {
+    return true;
+  }
+
+  const existingPayNote = await deps.payNoteRepository.getPayNote(
+    payloadDocumentId
+  );
+  if (existingPayNote) {
+    return true;
+  }
+
+  const existingContract =
+    await deps.contractRepository.getContractByDocumentId(payloadDocumentId);
+  return Boolean(existingContract);
+};
+
 export const resolvePayNoteDocumentId = async (input: {
   eventId: string;
   sessionId: string;
+  document?: Record<string, unknown>;
+  eventObject?: WebhookEventObject;
   payNoteRecord: PayNoteRecord | null;
   deps: HandleWebhookEventDependencies;
   logs: LogEntry[];
@@ -37,10 +134,131 @@ export const resolvePayNoteDocumentId = async (input: {
   | { resolution: PayNoteDocumentResolution }
   | { result: HandleWebhookEventResult }
 > => {
-  const { eventId, sessionId, payNoteRecord, deps, logs } = input;
+  const {
+    eventId,
+    sessionId,
+    document,
+    eventObject,
+    payNoteRecord,
+    deps,
+    logs,
+  } = input;
   let payNoteDocumentId = payNoteRecord?.payNoteDocumentId;
   let resolvedDocument: Record<string, unknown> | undefined;
   let resolvedDocumentRaw: unknown;
+
+  if (!payNoteDocumentId) {
+    const contractBySession =
+      await deps.contractRepository.getContractBySessionId(sessionId);
+    const aliasedDocumentId = getString(
+      (contractBySession as { documentId?: unknown } | null)?.documentId
+    );
+    const canonicalSessionId = getString(
+      (contractBySession as { sessionId?: unknown } | null)?.sessionId
+    );
+
+    if (aliasedDocumentId) {
+      payNoteDocumentId = aliasedDocumentId;
+
+      const preferredLookupSessionId =
+        canonicalSessionId && canonicalSessionId !== sessionId
+          ? canonicalSessionId
+          : undefined;
+
+      if (preferredLookupSessionId) {
+        const canonicalDocumentResult = await deps.myOsClient.fetchDocument(
+          preferredLookupSessionId
+        );
+        if (canonicalDocumentResult.kind === 'success') {
+          resolvedDocumentRaw = canonicalDocumentResult.document.document;
+          resolvedDocument =
+            toSimpleRecord(resolvedDocumentRaw) ??
+            (canonicalDocumentResult.document.document as
+              | Record<string, unknown>
+              | undefined);
+        } else {
+          logMyOsFetchError(
+            canonicalDocumentResult,
+            logs,
+            {
+              sessionId,
+              canonicalSessionId: preferredLookupSessionId,
+            },
+            fetchDocumentMessages
+          );
+        }
+      }
+
+      if (!resolvedDocument && document) {
+        resolvedDocumentRaw = document;
+        resolvedDocument = toSimpleRecord(document) ?? document;
+      }
+
+      trace(
+        logs,
+        'Resolved PayNote document id from canonical contract alias',
+        {
+          eventId,
+          sessionId,
+          canonicalSessionId: canonicalSessionId ?? null,
+          payNoteDocumentId,
+        }
+      );
+    }
+  }
+
+  if (!payNoteDocumentId) {
+    const payloadDocumentId =
+      readEventObjectDocumentId(eventObject) ??
+      readInitializedDocumentId(document);
+    if (
+      payloadDocumentId &&
+      (await isKnownPayNoteDocumentId({
+        payloadDocumentId,
+        payNoteRecord,
+        deps,
+      }))
+    ) {
+      payNoteDocumentId = payloadDocumentId;
+      resolvedDocumentRaw = document;
+      resolvedDocument = toSimpleRecord(document) ?? document;
+
+      trace(logs, 'Resolved PayNote document id from webhook payload', {
+        eventId,
+        sessionId,
+        payNoteDocumentId,
+      });
+    } else if (payloadDocumentId) {
+      trace(
+        logs,
+        'Ignored unverified PayNote document id from webhook payload',
+        {
+          eventId,
+          sessionId,
+          payloadDocumentId,
+        }
+      );
+    }
+  }
+
+  if (!payNoteDocumentId && document) {
+    const deliveryLinkedDocumentId =
+      await resolvePayNoteDocumentIdFromDeliveryCardDetails({
+        document,
+        deps,
+      });
+    if (deliveryLinkedDocumentId) {
+      payNoteDocumentId = deliveryLinkedDocumentId;
+      resolvedDocumentRaw = document;
+      resolvedDocument = toSimpleRecord(document) ?? document;
+
+      trace(logs, 'Resolved PayNote document id from delivery card details', {
+        eventId,
+        sessionId,
+        payNoteDocumentId,
+      });
+    }
+  }
 
   if (!payNoteDocumentId) {
     const documentResult = await deps.myOsClient.fetchDocument(sessionId);
@@ -56,7 +274,9 @@ export const resolvePayNoteDocumentId = async (input: {
       };
     }
 
-    payNoteDocumentId = documentResult.document.documentId;
+    payNoteDocumentId =
+      readFetchedDocumentId(documentResult.document) ??
+      documentResult.document.documentId;
     resolvedDocumentRaw = documentResult.document.document;
     resolvedDocument =
       toSimpleRecord(resolvedDocumentRaw) ??
@@ -135,6 +355,8 @@ export const buildPayNoteRecord = (input: {
   bootstrapMerchantId?: string;
   bootstrapAccountNumber?: string;
   bootstrapUserId?: string;
+  bootstrapHoldId?: string;
+  bootstrapTransactionId?: string;
   document: Record<string, unknown>;
   resolvedDocument?: Record<string, unknown>;
   eventObject?: WebhookEventObject;
@@ -155,6 +377,8 @@ export const buildPayNoteRecord = (input: {
     bootstrapMerchantId,
     bootstrapAccountNumber,
     bootstrapUserId,
+    bootstrapHoldId,
+    bootstrapTransactionId,
     document,
     resolvedDocument,
     eventObject,
@@ -167,6 +391,12 @@ export const buildPayNoteRecord = (input: {
   const payNoteSimple = blue.nodeToJson(payNoteParsed.node, 'simple') as
     | Record<string, unknown>
     | undefined;
+  const subscription = toSimpleRecord(payNoteSimple?.subscription);
+  const paymentMandateRequest =
+    toSimpleRecord(subscription?.paymentMandateRequest) ?? undefined;
+  const documentMerchantId =
+    getRecordString(payNoteSimple, 'merchantId') ??
+    getRecordString(paymentMandateRequest, 'merchantId');
   const payerAccountNumber =
     existingRecord?.payerAccountNumber ??
     existingRecord?.accountNumber ??
@@ -187,13 +417,16 @@ export const buildPayNoteRecord = (input: {
       bootstrapAccountNumber ??
       payerAccountNumber,
     userId: existingRecord?.userId ?? deliveryRecord?.userId ?? bootstrapUserId,
-    holdId: existingRecord?.holdId ?? deliveryRecord?.holdId,
+    holdId: existingRecord?.holdId ?? bootstrapHoldId ?? deliveryRecord?.holdId,
     transactionId:
-      existingRecord?.transactionId ?? deliveryRecord?.transactionId,
+      existingRecord?.transactionId ??
+      bootstrapTransactionId ??
+      deliveryRecord?.transactionId,
     merchantId:
       existingRecord?.merchantId ??
       deliveryRecord?.merchantId ??
-      bootstrapMerchantId,
+      bootstrapMerchantId ??
+      documentMerchantId,
     lastSourceEventCreatedAt:
       eventCreatedAt ?? existingRecord?.lastSourceEventCreatedAt,
     lastSourceEventEpoch:

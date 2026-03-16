@@ -144,6 +144,8 @@ export const handleWebhookEvent = async (
       const documentResolution = await resolvePayNoteDocumentId({
         eventId: input.eventId,
         sessionId,
+        document,
+        eventObject,
         payNoteRecord,
         deps,
         logs,
@@ -336,6 +338,8 @@ export const handleWebhookEvent = async (
           bootstrapMerchantId: bootstrapContext?.merchantId,
           bootstrapAccountNumber: bootstrapContext?.accountNumber,
           bootstrapUserId: bootstrapContext?.userId,
+          bootstrapHoldId: bootstrapContext?.holdId,
+          bootstrapTransactionId: bootstrapContext?.transactionId,
           document,
           resolvedDocument,
           eventObject,

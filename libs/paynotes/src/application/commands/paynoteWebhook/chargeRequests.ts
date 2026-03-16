@@ -49,6 +49,7 @@ import { trace } from './logging';
 import { resolveRuntimeContracts } from '../blueRuntime';
 import { isRecord } from '../typeGuards';
 import { upsertTransferMandateAttemptByHoldId } from './transferMandateAttemptByHold';
+import { readFetchedDocumentId } from '../webhookUtils';
 
 const CARD_CHARGE_RESPONDED_EVENT_NAME = 'PayNote/Card Charge Responded';
 const CARD_CHARGE_COMPLETED_EVENT_NAME = 'PayNote/Card Charge Completed';
@@ -1119,12 +1120,11 @@ const validatePaymentMandate = async (input: {
 const resolveMandateCounterparty = async (input: {
   context: ChargeRequestContext;
   direction: ChargeDirection;
-  sourcePayNoteType: SourcePayNoteType;
 }): Promise<{
   counterpartyType: 'merchantId' | 'customerId' | 'accountNumber';
   counterpartyId: string;
 } | null> => {
-  const { context, direction, sourcePayNoteType } = input;
+  const { context, direction } = input;
   if (direction === 'linked') {
     const merchantId = resolveContextMerchantId(context);
     if (merchantId) {
@@ -1133,7 +1133,6 @@ const resolveMandateCounterparty = async (input: {
 
     const fallbackMerchantAccount = await resolveMerchantFundingAccountNumber({
       context,
-      sourcePayNoteType,
     });
     if (fallbackMerchantAccount) {
       return {
@@ -1161,7 +1160,6 @@ const resolveMandateCounterparty = async (input: {
 
 const runMandateAuthorization = async (input: {
   context: ChargeRequestContext;
-  sourcePayNoteType: SourcePayNoteType;
   direction: ChargeDirection;
   amountMinor: number;
   mandateSessionId?: string;
@@ -1169,14 +1167,8 @@ const runMandateAuthorization = async (input: {
 }): Promise<
   { ok: true } | { ok: false; reason: string; retryable: boolean }
 > => {
-  const {
-    context,
-    sourcePayNoteType,
-    direction,
-    amountMinor,
-    mandateSessionId,
-    chargeAttemptId,
-  } = input;
+  const { context, direction, amountMinor, mandateSessionId, chargeAttemptId } =
+    input;
 
   if (!mandateSessionId) {
     return {
@@ -1200,7 +1192,6 @@ const runMandateAuthorization = async (input: {
   const counterparty = await resolveMandateCounterparty({
     context,
     direction,
-    sourcePayNoteType,
   });
   if (!counterparty) {
     return {
@@ -1284,7 +1275,6 @@ const dispatchMandateAuthorizationForCharge = async (input: {
 
   const mandateAuthorization = await runMandateAuthorization({
     context: input.context,
-    sourcePayNoteType: input.sourcePayNoteType,
     direction: input.direction,
     amountMinor: input.amountMinor,
     mandateSessionId: mandateValidation.mandateSessionId,
@@ -1932,18 +1922,15 @@ const resolveAccountWithOwner = async (input: {
 
 const resolveMerchantFundingAccountNumber = async (input: {
   context: ChargeRequestContext;
-  sourcePayNoteType: SourcePayNoteType;
 }): Promise<string | undefined> => {
-  const { context, sourcePayNoteType } = input;
+  const { context } = input;
   const { updatedRecord, deliveryRecord, deps } = context;
 
-  if (sourcePayNoteType === 'merchant-to-customer-paynote') {
-    return getString(updatedRecord.payerAccountNumber);
-  }
-
-  const explicitPayee = getString(updatedRecord.payeeAccountNumber);
-  if (explicitPayee) {
-    return explicitPayee;
+  const explicitMerchantFundingAccountNumber = getString(
+    updatedRecord.payeeAccountNumber
+  );
+  if (explicitMerchantFundingAccountNumber) {
+    return explicitMerchantFundingAccountNumber;
   }
 
   const merchantId = getString(
@@ -1973,27 +1960,18 @@ const resolveRootCustomerAccountNumber = (
 
 const resolveLocalRoleAccountNumbers = async (input: {
   context: ChargeRequestContext;
-  sourcePayNoteType: SourcePayNoteType;
 }): Promise<{
   payerAccountNumber?: string;
   payeeAccountNumber?: string;
 }> => {
-  const { context, sourcePayNoteType } = input;
+  const { context } = input;
   const explicitPayer = getString(context.updatedRecord.payerAccountNumber);
   const explicitPayee = getString(context.updatedRecord.payeeAccountNumber);
   const rootCustomerAccountNumber = resolveRootCustomerAccountNumber(context);
   const merchantFundingAccountNumber =
     await resolveMerchantFundingAccountNumber({
       context,
-      sourcePayNoteType,
     });
-
-  if (sourcePayNoteType === 'merchant-to-customer-paynote') {
-    return {
-      payerAccountNumber: explicitPayer ?? merchantFundingAccountNumber,
-      payeeAccountNumber: explicitPayee ?? rootCustomerAccountNumber,
-    };
-  }
 
   return {
     payerAccountNumber: explicitPayer ?? rootCustomerAccountNumber,
@@ -2011,7 +1989,6 @@ const resolveChargeAccounts = async (input: {
 
   const localRoleAccounts = await resolveLocalRoleAccountNumbers({
     context,
-    sourcePayNoteType,
   });
 
   const payerAccountNumber =
@@ -2436,7 +2413,10 @@ const maybeResolveBootstrappedDocumentId = async (input: {
     return undefined;
   }
 
-  return getString(documentResult.document.documentId);
+  return (
+    readFetchedDocumentId(documentResult.document) ??
+    getString(documentResult.document.documentId)
+  );
 };
 
 const maybeStartLinkedPayNote = async (input: {
