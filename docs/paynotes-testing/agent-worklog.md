@@ -76,3 +76,68 @@ logic.
 - Add initial `docs/paynotes-testing/*` scaffolding in English.
 - Add dedicated PayNote test targets and supporting env normalization.
 - Introduce the reusable helper layer before adding scenario coverage.
+
+---
+
+## Iteration 1 — env loading and target scaffolding
+
+### Scope
+
+Add the first PayNote-specific repository scaffolding inside `apps/bank-api`
+without touching runtime bank logic:
+
+- environment examples
+- `.env.agent` normalization helpers
+- dedicated Vitest configs
+- dedicated Nx targets
+- test-directory README
+- TypeScript project wiring for PayNote tests
+
+### Changes
+
+- Added `apps/bank-api/tests/paynotes/README.md`.
+- Added PayNote example env files:
+  - `.env.agent.example`
+  - `.env.paynotes.fast.example`
+  - `.env.paynotes.live.example`
+- Added repository-root `.env.agent` loading and env alias normalization for
+  E2E/canary tests in `tests/paynotes/lib/agentEnv.ts`.
+- Added a setup file to load and normalize agent env before E2E tests.
+- Added dedicated Vitest config files for:
+  - fast/live integration
+  - serial integration
+  - real MyOS E2E canaries
+- Added `tsconfig.paynotes.json` and referenced it from the app TypeScript
+  project so PayNote tests/config are typechecked with the app.
+- Added dedicated Nx targets in `apps/bank-api/project.json`:
+  - `test:paynotes:integration`
+  - `test:paynotes:integration:serial`
+  - `test:paynotes:e2e`
+  - `test:paynotes:all`
+
+### Commands run
+
+- `npm run format:check`
+- `npm run lint`
+- `npm run typecheck`
+- `npx nx run @demo-bank-app/bank-api:test:paynotes:integration`
+
+### Results
+
+- Formatting, linting, and typechecking passed after the new scaffold landed.
+- The dedicated PayNote integration target is now wired and runs successfully.
+- The target currently reports `No test files found`, which is expected because
+  scenario implementations have not been added yet.
+- The target also confirmed that LocalStack can now be started through the Nx
+  dependency chain for PayNote-focused runs.
+
+### Bugs / blockers discovered
+
+- `npm run format:check` initially failed because the staged code-review
+  artifacts were not Prettier-formatted. The artifacts were formatted and the
+  command then passed. This is not a product/runtime blocker.
+
+### Next
+
+- Build the reusable helper layer for local live scenarios.
+- Implement the first fast scenarios and align them to the real contract.
