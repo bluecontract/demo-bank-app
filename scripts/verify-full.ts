@@ -36,6 +36,7 @@ async function runOrExit(command: string, args: string[]): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  await runOrExit(npmCommand, ['run', 'deps:blue:check']);
   await runOrExit(npxCommand, [
     'nx',
     'run',

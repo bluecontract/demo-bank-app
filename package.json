@@ -20,6 +20,7 @@
     "lint:all": "nx run-many --target=lint --all",
     "lint:fix": "nx affected --target=lint --fix",
     "typecheck": "nx run-many --target=typecheck --all",
+    "deps:blue:check": "tsx scripts/check-blue-deps.ts",
     "verify:quick": "npx tsx scripts/verify-quick.ts",
     "verify:full": "npx tsx scripts/verify-full.ts",
     "format": "prettier --write .",

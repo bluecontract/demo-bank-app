@@ -90,6 +90,19 @@ npm run docker:check
 npm run serve:all
 ```
 
+Install dependencies only from the repository root. Do not run `npm install`
+inside `apps/*` or `libs/*`, because that can create nested workspace
+`node_modules` and make Blue packages resolve to different versions across the
+repo.
+
+If the Blue dependency guard fails, repair the workspace installs from the repo
+root:
+
+```bash
+find apps libs -type d -name node_modules -prune -exec rm -rf {} +
+npm install
+```
+
 The app will be available at:
 
 - **Frontend**: http://localhost:4200
@@ -98,42 +111,43 @@ The app will be available at:
 
 ### Available Scripts
 
-| Command                        | Description                                     |
-| ------------------------------ | ----------------------------------------------- |
-| `npm start`                    | Start development server                        |
-| `npm run dev`                  | Start development server (alias)                |
-| `npm test`                     | Run tests for affected projects                 |
-| `npm run test:all`             | Run tests for all projects                      |
-| `npm run test:integration`     | Run integration tests for affected projects     |
-| `npm run test:integration:all` | Run integration tests for all projects          |
-| `npm run test:watch`           | Run tests in watch mode                         |
-| `npm run e2e`                  | Run E2E tests locally                           |
-| `npm run e2e:dev`              | Run E2E tests against dev environment           |
-| `npm run e2e:prod`             | Run E2E tests against production environment    |
-| `npm run build`                | Build affected projects                         |
-| `npm run build:all`            | Build all projects                              |
-| `npm run lint`                 | Lint affected projects                          |
-| `npm run lint:all`             | Lint all projects                               |
-| `npm run lint:fix`             | Lint and auto-fix affected issues               |
-| `npm run typecheck`            | Run TypeScript type checking for all projects   |
-| `npm run verify:quick`         | Lint, typecheck, build, and run affected tests  |
-| `npm run verify:full`          | Lint, typecheck, build, and run full test suite |
-| `npm run format`               | Format code with Prettier                       |
-| `npm run format:check`         | Check code formatting                           |
-| `npm run format:staged`        | Format only staged files with Prettier          |
-| `npm run security:audit`       | Run security audit on production dependencies   |
-| `npm run security:audit:dev`   | Run security audit on development dependencies  |
-| `npm run security:audit:fix`   | Fix security vulnerabilities                    |
-| `npm run pre-commit`           | Run pre-commit checks manually                  |
-| `npm run validate-commit`      | Validate commit message format                  |
-| `npm run generate-docs`        | Generate OpenAPI docs from TypeScript           |
-| `npm run wait-for-backend`     | Wait for backend to be ready                    |
-| `npm run clean`                | Reset Nx cache                                  |
-| `npm run graph`                | View dependency graph                           |
-| `npm run serve:all`            | Start all services with Nx                      |
-| `npm run serve:stack`          | Start backend stack (LocalStack + Lambda)       |
-| `npm run docker:check`         | Verify Docker is running                        |
-| `npm run logs:summary`         | Tail summary lambda logs (LocalStack)           |
+| Command                        | Description                                      |
+| ------------------------------ | ------------------------------------------------ |
+| `npm start`                    | Start development server                         |
+| `npm run dev`                  | Start development server (alias)                 |
+| `npm test`                     | Run tests for affected projects                  |
+| `npm run test:all`             | Run tests for all projects                       |
+| `npm run test:integration`     | Run integration tests for affected projects      |
+| `npm run test:integration:all` | Run integration tests for all projects           |
+| `npm run test:watch`           | Run tests in watch mode                          |
+| `npm run e2e`                  | Run E2E tests locally                            |
+| `npm run e2e:dev`              | Run E2E tests against dev environment            |
+| `npm run e2e:prod`             | Run E2E tests against production environment     |
+| `npm run build`                | Build affected projects                          |
+| `npm run build:all`            | Build all projects                               |
+| `npm run lint`                 | Lint affected projects                           |
+| `npm run lint:all`             | Lint all projects                                |
+| `npm run lint:fix`             | Lint and auto-fix affected issues                |
+| `npm run typecheck`            | Run TypeScript type checking for all projects    |
+| `npm run deps:blue:check`      | Verify all workspaces resolve the same Blue deps |
+| `npm run verify:quick`         | Lint, typecheck, build, and run affected tests   |
+| `npm run verify:full`          | Lint, typecheck, build, and run full test suite  |
+| `npm run format`               | Format code with Prettier                        |
+| `npm run format:check`         | Check code formatting                            |
+| `npm run format:staged`        | Format only staged files with Prettier           |
+| `npm run security:audit`       | Run security audit on production dependencies    |
+| `npm run security:audit:dev`   | Run security audit on development dependencies   |
+| `npm run security:audit:fix`   | Fix security vulnerabilities                     |
+| `npm run pre-commit`           | Run pre-commit checks manually                   |
+| `npm run validate-commit`      | Validate commit message format                   |
+| `npm run generate-docs`        | Generate OpenAPI docs from TypeScript            |
+| `npm run wait-for-backend`     | Wait for backend to be ready                     |
+| `npm run clean`                | Reset Nx cache                                   |
+| `npm run graph`                | View dependency graph                            |
+| `npm run serve:all`            | Start all services with Nx                       |
+| `npm run serve:stack`          | Start backend stack (LocalStack + Lambda)        |
+| `npm run docker:check`         | Verify Docker is running                         |
+| `npm run logs:summary`         | Tail summary lambda logs (LocalStack)            |
 
 > **💡 Affected vs All**: By default, commands run only on "affected" projects (those changed since the last commit). Use `:all` variants to run on all projects.
 

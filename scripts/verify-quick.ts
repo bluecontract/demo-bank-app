@@ -60,6 +60,7 @@ async function runOrExit(
 }
 
 async function main(): Promise<void> {
+  await runOrExit(npmCommand, ['run', 'deps:blue:check']);
   await runOrExit(npmCommand, ['run', 'lint']);
   await runOrExit(npmCommand, ['run', 'typecheck']);
   await runOrExit(npmCommand, ['run', 'build:all']);
