@@ -34,3 +34,16 @@ The repository already confirms the key runtime assumptions needed by the suite:
 - `agent-worklog.md` — iterative delivery log for the agent
 - `bug-register.md` — blockers, root causes, and evidence
 - `01-strategy-and-split.md` — target suite layering and test split
+- `02-scenario-catalog.md` — active, blocked, and planned scenario inventory
+- `03-e2e-suite-requirements.md` — real-MyOS canary requirements
+- `04-known-gaps-and-blockers.md` — common blocker classes
+- `05-extension-policy.md` — rules for extending the suite
+- `06-runner-decision-matrix.md` — when to use local live vs real MyOS
+- `07-cursor-agent-playbook.md` — working rhythm and discovery sources
+- `08-reporting-templates.md` — reporting file conventions
+- `09-webhook-strategy.md` — preferred event-delivery modes
+- `10-event-sync-design.md` — explicit event-sync helper model
+- `11-myos-event-polling-and-payloads.md` — event filtering, sorting, and
+  payload download rules
+- `12-summary-disabled-fixture-requirements.md` — deterministic summary fixture
+  rules

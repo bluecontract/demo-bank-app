@@ -195,3 +195,68 @@ the first fast scenarios with real runtime evidence.
 
 - Add the remaining planned PayNote scenarios or explicit skipped blockers.
 - Add the serial/complex and real-MyOS canary scaffolding required by the plan.
+
+---
+
+## Iteration 3 — skipped serial/E2E coverage and operational docs
+
+### Scope
+
+Complete the next layer of repository scaffolding so the remaining planned
+scenarios and canaries exist explicitly in the repo even when they are not yet
+runnable.
+
+### Changes
+
+- Added skipped scenario files for:
+  - `pending-install-capture`
+  - `milestones.partial-captures`
+  - `subscription.mandate-cycle`
+  - `voucher.monitoring`
+- Added real-MyOS canary scaffolding:
+  - `tests/paynotes/e2e/paynotes.canary.e2e.test.ts`
+  - `tests/paynotes/e2e/README.md`
+  - `tests/paynotes/e2e/webhook-delivery-modes.md`
+  - `tests/paynotes/e2e/lib/WebhookQueuePoller.ts`
+- Added reusable live/E2E helper scaffolding for:
+  - MyOS live HTTP access
+  - explicit event pumping / pull-and-post synchronization
+- Added the remaining English PayNote docs covering:
+  - scenario catalog
+  - E2E requirements
+  - blocker classes
+  - extension policy
+  - runner decision rules
+  - webhook strategy
+  - event sync design
+  - MyOS event polling
+  - `LLM_SUMMARY_DISABLED` fixture rules
+
+### Commands run
+
+- `npx nx run @demo-bank-app/bank-api:test:paynotes:integration`
+- `npx nx run @demo-bank-app/bank-api:test:paynotes:integration:serial`
+- `npx nx run @demo-bank-app/bank-api:test:paynotes:e2e`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run format:check`
+
+### Results
+
+- Active fast PayNote scenarios still pass.
+- Serial PayNote target now exists and passes with explicit skipped scenarios.
+- E2E PayNote canary target now exists and passes with explicit skipped canary
+  tests unless `MYOS_E2E_ENABLED=1` is provided.
+- The docs now cover the required suite split, scenarios, event sync, E2E
+  requirements, extension policy, reporting, and blocker classes.
+
+### Bugs / blockers discovered
+
+- `BUG-002` — pending-action continuation is not yet reproduced locally.
+- `BUG-003` — richer serial continuation chains (milestones, mandate, voucher)
+  are not yet modeled in the local harness.
+
+### Next
+
+- Continue narrowing the blocked flows where feasible.
+- Prepare the next verification pass and commit the current scaffolding.
