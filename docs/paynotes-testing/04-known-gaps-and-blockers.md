@@ -52,3 +52,21 @@ Action:
 
 - document the missing continuation events or document shapes
 - keep the scenario implemented but skipped until the harness catches up
+
+Current concrete gaps in this repo:
+
+- pending-install:
+  - raw contract + pending action exist in Dynamo
+  - customer route still returns `Contract summary not available`
+  - the simplified root-only shortcut does not create the hold mapping needed
+    by the later capture request
+- milestones:
+  - harness cannot take the bank's `Customer Action Responded` operation and
+    synthesize the next epoch's capture request plus the next pending action
+- subscription:
+  - harness cannot synthesize payment-mandate bootstrap target sessions and the
+    bootstrap-completion webhook that links the mandate back to the requesting
+    PayNote session
+- voucher:
+  - harness cannot inject the monitoring-report -> linked voucher bootstrap ->
+    cashback capture chain with real event ordering

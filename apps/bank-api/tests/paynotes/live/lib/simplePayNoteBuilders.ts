@@ -1,6 +1,7 @@
 import { Blue } from '@blue-labs/language';
 import { createDefaultMergingProcessor } from '@blue-labs/document-processor';
 import { repository } from '@blue-repository/types';
+import conversationBlueIds from '@blue-repository/types/packages/conversation/blue-ids';
 import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 
 const blue = new Blue({
@@ -229,6 +230,26 @@ export const emittedCaptureFundsRequested = (
   },
   requestId,
   amount: { value: amountMinor },
+});
+
+export const emittedCustomerActionRequested = (input: {
+  requestId: string;
+  title: string;
+  message: string;
+  actions: Array<{
+    label: string;
+    description?: string;
+    variant?: 'primary' | 'secondary' | 'reject';
+  }>;
+}) => ({
+  type: {
+    name: 'Conversation/Customer Action Requested',
+    blueId: conversationBlueIds['Conversation/Customer Action Requested'],
+  },
+  requestId: input.requestId,
+  title: input.title,
+  message: input.message,
+  actions: input.actions,
 });
 
 export const emittedReserveAndCaptureImmediatelyRequested = (

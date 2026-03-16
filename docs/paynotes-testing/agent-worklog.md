@@ -305,3 +305,45 @@ suite state and capture the result explicitly.
 
 - No further implementation is required for the current plan beyond the
   documented blockers and final commit/push hygiene.
+
+---
+
+## Iteration 5 — BUG-001 closure and blocker narrowing
+
+### Scope
+
+- close `BUG-001` with a verified fix
+- verify the remaining PayNote targets
+- replace generic blocker text for `BUG-002` / `BUG-003` with precise,
+  evidence-backed root cause notes
+
+### Commands run
+
+- `npx nx run @demo-bank-app/bank-api:typecheck`
+- `npx nx run @demo-bank-app/bank-api:lint`
+- `set -a; . ./.localstack.env; set +a; npx nx run @demo-bank-app/bank-api:test:paynotes:integration`
+- `set -a; . ./.localstack.env; set +a; npx nx run @demo-bank-app/bank-api:test:paynotes:integration:serial`
+- `set -a; test -f apps/bank-api/tests/paynotes/.env.agent && . apps/bank-api/tests/paynotes/.env.agent; set +a; npx nx run @demo-bank-app/bank-api:test:paynotes:e2e`
+- targeted diagnostic runs for `pending-install-capture.integration.test.ts`
+
+### Results
+
+- `card-delivery-capture` now passes locally end to end.
+- `test:paynotes:integration` passes with the delivery/capture scenario active.
+- `test:paynotes:integration:serial` passes with 3 explicit skips.
+- `test:paynotes:e2e` passes with 4 explicit skips.
+- `BUG-002` was narrowed to a specific customer-read-model + hold-mapping gap.
+- `BUG-003` was narrowed to a specific stateful continuation gap in the local
+  MyOS harness.
+
+### Bugs / blockers discovered
+
+- `BUG-001` is closed.
+- `BUG-002` remains open, but the generic “pending-action continuation” wording
+  has been replaced with exact runtime evidence:
+  - raw contract exists with a pending action
+  - customer route returns `Contract summary not available`
+  - direct pending-action decision still leaves capture without a hold mapping
+- `BUG-003` remains open, but the blocker is now explicit:
+  the current `MyOsHarness` does not synthesize the multi-epoch follow-up
+  events required by milestone, subscription, and voucher documents.

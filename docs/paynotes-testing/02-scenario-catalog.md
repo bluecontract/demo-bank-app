@@ -17,21 +17,24 @@ its status must be explicit and documented.
    - duplicate capture replay must not duplicate balances
 
 2. `fetch-by-id-fallback-smoke`
+
    - bank webhook body `{ "id": eventId }`
    - bank fetches the full event from MyOS
    - replay remains idempotent
-
-### Implemented but blocked / skipped
 
 3. `card-delivery-capture`
 
    - delivery identification works locally
    - acceptance works locally
-   - capture continuation is currently blocked by local harness bootstrap-flow
-     gaps
+   - root PayNote bootstrap and capture now pass locally end to end
+
+### Implemented but blocked / skipped
 
 4. `pending-install-approval-capture`
-   - pending-action continuation still needs a stable local harness flow
+   - raw contract and pending action are persisted locally
+   - customer-facing contract route still returns `Contract summary not available`
+   - the simplified root-only shortcut does not create the hold mapping needed
+     for capture continuation
 
 ## L2 — serial / complex local live scenarios
 
@@ -40,17 +43,20 @@ its status must be explicit and documented.
 5. `milestones-partial-captures`
 
    - milestone captures: `8_000`, `12_000`, `7_000`, `9_000`
+   - needs stateful MyOS continuation after each customer approval
 
 6. `subscription-mandate-cycle`
 
    - initial capture
    - mandate bootstrap
    - one follow-up cycle
+   - needs mandate bootstrap target-session linking and completion events
 
 7. `voucher-monitoring`
    - delivery / satisfaction
    - voucher monitoring
    - cashback continuation
+   - needs monitoring report delivery and linked voucher auto-start
 
 ## L3 — real MyOS E2E canaries
 

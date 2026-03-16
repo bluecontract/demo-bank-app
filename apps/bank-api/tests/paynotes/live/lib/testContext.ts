@@ -14,6 +14,10 @@ import {
 } from '@aws-sdk/client-secrets-manager';
 import { CARD_SETTLEMENT } from '@demo-bank-app/banking';
 import {
+  DynamoContractRepository,
+  type ContractRecord,
+} from '@demo-bank-app/contracts';
+import {
   DynamoBootstrapContextRepository,
   DynamoPayNoteRepository,
   DynamoPayNoteDeliveryRepository,
@@ -49,6 +53,9 @@ export type PayNoteLiveTestContext = {
     sessionId: string,
     timeoutMs?: number
   ) => Promise<any>;
+  getRawContractBySessionId: (
+    sessionId: string
+  ) => Promise<ContractRecord | null>;
   getRawPayNoteBySessionId: (
     sessionId: string
   ) => Promise<PayNoteRecord | null>;
@@ -465,6 +472,11 @@ export const createPayNoteLiveTestContext =
       region: process.env.AWS_REGION ?? 'us-east-1',
       endpoint: process.env.AWS_ENDPOINT_URL,
     });
+    const contractRepository = new DynamoContractRepository({
+      tableName,
+      region: process.env.AWS_REGION ?? 'us-east-1',
+      endpoint: process.env.AWS_ENDPOINT_URL,
+    });
     const payNoteRepository = new DynamoPayNoteRepository({
       tableName,
       region: process.env.AWS_REGION ?? 'us-east-1',
@@ -504,6 +516,8 @@ export const createPayNoteLiveTestContext =
         );
         return matched;
       },
+      getRawContractBySessionId: async sessionId =>
+        contractRepository.getContractBySessionId(sessionId),
       getRawPayNoteBySessionId: async sessionId =>
         payNoteRepository.getPayNoteBySessionId(sessionId),
       cleanup: async () => {
