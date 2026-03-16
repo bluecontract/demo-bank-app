@@ -115,23 +115,27 @@ Payment Mandate operations used by bank:
 1. Parse emitted event.
 2. Resolve source contract/document type and validate against capability matrix.
 3. Resolve canonical session and root chain context.
-4. Resolve effective charge direction from event type in emitting-contract
+4. If canonical session is already established and webhook source session differs,
+   ignore the event for actionable processing. Non-canonical sessions may be
+   used only before canonical identity is established, for bootstrap/link
+   hydration and related dedupe/linkage setup.
+5. Resolve effective charge direction from event type in emitting-contract
    context:
    - linked => `payerChannel -> payeeChannel`,
    - reverse => `payeeChannel -> payerChannel`.
-5. Resolve effective source/destination accounts from emitting-contract context.
-6. Apply root-chain compatibility guards (policy-only), for example:
+6. Resolve effective source/destination accounts from emitting-contract context.
+7. Apply root-chain compatibility guards (policy-only), for example:
    - allowed merchant/customer pair constraints,
    - chain membership constraints.
-7. Validate `sourceAccount` mandate policy against resolved effective source:
+8. Validate `sourceAccount` mandate policy against resolved effective source:
    - `root` => accept resolved source account/funding context,
    - explicit account number => (future extension) must match resolved source;
      unsupported mode is explicit reject in current scope.
-8. Enforce ownership invariant:
+9. Enforce ownership invariant:
    - resolved effective source MUST belong to Payment Mandate granter,
    - if source owner != granter => explicit reject.
-9. Apply idempotency gate `(webhookEventId, emittedEventIndex)`.
-10. Derive stable `chargeAttemptId` from source event identity.
+10. Apply idempotency gate `(webhookEventId, emittedEventIndex)`.
+11. Derive stable `chargeAttemptId` from source event identity.
 
 ### 2) Payment Mandate policy gate
 

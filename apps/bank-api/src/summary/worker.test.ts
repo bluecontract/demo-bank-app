@@ -326,4 +326,68 @@ describe('handleSummaryJob (contract-summary)', () => {
     expect(summaryCallInput.contract.relatedTransactionIds).toBeUndefined();
     expect(summaryCallInput.contract.relatedHoldIds).toBeUndefined();
   });
+
+  it('skips delayed DOCUMENT_CREATED jobs after newer epochs already won', async () => {
+    summaryInputStore.get.mockResolvedValue({
+      contractId: 'contract-1',
+      summaryInputKey: 'SUMMARY_INPUT#2026-02-08T10:00:00.000Z#-1',
+      sourceUpdatedAt: '2026-02-08T10:00:00.000Z',
+      sourceEpoch: -1,
+      contractSnapshot: {
+        contractId: 'contract-1',
+        typeBlueId: 'PayNote/PayNote',
+        displayName: 'PayNote',
+        document: { name: 'Snapshot state' },
+        userId: 'user-1',
+        status: 'reserved',
+        updatedAt: '2026-02-08T10:00:00.000Z',
+        createdAt: '2026-02-08T09:00:00.000Z',
+      },
+      createdAt: '2026-02-08T10:00:00.000Z',
+    });
+
+    contractRepository.getContract.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: 'PayNote/PayNote',
+      displayName: 'PayNote',
+      document: { name: 'Latest state' },
+      userId: 'user-1',
+      status: 'reserved',
+      updatedAt: '2026-02-08T10:00:05.000Z',
+      summarySourceUpdatedAt: '2026-02-08T10:00:05.000Z',
+      summarySourceEpoch: 2,
+      createdAt: '2026-02-08T09:00:00.000Z',
+    });
+
+    const conditionalFailure = Object.assign(
+      new Error('The conditional request failed'),
+      {
+        name: 'ConditionalCheckFailedException',
+      }
+    );
+    hoistedSummary.generateContractSummaryForContractMock.mockRejectedValueOnce(
+      conditionalFailure
+    );
+
+    const result = await handleSummaryJob({
+      type: 'contract-summary',
+      messageVersion: 1,
+      contractId: 'contract-1',
+      documentId: 'document-1',
+      summaryInputKey: 'SUMMARY_INPUT#2026-02-08T10:00:00.000Z#-1',
+      sourceUpdatedAt: '2026-02-08T10:00:00.000Z',
+      sourceEpoch: -1,
+      reason: 'webhook',
+    });
+
+    expect(result).toEqual({ status: 'stale' });
+    expect(logger.info).toHaveBeenCalledWith(
+      'Skipping stale contract summary job',
+      expect.objectContaining({
+        contractId: 'contract-1',
+        sourceEpoch: -1,
+        latestSummarySourceEpoch: 2,
+      })
+    );
+  });
 });

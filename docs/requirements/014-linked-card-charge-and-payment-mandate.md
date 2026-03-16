@@ -118,6 +118,20 @@ successful capture result.
 - `requestId` remains optional business correlation only and MUST NOT be used as
   idempotency key.
 
+### FR-6a Canonical session gate for actionable webhook processing
+
+For PayNote card-charge/capture/transfer runtime, bank MUST treat the canonical
+session as the only actionable source session for a resolved PayNote document.
+
+- once canonical session is known, webhook events from other sessions MUST be
+  ignored for actionable processing,
+- ignored non-canonical events MUST NOT execute reserve/capture/transfer,
+  MUST NOT emit business response events, and MUST NOT advance async mandate
+  follow-up tied to that originating request,
+- non-canonical sessions may participate only in pre-canonical bootstrap/link
+  establishment and dedupe/linkage hydration; they are not source of truth after
+  canonical identity is established.
+
 ### FR-7 Payment Mandate cumulative usage state
 
 Payment Mandate usage limits MUST be validated and updated from Payment Mandate
