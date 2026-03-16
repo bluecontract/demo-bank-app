@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
+import { hydrateMerchantLogos } from '../../../lib/merchantDirectory';
 import type { RelatedContractItem } from '../../../types/api';
 
 type RelatedContractsError = Error & { status?: number };
@@ -45,7 +46,10 @@ export function useHoldContracts({
           throw makeError(message, response.status);
         }
 
-        return response.body.items;
+        return hydrateMerchantLogos(
+          response.body.items,
+          response.body.merchantDirectory
+        );
       } catch (error) {
         if (handleAuthError(error)) {
           throw makeError('Authentication required', 401);

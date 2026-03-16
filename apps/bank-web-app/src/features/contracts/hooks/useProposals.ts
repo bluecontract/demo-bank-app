@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
+import { hydrateMerchantLogos } from '../../../lib/merchantDirectory';
 import type { PayNoteDeliverySummary } from '../../../types/api';
 
 type ProposalsError = Error & { status?: number };
@@ -30,7 +31,10 @@ export function useProposals(options: UseProposalsOptions = {}) {
         throw makeError('Failed to fetch proposals', response.status);
       }
 
-      return response.body.items;
+      return hydrateMerchantLogos(
+        response.body.items,
+        response.body.merchantDirectory
+      );
     },
     enabled: options.enabled ?? true,
     refetchInterval: false,

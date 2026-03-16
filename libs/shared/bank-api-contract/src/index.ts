@@ -47,3 +47,7 @@ export {
   resolveCurrentSummaryEpoch,
   resolveActivePendingAction,
 } from './lib/pendingActionQueue';
+export {
+  BooleanQueryParamSchema,
+  coerceBooleanQueryParam,
+} from './lib/queryParams';

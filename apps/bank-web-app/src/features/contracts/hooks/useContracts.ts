@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
+import { hydrateMerchantLogos } from '../../../lib/merchantDirectory';
 import type { ContractSummary } from '../../../types/api';
 
 type UseContractsOptions = {
@@ -32,7 +33,10 @@ export function useContracts(options: UseContractsOptions = {}) {
         throw makeError('Failed to fetch contracts', response.status);
       }
 
-      return response.body.items;
+      return hydrateMerchantLogos(
+        response.body.items,
+        response.body.merchantDirectory
+      );
     },
     enabled: options.enabled ?? true,
     refetchInterval: false,

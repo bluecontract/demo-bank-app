@@ -102,6 +102,29 @@ describe('pollChangesHandler', () => {
     );
   });
 
+  it('treats includeActivity=false string as disabled activity polling', async () => {
+    contractRepository.getContractPollingMarkerByUserId.mockResolvedValue({
+      revision: 0,
+    });
+    payNoteDeliveryRepository.getDeliveryPollingMarkerByUserId.mockResolvedValue(
+      {
+        revision: 0,
+      }
+    );
+
+    const response = await pollChangesHandler(
+      {
+        query: {
+          includeActivity: 'false',
+        },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.activity).toBeUndefined();
+  });
+
   it('returns contracts/proposals polling summaries', async () => {
     contractRepository.getContractPollingMarkerByUserId.mockResolvedValue({
       revision: 4,

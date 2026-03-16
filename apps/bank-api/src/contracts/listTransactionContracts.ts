@@ -7,6 +7,7 @@ import {
 import { getDependencies } from '../paynote/dependencies';
 import { filterCustomerVisibleContracts } from './contractVisibility';
 import {
+  buildMerchantDirectoryResponse,
   buildMerchantDirectoryMap,
   resolveMerchantFrom,
 } from '../shared/merchantDirectory';
@@ -55,14 +56,19 @@ export const listTransactionContractsHandler = async (
   return {
     status: 200 as const,
     body: {
+      merchantDirectory: buildMerchantDirectoryResponse(directory),
       items: [
         ...visibleContracts.map(item => ({
           ...item,
-          from: resolveMerchantFrom(item.merchantId, directory),
+          from: resolveMerchantFrom(item.merchantId, directory, {
+            includeLogo: false,
+          }),
         })),
         ...proposalItems.map(item => ({
           ...item,
-          from: resolveMerchantFrom(item.merchantId, directory),
+          from: resolveMerchantFrom(item.merchantId, directory, {
+            includeLogo: false,
+          }),
         })),
       ],
     },

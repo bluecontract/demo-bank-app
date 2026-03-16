@@ -5,7 +5,10 @@ import {
   type ActivityItem,
 } from '@demo-bank-app/banking';
 import { ServerInferRequest } from '@ts-rest/core';
-import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
+import {
+  bankApiContract,
+  coerceBooleanQueryParam,
+} from '@demo-bank-app/shared-bank-api-contract';
 import {
   extractAuthInfo,
   type MaybeAuthenticatedTsRestRequestContext,
@@ -151,9 +154,18 @@ export const pollChangesHandler = async (
     holdRepository,
   } = await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
-  const includeContracts = request.query?.includeContracts ?? true;
-  const includeProposals = request.query?.includeProposals ?? true;
-  const includeActivity = request.query?.includeActivity ?? false;
+  const includeContracts = coerceBooleanQueryParam(
+    request.query?.includeContracts,
+    true
+  ) as boolean;
+  const includeProposals = coerceBooleanQueryParam(
+    request.query?.includeProposals,
+    true
+  ) as boolean;
+  const includeActivity = coerceBooleanQueryParam(
+    request.query?.includeActivity,
+    false
+  ) as boolean;
   const activityAccountNumber = request.query?.activityAccountNumber;
   const serverTime = new Date().toISOString();
   const invalidCursorResponse = (cursorName: string) =>

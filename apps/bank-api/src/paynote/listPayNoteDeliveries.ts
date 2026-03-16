@@ -6,6 +6,7 @@ import {
 } from '../auth/middleware';
 import { getDependencies } from './dependencies';
 import {
+  buildMerchantDirectoryResponse,
   buildMerchantDirectoryMap,
   resolveMerchantFrom,
 } from '../shared/merchantDirectory';
@@ -55,9 +56,12 @@ export const listPayNoteDeliveriesHandler = async (
   return {
     status: 200 as const,
     body: {
+      merchantDirectory: buildMerchantDirectoryResponse(directory),
       items: visibleDeliveries.map(delivery => ({
         ...delivery,
-        from: resolveMerchantFrom(delivery.merchantId, directory),
+        from: resolveMerchantFrom(delivery.merchantId, directory, {
+          includeLogo: false,
+        }),
       })),
     },
   };

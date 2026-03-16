@@ -424,6 +424,8 @@ export const MerchantFromDto = z.object({
   logoUrl: z.string().optional(),
 });
 
+export const MerchantDirectoryMapDto = z.record(z.string(), MerchantFromDto);
+
 export const PayNoteDeliverySummaryDto = z.object({
   deliveryId: z.string(),
   deliverySessionId: z.string().optional(),
@@ -446,6 +448,7 @@ export const PayNoteDeliverySummaryDto = z.object({
 
 export const PayNoteDeliveryListResponseDto = z.object({
   items: z.array(PayNoteDeliverySummaryDto),
+  merchantDirectory: MerchantDirectoryMapDto,
 });
 
 export const PayNoteDeliveryDetailsDto = z.object({
@@ -499,6 +502,7 @@ export const ContractSummaryDto = z.object({
 
 export const ContractListResponseDto = z.object({
   items: z.array(ContractSummaryDto),
+  merchantDirectory: MerchantDirectoryMapDto,
 });
 
 export const RelatedContractItemDto = z.union([
@@ -510,6 +514,7 @@ export const RelatedContractItemDto = z.union([
 
 export const RelatedContractListResponseDto = z.object({
   items: z.array(RelatedContractItemDto),
+  merchantDirectory: MerchantDirectoryMapDto,
 });
 
 export const ContractSummaryStoryDto = z.object({

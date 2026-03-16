@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
+import { hydrateMerchantLogos } from '../../../lib/merchantDirectory';
 import type { RelatedContractItem } from '../../../types/api';
 
 type RelatedContractsError = Error & { status?: number };
@@ -79,7 +80,12 @@ export function useRelatedContracts({
                 : 'Failed to fetch related contracts';
             throw makeError(message, response.status);
           }
-          items.push(...response.body.items);
+          items.push(
+            ...hydrateMerchantLogos(
+              response.body.items,
+              response.body.merchantDirectory
+            )
+          );
         });
 
         return items;

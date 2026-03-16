@@ -72,13 +72,19 @@ describe('listContractsHandler', () => {
     );
 
     expect(response.status).toBe(200);
+    expect(response.body.merchantDirectory).toEqual({
+      [merchantId]: {
+        merchantId,
+        name: 'Blue Appliances',
+        logoUrl: 'data:image/png;base64,abc',
+      },
+    });
     expect(response.body.items).toEqual([
       expect.objectContaining({
         contractId: visible[0].contractId,
         from: {
           merchantId,
           name: 'Blue Appliances',
-          logoUrl: 'data:image/png;base64,abc',
         },
       }),
     ]);

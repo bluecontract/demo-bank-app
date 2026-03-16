@@ -4,6 +4,7 @@ import {
   createSanitizedOptionalStringSchema,
   createSanitizedStringSchema,
 } from './sanitization';
+import { BooleanQueryParamSchema } from './queryParams';
 import {
   AccountDto,
   CreateAccountRequestDto,
@@ -65,7 +66,6 @@ export const HealthCheckSchema = z.object({
 });
 
 const PollCursorSchema = z.string().min(1);
-
 const PollChangeSummarySchema = z.object({
   cursor: PollCursorSchema,
   changed: z.boolean(),
@@ -463,9 +463,9 @@ export const bankApiContract = c.router(
         path: '/v1/poll/changes',
         query: z
           .object({
-            includeContracts: z.coerce.boolean().optional(),
-            includeProposals: z.coerce.boolean().optional(),
-            includeActivity: z.coerce.boolean().optional(),
+            includeContracts: BooleanQueryParamSchema,
+            includeProposals: BooleanQueryParamSchema,
+            includeActivity: BooleanQueryParamSchema,
             activityAccountNumber: z.string().length(10).optional(),
             contractsCursor: z.string().optional(),
             proposalsCursor: z.string().optional(),

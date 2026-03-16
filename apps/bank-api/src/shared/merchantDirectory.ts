@@ -9,6 +9,10 @@ export type MerchantFrom = {
   logoUrl?: string;
 };
 
+type ResolveMerchantFromOptions = {
+  includeLogo?: boolean;
+};
+
 const DEFAULT_NAME = 'Merchant';
 
 export const buildMerchantDirectoryMap = async (
@@ -29,7 +33,8 @@ export const buildMerchantDirectoryMap = async (
 
 export const resolveMerchantFrom = (
   merchantId: string | undefined,
-  directory: Map<string, MerchantDirectoryEntry>
+  directory: Map<string, MerchantDirectoryEntry>,
+  options: ResolveMerchantFromOptions = {}
 ): MerchantFrom => {
   if (!merchantId) {
     return { name: DEFAULT_NAME };
@@ -43,6 +48,18 @@ export const resolveMerchantFrom = (
   return {
     merchantId: entry.merchantId,
     name: entry.name,
-    logoUrl: entry.logoUrl,
+    ...(options.includeLogo !== false && entry.logoUrl
+      ? { logoUrl: entry.logoUrl }
+      : {}),
   };
 };
+
+export const buildMerchantDirectoryResponse = (
+  directory: Map<string, MerchantDirectoryEntry>
+): Record<string, MerchantFrom> =>
+  Object.fromEntries(
+    Array.from(directory.entries()).map(([merchantId]) => [
+      merchantId,
+      resolveMerchantFrom(merchantId, directory),
+    ])
+  );
