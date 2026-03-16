@@ -11,6 +11,8 @@ import {
 } from '../lib/assertions';
 import { materializeContractSummaryForWebhook } from '../lib/summaryWorker';
 import {
+  buildMyOsDocumentSessionBootstrap,
+  buildMyOsTargetDocumentSessionStartedEvent,
   buildSubscriptionDeliveryDocument,
   buildSubscriptionMandateDocument,
   buildSubscriptionPayNote,
@@ -29,21 +31,7 @@ describe('PayNote live scenario: subscription mandate bootstrap and follow-up cy
     await context.cleanup();
   });
 
-  it.skip('does init capture, mandate bootstrap and one linked follow-up cycle', async () => {
-    // Verified bank-runtime blocker on 2026-03-16:
-    // after delivery acceptance and root PayNote bootstrap, the raw root
-    // contract exists for the canonical session and document id, and the raw
-    // PayNote record is persisted, but the delivery record still lacks the
-    // root `payNoteDocumentId` linkage. When the root DOCUMENT_CREATED event
-    // is replayed, the normal paynote handler correctly sees the canonical
-    // session and ignores the duplicate create, then the delayed delivery
-    // bootstrap path calls `getDeliveryByPayNoteDocumentId(...)` and fails to
-    // resolve the canonical requesting delivery, logging:
-    // `Bootstrap requests ignored (unknown or non-canonical requesting session)`.
-    // This is a runtime bank bug in delivery -> root PayNote linkage, not a
-    // fixture or harness issue. Keep the scenario implemented but skipped
-    // until the runtime persists delivery <-> root PayNote linkage for this
-    // subscription bootstrap path.
+  it('does init capture, mandate bootstrap and one linked follow-up cycle', async () => {
     const ctx = createScenarioRunContext('subscription-mandate-cycle');
     await context.bank.signUpUniqueTestUser('pn-subscription-merchant', true, {
       merchantId: 'merchant-subscription-demo',
@@ -71,19 +59,22 @@ describe('PayNote live scenario: subscription mandate bootstrap and follow-up cy
 
     const deliverySessionId = `subscription-delivery-session-${randomUUID()}`;
     const deliveryDocumentId = `subscription-delivery-doc-${randomUUID()}`;
+    const payNoteBootstrapSessionId = `subscription-root-bootstrap-${randomUUID()}`;
+    const payNoteBootstrapDocumentId = `subscription-root-bootstrap-doc-${randomUUID()}`;
     const payNoteSessionId = `subscription-root-session-${randomUUID()}`;
     const payNoteDocumentId = `subscription-root-doc-${randomUUID()}`;
     const mandateSessionId = `subscription-mandate-session-${randomUUID()}`;
     const mandateDocumentId = `subscription-mandate-doc-${randomUUID()}`;
     const deliveryEventId = `subscription-delivery-event-${randomUUID()}`;
     const deliveryBootstrapEventId = `subscription-bootstrap-${randomUUID()}`;
+    const payNoteBootstrapLinkedEventId = `subscription-bootstrap-linked-${randomUUID()}`;
     const payNoteCreatedEventId = `subscription-created-${randomUUID()}`;
     const payNoteBootstrapReplayEventId = `subscription-bootstrap-replay-${randomUUID()}`;
     const initialCaptureEventId = `subscription-initial-capture-${randomUUID()}`;
     const mandateCreatedEventId = `subscription-mandate-created-${randomUUID()}`;
     const mandateAttachedEventId = `subscription-mandate-attached-${randomUUID()}`;
     const followUpChargeEventId = `subscription-follow-up-${randomUUID()}`;
-    const followUpChargeAttemptId = `paynote-card-charge-attempt:${payNoteDocumentId}:${followUpChargeEventId}:0`;
+    const followUpChargeAttemptId = `${payNoteDocumentId}:${followUpChargeEventId}:0`;
 
     const initialPayNoteDocument = buildSubscriptionPayNote({
       customerAccountId: customer.account.accountId,
@@ -149,12 +140,20 @@ describe('PayNote live scenario: subscription mandate bootstrap and follow-up cy
       document: initialPayNoteDocument,
     });
     context.myOs.seedDocument({
+      documentId: payNoteBootstrapDocumentId,
+      sessionId: payNoteBootstrapSessionId,
+      document: buildMyOsDocumentSessionBootstrap({
+        name: 'Subscription Root Bootstrap',
+        initiatorSessionIds: [payNoteSessionId],
+      }),
+    });
+    context.myOs.seedDocument({
       documentId: mandateDocumentId,
       sessionId: mandateSessionId,
       document: mandateDocumentForWebhook,
     });
     await context.saveBootstrapContext({
-      bootstrapSessionId: payNoteSessionId,
+      bootstrapSessionId: payNoteBootstrapSessionId,
       accountNumber: customer.account.accountNumber,
       userId: customer.user.userId,
     });
@@ -163,6 +162,15 @@ describe('PayNote live scenario: subscription mandate bootstrap and follow-up cy
       type: 'Conversation/Document Bootstrap Requested',
       requestId: 'subscription-payment-mandate',
       bootstrapAssignee: 'guarantorChannel',
+      initialMessages: {
+        perChannel: {
+          granterChannel:
+            'Authorize recurring monthly payments for this contract (customer message).',
+          payerChannel:
+            'Authorize recurring monthly payments for this contract (payer fallback).',
+        },
+        defaultMessage: 'Default payment mandate message.',
+      },
       channelBindings: {
         granterChannel: {
           accountId: customer.user.userId,
@@ -208,6 +216,20 @@ describe('PayNote live scenario: subscription mandate bootstrap and follow-up cy
       eventType: 'DOCUMENT_CREATED',
       document: initialPayNoteDocument,
       emitted: [mandateBootstrapRequest],
+    });
+    const payNoteBootstrapLinkedWebhookPayload = buildWebhookEnvelope({
+      eventId: payNoteBootstrapLinkedEventId,
+      sessionId: payNoteBootstrapSessionId,
+      eventType: 'DOCUMENT_EPOCH_ADVANCED',
+      epoch: 1,
+      document: buildMyOsDocumentSessionBootstrap({
+        name: 'Subscription Root Bootstrap',
+      }),
+      emitted: [
+        buildMyOsTargetDocumentSessionStartedEvent({
+          initiatorSessionIds: [payNoteSessionId],
+        }),
+      ],
     });
     const initialCaptureWebhookPayload = buildWebhookEnvelope({
       eventId: initialCaptureEventId,
@@ -307,13 +329,23 @@ describe('PayNote live scenario: subscription mandate bootstrap and follow-up cy
 
     context.myOs.queueBootstrapResponse({
       status: 200,
-      body: { sessionId: payNoteSessionId },
+      body: { sessionId: payNoteBootstrapSessionId },
     });
     await context.bank.postPayNoteWebhookPayload(
       deliveryBootstrapWebhookPayload
     );
     await context.myOs.waitForBootstrapCall(call =>
       JSON.stringify(call.body).includes('Exclusive Spotify Subscription Offer')
+    );
+
+    logScenarioStep(ctx, 'posting-root-bootstrap-link-webhook', {
+      payNoteBootstrapLinkedEventId,
+      payNoteBootstrapSessionId,
+      payNoteSessionId,
+      payNoteDocumentId,
+    });
+    await context.bank.postPayNoteWebhookPayload(
+      payNoteBootstrapLinkedWebhookPayload
     );
 
     logScenarioStep(ctx, 'posting-root-created-webhook', {

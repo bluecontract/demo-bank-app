@@ -6,9 +6,12 @@ import { createFundedCustomerWithCard } from '../lib/scenarioSetup';
 import { FAST_AMOUNTS } from '../lib/amounts';
 import { createScenarioRunContext, logScenarioStep } from '../lib/reporting';
 import {
+  waitForNoDuplicatePayNoteCaptureSequenceAfterReplay,
   waitForNoDuplicateActivityAfterReplay,
+  waitForPayNoteCaptureSequence,
   waitForSinglePostedCapture,
 } from '../lib/assertions';
+import { waitForExpectWithLogging } from '../lib/wait';
 import {
   buildCardDeliveryDocument,
   buildCardTransactionPayNote,
@@ -180,26 +183,33 @@ describe('PayNote live scenario: card delivery accepted then capture', () => {
       payNoteSessionId,
     });
     await context.bank.postPayNoteWebhookPayload(payNoteCreatedWebhookPayload);
-    console.log(
-      JSON.stringify({
-        scope: 'paynotes-test-debug',
-        label: 'raw-paynote-after-created',
-        payNoteSessionId,
-        record: await context.getRawPayNoteBySessionId(payNoteSessionId),
-      })
-    );
     await context.bank.postPayNoteWebhookPayload(captureWebhookPayload);
-    const rawPayNoteAfterCapture = await context.getRawPayNoteBySessionId(
-      payNoteSessionId
+
+    await waitForPayNoteCaptureSequence({
+      bank: context.bank,
+      jwtCookie: customer.user.jwtCookie,
+      accountNumber: customer.account.accountNumber,
+      payNoteDocumentId,
+      expectedCaptureAmountsMinor: [FAST_AMOUNTS.cardPurchaseMinor],
+    });
+
+    let rawPayNoteAfterCapture:
+      | Awaited<ReturnType<PayNoteLiveTestContext['getRawPayNoteBySessionId']>>
+      | undefined;
+    await waitForExpectWithLogging(
+      async () => {
+        rawPayNoteAfterCapture = await context.getRawPayNoteBySessionId(
+          payNoteSessionId
+        );
+        expect(rawPayNoteAfterCapture).toBeTruthy();
+        expect(rawPayNoteAfterCapture?.holdId).toBeTruthy();
+        expect(rawPayNoteAfterCapture?.transactionId).toBeTruthy();
+      },
+      20_000,
+      500,
+      'raw-paynote-after-capture'
     );
-    console.log(
-      JSON.stringify({
-        scope: 'paynotes-test-debug',
-        label: 'raw-paynote-after-capture',
-        payNoteSessionId,
-        record: rawPayNoteAfterCapture,
-      })
-    );
+
     expect(rawPayNoteAfterCapture).toBeTruthy();
     expect(rawPayNoteAfterCapture?.holdId).toBeTruthy();
     expect(rawPayNoteAfterCapture?.transactionId).toBeTruthy();
@@ -221,6 +231,14 @@ describe('PayNote live scenario: card delivery accepted then capture', () => {
     });
 
     await context.bank.postPayNoteWebhookPayload(captureWebhookPayload);
+    await waitForNoDuplicatePayNoteCaptureSequenceAfterReplay({
+      bank: context.bank,
+      jwtCookie: customer.user.jwtCookie,
+      accountNumber: customer.account.accountNumber,
+      payNoteDocumentId,
+      expectedCaptureAmountsMinor: [FAST_AMOUNTS.cardPurchaseMinor],
+      stablePeriodMs: 5_000,
+    });
     await waitForNoDuplicateActivityAfterReplay({
       bank: context.bank,
       jwtCookie: customer.user.jwtCookie,

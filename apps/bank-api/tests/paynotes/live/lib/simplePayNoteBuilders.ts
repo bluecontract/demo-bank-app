@@ -2,6 +2,7 @@ import { Blue } from '@blue-labs/language';
 import { createDefaultMergingProcessor } from '@blue-labs/document-processor';
 import { repository } from '@blue-repository/types';
 import conversationBlueIds from '@blue-repository/types/packages/conversation/blue-ids';
+import myosBlueIds from '@blue-repository/types/packages/myos/blue-ids';
 import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 import { FAST_AMOUNTS } from './amounts';
 
@@ -18,6 +19,46 @@ export type TestCardTransactionDetails = {
 };
 
 const DELIVERY_BLUE_ID = paynoteBlueIds['PayNote/PayNote Delivery'];
+
+export const buildMyOsDocumentSessionBootstrap = (input: {
+  name?: string;
+  initiatorSessionIds?: string[];
+}) => {
+  const initiatorSessionIdsYaml =
+    input.initiatorSessionIds && input.initiatorSessionIds.length > 0
+      ? `\ninitiatorSessionIds:\n${input.initiatorSessionIds
+          .map(sessionId => `  - ${sessionId}`)
+          .join('\n')}`
+      : '';
+  const node = blue.yamlToNode(
+    `name: ${input.name ?? 'Bootstrap'}${initiatorSessionIdsYaml}`
+  );
+  node.setType(
+    blue.jsonValueToNode({
+      blueId: myosBlueIds['MyOS/Document Session Bootstrap'],
+    })
+  );
+  return blue.nodeToJson(node) as Record<string, unknown>;
+};
+
+export const buildMyOsTargetDocumentSessionStartedEvent = (input: {
+  initiatorSessionIds: string[];
+  name?: string;
+}) => {
+  const node = blue.yamlToNode(
+    `name: ${
+      input.name ?? 'Target Session Started'
+    }\ninitiatorSessionIds:\n${input.initiatorSessionIds
+      .map(sessionId => `  - ${sessionId}`)
+      .join('\n')}`
+  );
+  node.setType(
+    blue.jsonValueToNode({
+      blueId: myosBlueIds['MyOS/Target Document Session Started'],
+    })
+  );
+  return blue.nodeToJson(node) as Record<string, unknown>;
+};
 
 export const buildWebhookEnvelope = (input: {
   eventId: string;
