@@ -17,6 +17,8 @@ import {
   DynamoBootstrapContextRepository,
   DynamoPayNoteRepository,
   DynamoPayNoteDeliveryRepository,
+  type PayNoteDeliveryRecord,
+  type PayNoteRecord,
 } from '@demo-bank-app/paynotes';
 import { BankTestDriver } from './BankTestDriver';
 import { MyOsHarness } from './MyOsHarness';
@@ -40,20 +42,30 @@ export type PayNoteLiveTestContext = {
     merchantId?: string;
     createdAt?: string;
   }) => Promise<void>;
-  getRawDeliveryBySessionId: (sessionId: string) => Promise<unknown | null>;
+  getRawDeliveryBySessionId: (
+    sessionId: string
+  ) => Promise<PayNoteDeliveryRecord | null>;
   waitForRawDeliveryBySessionId: (
     sessionId: string,
     timeoutMs?: number
   ) => Promise<any>;
-  getRawPayNoteBySessionId: (sessionId: string) => Promise<unknown | null>;
+  getRawPayNoteBySessionId: (
+    sessionId: string
+  ) => Promise<PayNoteRecord | null>;
   cleanup: () => Promise<void>;
 };
 
 const TRACKED_ENV_KEYS = [
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
   'AWS_REGION',
   'AWS_ENDPOINT_URL',
+  'AWS_PROFILE',
+  'AWS_DEFAULT_PROFILE',
+  'AWS_CONFIG_FILE',
+  'AWS_SHARED_CREDENTIALS_FILE',
+  'AWS_SDK_LOAD_CONFIG',
   'AUTH_DYNAMO_TABLE_NAME',
   'BANKING_DYNAMO_TABLE_NAME',
   'JWT_SECRET_ARN',
@@ -386,8 +398,14 @@ export const createPayNoteLiveTestContext =
 
     process.env.AWS_ACCESS_KEY_ID = 'test';
     process.env.AWS_SECRET_ACCESS_KEY = 'test';
+    delete process.env.AWS_SESSION_TOKEN;
     process.env.AWS_REGION = process.env.AWS_REGION ?? 'us-east-1';
     process.env.AWS_ENDPOINT_URL = resolveLocalstackEndpoint();
+    delete process.env.AWS_PROFILE;
+    delete process.env.AWS_DEFAULT_PROFILE;
+    delete process.env.AWS_CONFIG_FILE;
+    delete process.env.AWS_SHARED_CREDENTIALS_FILE;
+    delete process.env.AWS_SDK_LOAD_CONFIG;
     process.env.AUTH_DYNAMO_TABLE_NAME = tableName;
     process.env.BANKING_DYNAMO_TABLE_NAME = tableName;
     process.env.JWT_SECRET_ARN = jwtSecretArn;

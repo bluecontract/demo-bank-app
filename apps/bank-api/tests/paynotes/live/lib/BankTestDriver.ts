@@ -40,6 +40,7 @@ export type SignedUpUser = {
   userId: string;
   jwtCookie: string;
   userEmail: string;
+  merchantId?: string;
   merchantName: string;
 };
 
@@ -56,11 +57,15 @@ export type FundedCardContext = FundedAccountContext & {
 export class BankTestDriver {
   async signUpUniqueTestUser(
     prefix = 'paynote-user',
-    isTest = true
+    isTest = true,
+    options: {
+      merchantId?: string;
+      merchantName?: string;
+    } = {}
   ): Promise<SignedUpUser> {
     const suffix = randomUUID().replace(/-/g, '').slice(0, 10);
     const userEmail = `${prefix}-${suffix}@example.test`;
-    const merchantName = `Merchant ${prefix} ${suffix}`;
+    const merchantName = options.merchantName ?? `Merchant ${prefix} ${suffix}`;
 
     const response = await invokeBankApi({
       method: 'POST',
@@ -69,6 +74,7 @@ export class BankTestDriver {
         email: userEmail,
         merchantName,
         marketingEmailsOptIn: true,
+        ...(options.merchantId ? { merchantId: options.merchantId } : {}),
       },
       headers: { origin: DEFAULT_TEST_ORIGIN },
     });
@@ -84,6 +90,7 @@ export class BankTestDriver {
       userId: response.body.userId,
       jwtCookie,
       userEmail,
+      merchantId: response.body.merchantId,
       merchantName,
     };
   }

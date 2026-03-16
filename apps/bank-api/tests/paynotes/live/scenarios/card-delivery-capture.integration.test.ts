@@ -16,12 +16,7 @@ import {
   emittedCaptureFundsRequested,
 } from '../lib/simplePayNoteBuilders';
 
-/**
- * Blocked locally: after delivery acceptance, the bank expects a richer MyOS
- * bootstrap continuation than the current harness replay provides. See the
- * bug register for the detailed root-cause notes.
- */
-describe.skip('PayNote live scenario: card delivery accepted then capture', () => {
+describe('PayNote live scenario: card delivery accepted then capture', () => {
   let context: PayNoteLiveTestContext;
 
   beforeAll(async () => {
@@ -34,6 +29,10 @@ describe.skip('PayNote live scenario: card delivery accepted then capture', () =
 
   it('posts full webhook payload, persists delivery, accepts it, and captures funds exactly once', async () => {
     const ctx = createScenarioRunContext('card-delivery-capture');
+    await context.bank.signUpUniqueTestUser('pn-card-merchant', true, {
+      merchantId: 'merchant-paynote-demo',
+      merchantName: 'PayNote Demo Shop',
+    });
     const customer = await createFundedCustomerWithCard(context.bank, {
       prefix: 'pn-card-customer',
       accountName: 'PayNote card account',
@@ -56,7 +55,7 @@ describe.skip('PayNote live scenario: card delivery accepted then capture', () =
     const deliverySessionId = `paynote-delivery-session-${randomUUID()}`;
     const deliveryDocumentId = `paynote-delivery-doc-${randomUUID()}`;
     const payNoteSessionId = `paynote-root-session-${randomUUID()}`;
-    const payNoteDocumentId = deliveryDocumentId;
+    const payNoteDocumentId = `paynote-root-doc-${randomUUID()}`;
     const deliveryEventId = `myos-delivery-event-${randomUUID()}`;
     const deliveryBootstrapEventId = `myos-delivery-bootstrap-${randomUUID()}`;
     const payNoteCreatedEventId = `myos-paynote-created-${randomUUID()}`;
@@ -190,20 +189,35 @@ describe.skip('PayNote live scenario: card delivery accepted then capture', () =
       })
     );
     await context.bank.postPayNoteWebhookPayload(captureWebhookPayload);
+    const rawPayNoteAfterCapture = await context.getRawPayNoteBySessionId(
+      payNoteSessionId
+    );
     console.log(
       JSON.stringify({
         scope: 'paynotes-test-debug',
         label: 'raw-paynote-after-capture',
         payNoteSessionId,
-        record: await context.getRawPayNoteBySessionId(payNoteSessionId),
+        record: rawPayNoteAfterCapture,
       })
     );
+    expect(rawPayNoteAfterCapture).toBeTruthy();
+    expect(rawPayNoteAfterCapture?.holdId).toBeTruthy();
+    expect(rawPayNoteAfterCapture?.transactionId).toBeTruthy();
+    if (
+      !rawPayNoteAfterCapture?.holdId ||
+      !rawPayNoteAfterCapture.transactionId
+    ) {
+      throw new Error(
+        'Expected captured PayNote to persist holdId and transactionId'
+      );
+    }
 
     await waitForSinglePostedCapture({
       bank: context.bank,
       jwtCookie: customer.user.jwtCookie,
       accountNumber: customer.account.accountNumber,
-      processorChargeId: auth.processorChargeId,
+      holdId: rawPayNoteAfterCapture.holdId,
+      transactionId: rawPayNoteAfterCapture.transactionId,
     });
 
     await context.bank.postPayNoteWebhookPayload(captureWebhookPayload);
@@ -211,7 +225,8 @@ describe.skip('PayNote live scenario: card delivery accepted then capture', () =
       bank: context.bank,
       jwtCookie: customer.user.jwtCookie,
       accountNumber: customer.account.accountNumber,
-      processorChargeId: auth.processorChargeId,
+      holdId: rawPayNoteAfterCapture.holdId,
+      transactionId: rawPayNoteAfterCapture.transactionId,
       stablePeriodMs: 5_000,
     });
   });

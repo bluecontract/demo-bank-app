@@ -25,10 +25,26 @@ export async function waitForSinglePostedCapture(input: {
   bank: BankTestDriver;
   jwtCookie: string;
   accountNumber: string;
-  processorChargeId: string;
+  processorChargeId?: string;
+  holdId?: string;
+  transactionId?: string;
   timeoutMs?: number;
 }) {
   let items: any[] = [];
+  const matchesHoldCapture = (item: any): boolean =>
+    item.kind === 'HOLD_CAPTURED' &&
+    Boolean(
+      (input.processorChargeId &&
+        item.processorChargeId === input.processorChargeId) ||
+        (input.holdId && item.holdId === input.holdId)
+    );
+  const matchesPostedTransaction = (item: any): boolean =>
+    item.kind === 'POSTED_TRANSACTION' &&
+    Boolean(
+      (input.processorChargeId &&
+        item.processorChargeId === input.processorChargeId) ||
+        (input.transactionId && item.transactionId === input.transactionId)
+    );
 
   await waitForExpectWithLogging(
     async () => {
@@ -39,17 +55,13 @@ export async function waitForSinglePostedCapture(input: {
 
       expectExactlyOneActivityMatch(
         items,
-        item =>
-          item.processorChargeId === input.processorChargeId &&
-          item.kind === 'HOLD_CAPTURED',
+        matchesHoldCapture,
         'single hold capture'
       );
 
       expectExactlyOneActivityMatch(
         items,
-        item =>
-          item.processorChargeId === input.processorChargeId &&
-          item.kind === 'POSTED_TRANSACTION',
+        matchesPostedTransaction,
         'single posted transaction'
       );
     },
@@ -61,16 +73,12 @@ export async function waitForSinglePostedCapture(input: {
   return {
     holdCapture: expectExactlyOneActivityMatch(
       items,
-      item =>
-        item.processorChargeId === input.processorChargeId &&
-        item.kind === 'HOLD_CAPTURED',
+      matchesHoldCapture,
       'single hold capture'
     ),
     postedTransaction: expectExactlyOneActivityMatch(
       items,
-      item =>
-        item.processorChargeId === input.processorChargeId &&
-        item.kind === 'POSTED_TRANSACTION',
+      matchesPostedTransaction,
       'single posted transaction'
     ),
   };
@@ -80,10 +88,26 @@ export async function waitForNoDuplicateActivityAfterReplay(input: {
   bank: BankTestDriver;
   jwtCookie: string;
   accountNumber: string;
-  processorChargeId: string;
+  processorChargeId?: string;
+  holdId?: string;
+  transactionId?: string;
   stablePeriodMs?: number;
 }) {
   const stablePeriodMs = input.stablePeriodMs ?? 2_000;
+  const matchesHoldCapture = (item: any): boolean =>
+    item.kind === 'HOLD_CAPTURED' &&
+    Boolean(
+      (input.processorChargeId &&
+        item.processorChargeId === input.processorChargeId) ||
+        (input.holdId && item.holdId === input.holdId)
+    );
+  const matchesPostedTransaction = (item: any): boolean =>
+    item.kind === 'POSTED_TRANSACTION' &&
+    Boolean(
+      (input.processorChargeId &&
+        item.processorChargeId === input.processorChargeId) ||
+        (input.transactionId && item.transactionId === input.transactionId)
+    );
 
   await waitForExpectWithLogging(
     async () => {
@@ -93,22 +117,12 @@ export async function waitForNoDuplicateActivityAfterReplay(input: {
       );
 
       expect(
-        findActivityMatches(
-          items,
-          item =>
-            item.processorChargeId === input.processorChargeId &&
-            item.kind === 'HOLD_CAPTURED'
-        ),
+        findActivityMatches(items, matchesHoldCapture),
         'expected exactly one hold capture after replay'
       ).toHaveLength(1);
 
       expect(
-        findActivityMatches(
-          items,
-          item =>
-            item.processorChargeId === input.processorChargeId &&
-            item.kind === 'POSTED_TRANSACTION'
-        ),
+        findActivityMatches(items, matchesPostedTransaction),
         'expected exactly one posted transaction after replay'
       ).toHaveLength(1);
     },
