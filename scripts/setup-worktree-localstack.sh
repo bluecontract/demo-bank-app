@@ -85,6 +85,29 @@ release_lock() {
   rm -rf "${LOCK_DIR}"
 }
 
+resolve_localstack_docker_endpoint_host() {
+  if [[ -n "${LOCALSTACK_DOCKER_ENDPOINT_HOST:-}" ]]; then
+    echo "${LOCALSTACK_DOCKER_ENDPOINT_HOST}"
+    return 0
+  fi
+
+  if [[ "$(uname -s)" == "Linux" ]] \
+    && command -v docker >/dev/null 2>&1 \
+    && docker info >/dev/null 2>&1; then
+    local bridge_gateway=""
+    bridge_gateway="$(
+      docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true
+    )"
+
+    if [[ -n "${bridge_gateway}" && "${bridge_gateway}" != "<no value>" ]]; then
+      echo "${bridge_gateway}"
+      return 0
+    fi
+  fi
+
+  echo "host.docker.internal"
+}
+
 cleanup_registry() {
   [[ -f "${REGISTRY_FILE}" ]] || return 0
   local now
@@ -496,6 +519,8 @@ if [[ -z "${SHARED_SECRETS_FILE}" ]]; then
   fi
 fi
 
+LOCALSTACK_DOCKER_ENDPOINT_HOST="$(resolve_localstack_docker_endpoint_host)"
+
 write_registry_entry
 
 ENV_FILE="${REPO_ROOT}/.localstack.env"
@@ -507,7 +532,7 @@ export LOCALSTACK_CONTAINER_LABEL=com.demo-bank-app.worktree=${WORKTREE_ID}
 export LOCALSTACK_EDGE_PORT=${EDGE_PORT}
 export LOCALSTACK_PORT_RANGE=${PORT_RANGE}
 export AWS_ENDPOINT_URL=http://localhost:${EDGE_PORT}
-export LOCALSTACK_DOCKER_ENDPOINT_URL=http://host.docker.internal:${EDGE_PORT}
+export LOCALSTACK_DOCKER_ENDPOINT_URL=http://${LOCALSTACK_DOCKER_ENDPOINT_HOST}:${EDGE_PORT}
 export BANK_API_PORT=${BANK_API_PORT}
 export WEB_APP_PORT=${WEB_APP_PORT}
 export WEB_APP_PREVIEW_PORT=${WEB_APP_PREVIEW_PORT}
@@ -529,6 +554,7 @@ fi
 echo "  BANK_API_PORT=${BANK_API_PORT}"
 echo "  WEB_APP_PORT=${WEB_APP_PORT}"
 echo "  WEB_APP_PREVIEW_PORT=${WEB_APP_PREVIEW_PORT}"
+echo "  LOCALSTACK_DOCKER_ENDPOINT_URL=http://${LOCALSTACK_DOCKER_ENDPOINT_HOST}:${EDGE_PORT}"
 if [[ "${#AUTO_PICKED_PORTS[@]}" -gt 0 ]]; then
   echo "Auto-picked: ${AUTO_PICKED_PORTS[*]}"
 fi

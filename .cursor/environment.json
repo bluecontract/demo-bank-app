@@ -1,0 +1,8 @@
+{
+  "build": {
+    "dockerfile": "Dockerfile.cloud",
+    "context": ".."
+  },
+  "install": "npm install && npx playwright install --with-deps",
+  "start": "scripts/start-cursor-cloud.sh"
+}

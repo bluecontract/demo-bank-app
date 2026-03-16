@@ -85,6 +85,7 @@ codex_review_reasoning_effort="${CODEX_REVIEW_REASONING_EFFORT:-low}"
 # Disable MCP for Codex review by default to avoid long tool startup/loops.
 codex_disable_playwright_mcp="${CODEX_REVIEW_DISABLE_PLAYWRIGHT_MCP:-true}"
 codex_disable_figma_mcp="${CODEX_REVIEW_DISABLE_FIGMA_MCP:-true}"
+review_fallback_mode="${REVIEW_FALLBACK_MODE:-self-review}"
 
 if git diff --cached --quiet; then
   echo "No staged changes to review." >&2
@@ -259,6 +260,11 @@ is_model_enabled() {
   [[ ",${selected_models}," == *,"${target}",* ]]
 }
 
+is_tool_available() {
+  local tool_name="$1"
+  command -v "${tool_name}" >/dev/null 2>&1
+}
+
 write_model_skipped() {
   local label="$1"
   local outfile="$2"
@@ -269,6 +275,13 @@ EOF
 }
 
 validate_selected_models
+
+available_enabled_models=()
+for candidate in claude gemini codex; do
+  if is_model_enabled "${candidate}" && is_tool_available "${candidate}"; then
+    available_enabled_models+=("${candidate}")
+  fi
+done
 
 if is_model_enabled "claude"; then
   run_model "claude" "${review_dir}/claude.md" claude --model sonnet -p "$prompt"
@@ -351,7 +364,28 @@ else
   write_model_skipped "codex" "${review_dir}/codex.md"
 fi
 
-cat <<'EOF' > "$result_file"
+if [[ "${#available_enabled_models[@]}" -eq 0 ]]; then
+  cat <<EOF > "$result_file"
+# Review Resolution
+
+## External Review Status
+- No external review CLI is available in PATH for enabled models: ${selected_models}.
+- Reviewer artifact files were still generated and marked as skipped for traceability.
+- Fallback mode: ${review_fallback_mode}
+
+## Required Self-Review
+- [ ] Review staged changes manually for bugs, regressions, security, DRY/SRP, and missing tests.
+- [ ] Record the self-review findings and decisions in the task handoff or final response.
+- [ ] If external review will be delivered separately, state that explicitly.
+
+## High-Priority Issues
+- No external reviewer findings available in this environment; self-review required.
+
+## Lower-Priority/Informational
+- External review CLIs unavailable in sandbox PATH: claude, gemini, codex.
+EOF
+else
+  cat <<'EOF' > "$result_file"
 # Review Resolution
 
 ## High-Priority Issues
@@ -368,3 +402,4 @@ cat <<'EOF' > "$result_file"
   - Rationale:
   - Action taken (if any):
 EOF
+fi

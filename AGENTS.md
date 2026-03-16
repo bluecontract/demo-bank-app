@@ -45,11 +45,42 @@ Parallel agents should use per-worktree LocalStack settings:
   current worktree label.
 - Stop helper: `scripts/stop-worktree-localstack.sh`.
 
+## Cursor Cloud specific instructions
+
+- This repo provides a repo-level Cursor Cloud environment via:
+  - `.cursor/environment.json`
+  - `.cursor/Dockerfile.cloud`
+- Cloud startup runs `scripts/start-cursor-cloud.sh`, which:
+  - starts Docker for the cloud VM
+  - prepares `.localstack.env` with the correct Docker-host endpoint for SAM containers
+- In fresh shells, run `source .localstack.env` before LocalStack/SAM/Nx commands.
+- For local full-stack verification in cloud agents:
+  1. `source .localstack.env`
+  2. `npm run serve:all`
+  3. `npm run verify:full`
+- If `verify:full` is too long-lived for the current cloud session, use
+  `npm run verify:full:stepwise` instead so each phase is visible and resumable.
+- Resume stepwise verify with `VERIFY_FULL_STEP_FROM=<step> npm run verify:full:stepwise`.
+- Prefer `npm run verify:full:resume -- <step>` over the env-var form when resuming from a failure.
+- Step names:
+  - `web-build`
+  - `lint`
+  - `typecheck`
+  - `build-all`
+  - `test-all`
+  - `test-integration-all`
+  - `e2e`
+- `npm run e2e` and the final E2E phase of `npm run verify:full` expect the local stack to already be running.
+- Prefer Cursor Secrets / workspace secrets for API keys and env vars required by local verification.
+
 ## Git Commits (Required)
 
 - Work in reasonable increments; avoid micro-commits and avoid one giant commit for a large change.
 - Use Conventional Commits (e.g., `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`) with an optional scope.
 - Before each commit, stage the intended changes and run the staged-only code review (see `agents/skills/code-review`).
+- If external reviewer CLIs (`claude`, `gemini`, `codex`) are unavailable in the
+  current sandbox, the code-review step falls back to self-review; call that out
+  explicitly in the handoff/final response or note that external review is delivered separately.
 - Before each commit, ensure Quick Verify passes (husky will enforce formatting/tests on commit).
 - If tests cannot run, state why in the commit body and in the final response.
 
