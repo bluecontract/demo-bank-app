@@ -11,9 +11,9 @@
 
 ### Scope
 
-Verify that the full repository, the supplied PayNote package, and the local
-tooling are sufficient to start implementation without changing production bank
-logic.
+Verify that the full repository, the supplied PayNote blueprint materials, and
+the local tooling are sufficient to start implementation without changing
+production bank logic.
 
 ### Discovery sources reviewed
 
@@ -28,7 +28,7 @@ logic.
 - `apps/bank-api/env.local.json`
 - `apps/bank-api/project.json`
 - `package.json`
-- `test-coverage-package/**/*`
+- reference PayNote blueprint materials supplied outside the final repository
 
 ### Commands run
 
@@ -42,8 +42,8 @@ logic.
 ### Results
 
 - The full repository is present at the workspace root.
-- The PayNote blueprint package is present under `test-coverage-package/` and
-  has not been overlaid into the repository root.
+- The initial PayNote blueprint materials were available as an external
+  reference package and were not overlaid into the repository root.
 - The bank contract and handlers confirm:
   - `POST /v1/paynotes/webhook` exists
   - the bank accepts both full webhook payloads and `{ "id": eventId }`
