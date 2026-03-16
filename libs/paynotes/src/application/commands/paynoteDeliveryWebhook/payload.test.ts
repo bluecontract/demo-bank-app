@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { resolveDeliveryWebhookContext } from './payload';
+import {
+  buildSchemaShapedDocumentBootstrapRequestedEvent,
+  buildSchemaShapedDocumentBootstrapRequestedNode,
+  buildSynchronyDocumentWithCheckpointBootstrapRequest,
+} from './testFixtures';
 
 describe('resolveDeliveryWebhookContext', () => {
   it('uses resolved runtime document shape for delivery webhook context', () => {
@@ -107,6 +112,93 @@ describe('resolveDeliveryWebhookContext', () => {
                 },
               },
             ],
+          },
+        },
+      },
+      logs
+    );
+
+    expect('context' in result).toBe(true);
+    if (!('context' in result)) {
+      return;
+    }
+
+    expect(result.context.isDeliveryDoc).toBe(false);
+    expect(result.context.documentBootstrapRequests).toHaveLength(1);
+  });
+
+  it('detects schema-shaped emitted bootstrap requests from synchrony documents', () => {
+    const logs: any[] = [];
+    const result = resolveDeliveryWebhookContext(
+      {
+        eventId: 'event-4',
+        payload: {
+          id: 'event-4',
+          type: 'Core/Document Epoch Advanced',
+          object: {
+            sessionId: 'session-4',
+            document: {
+              name: 'Synchrony Merchant',
+              type: 'Synchrony/Merchant',
+            },
+            emitted: [buildSchemaShapedDocumentBootstrapRequestedEvent()],
+          },
+        },
+      },
+      logs
+    );
+
+    expect('context' in result).toBe(true);
+    if (!('context' in result)) {
+      return;
+    }
+
+    expect(result.context.isDeliveryDoc).toBe(false);
+    expect(result.context.documentBootstrapRequests).toHaveLength(1);
+  });
+
+  it('detects schema-shaped emitted bootstrap request nodes from synchrony documents', () => {
+    const logs: any[] = [];
+    const result = resolveDeliveryWebhookContext(
+      {
+        eventId: 'event-5',
+        payload: {
+          id: 'event-5',
+          type: 'Core/Document Epoch Advanced',
+          object: {
+            sessionId: 'session-5',
+            document: {
+              name: 'Synchrony Merchant',
+              type: 'Synchrony/Merchant',
+            },
+            emitted: [buildSchemaShapedDocumentBootstrapRequestedNode()],
+          },
+        },
+      },
+      logs
+    );
+
+    expect('context' in result).toBe(true);
+    if (!('context' in result)) {
+      return;
+    }
+
+    expect(result.context.isDeliveryDoc).toBe(false);
+    expect(result.context.documentBootstrapRequests).toHaveLength(1);
+  });
+
+  it('detects checkpoint-stashed bootstrap requests from synchrony documents', () => {
+    const logs: any[] = [];
+    const result = resolveDeliveryWebhookContext(
+      {
+        eventId: 'event-6',
+        payload: {
+          id: 'event-6',
+          type: 'Core/Document Epoch Advanced',
+          object: {
+            sessionId: 'session-6',
+            document: buildSynchronyDocumentWithCheckpointBootstrapRequest(),
+            emitted: [],
           },
         },
       },

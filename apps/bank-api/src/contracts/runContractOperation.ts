@@ -6,7 +6,6 @@ import {
   getSupportedContractByTypeBlueId,
   resolveContractChannelKeys,
 } from '@demo-bank-app/shared-bank-api-contract';
-import { PAYNOTE_DELIVERY_BLUE_ID } from '@demo-bank-app/paynotes';
 import {
   extractAuthInfo,
   type MaybeAuthenticatedTsRestRequestContext,
@@ -53,15 +52,6 @@ export const runContractOperationHandler = async (
     });
   }
 
-  const isDeliveryContract = contract.typeBlueId === PAYNOTE_DELIVERY_BLUE_ID;
-  if (isContractHiddenFromCustomer(contract) && !isDeliveryContract) {
-    return problemResponse({
-      status: 404,
-      code: ERROR_CODES.CONTRACT_NOT_FOUND,
-      message: 'Contract not found',
-    });
-  }
-
   const supportedContract = getSupportedContractByTypeBlueId(
     contract.typeBlueId
   );
@@ -71,6 +61,16 @@ export const runContractOperationHandler = async (
       status: 400,
       code: ERROR_CODES.UNSUPPORTED_CONTRACT_TYPE,
       message: 'Unsupported contract type',
+    });
+  }
+
+  const isDeliveryContract =
+    supportedContract.typeName === 'PayNote/PayNote Delivery';
+  if (isContractHiddenFromCustomer(contract) && !isDeliveryContract) {
+    return problemResponse({
+      status: 404,
+      code: ERROR_CODES.CONTRACT_NOT_FOUND,
+      message: 'Contract not found',
     });
   }
 

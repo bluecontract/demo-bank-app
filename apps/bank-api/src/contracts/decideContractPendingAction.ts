@@ -14,7 +14,11 @@ import {
   type ContractRecord,
   type CustomerContractPendingAction,
 } from '@demo-bank-app/contracts';
-import { blue, runGuarantorUpdate } from '@demo-bank-app/paynotes';
+import {
+  blue,
+  readFetchedDocumentId,
+  runGuarantorUpdate,
+} from '@demo-bank-app/paynotes';
 import {
   extractAuthInfo,
   type MaybeAuthenticatedTsRestRequestContext,
@@ -724,7 +728,8 @@ const resolveDecisionOutcome = async (input: {
           );
           if (mandateDocumentResult?.kind === 'success') {
             paymentMandateDocumentId = getString(
-              mandateDocumentResult.document.documentId
+              readFetchedDocumentId(mandateDocumentResult.document) ??
+                mandateDocumentResult.document.documentId
             );
           }
         }

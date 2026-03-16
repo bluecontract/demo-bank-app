@@ -1,6 +1,13 @@
+import { DocumentBootstrapRequestedSchema } from '@blue-repository/types/packages/conversation/schemas';
 import type { LogEntry } from '../../ports';
-import { getPayloadSummary } from '../webhookUtils';
+import { blue } from '../../../blue';
+import {
+  getPayloadSummary,
+  toBlueNode,
+  toSimpleBlueRecord,
+} from '../webhookUtils';
 import { log, trace } from '../paynoteWebhook/logging';
+import { getString, toSimpleRecord } from '../paynoteWebhook/utils';
 import { resolveRuntimeDocument } from '../blueRuntime';
 import { isPayNoteDeliveryDocument } from '../../payNoteDelivery/blueUtils';
 import { isRecord } from '../typeGuards';
@@ -9,10 +16,7 @@ import type {
   HandlePayNoteDeliveryWebhookResult,
   WebhookPayload,
 } from './types';
-import {
-  type BootstrapRequest,
-  getDocumentBootstrapRequestFromEvent,
-} from './bootstrap';
+import type { BootstrapRequest } from './bootstrap';
 
 export type DeliveryWebhookContext = {
   eventId: string;
@@ -22,6 +26,78 @@ export type DeliveryWebhookContext = {
   emitted: unknown[];
   documentBootstrapRequests: BootstrapRequest[];
   isDeliveryDoc: boolean;
+};
+
+const extractDocumentBootstrapRequest = (
+  event: unknown
+): BootstrapRequest | null => {
+  const node = toBlueNode(event);
+  if (
+    !node ||
+    !blue.isTypeOf(node, DocumentBootstrapRequestedSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    return null;
+  }
+
+  const payload = toSimpleBlueRecord(event);
+  if (!payload) {
+    return null;
+  }
+
+  const rawRecord = isRecord(event) ? event : null;
+  const rawDocument = isRecord(rawRecord?.document) ? rawRecord.document : null;
+  const payloadDocument = isRecord(payload.document) ? payload.document : null;
+
+  return {
+    rawEvent: event,
+    request: payload,
+    documentNode:
+      toBlueNode(rawDocument) ?? toBlueNode(payloadDocument) ?? null,
+    documentPayload: rawDocument ?? payloadDocument,
+  };
+};
+
+const getCheckpointBootstrapRequestCandidates = (
+  document: unknown
+): unknown[] => {
+  const record =
+    toSimpleBlueRecord(document) ?? (isRecord(document) ? document : null);
+  if (!record) {
+    return [];
+  }
+
+  const checkpoint = toSimpleRecord(record.checkpoint);
+  const lastEvents = toSimpleRecord(checkpoint?.lastEvents);
+  if (!lastEvents) {
+    return [];
+  }
+
+  return Object.values(lastEvents)
+    .map(entry => {
+      const message = toSimpleRecord(toSimpleRecord(entry)?.message);
+      return message?.request;
+    })
+    .filter((request): request is unknown => request != null);
+};
+
+const dedupeBootstrapRequests = (
+  requests: BootstrapRequest[]
+): BootstrapRequest[] => {
+  const seen = new Set<string>();
+
+  return requests.filter(request => {
+    const requestId =
+      getString(request.request.requestId) ??
+      getString(toSimpleRecord(request.request.requestId)?.value);
+    const key = requestId ?? JSON.stringify(request.request);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 };
 
 export const resolveDeliveryWebhookContext = (
@@ -69,11 +145,18 @@ export const resolveDeliveryWebhookContext = (
   const emitted = Array.isArray(eventObject?.emitted)
     ? eventObject?.emitted
     : [];
-  const documentBootstrapRequests = emitted
-    .map(event => getDocumentBootstrapRequestFromEvent(event))
+  const checkpointBootstrapRequests =
+    rawDocument != null
+      ? getCheckpointBootstrapRequestCandidates(rawDocument)
+      : [];
+  const documentBootstrapRequests = [...emitted, ...checkpointBootstrapRequests]
+    .map(event => extractDocumentBootstrapRequest(event))
     .filter(
       (request): request is NonNullable<typeof request> => request !== null
     );
+  const uniqueDocumentBootstrapRequests = dedupeBootstrapRequests(
+    documentBootstrapRequests
+  );
 
   trace(logs, 'PayNote Delivery webhook received', {
     eventId,
@@ -81,7 +164,8 @@ export const resolveDeliveryWebhookContext = (
     sessionId: eventObject?.sessionId,
     hasDocument: Boolean(documentPayload),
     emittedCount: emitted.length,
-    bootstrapRequestCount: documentBootstrapRequests.length,
+    checkpointBootstrapRequestCount: checkpointBootstrapRequests.length,
+    bootstrapRequestCount: uniqueDocumentBootstrapRequests.length,
     isDeliveryDoc,
   });
 
@@ -92,7 +176,7 @@ export const resolveDeliveryWebhookContext = (
       eventObject,
       documentPayload,
       emitted,
-      documentBootstrapRequests,
+      documentBootstrapRequests: uniqueDocumentBootstrapRequests,
       isDeliveryDoc,
     },
   };

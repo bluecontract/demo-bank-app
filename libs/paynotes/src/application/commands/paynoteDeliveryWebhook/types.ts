@@ -42,6 +42,7 @@ export interface HandlePayNoteDeliveryWebhookResult {
 
 export type WebhookEventObject = {
   sessionId?: string;
+  blueId?: unknown;
   document?: unknown;
   emitted?: unknown[];
   triggeredBy?: unknown;

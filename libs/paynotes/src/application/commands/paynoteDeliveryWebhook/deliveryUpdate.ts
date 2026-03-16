@@ -236,6 +236,11 @@ const normalizeChannelBindings = (
 const normalizeBootstrapDocument = (
   document: Record<string, unknown>
 ): Record<string, unknown> => {
+  // Webhook-emitted MyOS documents are already bootstrap-ready; re-expanding
+  // inline types can invalidate them for /documents/bootstrap validation.
+  if (isRecord(document.type)) {
+    return document;
+  }
   const node = toBlueNode(document);
   if (!node) {
     return document;
@@ -461,6 +466,7 @@ export const handleDeliveryDocumentUpdate = async (input: {
 
   const deliveryDocumentId = await resolveDeliveryDocumentId(
     sessionId,
+    emitted,
     logs,
     deps
   );

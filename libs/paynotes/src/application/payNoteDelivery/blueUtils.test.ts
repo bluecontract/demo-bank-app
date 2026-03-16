@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { PAYNOTE_DELIVERY_BLUE_ID } from './schema';
 import { blue } from '../../blue';
-import { getProposalDescriptionFromDeliveryDocument } from './blueUtils';
+import {
+  getCardTransactionDetailsFromDocument,
+  getSynchronySessionIdFromDocument,
+  getProposalDescriptionFromDeliveryDocument,
+} from './blueUtils';
 
 const buildDeliveryDocument = (input?: {
   initialMessagesYaml?: string;
@@ -37,7 +41,89 @@ contracts:
   return blue.nodeToJson(node) as Record<string, unknown>;
 };
 
+const buildCardTransactionPayNote = () =>
+  blue.nodeToJson(
+    blue.yamlToNode(`type: PayNote/Card Transaction PayNote
+name: Root PayNote
+currency: USD
+amount:
+  total: 1200
+cardTransactionDetails:
+  retrievalReferenceNumber: "123456789012"
+  systemTraceAuditNumber: "654321"
+  transmissionDateTime: "0101123456"
+  authorizationCode: "ABC123"
+`)
+  ) as Record<string, unknown>;
+
+const buildBlueIdOnlyDeliveryDocument = () => ({
+  name: 'Raw Delivery',
+  type: {
+    blueId: PAYNOTE_DELIVERY_BLUE_ID,
+  },
+  cardTransactionDetails: {
+    retrievalReferenceNumber: {
+      value: '123456789012',
+    },
+    systemTraceAuditNumber: {
+      value: '654321',
+    },
+    transmissionDateTime: {
+      value: '0101123456',
+    },
+    authorizationCode: {
+      value: 'ABC123',
+    },
+  },
+});
+
+const buildBlueIdOnlyDeliveryDocumentWithSynchronyLink = () => ({
+  ...buildBlueIdOnlyDeliveryDocument(),
+  contracts: {
+    links: {
+      synchronyMerchantLink: {
+        type: {
+          blueId: 'd1vQ8ZTPcQc5KeuU6tzWaVukWRVtKjQL4hbvbpC22rB',
+        },
+        sessionId: {
+          value: 'canonical-sync-session',
+        },
+      },
+    },
+  },
+});
+
 describe('getProposalDescriptionFromDeliveryDocument', () => {
+  it('reads card transaction details from a card transaction paynote', () => {
+    expect(
+      getCardTransactionDetailsFromDocument(buildCardTransactionPayNote())
+    ).toEqual({
+      retrievalReferenceNumber: '123456789012',
+      systemTraceAuditNumber: '654321',
+      transmissionDateTime: '0101123456',
+      authorizationCode: 'ABC123',
+    });
+  });
+
+  it('reads card transaction details from blueId-only delivery documents', () => {
+    expect(
+      getCardTransactionDetailsFromDocument(buildBlueIdOnlyDeliveryDocument())
+    ).toEqual({
+      retrievalReferenceNumber: '123456789012',
+      systemTraceAuditNumber: '654321',
+      transmissionDateTime: '0101123456',
+      authorizationCode: 'ABC123',
+    });
+  });
+
+  it('reads synchrony session id from blueId-only delivery documents', () => {
+    expect(
+      getSynchronySessionIdFromDocument(
+        buildBlueIdOnlyDeliveryDocumentWithSynchronyLink()
+      )
+    ).toBe('canonical-sync-session');
+  });
+
   it('prefers payNote initial message over bootstrap initial messages', () => {
     const document = buildDeliveryDocument({
       initialMessagesYaml: `  initialMessages:

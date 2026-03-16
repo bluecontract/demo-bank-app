@@ -40,6 +40,7 @@ export type WebhookEmittedEvent = {
 
 export type WebhookEventObject = {
   sessionId?: string;
+  blueId?: unknown;
   document?: unknown;
   emitted?: WebhookEmittedEvent[];
   triggeredBy?: unknown;
