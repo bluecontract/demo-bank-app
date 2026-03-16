@@ -13,13 +13,17 @@ import {
   createScenarioRunContext,
   logScenarioStep,
 } from '../live/lib/reporting';
-import { waitForSinglePostedCapture } from '../live/lib/assertions';
+import {
+  waitForPayNoteCaptureSequence,
+  waitForSinglePostedCapture,
+} from '../live/lib/assertions';
 import { waitForExpectWithLogging } from '../live/lib/wait';
 import { toMyOsWebhookPayload } from '../live/lib/myOsWebhookPayload';
 import {
   buildCardDeliveryDocument,
   buildPendingInstallDeliveryDocument,
 } from '../live/lib/simplePayNoteBuilders';
+import { buildVoucherMonitoringPayNote } from '../live/lib/documentFixtures';
 
 const enabled = process.env.MYOS_E2E_ENABLED === '1';
 
@@ -127,21 +131,39 @@ const buildRealDeliveryBootstrapPayload = (input: {
   const payNoteBootstrapRequest = isRecord(document.payNoteBootstrapRequest)
     ? document.payNoteBootstrapRequest
     : undefined;
+  const requestedDocumentContracts = isRecord(payNoteBootstrapRequest?.document)
+    ? isRecord(payNoteBootstrapRequest.document.contracts)
+      ? payNoteBootstrapRequest.document.contracts
+      : undefined
+    : undefined;
   const requestChannelBindings = isRecord(
     payNoteBootstrapRequest?.channelBindings
   )
     ? payNoteBootstrapRequest.channelBindings
     : undefined;
   if (requestChannelBindings) {
-    requestChannelBindings.payeeChannel = {
-      accountId: input.bankAccountId,
-    };
-    requestChannelBindings.cardProcessorChannel = {
-      accountId: input.bankAccountId,
-    };
-    requestChannelBindings.guarantorChannel = {
-      accountId: input.bankAccountId,
-    };
+    if (
+      !requestedDocumentContracts ||
+      isRecord(requestedDocumentContracts.payeeChannel)
+    ) {
+      requestChannelBindings.payeeChannel = {
+        accountId: input.bankAccountId,
+      };
+    }
+    if (isRecord(requestedDocumentContracts?.cardProcessorChannel)) {
+      requestChannelBindings.cardProcessorChannel = {
+        accountId: input.bankAccountId,
+      };
+    } else {
+      delete requestChannelBindings.cardProcessorChannel;
+    }
+    if (isRecord(requestedDocumentContracts?.guarantorChannel)) {
+      requestChannelBindings.guarantorChannel = {
+        accountId: input.bankAccountId,
+      };
+    } else {
+      delete requestChannelBindings.guarantorChannel;
+    }
   }
 
   return {
@@ -368,6 +390,37 @@ const bootstrapRealDeliveryDocument = async (input: {
     deliverySessionId,
     deliveryCandidateSessionIds,
     bootstrapCreatedEventId,
+  };
+};
+
+const bootstrapRealRootDocument = async (input: {
+  bootstrapClient: MyOsLiveClient;
+  baseDocument: Record<string, unknown>;
+  initiatorAccountId: string;
+}) => {
+  const response = (await input.bootstrapClient.bootstrapDocument({
+    document: input.baseDocument,
+    channelBindings: {
+      guarantorChannel: {
+        accountId: input.initiatorAccountId,
+      },
+    },
+  })) as {
+    sessionId?: string;
+  };
+  const bootstrapSessionId = extractBlueString(response.sessionId);
+  if (!bootstrapSessionId) {
+    throw new Error('MyOS bootstrap did not return a bootstrap session id');
+  }
+
+  const rootSessionIds = await waitForBootstrapInitiatorSessionIds(
+    input.bootstrapClient,
+    bootstrapSessionId
+  );
+
+  return {
+    bootstrapSessionId,
+    rootSessionIds,
   };
 };
 
@@ -846,26 +899,239 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
   });
 
   it.skip('subscription one follow-up cycle', async () => {
-    // Shared blocker as of 2026-03-16:
-    // the real-MyOS subscription flow starts with the same delivery bootstrap
-    // and acceptance path as the card canary above. That shared bootstrap step
-    // currently never yields any delivery session readable by bank credentials,
-    // so the scenario cannot reach mandate bootstrap or follow-up cycle logic.
+    // Hard blocker as of 2026-03-16, after fixing the real-MyOS bootstrap test
+    // bindings and validating that the canonical root contract materializes:
+    // the real subscription root document reaches paymentMandateStatus=requested
+    // and initial capture succeeds, but bank runtime still ignores the real
+    // canonical Conversation/Document Bootstrap Requested emitted on the root
+    // DOCUMENT_EPOCH_ADVANCED event.
     //
-    // Once MyOS exposes a bank-visible delivery session for this flow, re-check
-    // the deeper subscription continuation path; earlier local-only findings are
-    // no longer treated as the current root cause.
+    // Evidence from the live probe:
+    // - GET /v1/contracts/:sessionId returns 200 for the canonical root session
+    // - the root MyOS document shows subscription.paymentMandateStatus=requested
+    // - the root initial PayNote capture completes successfully
+    // - yet pendingActions stays empty and logs contain:
+    //   "PayNote emitted event intentionally ignored (Document Bootstrap Requested handled by delivery pipeline)"
+    //
+    // That leaves no paymentMandateBootstrapApproval to accept, so the follow-up
+    // subscription charge cannot proceed. This is no longer a harness/test issue.
   });
 
-  it.skip('voucher cashback smoke', async () => {
-    // Shared blocker as of 2026-03-16:
-    // voucher canary uses the same real-MyOS delivery bootstrap / acceptance
-    // stage as the card canary, and that stage currently fails before the
-    // monitored-transaction part can start because no bank-visible delivery
-    // session materializes for sandbox bank credentials.
-    //
-    // When that shared MyOS visibility blocker is removed, the monitored
-    // transaction trigger should be modeled via a normal bank card auth at the
-    // monitored merchant, not via any synthetic MyOS REST trigger.
+  it('voucher cashback smoke', async () => {
+    const run = createScenarioRunContext('real-voucher-cashback');
+    const bankEventPump = new EventPump(myOsEventSource, context.bank);
+
+    const sponsor = await context.bank.signUpUniqueTestUser(
+      'pn-e2e-voucher-sponsor',
+      true,
+      {
+        merchantId: 'merchant-voucher-sponsor',
+        merchantName: 'Voucher Sponsor Shop',
+      }
+    );
+    await context.bank.signUpUniqueTestUser('pn-e2e-voucher-restaurant', true, {
+      merchantId: 'merchant-voucher-restaurant',
+      merchantName: 'Balanced Bowl Restaurant',
+    });
+    const sponsorAccount = await context.bank.createAccount(
+      sponsor.jwtCookie,
+      'Voucher reserve account'
+    );
+    await context.bank.fundAccount(
+      sponsor.jwtCookie,
+      sponsorAccount.accountId,
+      FAST_AMOUNTS.voucherReserveMinor + FAST_AMOUNTS.fundingBufferMinor
+    );
+    const customer = await createFundedCustomerWithCard(context.bank, {
+      prefix: 'pn-e2e-voucher-customer',
+      accountName: 'Real MyOS voucher customer account',
+      fundingAmountMinor:
+        FAST_AMOUNTS.cardPurchaseMinor + FAST_AMOUNTS.fundingBufferMinor,
+    });
+
+    const rootDocument = buildVoucherMonitoringPayNote({
+      sponsorMerchantId: 'merchant-voucher-sponsor',
+      sponsorAccountNumber: sponsorAccount.accountNumber,
+      customerAccountNumber: customer.account.accountNumber,
+      targetMerchantId: 'merchant-voucher-restaurant',
+      amountMinor: FAST_AMOUNTS.voucherReserveMinor,
+    });
+
+    logScenarioStep(run, 'bootstrapping-real-voucher-root', {
+      sponsorAccountNumber: sponsorAccount.accountNumber,
+    });
+    const { bootstrapSessionId, rootSessionIds } =
+      await bootstrapRealRootDocument({
+        bootstrapClient: bankMyOsClient,
+        baseDocument: rootDocument,
+        initiatorAccountId: bankMyOsEnv.accountId,
+      });
+
+    await context.saveBootstrapContext({
+      bootstrapSessionId,
+      accountNumber: customer.account.accountNumber,
+      userId: customer.user.userId,
+      merchantId: 'merchant-voucher-sponsor',
+    });
+    await Promise.all(
+      rootSessionIds.map(sessionId =>
+        context.saveBootstrapContext({
+          bootstrapSessionId: sessionId,
+          accountNumber: customer.account.accountNumber,
+          userId: customer.user.userId,
+          merchantId: 'merchant-voucher-sponsor',
+        })
+      )
+    );
+
+    await bankEventPump.flushUntilSettled({
+      sessionIds: rootSessionIds,
+      timeoutMs: 90_000,
+      pollIntervalMs: 2_000,
+      idleQuietPeriodMs: 3_000,
+      assertSettled: async () => {
+        for (const sessionId of rootSessionIds) {
+          const contract = await context.getRawContractBySessionId(sessionId);
+          const payNote = await context.getRawPayNoteBySessionId(sessionId);
+          if (contract?.documentId && payNote?.holdId) {
+            return;
+          }
+        }
+
+        throw new Error(
+          'Canonical voucher contract with initial reserve not materialized yet'
+        );
+      },
+    });
+
+    const canonicalContract = await waitForCanonicalRawContract({
+      context,
+      candidateSessionIds: rootSessionIds,
+    });
+
+    await context.bank.generateContractSummary(
+      customer.user.jwtCookie,
+      canonicalContract.sessionId,
+      { force: true }
+    );
+    const contract = await context.bank.waitForContract(
+      customer.user.jwtCookie,
+      canonicalContract.sessionId,
+      60_000
+    );
+    const monitoringPendingAction = (contract.pendingActions ?? []).find(
+      (action: any) =>
+        action.status === 'pending' &&
+        action.type === 'monitoringConsentApproval'
+    );
+
+    expect(monitoringPendingAction).toBeTruthy();
+
+    logScenarioStep(run, 'approving-voucher-monitoring', {
+      sessionId: canonicalContract.sessionId,
+      actionId: monitoringPendingAction?.actionId,
+    });
+    await context.bank.decideContractPendingAction(
+      customer.user.jwtCookie,
+      canonicalContract.sessionId,
+      monitoringPendingAction.actionId,
+      {
+        kind: 'approveReject',
+        input: 'accepted',
+      }
+    );
+
+    await bankEventPump.flushUntilSettled({
+      sessionIds: rootSessionIds,
+      timeoutMs: 90_000,
+      pollIntervalMs: 2_000,
+      idleQuietPeriodMs: 3_000,
+      assertSettled: async () => {
+        const snapshot = (await bankMyOsClient.fetchDocument(
+          canonicalContract.sessionId
+        )) as {
+          document?: unknown;
+        };
+        const state =
+          isRecord(snapshot.document) && isRecord(snapshot.document.state)
+            ? snapshot.document.state
+            : {};
+        if (extractBlueString(state.monitoringStatus) !== 'started') {
+          throw new Error('Monitoring status not started yet');
+        }
+      },
+    });
+
+    const authorization = await context.bank.authorizeCard({
+      pan: customer.card.pan,
+      expiryMonth: customer.card.expiryMonth,
+      expiryYear: customer.card.expiryYear,
+      cvc: customer.card.cvc,
+      amountMinor: FAST_AMOUNTS.cardPurchaseMinor,
+      merchantId: 'merchant-voucher-restaurant',
+      merchantName: 'Balanced Bowl Restaurant',
+    });
+
+    logScenarioStep(run, 'capturing-monitored-restaurant-transaction', {
+      authorizationId: authorization.authorizationId,
+    });
+    await context.bank.captureCardAuthorization(
+      authorization.authorizationId,
+      FAST_AMOUNTS.cardPurchaseMinor
+    );
+
+    await bankEventPump.flushUntilSettled({
+      sessionIds: rootSessionIds,
+      timeoutMs: 30_000,
+      pollIntervalMs: 2_000,
+      idleQuietPeriodMs: 3_000,
+      assertSettled: async () => {
+        const items = await context.bank.getActivity(
+          sponsor.jwtCookie,
+          sponsorAccount.accountNumber
+        );
+        const holdCaptures = items.filter(
+          item =>
+            item.kind === 'HOLD_CAPTURED' &&
+            item.payNote?.payNoteDocumentId === canonicalContract.documentId
+        );
+        const postedTransactions = items.filter(
+          item =>
+            item.kind === 'POSTED_TRANSACTION' &&
+            item.payNote?.payNoteDocumentId === canonicalContract.documentId
+        );
+
+        if (
+          holdCaptures.length !== 1 ||
+          postedTransactions.length !== 1 ||
+          holdCaptures[0]?.amountMinor !== FAST_AMOUNTS.voucherReserveMinor ||
+          postedTransactions[0]?.amountMinor !==
+            FAST_AMOUNTS.voucherReserveMinor
+        ) {
+          throw new Error('Voucher cashback capture not materialized yet');
+        }
+      },
+      afterEachDelivery: async event => {
+        logScenarioStep(run, 'delivered-voucher-follow-up-event', {
+          eventId: event.id,
+          eventType: event.type,
+          epoch: event.epoch ?? null,
+        });
+      },
+    });
+
+    await waitForPayNoteCaptureSequence({
+      bank: context.bank,
+      jwtCookie: sponsor.jwtCookie,
+      accountNumber: sponsorAccount.accountNumber,
+      payNoteDocumentId: canonicalContract.documentId,
+      expectedCaptureAmountsMinor: [FAST_AMOUNTS.voucherReserveMinor],
+      timeoutMs: 20_000,
+    });
+
+    logScenarioStep(run, 'voucher-cashback-captured', {
+      sessionId: canonicalContract.sessionId,
+      payNoteDocumentId: canonicalContract.documentId,
+    });
   });
 });

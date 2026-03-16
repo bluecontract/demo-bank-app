@@ -102,7 +102,6 @@ export const buildTestWebhookHeaders = (
  * waits for a short quiet period plus an optional bank-side settled assertion.
  */
 export class EventPump {
-  private from: string | undefined;
   private readonly processedEventIds = new Set<string>();
 
   constructor(
@@ -121,7 +120,6 @@ export class EventPump {
     while (Date.now() < deadlineAt) {
       const listed = await this.client.listRelevantDocumentEvents({
         sessionIds: input.sessionIds,
-        from: this.from,
         itemsPerPage: input.itemsPerPage,
       });
 
@@ -141,12 +139,6 @@ export class EventPump {
             buildTestWebhookHeaders(payload)
           );
           await input.afterEachDelivery?.(item);
-          if (
-            !this.from ||
-            compareIsoTimestamps(item.createdAt, this.from) > 0
-          ) {
-            this.from = item.createdAt;
-          }
         }
         lastProgressAt = Date.now();
         continue;
