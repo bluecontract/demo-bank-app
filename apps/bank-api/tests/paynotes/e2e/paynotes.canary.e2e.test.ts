@@ -766,17 +766,7 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
     });
   });
 
-  it.skip('fetch-by-id compatibility smoke', async () => {
-    // Verified on 2026-03-16 against real MyOS after fixing test-side env and
-    // multi-account event visibility:
-    // - the test can discover a real delivery DOCUMENT_CREATED event id
-    // - `POST /paynote/webhook { id }` still makes bank runtime log
-    //   `Failed to download PayNote event from MyOS` with status 404
-    // - raw delivery never materializes afterwards
-    //
-    // Root cause is not the smoke harness anymore: bank MyOS credentials cannot
-    // fetch that sandbox event by id. Keep this skipped until MyOS exposes a
-    // bank-visible event/session for the fallback path.
+  it('fetch-by-id compatibility smoke', async () => {
     await context.bank.signUpUniqueTestUser('pn-e2e-fetch-merchant', true, {
       merchantId: 'merchant-fetch-by-id-demo',
       merchantName: 'PayNote Demo Shop',
@@ -816,7 +806,7 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
     let createdEventId: string | undefined;
     await waitForExpectWithLogging(
       async () => {
-        const events = await myOsEventSource.listRelevantDocumentEvents({
+        const events = await bankMyOsClient.listRelevantDocumentEvents({
           sessionIds: [deliverySessionId],
         });
         createdEventId = events.find(
@@ -828,8 +818,14 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
       },
       60_000,
       2_000,
-      'myos-created-event-id'
+      'bank-visible-created-event-id'
     );
+
+    await expect(
+      bankMyOsClient.fetchEvent(createdEventId!)
+    ).resolves.toMatchObject({
+      id: createdEventId,
+    });
 
     await context.bank.postPayNoteWebhookById(createdEventId!);
 
