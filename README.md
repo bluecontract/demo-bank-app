@@ -117,6 +117,7 @@ No manual bootstrap script is required in Cursor Cloud. In fresh shells, load:
 ```bash
 source .localstack.env
 ```
+
 The app will be available at:
 
 - **Frontend**: http://localhost:4200

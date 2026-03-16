@@ -11,19 +11,19 @@
 
 ### Done
 
--
+- _Pending_
 
 ### Commands run
 
--
+- _Pending_
 
 ### Results
 
--
+- _Pending_
 
 ### Next
 
--
+- _Pending_
 
 ---
 
@@ -31,24 +31,24 @@
 
 ### Scope
 
--
+- _Pending_
 
 ### Changes
 
--
+- _Pending_
 
 ### Commands run
 
--
+- _Pending_
 
 ### Results
 
--
+- _Pending_
 
 ### Bugs / blockers discovered
 
--
+- _Pending_
 
 ### Next
 
--
+- _Pending_
