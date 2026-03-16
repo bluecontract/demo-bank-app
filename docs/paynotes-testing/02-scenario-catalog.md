@@ -28,13 +28,13 @@ its status must be explicit and documented.
    - acceptance works locally
    - root PayNote bootstrap and capture now pass locally end to end
 
-### Implemented but blocked / skipped
-
 4. `pending-install-approval-capture`
-   - raw contract and pending action are persisted locally
-   - customer-facing contract route still returns `Contract summary not available`
-   - the simplified root-only shortcut does not create the hold mapping needed
-     for capture continuation
+   - delivery/bootstrap-backed card flow now creates the expected hold mapping
+   - deterministic summary generation exposes the pending action through the
+     normal customer contract route
+   - customer approval followed by capture now passes locally end to end
+
+### Implemented but blocked / skipped
 
 ## L2 — serial / complex local live scenarios
 

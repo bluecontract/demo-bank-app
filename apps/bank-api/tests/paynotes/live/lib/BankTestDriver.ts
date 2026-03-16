@@ -27,6 +27,8 @@ export const bankRoutes = {
   rejectPayNoteDelivery: (sessionId: string) =>
     `/v1/paynotes/deliveries/${sessionId}/reject`,
   getContract: (sessionId: string) => `/v1/contracts/${sessionId}`,
+  generateContractSummary: (sessionId: string) =>
+    `/v1/contracts/${sessionId}/summary`,
   runContractOperation: (sessionId: string, operation: string) =>
     `/v1/contracts/${sessionId}/operations/${operation}`,
   decideContractPendingAction: (sessionId: string, pendingActionId: string) =>
@@ -428,6 +430,22 @@ export class BankTestDriver {
       'contract-by-session'
     );
     return matched;
+  }
+
+  async generateContractSummary(
+    jwtCookie: string,
+    sessionId: string,
+    body?: { force?: boolean }
+  ) {
+    const response = await invokeBankApi({
+      method: 'POST',
+      path: bankRoutes.generateContractSummary(sessionId),
+      jwtCookie,
+      headers: { origin: DEFAULT_TEST_ORIGIN },
+      body: body ?? {},
+    });
+    expect(response.statusCode).toBe(200);
+    return response.body;
   }
 
   async runContractOperation(

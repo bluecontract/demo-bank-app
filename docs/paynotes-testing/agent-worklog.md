@@ -347,3 +347,39 @@ suite state and capture the result explicitly.
 - `BUG-003` remains open, but the blocker is now explicit:
   the current `MyOsHarness` does not synthesize the multi-epoch follow-up
   events required by milestone, subscription, and voucher documents.
+
+---
+
+## Iteration 6 — BUG-002 closure
+
+### Scope
+
+- re-enable `pending-install-approval-capture`
+- verify whether the blocker was in the bank runtime or in the test path
+
+### Commands run
+
+- `set -a; . ../../.localstack.env; set +a; npx vitest run --config vitest.paynotes.integration.config.ts tests/paynotes/live/scenarios/pending-install-capture.integration.test.ts`
+- `set -a; . ./.localstack.env; set +a; npx nx run @demo-bank-app/bank-api:test:paynotes:integration`
+
+### Results
+
+- `pending-install-approval-capture` now passes locally end to end.
+- `test:paynotes:integration` now passes with `5 passed`.
+- `BUG-002` is closed.
+
+### Root cause
+
+- The failure was in the test path, not in the bank runtime.
+- The previous scenario used a root-only shortcut, which never created the
+  delivery/bootstrap-backed hold mapping that later card capture expects.
+- The previous scenario also read the customer contract route before
+  deterministic summary generation had been materialized.
+
+### Fix
+
+- rebuilt the scenario around the real delivery -> bootstrap -> root PayNote
+  path
+- generated deterministic contract summary before reading customer-visible
+  contract details
+- manually posted the post-approval epoch that emits `PayNote/Capture Funds Requested`

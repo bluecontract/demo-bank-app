@@ -178,6 +178,227 @@ contracts:
   return blue.nodeToJson(node) as Record<string, unknown>;
 };
 
+export const buildPendingInstallPayNote = (input: {
+  customerAccountId: string;
+  merchantAccountId: string;
+  amountMinor: number;
+  cardTransactionDetails: TestCardTransactionDetails;
+}) => {
+  const yaml = `type: PayNote/Card Transaction PayNote
+name: Pending Installation Capture
+LLM_SUMMARY_DISABLED: true
+currency: USD
+amount:
+  total: ${input.amountMinor}
+state:
+  approved: false
+payNoteInitialStateDescription:
+  summary: Requires one customer approval before capture.
+  details: |
+    This fixture exposes a single pending customer action. After approval the
+    document requests capture of the already-authorized card hold.
+  initialMessage: Confirm the installation to finish this small PayNote flow.
+cardTransactionDetails:
+  retrievalReferenceNumber: "${input.cardTransactionDetails.retrievalReferenceNumber}"
+  systemTraceAuditNumber: "${input.cardTransactionDetails.systemTraceAuditNumber}"
+  transmissionDateTime: "${input.cardTransactionDetails.transmissionDateTime}"
+  authorizationCode: "${input.cardTransactionDetails.authorizationCode}"
+contracts:
+  payerChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: ${input.customerAccountId}
+  payeeChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: ${input.merchantAccountId}
+  cardProcessorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: processor-account
+  guarantorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: bank-account
+  initLifecycleChannel:
+    type: Core/Lifecycle Event Channel
+    event:
+      type: Core/Document Processing Initiated
+  eventsChannel:
+    type: Core/Triggered Event Channel
+  requestInstallConfirmation:
+    type: Conversation/Sequential Workflow
+    channel: initLifecycleChannel
+    steps:
+      - type: Conversation/Trigger Event
+        event:
+          type: Conversation/Customer Action Requested
+          requestId: install-confirmation
+          title: Confirm installation
+          message: Confirm the installation to capture the authorized payment.
+          actions:
+            - label: Installation confirmed
+              variant: primary
+  onInstallConfirmed:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: Conversation/Customer Action Responded
+    steps:
+      - name: Decide Install Confirmation
+        type: Conversation/JavaScript Code
+        code: |
+          const inResponseTo = String(event?.inResponseTo?.requestId ?? '').trim();
+          const actionLabel = String(event?.actionLabel ?? '').trim();
+          if (
+            inResponseTo !== 'install-confirmation' ||
+            actionLabel !== 'Installation confirmed'
+          ) {
+            return { changeset: [], followUpEvents: [] };
+          }
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/state/approved', val: true }
+            ],
+            followUpEvents: [
+              {
+                type: 'PayNote/Capture Funds Requested',
+                requestId: 'install-capture',
+                amount: ${input.amountMinor}
+              }
+            ]
+          };
+      - name: Apply Install Approval
+        type: Conversation/Update Document
+        changeset: "\${steps['Decide Install Confirmation'].changeset}"
+      - name: Emit Install Follow-up Events
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Decide Install Confirmation'].followUpEvents || [] };
+`;
+
+  return blue.nodeToJson(blue.yamlToNode(yaml)) as Record<string, unknown>;
+};
+
+export const buildPendingInstallDeliveryDocument = (input: {
+  customerAccountId: string;
+  merchantAccountId: string;
+  amountMinor: number;
+  cardTransactionDetails: TestCardTransactionDetails;
+}) => {
+  const yaml = `name: Delivery for Pending Installation Capture
+payNoteBootstrapRequest:
+  type: Conversation/Document Bootstrap Requested
+  bootstrapAssignee: payNoteDeliverer
+  channelBindings:
+    payeeChannel:
+      accountId: ${input.merchantAccountId}
+    cardProcessorChannel:
+      accountId: processor-account
+  document:
+    type: PayNote/Card Transaction PayNote
+    name: Pending Installation Capture
+    LLM_SUMMARY_DISABLED: true
+    currency: USD
+    amount:
+      total: ${input.amountMinor}
+    state:
+      approved: false
+    payNoteInitialStateDescription:
+      summary: Requires one customer approval before capture.
+      details: |
+        This fixture exposes a single pending customer action. After approval the
+        document requests capture of the already-authorized card hold.
+      initialMessage: Confirm the installation to finish this small PayNote flow.
+    cardTransactionDetails:
+      retrievalReferenceNumber: "${input.cardTransactionDetails.retrievalReferenceNumber}"
+      systemTraceAuditNumber: "${input.cardTransactionDetails.systemTraceAuditNumber}"
+      transmissionDateTime: "${input.cardTransactionDetails.transmissionDateTime}"
+      authorizationCode: "${input.cardTransactionDetails.authorizationCode}"
+    contracts:
+      payerChannel:
+        type: MyOS/MyOS Timeline Channel
+      payeeChannel:
+        type: MyOS/MyOS Timeline Channel
+      cardProcessorChannel:
+        type: MyOS/MyOS Timeline Channel
+      guarantorChannel:
+        type: MyOS/MyOS Timeline Channel
+      initLifecycleChannel:
+        type: Core/Lifecycle Event Channel
+        event:
+          type: Core/Document Processing Initiated
+      eventsChannel:
+        type: Core/Triggered Event Channel
+      requestInstallConfirmation:
+        type: Conversation/Sequential Workflow
+        channel: initLifecycleChannel
+        steps:
+          - type: Conversation/Trigger Event
+            event:
+              type: Conversation/Customer Action Requested
+              requestId: install-confirmation
+              title: Confirm installation
+              message: Confirm the installation to capture the authorized payment.
+              actions:
+                - label: Installation confirmed
+                  variant: primary
+      onInstallConfirmed:
+        type: Conversation/Sequential Workflow
+        channel: eventsChannel
+        event:
+          type: Conversation/Customer Action Responded
+        steps:
+          - name: Decide Install Confirmation
+            type: Conversation/JavaScript Code
+            code: |
+              const inResponseTo = String(event?.inResponseTo?.requestId ?? '').trim();
+              const actionLabel = String(event?.actionLabel ?? '').trim();
+              if (
+                inResponseTo !== 'install-confirmation' ||
+                actionLabel !== 'Installation confirmed'
+              ) {
+                return { changeset: [], followUpEvents: [] };
+              }
+
+              return {
+                changeset: [
+                  { op: 'replace', path: '/state/approved', val: true }
+                ],
+                followUpEvents: [
+                  {
+                    type: 'PayNote/Capture Funds Requested',
+                    requestId: 'install-capture',
+                    amount: ${input.amountMinor}
+                  }
+                ]
+              };
+          - name: Apply Install Approval
+            type: Conversation/Update Document
+            changeset: "\${steps['Decide Install Confirmation'].changeset}"
+          - name: Emit Install Follow-up Events
+            type: Conversation/JavaScript Code
+            code: |
+              return { events: steps['Decide Install Confirmation'].followUpEvents || [] };
+cardTransactionDetails:
+  retrievalReferenceNumber: "${input.cardTransactionDetails.retrievalReferenceNumber}"
+  systemTraceAuditNumber: "${input.cardTransactionDetails.systemTraceAuditNumber}"
+  transmissionDateTime: "${input.cardTransactionDetails.transmissionDateTime}"
+  authorizationCode: "${input.cardTransactionDetails.authorizationCode}"
+contracts:
+  payNoteSender:
+    type: MyOS/MyOS Timeline Channel
+    accountId: ${input.merchantAccountId}
+  payNoteDeliverer:
+    type: MyOS/MyOS Timeline Channel
+    accountId: bank-account
+  cardProcessorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: processor-account
+`;
+
+  const node = blue.yamlToNode(yaml);
+  node.setType(blue.jsonValueToNode({ blueId: DELIVERY_BLUE_ID }));
+  return blue.nodeToJson(node) as Record<string, unknown>;
+};
+
 export const buildTransferPayNote = (input: {
   payerAccountNumber: string;
   payeeAccountNumber: string;

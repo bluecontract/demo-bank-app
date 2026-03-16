@@ -55,11 +55,6 @@ Action:
 
 Current concrete gaps in this repo:
 
-- pending-install:
-  - raw contract + pending action exist in Dynamo
-  - customer route still returns `Contract summary not available`
-  - the simplified root-only shortcut does not create the hold mapping needed
-    by the later capture request
 - milestones:
   - harness cannot take the bank's `Customer Action Responded` operation and
     synthesize the next epoch's capture request plus the next pending action
