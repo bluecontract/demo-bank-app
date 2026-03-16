@@ -1,0 +1,19 @@
+name: Simple Card Capture
+LLM_SUMMARY_DISABLED: true
+type: PayNote/Card Transaction PayNote
+currency: USD
+amount:
+  total: 1200
+contracts:
+  payerChannel:
+    type: MyOS/MyOS Timeline Channel
+  payeeChannel:
+    type: MyOS/MyOS Timeline Channel
+  guarantorChannel:
+    type: MyOS/MyOS Timeline Channel
+payNoteInitialStateDescription:
+  summary: Simple low-value card capture scenario for integration tests.
+  details: |
+    This fixture is used for deterministic summary mode. The document uses an existing
+    card authorization hold and emits a capture request when delivery or approval completes.
+  initialMessage: A small card-based PayNote offer is ready for you.

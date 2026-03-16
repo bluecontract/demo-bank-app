@@ -1,0 +1,823 @@
+name: GE Refrigerator Order
+description: |
+  This contract governs the purchase of a GE Standard-Depth 27-cu ft 3-Door, 36-in French Door Refrigerator with Ice Maker and Water Dispenser (Stainless Steel), Model #GNE27JYMFS, between the customer and Abt.com.
+  Contract Acceptance: The customer made a purchase and payment is placed on hold. Customer approves the contract to initiate the process.
+  Delivery: Shipment company confirms delivery.
+  Satisfaction Window: After delivery, customer confirms satisfaction or reports concerns.
+  Concern Handling: If concerns are reported, service visit is proposed. Customer can accept or reschedule with a selected timestamp.
+  Completion & Reward: Once customer confirms satisfaction, hold is captured and a $100 restaurant voucher is started.
+
+LLM_SUMMARY_DISABLED: true
+type: PayNote/Card Transaction PayNote
+currency: USD
+amount:
+  total: 120000
+state:
+  deliveryConfirmedAt:
+  satisfactionRound: 0
+  activeSatisfactionRequestId:
+  activeScheduleRequestId:
+  satisfactionDeadlineAt:
+  satisfactionWindowExpired: false
+  satisfactionConfirmed: false
+  concernOpen: false
+  concernNote:
+  proposedServiceAt:
+  serviceScheduled: false
+  serviceCompleted: false
+  finalized: false
+  voucherStarted: false
+voucherOffer:
+  name: Voucher CashBack
+  reserveAmountMinor: 10000
+  targetMerchantId: 3bee5e3a-d435-46e1-a4f5-4d7a6bae43b8
+  paymentMandateDocumentId:
+  paymentMandateStatus: pending
+contracts:
+  payerChannel:
+    type: MyOS/MyOS Timeline Channel
+  payeeChannel:
+    type: MyOS/MyOS Timeline Channel
+  guarantorChannel:
+    type: MyOS/MyOS Timeline Channel
+  shipmentCompanyChannel:
+    type: MyOS/MyOS Timeline Channel
+  eventsChannel:
+    type: Core/Triggered Event Channel
+
+  confirmDelivery:
+    type: Conversation/Operation
+    channel: shipmentCompanyChannel
+    description: Shipment company confirms refrigerator delivery.
+  confirmDeliveryImpl:
+    type: Conversation/Sequential Workflow Operation
+    operation: confirmDelivery
+    steps:
+      - name: Prepare Delivery Confirmation
+        type: Conversation/JavaScript Code
+        code: |
+          const deliveryConfirmedAt =
+            typeof event?.timestamp === 'string' ? event.timestamp.trim() : '';
+          const requestedDeadlineAt =
+            typeof event?.satisfactionDeadlineAt === 'string'
+              ? event.satisfactionDeadlineAt.trim()
+              : '';
+
+          const changeset = [
+            { op: 'replace', path: '/state/concernOpen', val: false },
+            { op: 'replace', path: '/state/serviceScheduled', val: false },
+            { op: 'replace', path: '/state/serviceCompleted', val: false }
+          ];
+          if (deliveryConfirmedAt) {
+            changeset.unshift({
+              op: 'replace',
+              path: '/state/deliveryConfirmedAt',
+              val: deliveryConfirmedAt
+            });
+          }
+
+          return {
+            changeset,
+            requestEvents: [
+              {
+                type: 'Conversation/Status Change',
+                status: { type: 'Conversation/Status Pending' },
+                signal: 'requestSatisfaction',
+                reason: 'deliveryConfirmed',
+                deadlineAt: requestedDeadlineAt
+              }
+            ]
+          };
+      - name: Apply Delivery Confirmation
+        type: Conversation/Update Document
+        changeset: "${steps['Prepare Delivery Confirmation'].changeset}"
+      - name: Emit Satisfaction Request Signal
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Prepare Delivery Confirmation'].requestEvents || [] };
+
+  confirmServiceCompleted:
+    type: Conversation/Operation
+    channel: payeeChannel
+    description: Merchant confirms service visit was completed.
+  confirmServiceCompletedImpl:
+    type: Conversation/Sequential Workflow Operation
+    operation: confirmServiceCompleted
+    steps:
+      - name: Prepare Service Completion
+        type: Conversation/JavaScript Code
+        code: |
+          const serviceScheduled = document('/state/serviceScheduled') === true;
+          if (!serviceScheduled) {
+            return { changeset: [], requestEvents: [] };
+          }
+          const requestedDeadlineAt =
+            typeof event?.satisfactionDeadlineAt === 'string'
+              ? event.satisfactionDeadlineAt.trim()
+              : '';
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/state/serviceCompleted', val: true },
+              { op: 'replace', path: '/state/concernOpen', val: false }
+            ],
+            requestEvents: [
+              {
+                type: 'Conversation/Status Change',
+                status: { type: 'Conversation/Status Pending' },
+                signal: 'requestSatisfaction',
+                reason: 'serviceCompleted',
+                deadlineAt: requestedDeadlineAt
+              }
+            ]
+          };
+      - name: Apply Service Completion
+        type: Conversation/Update Document
+        changeset: "${steps['Prepare Service Completion'].changeset}"
+      - name: Emit Satisfaction Request Signal
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Prepare Service Completion'].requestEvents || [] };
+
+  markSatisfactionWindowExpired:
+    type: Conversation/Operation
+    channel: payeeChannel
+    description: Marks satisfaction confirmation window as expired (manual simulation).
+  markSatisfactionWindowExpiredImpl:
+    type: Conversation/Sequential Workflow Operation
+    operation: markSatisfactionWindowExpired
+    steps:
+      - name: Expire Satisfaction Window
+        type: Conversation/Update Document
+        changeset:
+          - op: replace
+            path: /state/satisfactionWindowExpired
+            val: true
+          - op: replace
+            path: /state/activeSatisfactionRequestId
+            val: ''
+          - op: replace
+            path: /state/activeScheduleRequestId
+            val: ''
+
+  onRequestSatisfactionConfirmation:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: Conversation/Status Change
+    steps:
+      - name: Build Satisfaction Pending Action
+        type: Conversation/JavaScript Code
+        code: |
+          const signal = String(event?.signal ?? '').trim();
+          if (signal !== 'requestSatisfaction') {
+            return { changeset: [], pendingActionEvents: [] };
+          }
+
+          const finalized = document('/state/finalized') === true;
+          if (finalized) {
+            return { changeset: [], pendingActionEvents: [] };
+          }
+
+          const currentRound = Number(document('/state/satisfactionRound') ?? 0);
+          const nextRound = Number.isFinite(currentRound) ? currentRound + 1 : 1;
+          const requestId = 'refrigerator-satisfaction-' + String(nextRound);
+          const deadlineAt =
+            typeof event?.deadlineAt === 'string' ? event.deadlineAt.trim() : '';
+
+          const title =
+            nextRound === 1
+              ? 'Refrigerator satisfaction confirmation'
+              : 'Post-service satisfaction confirmation';
+          const message = deadlineAt
+            ? 'Please confirm if everything is satisfactory. You can also report a concern before ' +
+              deadlineAt +
+              '.'
+            : 'Please confirm if everything is satisfactory. You can also report a concern within 7 days from this request.';
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/state/satisfactionRound', val: nextRound },
+              { op: 'replace', path: '/state/activeSatisfactionRequestId', val: requestId },
+              { op: 'replace', path: '/state/activeScheduleRequestId', val: '' },
+              { op: 'replace', path: '/state/satisfactionDeadlineAt', val: deadlineAt },
+              { op: 'replace', path: '/state/satisfactionWindowExpired', val: false },
+              { op: 'replace', path: '/state/satisfactionConfirmed', val: false }
+            ],
+            pendingActionEvents: [
+              {
+                type: 'Conversation/Customer Action Requested',
+                requestId,
+                title,
+                message,
+                actions: [
+                  {
+                    label: 'Everything is fine',
+                    variant: 'primary'
+                  },
+                  {
+                    label: 'I have a concern',
+                    variant: 'reject',
+                    inputSchema: { type: 'Text' },
+                    inputRequired: false,
+                    inputTitle: 'Concern details (optional)',
+                    inputPlaceholder: 'Describe what is missing or incorrect.'
+                  }
+                ]
+              }
+            ]
+          };
+      - name: Apply Satisfaction Request State
+        type: Conversation/Update Document
+        changeset: "${steps['Build Satisfaction Pending Action'].changeset}"
+      - name: Emit Satisfaction Pending Action
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Build Satisfaction Pending Action'].pendingActionEvents || [] };
+
+  onSatisfactionResponse:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: Conversation/Customer Action Responded
+    steps:
+      - name: Decide Satisfaction Response
+        type: Conversation/JavaScript Code
+        code: |
+          const expectedRequestId = String(
+            document('/state/activeSatisfactionRequestId') ?? ''
+          ).trim();
+          const inResponseTo = String(event?.inResponseTo?.requestId ?? '').trim();
+          if (!expectedRequestId || inResponseTo !== expectedRequestId) {
+            return { changeset: [], events: [] };
+          }
+
+          if (document('/state/finalized') === true) {
+            return { changeset: [], events: [] };
+          }
+
+          if (document('/state/satisfactionWindowExpired') === true) {
+            return { changeset: [], events: [] };
+          }
+
+          const actionLabel = String(event?.actionLabel ?? '').trim();
+
+          if (actionLabel === 'Everything is fine') {
+            return {
+              changeset: [
+                { op: 'replace', path: '/state/satisfactionConfirmed', val: true },
+                { op: 'replace', path: '/state/concernOpen', val: false },
+                { op: 'replace', path: '/state/concernNote', val: '' },
+                { op: 'replace', path: '/state/activeScheduleRequestId', val: '' }
+              ],
+              events: [
+                {
+                  type: 'Conversation/Status Change',
+                  status: { type: 'Conversation/Status In Progress' },
+                  signal: 'tryFinalize'
+                }
+              ]
+            };
+          }
+
+          if (actionLabel !== 'I have a concern') {
+            return { changeset: [], events: [] };
+          }
+
+          const round = Number(document('/state/satisfactionRound') ?? 1);
+          const scheduleRequestId =
+            'refrigerator-service-schedule-' + String(Number.isFinite(round) ? round : 1);
+
+          const concernInput = event?.input;
+          const concernNote =
+            typeof concernInput === 'string' ? concernInput.trim() : '';
+          const storedProposedServiceAt = document('/state/proposedServiceAt');
+          const proposedServiceAt =
+            (typeof storedProposedServiceAt === 'string'
+              ? storedProposedServiceAt.trim()
+              : '') || '2026-03-12T10:00:00Z';
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/state/concernOpen', val: true },
+              { op: 'replace', path: '/state/satisfactionConfirmed', val: false },
+              { op: 'replace', path: '/state/serviceScheduled', val: false },
+              { op: 'replace', path: '/state/serviceCompleted', val: false },
+              { op: 'replace', path: '/state/concernNote', val: concernNote },
+              { op: 'replace', path: '/state/proposedServiceAt', val: proposedServiceAt },
+              { op: 'replace', path: '/state/activeScheduleRequestId', val: scheduleRequestId }
+            ],
+            events: [
+              {
+                type: 'Conversation/Customer Action Requested',
+                requestId: scheduleRequestId,
+                title: 'Schedule service visit',
+                message:
+                  'We proposed a technician visit at ' +
+                  proposedServiceAt +
+                  '. Accept it or choose another date.',
+                actions: [
+                  {
+                    label: 'Accept proposed visit',
+                    variant: 'primary'
+                  },
+                  {
+                    label: 'Reschedule visit',
+                    variant: 'secondary',
+                    inputSchema: { type: 'Common/Timestamp' },
+                    inputRequired: true,
+                    inputTitle: 'Preferred service date',
+                    inputPlaceholder: 'Select your preferred date and time.'
+                  }
+                ]
+              }
+            ]
+          };
+      - name: Apply Satisfaction Response
+        type: Conversation/Update Document
+        changeset: "${steps['Decide Satisfaction Response'].changeset}"
+
+  onServiceScheduleResponse:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: Conversation/Customer Action Responded
+    steps:
+      - name: Decide Service Schedule Response
+        type: Conversation/JavaScript Code
+        code: |
+          const expectedRequestId = String(
+            document('/state/activeScheduleRequestId') ?? ''
+          ).trim();
+          const inResponseTo = String(event?.inResponseTo?.requestId ?? '').trim();
+          if (!expectedRequestId || inResponseTo !== expectedRequestId) {
+            return { changeset: [] };
+          }
+
+          if (document('/state/finalized') === true) {
+            return { changeset: [] };
+          }
+
+          if (document('/state/satisfactionWindowExpired') === true) {
+            return { changeset: [] };
+          }
+
+          const actionLabel = String(event?.actionLabel ?? '').trim();
+
+          if (actionLabel === 'Accept proposed visit') {
+            return {
+              changeset: [
+                { op: 'replace', path: '/state/serviceScheduled', val: true },
+                { op: 'replace', path: '/state/serviceCompleted', val: false }
+              ]
+            };
+          }
+
+          if (actionLabel !== 'Reschedule visit') {
+            return { changeset: [] };
+          }
+
+          const candidateInput = event?.input;
+          let selectedAt = '';
+          if (typeof candidateInput === 'string') {
+            selectedAt = candidateInput.trim();
+          } else if (
+            candidateInput &&
+            typeof candidateInput === 'object' &&
+            typeof candidateInput.value === 'string'
+          ) {
+            selectedAt = candidateInput.value.trim();
+          }
+
+          if (!selectedAt) {
+            return { changeset: [] };
+          }
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/state/proposedServiceAt', val: selectedAt },
+              { op: 'replace', path: '/state/serviceScheduled', val: true },
+              { op: 'replace', path: '/state/serviceCompleted', val: false }
+            ]
+          };
+      - name: Apply Service Schedule Response
+        type: Conversation/Update Document
+        changeset: "${steps['Decide Service Schedule Response'].changeset}"
+
+  onTryFinalizeRequested:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: Conversation/Status Change
+    steps:
+      - name: Decide Finalization
+        type: Conversation/JavaScript Code
+        code: |
+          const signal = String(event?.signal ?? '').trim();
+          if (signal !== 'tryFinalize') {
+            return { changeset: [], followUpEvents: [] };
+          }
+
+          if (document('/state/finalized') === true) {
+            return { changeset: [], followUpEvents: [] };
+          }
+
+          if (document('/state/satisfactionConfirmed') !== true) {
+            return { changeset: [], followUpEvents: [] };
+          }
+
+          const totalAmount = Number(document('/amount/total') ?? 0);
+          const followUpEvents = [
+            {
+              type: 'Conversation/Status Change',
+              status: { type: 'Conversation/Status Completed' },
+              signal: 'tryStartVoucher'
+            }
+          ];
+
+          if (totalAmount > 0) {
+            followUpEvents.unshift({
+              type: 'PayNote/Capture Funds Requested',
+              requestId: 'refrigerator-final-capture',
+              amount: totalAmount
+            });
+          }
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/state/finalized', val: true },
+              { op: 'replace', path: '/state/activeSatisfactionRequestId', val: '' },
+              { op: 'replace', path: '/state/activeScheduleRequestId', val: '' }
+            ],
+            followUpEvents
+          };
+      - name: Apply Finalization
+        type: Conversation/Update Document
+        changeset: "${steps['Decide Finalization'].changeset}"
+      - name: Emit Finalization Events
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Decide Finalization'].followUpEvents || [] };
+
+  onTryStartVoucherRequested:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: Conversation/Status Change
+    steps:
+      - name: Decide Voucher Start
+        type: Conversation/JavaScript Code
+        code: |
+          const signal = String(event?.signal ?? '').trim();
+          if (signal !== 'tryStartVoucher') {
+            return { changeset: [], voucherStartEvents: [] };
+          }
+
+          const finalized = document('/state/finalized') === true;
+          const voucherStarted = document('/state/voucherStarted') === true;
+          if (!finalized || voucherStarted) {
+            return { changeset: [], voucherStartEvents: [] };
+          }
+
+          const offer = document('/voucherOffer') ?? {};
+          const targetMerchantId = String(offer.targetMerchantId ?? '').trim();
+          const paymentMandateDocumentId = String(
+            offer.paymentMandateDocumentId ?? ''
+          ).trim();
+          const reserveAmountMinor = Number(offer.reserveAmountMinor ?? 500);
+
+          if (
+            !targetMerchantId ||
+            !paymentMandateDocumentId ||
+            !(reserveAmountMinor > 0)
+          ) {
+            return { changeset: [], voucherStartEvents: [] };
+          }
+
+          const linkedVoucherPayNote = {
+            name: offer.name ?? 'Voucher CashBack',
+            description: `This document is a $100 voucher issued by Abt.com for use at STK Steak House restaurant by the consumer.\nConsent to Data Processing: The consumer must provide consent for Abt.com and STK Steak House to process information about the consumer’s card payments at STK Steak House in order to activate the voucher.\nRedemption: To redeem the voucher, the consumer must make a payment at STK Steak House using a card.\nRefund: For each qualifying transaction at STK Steak House, Abt.com will transfer the corresponding amount to the consumer’s account, up to a maximum of $100.\nVoucher is used: The voucher is considered fully redeemed when either the total redeemed amount reaches $100 or the voucher reaches its expiration date.`,
+            type: 'PayNote/Merchant To Customer PayNote',
+            currency: 'USD',
+            amount: {
+              total: reserveAmountMinor
+            },
+            paymentMandateDocumentId,
+            voucher: {
+              targetMerchantId,
+              reserveAmountMinor
+            },
+            state: {
+              monitoringStatus: 'idle',
+              remainingMinor: reserveAmountMinor,
+              paidOutMinor: 0
+            },
+            reportedTransactionIds: {
+              type: 'Dictionary',
+              keyType: 'Text',
+              valueType: 'Text'
+            },
+            contracts: {
+              payerChannel: {
+                type: 'MyOS/MyOS Timeline Channel'
+              },
+              payeeChannel: {
+                type: 'MyOS/MyOS Timeline Channel'
+              },
+              guarantorChannel: {
+                type: 'MyOS/MyOS Timeline Channel'
+              },
+              initLifecycleChannel: {
+                type: 'Core/Lifecycle Event Channel',
+                event: {
+                  type: 'Core/Document Processing Initiated'
+                }
+              },
+              eventsChannel: {
+                type: 'Core/Triggered Event Channel'
+              },
+              requestMonitoringOnInit: {
+                type: 'Conversation/Sequential Workflow',
+                channel: 'initLifecycleChannel',
+                steps: [
+                  {
+                    name: 'Emit Monitoring Request',
+                    type: 'Conversation/JavaScript Code',
+                    code: `
+                      const targetMerchantId = String(
+                        document('/voucher/targetMerchantId') ?? ''
+                      ).trim();
+                      if (!targetMerchantId) {
+                        return { events: [] };
+                      }
+
+                      return {
+                        changeset: [
+                          {
+                            op: 'replace',
+                            path: '/state/monitoringStatus',
+                            val: 'requested'
+                          }
+                        ],
+                        events: [
+                          {
+                            type: 'PayNote/Start Card Transaction Monitoring Requested',
+                            requestId: 'voucher-monitoring',
+                            targetMerchantId,
+                            events: ['transaction']
+                          }
+                        ]
+                      };
+                    `
+                  },
+                  {
+                    name: 'Apply Monitoring Requested',
+                    type: 'Conversation/Update Document',
+                    changeset: "\${steps['Emit Monitoring Request'].changeset}"
+                  }
+                ]
+              },
+              onMonitoringStarted: {
+                type: 'Conversation/Sequential Workflow',
+                channel: 'eventsChannel',
+                event: {
+                  type: 'PayNote/Card Transaction Monitoring Started'
+                },
+                steps: [
+                  {
+                    name: 'Set Monitoring Started',
+                    type: 'Conversation/Update Document',
+                    changeset: [
+                      {
+                        op: 'replace',
+                        path: '/state/monitoringStatus',
+                        val: 'started'
+                      }
+                    ]
+                  }
+                ]
+              },
+              onMonitoringRejected: {
+                type: 'Conversation/Sequential Workflow',
+                channel: 'eventsChannel',
+                event: {
+                  type: 'PayNote/Card Transaction Monitoring Request Rejected'
+                },
+                steps: [
+                  {
+                    name: 'Set Monitoring Rejected',
+                    type: 'Conversation/Update Document',
+                    changeset: [
+                      {
+                        op: 'replace',
+                        path: '/state/monitoringStatus',
+                        val: 'rejected'
+                      }
+                    ]
+                  }
+                ]
+              },
+              onMonitoringStopped: {
+                type: 'Conversation/Sequential Workflow',
+                channel: 'eventsChannel',
+                event: {
+                  type: 'PayNote/Card Transaction Monitoring Stopped'
+                },
+                steps: [
+                  {
+                    name: 'Set Monitoring Stopped',
+                    type: 'Conversation/Update Document',
+                    changeset: [
+                      {
+                        op: 'replace',
+                        path: '/state/monitoringStatus',
+                        val: 'stopped'
+                      }
+                    ]
+                  }
+                ]
+              },
+              onCardTransactionReport: {
+                type: 'Conversation/Sequential Workflow',
+                channel: 'eventsChannel',
+                event: {
+                  type: 'PayNote/Card Transaction Report'
+                },
+                steps: [
+                  {
+                    name: 'Decide Cashback Capture',
+                    type: 'Conversation/JavaScript Code',
+                    code: `
+                      const txnId = String(event.transactionId ?? '').trim();
+                      if (!txnId) {
+                        return { events: [] };
+                      }
+
+                      const alreadyProcessed = document('/reportedTransactionIds/' + txnId);
+                      if (alreadyProcessed) {
+                        return { events: [] };
+                      }
+
+                      const monitoringStatus = String(
+                        document('/state/monitoringStatus') ?? 'idle'
+                      );
+                      const targetMerchantId = String(
+                        document('/voucher/targetMerchantId') ?? ''
+                      ).trim();
+                      const reportMerchantId = String(event.merchantId ?? '').trim();
+                      const reportStatus = String(event.status ?? '').trim();
+                      const reportAmountMinor = Number(event.amountMinor ?? 0);
+                      const remainingMinor = Number(document('/state/remainingMinor') ?? 0);
+                      const changeset = [
+                        { op: 'replace', path: '/reportedTransactionIds/' + txnId, val: '1' }
+                      ];
+
+                      const isCaptureLikeStatus =
+                        reportStatus === 'captured' ||
+                        reportStatus === 'partially captured';
+
+                      if (
+                        monitoringStatus !== 'started' ||
+                        !isCaptureLikeStatus ||
+                        !targetMerchantId ||
+                        reportMerchantId !== targetMerchantId ||
+                        !(reportAmountMinor > 0) ||
+                        !(remainingMinor > 0)
+                      ) {
+                        return { changeset, events: [] };
+                      }
+
+                      const captureAmountMinor = Math.min(
+                        remainingMinor,
+                        reportAmountMinor
+                      );
+
+                      if (!(captureAmountMinor > 0)) {
+                        return { changeset, events: [] };
+                      }
+
+                      const paidOutMinor = Number(document('/state/paidOutMinor') ?? 0);
+                      changeset.push({
+                        op: 'replace',
+                        path: '/state/remainingMinor',
+                        val: remainingMinor - captureAmountMinor
+                      });
+                      changeset.push({
+                        op: 'replace',
+                        path: '/state/paidOutMinor',
+                        val: paidOutMinor + captureAmountMinor
+                      });
+
+                      return {
+                        changeset,
+                        events: [
+                          {
+                            type: 'PayNote/Capture Funds Requested',
+                            requestId: 'voucher-capture:' + txnId,
+                            amount: captureAmountMinor,
+                            paymentMandateDocumentId: document('/paymentMandateDocumentId')
+                          }
+                        ]
+                      };
+                    `
+                  },
+                  {
+                    name: 'Apply Cashback Decision',
+                    type: 'Conversation/Update Document',
+                    changeset: "\${steps['Decide Cashback Capture'].changeset}"
+                  }
+                ]
+              }
+            }
+          };
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/state/voucherStarted', val: true }
+            ],
+            voucherStartEvents: [
+              {
+                type: 'PayNote/Reverse Card Charge Requested',
+                requestId: 'voucher-reserve',
+                name: 'Voucher reserve authorization',
+                description: 'Cashback for purchase in STK Steak House restaurant.',
+                amount: reserveAmountMinor,
+                paymentMandateDocumentId,
+                paynote: linkedVoucherPayNote
+              }
+            ]
+          };
+      - name: Apply Voucher Started
+        type: Conversation/Update Document
+        changeset: "${steps['Decide Voucher Start'].changeset}"
+      - name: Emit Voucher Start Events
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Decide Voucher Start'].voucherStartEvents || [] };
+
+  onPaymentMandateAttached:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: PayNote/Payment Mandate Attached
+    steps:
+      - name: Apply Payment Mandate Attached
+        type: Conversation/JavaScript Code
+        code: |
+          const mandateId = String(event.paymentMandateDocumentId ?? '').trim();
+          if (!mandateId) {
+            return { changeset: [], followUpEvents: [] };
+          }
+
+          return {
+            changeset: [
+              {
+                op: 'replace',
+                path: '/voucherOffer/paymentMandateDocumentId',
+                val: mandateId
+              },
+              {
+                op: 'replace',
+                path: '/voucherOffer/paymentMandateStatus',
+                val: 'attached'
+              }
+            ],
+            followUpEvents: [
+              {
+                type: 'Conversation/Status Change',
+                status: { type: 'Conversation/Status Completed' },
+                signal: 'tryStartVoucher'
+              }
+            ]
+          };
+      - name: Persist Payment Mandate Attached
+        type: Conversation/Update Document
+        changeset: "${steps['Apply Payment Mandate Attached'].changeset}"
+      - name: Emit Voucher Start Signal
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Apply Payment Mandate Attached'].followUpEvents || [] };
+
+  onPaymentMandateAttachmentFailed:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: PayNote/Payment Mandate Attachment Failed
+    steps:
+      - name: Mark Payment Mandate Failed
+        type: Conversation/Update Document
+        changeset:
+          - op: replace
+            path: /voucherOffer/paymentMandateStatus
+            val: failed
+
+payNoteInitialStateDescription:
+  summary: |
+    Delivery-confirmed purchase with customer satisfaction loop and voucher cashback after final confirmation.
+  details: |
+    1. Shipment company confirms delivery.
+    2. Contract emits Customer Action Requested for satisfaction confirmation.
+    3. Customer can confirm satisfaction or report concern.
+    4. Concern flow asks customer to accept or reschedule service using Common/Timestamp input.
+    5. Merchant confirms service completion and the satisfaction request can repeat until accepted.
+    6. After satisfaction confirmation, hold is captured and voucher starts when mandate is attached.

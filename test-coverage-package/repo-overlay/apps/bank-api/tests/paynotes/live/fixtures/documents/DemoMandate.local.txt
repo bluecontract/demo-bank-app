@@ -1,0 +1,22 @@
+name: Demo Voucher Payment Mandate Template
+LLM_SUMMARY_DISABLED: true
+type: PayNote/Payment Mandate
+
+# Delivery-attached template for voucher/cashback flows.
+# Keep this document policy-only: do not duplicate contracts/runtime state
+# from the PayNote/Payment Mandate type.
+
+granterType: merchant
+granterId: afb2148a-2468-4ca6-b820-6c6bfe69a181
+granteeType: merchantId
+granteeId: afb2148a-2468-4ca6-b820-6c6bfe69a181
+
+amountLimit: 10000
+currency: USD
+sourceAccount: root
+allowLinkedPayNote: true
+expiresAt: 2027-12-31T23:59:59Z
+
+# Optional allowlists intentionally omitted (wildcard):
+# - allowedPaymentCounterparties
+# - allowedPayNotes

@@ -1,0 +1,37 @@
+{
+  "test:paynotes:integration": {
+    "executor": "nx:run-commands",
+    "options": {
+      "command": "npx vitest run --config vitest.paynotes.integration.config.ts",
+      "cwd": "apps/bank-api"
+    },
+    "dependsOn": ["^build", "localstack:serve"]
+  },
+  "test:paynotes:integration:serial": {
+    "executor": "nx:run-commands",
+    "options": {
+      "command": "npx vitest run --config vitest.paynotes.integration.serial.config.ts",
+      "cwd": "apps/bank-api"
+    },
+    "dependsOn": ["^build", "localstack:serve"]
+  },
+  "test:paynotes:e2e": {
+    "executor": "nx:run-commands",
+    "options": {
+      "command": "npx vitest run --config vitest.paynotes.e2e.config.ts",
+      "cwd": "apps/bank-api"
+    }
+  },
+  "test:paynotes:all": {
+    "executor": "nx:run-commands",
+    "options": {
+      "commands": [
+        "npx vitest run --config vitest.paynotes.integration.config.ts",
+        "npx vitest run --config vitest.paynotes.integration.serial.config.ts"
+      ],
+      "cwd": "apps/bank-api",
+      "parallel": false
+    },
+    "dependsOn": ["^build", "localstack:serve"]
+  }
+}

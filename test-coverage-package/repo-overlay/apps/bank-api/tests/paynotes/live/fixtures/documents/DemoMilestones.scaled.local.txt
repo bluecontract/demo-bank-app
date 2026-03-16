@@ -1,0 +1,245 @@
+name: Demo Milestones
+description: Milestone-based contractor payout driven by Customer Action Requested/Responded.
+LLM_SUMMARY_DISABLED: true
+type: PayNote/Card Transaction PayNote
+currency: USD
+amount:
+  total: 36000
+milestones:
+  m1: false
+  m2: false
+  m3: false
+  m4: false
+contracts:
+  payerChannel:
+    type: MyOS/MyOS Timeline Channel
+  payeeChannel:
+    type: MyOS/MyOS Timeline Channel
+  guarantorChannel:
+    type: MyOS/MyOS Timeline Channel
+  eventsChannel:
+    type: Core/Triggered Event Channel
+  initLifecycleChannel:
+    type: Core/Lifecycle Event Channel
+    event:
+      type: Core/Document Processing Initiated
+
+  requestMilestone1PendingAction:
+    type: Conversation/Sequential Workflow
+    channel: initLifecycleChannel
+    steps:
+      - type: Conversation/Trigger Event
+        event:
+          type: Conversation/Customer Action Requested
+          requestId: contractor-m1-action
+          title: Milestone 1 Confirmation
+          message: Confirm completion of milestone 1.
+          actions:
+            - label: Approve milestone 1
+              variant: primary
+            - label: I have a concern
+              variant: secondary
+              inputSchema:
+                type: Text
+              inputRequired: false
+              inputTitle: Concern details (optional)
+              inputPlaceholder: Describe what is missing or incorrect.
+
+  onMilestone1ApprovedByCustomerAction:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: Conversation/Customer Action Responded
+    steps:
+      - name: Decide Milestone 1 Reaction
+        type: Conversation/JavaScript Code
+        code: |
+          const inResponseTo = String(event?.inResponseTo?.requestId ?? '').trim();
+          const actionLabel = String(event?.actionLabel ?? '').trim();
+          if (inResponseTo !== 'contractor-m1-action' || actionLabel !== 'Approve milestone 1') {
+            return { changeset: [], followUpEvents: [] };
+          }
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/milestones/m1', val: true }
+            ],
+            followUpEvents: [
+              {
+                type: 'PayNote/Capture Funds Requested',
+                requestId: 'contractor-m1',
+                amount: 8000
+              },
+              {
+                type: 'Conversation/Customer Action Requested',
+                requestId: 'contractor-m2-action',
+                title: 'Milestone 2 Confirmation',
+                message: 'Confirm completion of milestone 2.',
+                actions: [
+                  { label: 'Approve milestone 2', variant: 'primary' },
+                  {
+                    label: 'I have a concern',
+                    variant: 'secondary',
+                    inputSchema: { type: 'Text' },
+                    inputRequired: false,
+                    inputTitle: 'Concern details (optional)',
+                    inputPlaceholder: 'Describe what is missing or incorrect.'
+                  }
+                ]
+              }
+            ]
+          };
+      - name: Apply Milestone 1 Changes
+        type: Conversation/Update Document
+        changeset: "${steps['Decide Milestone 1 Reaction'].changeset}"
+      - name: Emit Milestone 1 Follow-up Events
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Decide Milestone 1 Reaction'].followUpEvents || [] };
+
+  onMilestone2ApprovedByCustomerAction:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: Conversation/Customer Action Responded
+    steps:
+      - name: Decide Milestone 2 Reaction
+        type: Conversation/JavaScript Code
+        code: |
+          const inResponseTo = String(event?.inResponseTo?.requestId ?? '').trim();
+          const actionLabel = String(event?.actionLabel ?? '').trim();
+          if (inResponseTo !== 'contractor-m2-action' || actionLabel !== 'Approve milestone 2') {
+            return { changeset: [], followUpEvents: [] };
+          }
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/milestones/m2', val: true }
+            ],
+            followUpEvents: [
+              {
+                type: 'PayNote/Capture Funds Requested',
+                requestId: 'contractor-m2',
+                amount: 12000
+              },
+              {
+                type: 'Conversation/Customer Action Requested',
+                requestId: 'contractor-m3-action',
+                title: 'Milestone 3 Confirmation',
+                message: 'Confirm completion of milestone 3.',
+                actions: [
+                  { label: 'Approve milestone 3', variant: 'primary' },
+                  {
+                    label: 'I have a concern',
+                    variant: 'secondary',
+                    inputSchema: { type: 'Text' },
+                    inputRequired: false,
+                    inputTitle: 'Concern details (optional)',
+                    inputPlaceholder: 'Describe what is missing or incorrect.'
+                  }
+                ]
+              }
+            ]
+          };
+      - name: Apply Milestone 2 Changes
+        type: Conversation/Update Document
+        changeset: "${steps['Decide Milestone 2 Reaction'].changeset}"
+      - name: Emit Milestone 2 Follow-up Events
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Decide Milestone 2 Reaction'].followUpEvents || [] };
+
+  onMilestone3ApprovedByCustomerAction:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: Conversation/Customer Action Responded
+    steps:
+      - name: Decide Milestone 3 Reaction
+        type: Conversation/JavaScript Code
+        code: |
+          const inResponseTo = String(event?.inResponseTo?.requestId ?? '').trim();
+          const actionLabel = String(event?.actionLabel ?? '').trim();
+          if (inResponseTo !== 'contractor-m3-action' || actionLabel !== 'Approve milestone 3') {
+            return { changeset: [], followUpEvents: [] };
+          }
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/milestones/m3', val: true }
+            ],
+            followUpEvents: [
+              {
+                type: 'PayNote/Capture Funds Requested',
+                requestId: 'contractor-m3',
+                amount: 7000
+              },
+              {
+                type: 'Conversation/Customer Action Requested',
+                requestId: 'contractor-m4-action',
+                title: 'Milestone 4 Confirmation',
+                message: 'Confirm completion of milestone 4.',
+                actions: [
+                  { label: 'Approve milestone 4', variant: 'primary' },
+                  {
+                    label: 'I have a concern',
+                    variant: 'secondary',
+                    inputSchema: { type: 'Text' },
+                    inputRequired: false,
+                    inputTitle: 'Concern details (optional)',
+                    inputPlaceholder: 'Describe what is missing or incorrect.'
+                  }
+                ]
+              }
+            ]
+          };
+      - name: Apply Milestone 3 Changes
+        type: Conversation/Update Document
+        changeset: "${steps['Decide Milestone 3 Reaction'].changeset}"
+      - name: Emit Milestone 3 Follow-up Events
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Decide Milestone 3 Reaction'].followUpEvents || [] };
+
+  onMilestone4ApprovedByCustomerAction:
+    type: Conversation/Sequential Workflow
+    channel: eventsChannel
+    event:
+      type: Conversation/Customer Action Responded
+    steps:
+      - name: Decide Milestone 4 Reaction
+        type: Conversation/JavaScript Code
+        code: |
+          const inResponseTo = String(event?.inResponseTo?.requestId ?? '').trim();
+          const actionLabel = String(event?.actionLabel ?? '').trim();
+          if (inResponseTo !== 'contractor-m4-action' || actionLabel !== 'Approve milestone 4') {
+            return { changeset: [], followUpEvents: [] };
+          }
+
+          return {
+            changeset: [
+              { op: 'replace', path: '/milestones/m4', val: true }
+            ],
+            followUpEvents: [
+              {
+                type: 'PayNote/Capture Funds Requested',
+                requestId: 'contractor-m4',
+                amount: 9000
+              }
+            ]
+          };
+      - name: Apply Milestone 4 Changes
+        type: Conversation/Update Document
+        changeset: "${steps['Decide Milestone 4 Reaction'].changeset}"
+      - name: Emit Milestone 4 Capture Event
+        type: Conversation/JavaScript Code
+        code: |
+          return { events: steps['Decide Milestone 4 Reaction'].followUpEvents || [] };
+
+payNoteInitialStateDescription:
+  summary: |
+    Uses the card-authorization hold, then runs milestone-driven partial captures confirmed through pending actions.
+  details: |
+    The document emits Customer Action Requested for each milestone. After bank response (Customer Action Responded),
+    the document captures the milestone amount and requests confirmation for the next milestone.
+  initialMessage: super nice offer only for you
