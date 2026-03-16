@@ -29,6 +29,9 @@
     },
     {
       "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.paynotes.json"
     }
   ]
 }

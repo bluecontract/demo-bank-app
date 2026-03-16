@@ -1,0 +1,46 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist/paynotes-tests",
+    "module": "esnext",
+    "types": ["node", "vitest/globals"],
+    "moduleResolution": "bundler",
+    "tsBuildInfoFile": "dist/tsconfig.paynotes.tsbuildinfo"
+  },
+  "include": [
+    "tests/**/*.ts",
+    "vitest.paynotes.integration.shared.ts",
+    "vitest.paynotes.integration.config.ts",
+    "vitest.paynotes.integration.serial.config.ts",
+    "vitest.paynotes.e2e.config.ts"
+  ],
+  "references": [
+    {
+      "path": "../../libs/shared/observability/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/shared/core/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/shared/config/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/shared/bank-api-contract/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/paynotes/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/contracts/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/banking/tsconfig.lib.json"
+    },
+    {
+      "path": "../../libs/auth/tsconfig.lib.json"
+    },
+    {
+      "path": "./tsconfig.app.json"
+    }
+  ]
+}
