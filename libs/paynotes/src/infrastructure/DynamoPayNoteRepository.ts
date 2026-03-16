@@ -1,20 +1,25 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
+  DeleteCommand,
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 import type { PayNoteRecord, PayNoteRepository } from '../application/ports';
+import { toCompactBlueJsonValue } from '../application/blue/compactBlue';
 
 const ENTITY_TYPES = {
   PAYNOTE: 'PAYNOTE',
   SESSION: 'PAYNOTE_SESSION',
+  EVENT: 'PAYNOTE_EVENT',
 } as const;
 
 const TABLE_PREFIXES = {
   PAYNOTE: 'PAYNOTE#',
   SESSION: 'PAYNOTE_SESSION#',
+  EVENT: 'PAYNOTE_EVENT#',
 } as const;
 
 const SORT_KEYS = {
@@ -38,11 +43,37 @@ interface PayNoteItem {
   userId?: string;
   holdId?: string;
   transactionId?: string;
+  merchantId?: string;
+  lastSourceEventCreatedAt?: string;
+  lastSourceEventEpoch?: number;
+  lastCaptureLockEventId?: string;
+  lastCaptureUnlockEventId?: string;
   payerAccountNumber?: string;
   payeeAccountNumber?: string;
   document?: Record<string, unknown>;
   transactionRequest?: unknown;
   triggerEvent?: unknown;
+  pendingMandateChargeAttempts?: Record<
+    string,
+    {
+      mandateDocumentId: string;
+      eventType: string;
+      requestId?: string;
+      queuedAt: string;
+      retryCount: number;
+      nextRetryAt?: string;
+      lastReason?: string;
+    }
+  >;
+  transferMandateAttemptsByHoldId?: Record<
+    string,
+    {
+      mandateDocumentId: string;
+      mandateSessionId: string;
+      chargeAttemptId: string;
+      updatedAt: string;
+    }
+  >;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,6 +86,20 @@ interface PayNoteSessionItem {
   payNoteDocumentId: string;
   createdAt: string;
 }
+
+interface PayNoteEventItem {
+  PK: string;
+  SK: typeof SORT_KEYS.META;
+  entityType: typeof ENTITY_TYPES.EVENT;
+  eventId: string;
+  status: 'processing' | 'completed';
+  createdAt: string;
+  updatedAt?: string;
+  ttl?: number;
+}
+
+const PROCESSING_EVENT_TTL_SECONDS = 60 * 10;
+const COMPLETED_EVENT_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 export class DynamoPayNoteRepository implements PayNoteRepository {
   private readonly tableName: string;
@@ -79,6 +124,10 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
     return `${TABLE_PREFIXES.SESSION}${sessionId}`;
   }
 
+  private buildEventPk(eventId: string) {
+    return `${TABLE_PREFIXES.EVENT}${eventId}`;
+  }
+
   private mapItemToRecord(item: PayNoteItem): PayNoteRecord {
     return {
       payNoteDocumentId: item.payNoteDocumentId,
@@ -88,11 +137,18 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
       userId: item.userId,
       holdId: item.holdId,
       transactionId: item.transactionId,
+      merchantId: item.merchantId,
+      lastSourceEventCreatedAt: item.lastSourceEventCreatedAt,
+      lastSourceEventEpoch: item.lastSourceEventEpoch,
+      lastCaptureLockEventId: item.lastCaptureLockEventId,
+      lastCaptureUnlockEventId: item.lastCaptureUnlockEventId,
       payerAccountNumber: item.payerAccountNumber,
       payeeAccountNumber: item.payeeAccountNumber,
       document: item.document,
       transactionRequest: item.transactionRequest,
       triggerEvent: item.triggerEvent,
+      pendingMandateChargeAttempts: item.pendingMandateChargeAttempts,
+      transferMandateAttemptsByHoldId: item.transferMandateAttemptsByHoldId,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     };
@@ -106,6 +162,7 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
           PK: this.buildPayNotePk(documentId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -126,6 +183,7 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
           PK: this.buildSessionPk(sessionId),
           SK: SORT_KEYS.META,
         },
+        ConsistentRead: true,
       })
     );
 
@@ -139,30 +197,195 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
   }
 
   async savePayNote(record: PayNoteRecord): Promise<void> {
-    const item: PayNoteItem = {
-      PK: this.buildPayNotePk(record.payNoteDocumentId),
-      SK: SORT_KEYS.META,
-      entityType: ENTITY_TYPES.PAYNOTE,
-      payNoteDocumentId: record.payNoteDocumentId,
-      sessionIds: record.sessionIds,
-      deliveryId: record.deliveryId,
-      accountNumber: record.accountNumber,
-      userId: record.userId,
-      holdId: record.holdId,
-      transactionId: record.transactionId,
-      payerAccountNumber: record.payerAccountNumber,
-      payeeAccountNumber: record.payeeAccountNumber,
-      document: record.document,
-      transactionRequest: record.transactionRequest,
-      triggerEvent: record.triggerEvent,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt,
+    const compactDocument =
+      record.document === undefined
+        ? undefined
+        : (toCompactBlueJsonValue(record.document) as Record<string, unknown>);
+    const compactTransactionRequest =
+      record.transactionRequest === undefined
+        ? undefined
+        : toCompactBlueJsonValue(record.transactionRequest);
+    const compactTriggerEvent =
+      record.triggerEvent === undefined
+        ? undefined
+        : toCompactBlueJsonValue(record.triggerEvent);
+
+    const expressionAttributeNames: Record<string, string> = {
+      '#entityType': 'entityType',
+      '#payNoteDocumentId': 'payNoteDocumentId',
+      '#createdAt': 'createdAt',
+      '#updatedAt': 'updatedAt',
+    };
+    const expressionAttributeValues: Record<string, unknown> = {
+      ':entityType': ENTITY_TYPES.PAYNOTE,
+      ':payNoteDocumentId': record.payNoteDocumentId,
+      ':createdAt': record.createdAt,
+      ':updatedAt': record.updatedAt,
     };
 
+    const setExpressions: string[] = [
+      '#entityType = :entityType',
+      '#payNoteDocumentId = :payNoteDocumentId',
+      '#createdAt = :createdAt',
+      '#updatedAt = :updatedAt',
+    ];
+    const removeExpressions: string[] = [];
+
+    const addOptionalAttribute = (input: {
+      nameKey: string;
+      valueKey: string;
+      attributeName: string;
+      value: unknown;
+      preserveOnUndefined?: boolean;
+    }) => {
+      const { nameKey, valueKey, attributeName, value, preserveOnUndefined } =
+        input;
+
+      if (value !== undefined) {
+        expressionAttributeNames[nameKey] = attributeName;
+        expressionAttributeValues[valueKey] = value;
+        setExpressions.push(`${nameKey} = ${valueKey}`);
+        return;
+      }
+
+      if (!preserveOnUndefined) {
+        expressionAttributeNames[nameKey] = attributeName;
+        removeExpressions.push(nameKey);
+      }
+    };
+
+    addOptionalAttribute({
+      nameKey: '#sessionIds',
+      valueKey: ':sessionIds',
+      attributeName: 'sessionIds',
+      value: record.sessionIds,
+    });
+    addOptionalAttribute({
+      nameKey: '#deliveryId',
+      valueKey: ':deliveryId',
+      attributeName: 'deliveryId',
+      value: record.deliveryId,
+    });
+    addOptionalAttribute({
+      nameKey: '#accountNumber',
+      valueKey: ':accountNumber',
+      attributeName: 'accountNumber',
+      value: record.accountNumber,
+    });
+    addOptionalAttribute({
+      nameKey: '#userId',
+      valueKey: ':userId',
+      attributeName: 'userId',
+      value: record.userId,
+    });
+    addOptionalAttribute({
+      nameKey: '#holdId',
+      valueKey: ':holdId',
+      attributeName: 'holdId',
+      value: record.holdId,
+    });
+    addOptionalAttribute({
+      nameKey: '#transactionId',
+      valueKey: ':transactionId',
+      attributeName: 'transactionId',
+      value: record.transactionId,
+    });
+    addOptionalAttribute({
+      nameKey: '#merchantId',
+      valueKey: ':merchantId',
+      attributeName: 'merchantId',
+      value: record.merchantId,
+    });
+    addOptionalAttribute({
+      nameKey: '#lastSourceEventCreatedAt',
+      valueKey: ':lastSourceEventCreatedAt',
+      attributeName: 'lastSourceEventCreatedAt',
+      value: record.lastSourceEventCreatedAt,
+      preserveOnUndefined: true,
+    });
+    addOptionalAttribute({
+      nameKey: '#lastSourceEventEpoch',
+      valueKey: ':lastSourceEventEpoch',
+      attributeName: 'lastSourceEventEpoch',
+      value: record.lastSourceEventEpoch,
+      preserveOnUndefined: true,
+    });
+    addOptionalAttribute({
+      nameKey: '#lastCaptureLockEventId',
+      valueKey: ':lastCaptureLockEventId',
+      attributeName: 'lastCaptureLockEventId',
+      value: record.lastCaptureLockEventId,
+      preserveOnUndefined: true,
+    });
+    addOptionalAttribute({
+      nameKey: '#lastCaptureUnlockEventId',
+      valueKey: ':lastCaptureUnlockEventId',
+      attributeName: 'lastCaptureUnlockEventId',
+      value: record.lastCaptureUnlockEventId,
+      preserveOnUndefined: true,
+    });
+    addOptionalAttribute({
+      nameKey: '#payerAccountNumber',
+      valueKey: ':payerAccountNumber',
+      attributeName: 'payerAccountNumber',
+      value: record.payerAccountNumber,
+    });
+    addOptionalAttribute({
+      nameKey: '#payeeAccountNumber',
+      valueKey: ':payeeAccountNumber',
+      attributeName: 'payeeAccountNumber',
+      value: record.payeeAccountNumber,
+    });
+    addOptionalAttribute({
+      nameKey: '#document',
+      valueKey: ':document',
+      attributeName: 'document',
+      value: compactDocument,
+    });
+    addOptionalAttribute({
+      nameKey: '#transactionRequest',
+      valueKey: ':transactionRequest',
+      attributeName: 'transactionRequest',
+      value: compactTransactionRequest,
+    });
+    addOptionalAttribute({
+      nameKey: '#triggerEvent',
+      valueKey: ':triggerEvent',
+      attributeName: 'triggerEvent',
+      value: compactTriggerEvent,
+    });
+    addOptionalAttribute({
+      nameKey: '#pendingMandateChargeAttempts',
+      valueKey: ':pendingMandateChargeAttempts',
+      attributeName: 'pendingMandateChargeAttempts',
+      value: record.pendingMandateChargeAttempts,
+    });
+    addOptionalAttribute({
+      nameKey: '#transferMandateAttemptsByHoldId',
+      valueKey: ':transferMandateAttemptsByHoldId',
+      attributeName: 'transferMandateAttemptsByHoldId',
+      value: record.transferMandateAttemptsByHoldId,
+      preserveOnUndefined: true,
+    });
+
+    const updateExpressionParts: string[] = [];
+    if (setExpressions.length) {
+      updateExpressionParts.push(`SET ${setExpressions.join(', ')}`);
+    }
+    if (removeExpressions.length) {
+      updateExpressionParts.push(`REMOVE ${removeExpressions.join(', ')}`);
+    }
+
     await this.client.send(
-      new PutCommand({
+      new UpdateCommand({
         TableName: this.tableName,
-        Item: item,
+        Key: {
+          PK: this.buildPayNotePk(record.payNoteDocumentId),
+          SK: SORT_KEYS.META,
+        },
+        UpdateExpression: updateExpressionParts.join(' '),
+        ExpressionAttributeNames: expressionAttributeNames,
+        ExpressionAttributeValues: expressionAttributeValues,
       })
     );
 
@@ -186,6 +409,137 @@ export class DynamoPayNoteRepository implements PayNoteRepository {
     });
 
     await Promise.all(writes);
+  }
+
+  async markEventProcessed(eventId: string): Promise<boolean> {
+    const createdAt = new Date().toISOString();
+    const ttl = Math.floor(Date.now() / 1000) + PROCESSING_EVENT_TTL_SECONDS;
+    const item: PayNoteEventItem = {
+      PK: this.buildEventPk(eventId),
+      SK: SORT_KEYS.META,
+      entityType: ENTITY_TYPES.EVENT,
+      eventId,
+      status: 'processing',
+      createdAt,
+      ttl,
+    };
+
+    try {
+      await this.client.send(
+        new PutCommand({
+          TableName: this.tableName,
+          Item: item,
+          ConditionExpression: 'attribute_not_exists(#pk)',
+          ExpressionAttributeNames: {
+            '#pk': 'PK',
+          },
+        })
+      );
+      return true;
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        (error as { name?: string }).name === 'ConditionalCheckFailedException'
+      ) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  async getEventProcessingStatus(
+    eventId: string
+  ): Promise<'processing' | 'completed' | null> {
+    const response = await this.client.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: this.buildEventPk(eventId),
+          SK: SORT_KEYS.META,
+        },
+        ConsistentRead: true,
+      })
+    );
+
+    const status = (response.Item as Partial<PayNoteEventItem> | undefined)
+      ?.status;
+    if (status === 'processing' || status === 'completed') {
+      return status;
+    }
+    return null;
+  }
+
+  async finalizeEventProcessing(eventId: string): Promise<void> {
+    const now = new Date();
+    const ttl = Math.floor(now.getTime() / 1000) + COMPLETED_EVENT_TTL_SECONDS;
+
+    try {
+      await this.client.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: this.buildEventPk(eventId),
+            SK: SORT_KEYS.META,
+          },
+          UpdateExpression:
+            'SET #status = :completed, #updatedAt = :updatedAt, #ttl = :ttl',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+            '#updatedAt': 'updatedAt',
+            '#ttl': 'ttl',
+          },
+          ExpressionAttributeValues: {
+            ':completed': 'completed',
+            ':updatedAt': now.toISOString(),
+            ':ttl': ttl,
+          },
+          ConditionExpression: 'attribute_exists(PK)',
+        })
+      );
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        (error as { name?: string }).name === 'ConditionalCheckFailedException'
+      ) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async releaseEventProcessing(eventId: string): Promise<void> {
+    try {
+      await this.client.send(
+        new DeleteCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: this.buildEventPk(eventId),
+            SK: SORT_KEYS.META,
+          },
+          ConditionExpression: '#status = :processing',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+          },
+          ExpressionAttributeValues: {
+            ':processing': 'processing',
+          },
+        })
+      );
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'name' in error &&
+        (error as { name?: string }).name === 'ConditionalCheckFailedException'
+      ) {
+        return;
+      }
+      throw error;
+    }
   }
 }
 

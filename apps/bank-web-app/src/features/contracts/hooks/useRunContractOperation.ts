@@ -50,6 +50,9 @@ export function useRunContractOperation() {
       queryClient.invalidateQueries({
         queryKey: ['contract-details', variables.sessionId],
       });
+      queryClient.invalidateQueries({
+        queryKey: ['contract-history', variables.sessionId],
+      });
     },
   });
 }

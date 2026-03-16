@@ -31,6 +31,7 @@ const mockConfig = {
     cardBinPrefix: '123456',
     cardProcessorToken: 'processor-token',
   },
+  defaultMerchantCreditLimitMinor: 500_000,
 };
 
 const authHeaders = new Headers({ Authorization: 'Bearer processor-token' });
@@ -47,7 +48,14 @@ describe('captureCardAuthorizationHandler', () => {
   beforeEach(() => {
     vi.spyOn(dependencies, 'getDependencies').mockResolvedValue({
       repository: {} as any,
-      holdRepository: {} as any,
+      contractRepository: {
+        listContractsByHoldId: vi.fn().mockResolvedValue([]),
+        getContract: vi.fn(),
+        saveContract: vi.fn(),
+      } as any,
+      holdRepository: {
+        getHold: vi.fn().mockResolvedValue(null),
+      } as any,
       cardRepository: {} as any,
       cardHasher: {} as any,
       accountNumberGenerator: {} as any,
@@ -80,6 +88,11 @@ describe('captureCardAuthorizationHandler', () => {
       authorizationId: 'hold-123',
       transactionId: 'txn-123',
     });
+
+    const deps = await dependencies.getDependencies();
+    expect(deps.contractRepository.listContractsByHoldId).toHaveBeenCalledWith(
+      'hold-123'
+    );
   });
 
   it('returns 400 when idempotency key missing', async () => {

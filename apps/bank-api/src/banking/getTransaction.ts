@@ -56,6 +56,9 @@ export const getTransactionHandler = async (
         timestamp: transaction.createdAt.toISOString(),
         description: transaction.description,
         counterpartyAccountNumber: accountPosting.counterpartyAccountNumber,
+        ...(transaction.merchantId
+          ? { merchantId: transaction.merchantId }
+          : {}),
       },
     };
   } catch (err) {

@@ -32,6 +32,9 @@ function toAuthResult(user: User, token: string): AuthResult {
       createdAt: user.createdAt.toISOString(),
       isTest: user.isTest,
       marketingEmailsOptIn: user.marketingEmailsOptIn,
+      merchantId: user.merchantId,
+      merchantName: user.merchantName,
+      avatarDataUrl: user.avatarDataUrl,
     },
     token,
   };

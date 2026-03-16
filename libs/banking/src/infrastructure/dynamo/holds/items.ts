@@ -42,12 +42,14 @@ export interface HoldMetaItem {
   payerAccountNumber: string;
   counterpartyAccountNumber?: string;
   amountMinor: number;
+  capturedAmountMinor?: number;
   currency: Hold['currency'];
   status: HoldStatus;
   description?: string;
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
   cardTransactionDetails?: CardTransactionDetails;
@@ -77,6 +79,7 @@ export interface HoldEventItem {
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
   cardTransactionDetails?: CardTransactionDetails;
@@ -98,12 +101,14 @@ export function buildHoldMetaItem(hold: Hold): HoldMetaItem {
     payerAccountNumber: hold.payerAccountNumber,
     counterpartyAccountNumber: hold.counterpartyAccountNumber,
     amountMinor: hold.amountMinor,
+    capturedAmountMinor: hold.capturedAmountMinor,
     currency: hold.currency,
     status: hold.status,
     description: hold.description,
     cardId: hold.cardId,
     cardLast4: hold.cardLast4,
     merchantName: hold.merchantName,
+    merchantId: hold.merchantId,
     merchantStatementDescriptor: hold.merchantStatementDescriptor,
     processorChargeId: hold.processorChargeId,
     cardTransactionDetails: hold.cardTransactionDetails,
@@ -123,12 +128,16 @@ export function mapHoldMetaItemToHold(item: HoldMetaItem): Hold {
     payerAccountNumber: item.payerAccountNumber,
     counterpartyAccountNumber: item.counterpartyAccountNumber,
     amountMinor: item.amountMinor,
+    capturedAmountMinor:
+      item.capturedAmountMinor ??
+      (item.status === 'CAPTURED' ? item.amountMinor : 0),
     currency: item.currency,
     status: item.status,
     description: item.description,
     cardId: item.cardId,
     cardLast4: item.cardLast4,
     merchantName: item.merchantName,
+    merchantId: item.merchantId,
     merchantStatementDescriptor: item.merchantStatementDescriptor,
     processorChargeId: item.processorChargeId,
     cardTransactionDetails: item.cardTransactionDetails,
@@ -182,6 +191,7 @@ export function buildHoldEventItem(
     cardId: hold.cardId,
     cardLast4: hold.cardLast4,
     merchantName: hold.merchantName,
+    merchantId: hold.merchantId,
     merchantStatementDescriptor: hold.merchantStatementDescriptor,
     processorChargeId: hold.processorChargeId,
     payload: holdEventPayload(event),
@@ -235,6 +245,16 @@ function holdEventPayload(
       return compactRecord({
         transactionId: event.transactionId,
         counterpartyAccountNumber: event.counterpartyAccountNumber,
+        amountMinor: event.amountMinor,
+        remainingAmountMinor: event.remainingAmountMinor,
+        payNoteDocumentId: event.payNoteDocumentId,
+      });
+    case 'CAPTURED_PARTIAL':
+      return compactRecord({
+        transactionId: event.transactionId,
+        counterpartyAccountNumber: event.counterpartyAccountNumber,
+        amountMinor: event.amountMinor,
+        remainingAmountMinor: event.remainingAmountMinor,
         payNoteDocumentId: event.payNoteDocumentId,
       });
     case 'RELEASED':
@@ -278,11 +298,45 @@ function parseHoldEvent(item: HoldEventItem): HoldEvent {
         'counterpartyAccountNumber',
         item
       );
+      const amountMinor = extractOptionalNumber(payload, 'amountMinor');
+      const remainingAmountMinor = extractOptionalNumber(
+        payload,
+        'remainingAmountMinor'
+      );
       return {
         at: item.at,
         type: 'CAPTURED',
         transactionId,
         counterpartyAccountNumber,
+        ...(amountMinor !== undefined ? { amountMinor } : {}),
+        ...(remainingAmountMinor !== undefined ? { remainingAmountMinor } : {}),
+        payNoteDocumentId: extractOptionalString(payload, 'payNoteDocumentId'),
+      };
+    }
+    case 'CAPTURED_PARTIAL': {
+      const transactionId = extractRequiredString(
+        payload,
+        'transactionId',
+        item
+      );
+      const counterpartyAccountNumber = extractRequiredString(
+        payload,
+        'counterpartyAccountNumber',
+        item
+      );
+      const amountMinor = extractRequiredNumber(payload, 'amountMinor', item);
+      const remainingAmountMinor = extractRequiredNumber(
+        payload,
+        'remainingAmountMinor',
+        item
+      );
+      return {
+        at: item.at,
+        type: 'CAPTURED_PARTIAL',
+        transactionId,
+        counterpartyAccountNumber,
+        amountMinor,
+        remainingAmountMinor,
         payNoteDocumentId: extractOptionalString(payload, 'payNoteDocumentId'),
       };
     }
@@ -321,6 +375,14 @@ function extractOptionalString(
   return typeof value === 'string' ? value : undefined;
 }
 
+function extractOptionalNumber(
+  payload: Record<string, unknown>,
+  key: string
+): number | undefined {
+  const value = payload[key];
+  return typeof value === 'number' ? value : undefined;
+}
+
 function extractRequiredString(
   payload: Record<string, unknown>,
   key: string,
@@ -328,6 +390,20 @@ function extractRequiredString(
 ): string {
   const value = payload[key];
   if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(
+      `Hold event item missing required field "${key}" for type ${item.type}`
+    );
+  }
+  return value;
+}
+
+function extractRequiredNumber(
+  payload: Record<string, unknown>,
+  key: string,
+  item: HoldEventItem
+): number {
+  const value = payload[key];
+  if (typeof value !== 'number' || Number.isNaN(value)) {
     throw new Error(
       `Hold event item missing required field "${key}" for type ${item.type}`
     );

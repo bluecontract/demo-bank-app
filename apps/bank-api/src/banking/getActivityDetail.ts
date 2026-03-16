@@ -43,6 +43,7 @@ const mapTransactionDetail = (
   cardId: transaction.cardId,
   cardLast4: transaction.cardLast4,
   merchantName: transaction.merchantName,
+  merchantId: transaction.merchantId,
   merchantStatementDescriptor: transaction.merchantStatementDescriptor,
   processorChargeId: transaction.processorChargeId,
   ...(transaction.payNoteDocumentId
@@ -67,6 +68,22 @@ const mapHoldTimeline = (events: HoldEvent[]) =>
           at: event.at,
           transactionId: event.transactionId,
           counterpartyAccountNumber: event.counterpartyAccountNumber,
+          ...(event.amountMinor !== undefined
+            ? { amountMinor: event.amountMinor }
+            : {}),
+          ...(event.remainingAmountMinor !== undefined
+            ? { remainingAmountMinor: event.remainingAmountMinor }
+            : {}),
+          payNoteDocumentId: event.payNoteDocumentId,
+        };
+      case 'CAPTURED_PARTIAL':
+        return {
+          type: 'CAPTURED_PARTIAL' as const,
+          at: event.at,
+          transactionId: event.transactionId,
+          counterpartyAccountNumber: event.counterpartyAccountNumber,
+          amountMinor: event.amountMinor,
+          remainingAmountMinor: event.remainingAmountMinor,
           payNoteDocumentId: event.payNoteDocumentId,
         };
       case 'RELEASED':
@@ -92,17 +109,28 @@ const mapHoldDetail = (
   events: HoldEvent[],
   activityId: string
 ): ActivityDetailDto => {
-  const capturedEvent = events.find(event => event.type === 'CAPTURED');
+  const captureEvents = events.filter(
+    event => event.type === 'CAPTURED' || event.type === 'CAPTURED_PARTIAL'
+  );
+  const capturedEvent =
+    captureEvents.length > 0 ? captureEvents[captureEvents.length - 1] : null;
   const failedEvent = events.find(event => event.type === 'FAILED');
   const payNoteDocumentId =
     hold.payNoteDocumentId ??
     events.find(event => event.payNoteDocumentId)?.payNoteDocumentId;
+  const capturedAmountMinor = hold.capturedAmountMinor ?? 0;
+  const remainingAmountMinor = Math.max(
+    hold.amountMinor - capturedAmountMinor,
+    0
+  );
 
   return {
     kind: 'HOLD',
     activityId,
     holdId: hold.holdId,
     amountMinor: hold.amountMinor,
+    capturedAmountMinor,
+    remainingAmountMinor,
     currency: hold.currency,
     status: hold.status,
     description: hold.description,
@@ -111,16 +139,22 @@ const mapHoldDetail = (
     releasedAt: hold.releasedAt,
     releaseReason: hold.releaseReason,
     capturedAt: capturedEvent?.at,
-    captureTransactionId: capturedEvent?.transactionId,
+    captureTransactionId:
+      capturedEvent && 'transactionId' in capturedEvent
+        ? capturedEvent.transactionId
+        : undefined,
     failedAt: failedEvent?.at,
     failureCode: failedEvent?.code,
     failureMessage: failedEvent?.message,
     counterpartyAccountNumber:
       hold.counterpartyAccountNumber ??
-      capturedEvent?.counterpartyAccountNumber,
+      (capturedEvent && 'counterpartyAccountNumber' in capturedEvent
+        ? capturedEvent.counterpartyAccountNumber
+        : undefined),
     cardId: hold.cardId,
     cardLast4: hold.cardLast4,
     merchantName: hold.merchantName,
+    merchantId: hold.merchantId,
     merchantStatementDescriptor: hold.merchantStatementDescriptor,
     processorChargeId: hold.processorChargeId,
     timeline: mapHoldTimeline(events),

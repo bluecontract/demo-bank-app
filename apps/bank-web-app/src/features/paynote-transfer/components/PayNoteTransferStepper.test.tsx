@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import { PayNoteTransferStepper } from './PayNoteTransferStepper';
+import { routerFutureConfig } from '../../../app/routerFutureConfig';
 
 const hoistedStepper = vi.hoisted(() => {
   const state: {
@@ -132,7 +133,7 @@ describe('PayNoteTransferStepper', () => {
 
   const renderStepper = () =>
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFutureConfig}>
         <PayNoteTransferStepper accounts={accounts} />
       </MemoryRouter>
     );

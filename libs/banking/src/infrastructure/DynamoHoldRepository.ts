@@ -16,8 +16,12 @@ import type {
   ReserveHoldResult,
   ReleaseHoldRequest,
   ReleaseHoldResult,
+  PartialReleaseHoldRequest,
+  PartialReleaseHoldResult,
   CaptureHoldRequest,
   CaptureHoldResult,
+  PartialCaptureHoldRequest,
+  PartialCaptureHoldResult,
   HoldActivityRecord,
 } from '../application/HoldRepository';
 import type { Hold, HoldEvent } from '../domain/entities/Hold';
@@ -524,6 +528,7 @@ export class DynamoHoldRepository implements HoldRepository {
       cardId: item.cardId,
       cardLast4: item.cardLast4,
       merchantName: item.merchantName,
+      merchantId: item.merchantId,
       merchantStatementDescriptor: item.merchantStatementDescriptor,
       processorChargeId: item.processorChargeId,
       eventId: item.eventId,
@@ -707,6 +712,175 @@ export class DynamoHoldRepository implements HoldRepository {
     }
   }
 
+  async partialReleaseHold(
+    request: PartialReleaseHoldRequest
+  ): Promise<PartialReleaseHoldResult> {
+    const timing = TimingUtils.startTiming(
+      OPERATION_NAMES.BANKING?.RELEASE_HOLD_REPOSITORY ??
+        'ReleaseHoldRepository'
+    );
+
+    const accountKey = {
+      PK: `${TABLE_PREFIXES.ACCOUNT}${request.accountId}`,
+      SK: SORT_KEYS.BALANCE,
+    };
+
+    const holdPartitionKey = buildHoldPartitionKey(request.hold.holdId);
+    const updatedHoldMeta = buildHoldMetaItem(request.hold);
+    const holdUpdateExpressions = [
+      '#status = :nextStatus',
+      'HOLD_GSI1SK = :gsi1sk',
+      'amountMinor = :nextAmountMinor',
+    ];
+    const expressionAttributeNames: Record<string, string> = {
+      '#status': 'status',
+    };
+    const expressionAttributeValues: Record<string, unknown> = {
+      ':nextStatus': request.hold.status,
+      ':pendingStatus': 'PENDING',
+      ':partiallyCapturedStatus': 'PARTIALLY_CAPTURED',
+      ':gsi1sk': updatedHoldMeta.HOLD_GSI1SK,
+      ':nextAmountMinor': request.hold.amountMinor,
+      ':expectedAmountMinor': request.expectedAmountMinor,
+      ':expectedCapturedAmountMinor': request.expectedCapturedAmountMinor,
+    };
+
+    const removeExpressions: string[] = [];
+    if (request.hold.status === 'RELEASED') {
+      holdUpdateExpressions.push('releasedAt = :releasedAt');
+      expressionAttributeValues[':releasedAt'] = request.hold.releasedAt;
+      if (request.hold.releaseReason) {
+        holdUpdateExpressions.push('releaseReason = :releaseReason');
+        expressionAttributeValues[':releaseReason'] =
+          request.hold.releaseReason;
+      } else {
+        removeExpressions.push('releaseReason');
+      }
+    } else {
+      removeExpressions.push('releasedAt', 'releaseReason');
+    }
+
+    const holdUpdateExpression =
+      `SET ${holdUpdateExpressions.join(', ')}` +
+      (removeExpressions.length > 0
+        ? ` REMOVE ${removeExpressions.join(', ')}`
+        : '');
+
+    const holdEventItem = buildHoldEventItem(request.hold, request.holdEvent);
+    const idempotencyItem = buildHoldIdempotencyItem({
+      userId: request.userId,
+      idempotencyKey: request.idempotencyKey,
+      holdId: request.hold.holdId,
+      command: 'RELEASE_PARTIAL',
+      createdAt: request.holdEvent.at,
+    });
+
+    const transactItems = [
+      {
+        Update: {
+          TableName: this.tableName,
+          Key: accountKey,
+          UpdateExpression:
+            'SET availableBalanceMinor = availableBalanceMinor + :amount, #version = #version + :inc',
+          ConditionExpression: `${EXPRESSION_ATTRIBUTE_NAMES.VERSION} = :currentVersion`,
+          ExpressionAttributeNames: {
+            [EXPRESSION_ATTRIBUTE_NAMES.VERSION]: 'version',
+          },
+          ExpressionAttributeValues: {
+            ':amount': request.releaseAmountMinor,
+            ':inc': 1,
+            ':currentVersion': request.accountBalanceVersion,
+          },
+        },
+      },
+      {
+        Update: {
+          TableName: this.tableName,
+          Key: {
+            PK: holdPartitionKey,
+            SK: HOLD_ITEM_CONSTANTS.SORT_KEYS.META,
+          },
+          UpdateExpression: holdUpdateExpression,
+          ConditionExpression:
+            '(#status = :pendingStatus OR #status = :partiallyCapturedStatus) AND amountMinor = :expectedAmountMinor AND (attribute_not_exists(capturedAmountMinor) OR capturedAmountMinor = :expectedCapturedAmountMinor)',
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: {
+            ...expressionAttributeValues,
+          },
+        },
+      },
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: holdEventItem,
+          ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
+        },
+      },
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: idempotencyItem,
+          ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
+        },
+      },
+    ];
+
+    try {
+      await this.client.send(
+        new TransactWriteCommand({
+          TransactItems: transactItems,
+        })
+      );
+
+      const completedTiming = TimingUtils.endTiming(timing);
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING?.RELEASE_HOLD_REPOSITORY_SUCCESS ??
+          'ReleaseHoldRepositorySuccess',
+        METRIC_UNITS.COUNT,
+        1
+      );
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING?.RELEASE_HOLD_REPOSITORY_DURATION ??
+          'ReleaseHoldRepositoryDuration',
+        METRIC_UNITS.MILLISECONDS,
+        completedTiming.duration ?? 0
+      );
+
+      this.logger?.debug('Hold partially released successfully in repository', {
+        holdId: request.hold.holdId,
+        accountId: request.accountId,
+        releasedAmountMinor: request.releaseAmountMinor,
+        nextAmountMinor: request.hold.amountMinor,
+        nextStatus: request.hold.status,
+        userId: request.userId,
+        ...TimingUtils.createTimingMetadata(completedTiming),
+      });
+
+      return { hold: request.hold, created: true };
+    } catch (error) {
+      const failedTiming = TimingUtils.endTiming(timing);
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING?.RELEASE_HOLD_REPOSITORY_ERROR ??
+          'ReleaseHoldRepositoryError',
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      this.logger?.error('Hold partial release transaction failed', {
+        holdId: request.hold.holdId,
+        accountId: request.accountId,
+        releasedAmountMinor: request.releaseAmountMinor,
+        nextAmountMinor: request.hold.amountMinor,
+        nextStatus: request.hold.status,
+        userId: request.userId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+
+      return this.handlePartialReleaseError(error, request);
+    }
+  }
+
   async captureHold(request: CaptureHoldRequest): Promise<CaptureHoldResult> {
     const timing = TimingUtils.startTiming(
       OPERATION_NAMES.BANKING?.CAPTURE_HOLD_REPOSITORY ??
@@ -732,6 +906,7 @@ export class DynamoHoldRepository implements HoldRepository {
       `${HOLD_ITEM_CONSTANTS.GSI1_KEYS.SK} = :gsi1sk`,
       'relatedTransactionId = :relatedTransactionId',
       'counterpartyAccountNumber = :counterpartyAccountNumber',
+      'capturedAmountMinor = :capturedAmountMinor',
     ];
     const expressionAttributeNames: Record<string, string> = {
       '#status': 'status',
@@ -742,6 +917,7 @@ export class DynamoHoldRepository implements HoldRepository {
       ':gsi1sk': updatedHoldMeta.HOLD_GSI1SK,
       ':relatedTransactionId': request.transaction.id,
       ':counterpartyAccountNumber': request.hold.counterpartyAccountNumber,
+      ':capturedAmountMinor': request.hold.capturedAmountMinor ?? amountMinor,
     };
 
     const removeExpressions = ['releasedAt', 'releaseReason'];
@@ -893,6 +1069,207 @@ export class DynamoHoldRepository implements HoldRepository {
     }
   }
 
+  async partialCaptureHold(
+    request: PartialCaptureHoldRequest
+  ): Promise<PartialCaptureHoldResult> {
+    const timing = TimingUtils.startTiming(
+      OPERATION_NAMES.BANKING?.CAPTURE_HOLD_REPOSITORY ??
+        'CaptureHoldRepository'
+    );
+
+    const amountMinor = request.captureAmountMinor;
+    const updatedCapturedAmount =
+      request.hold.capturedAmountMinor ?? amountMinor;
+    const expectedCapturedAmount = Math.max(
+      updatedCapturedAmount - amountMinor,
+      0
+    );
+
+    const payerAccountKey = {
+      PK: `${TABLE_PREFIXES.ACCOUNT}${request.payerAccountId}`,
+      SK: SORT_KEYS.BALANCE,
+    };
+
+    const counterpartyAccountKey = {
+      PK: `${TABLE_PREFIXES.ACCOUNT}${request.counterpartyAccountId}`,
+      SK: SORT_KEYS.BALANCE,
+    };
+
+    const holdPartitionKey = buildHoldPartitionKey(request.hold.holdId);
+    const updatedHoldMeta = buildHoldMetaItem(request.hold);
+    const holdUpdateExpressions = [
+      '#status = :capturedStatus',
+      `${HOLD_ITEM_CONSTANTS.GSI1_KEYS.SK} = :gsi1sk`,
+      'relatedTransactionId = :relatedTransactionId',
+      'counterpartyAccountNumber = :counterpartyAccountNumber',
+      'capturedAmountMinor = :capturedAmountMinor',
+    ];
+    const expressionAttributeNames: Record<string, string> = {
+      '#status': 'status',
+    };
+    const expressionAttributeValues: Record<string, unknown> = {
+      ':capturedStatus': request.hold.status,
+      ':pendingStatus': 'PENDING',
+      ':partiallyCapturedStatus': 'PARTIALLY_CAPTURED',
+      ':gsi1sk': updatedHoldMeta.HOLD_GSI1SK,
+      ':relatedTransactionId': request.transaction.id,
+      ':counterpartyAccountNumber': request.hold.counterpartyAccountNumber,
+      ':capturedAmountMinor': updatedCapturedAmount,
+      ':expectedCapturedAmount': expectedCapturedAmount,
+      ':newCapturedAmount': updatedCapturedAmount,
+    };
+
+    const removeExpressions = ['releasedAt', 'releaseReason'];
+
+    const holdUpdateExpression =
+      `SET ${holdUpdateExpressions.join(', ')}` +
+      (removeExpressions.length > 0
+        ? ` REMOVE ${removeExpressions.join(', ')}`
+        : '');
+
+    const holdEventItem = buildHoldEventItem(request.hold, request.holdEvent);
+    const idempotencyItem = buildHoldIdempotencyItem({
+      userId: request.userId,
+      idempotencyKey: request.idempotencyKey,
+      holdId: request.hold.holdId,
+      command: 'CAPTURE_PARTIAL',
+      createdAt: request.holdEvent.at,
+      transactionId: request.transaction.id,
+    });
+
+    const transactItems = [
+      {
+        Update: {
+          TableName: this.tableName,
+          Key: payerAccountKey,
+          UpdateExpression:
+            'SET availableBalanceMinor = availableBalanceMinor + :payerAvailableDelta, ledgerBalanceMinor = ledgerBalanceMinor + :payerLedgerDelta, #version = #version + :inc',
+          ConditionExpression: `${EXPRESSION_ATTRIBUTE_NAMES.VERSION} = :currentVersion`,
+          ExpressionAttributeNames: {
+            [EXPRESSION_ATTRIBUTE_NAMES.VERSION]: 'version',
+          },
+          ExpressionAttributeValues: {
+            ':payerAvailableDelta': 0,
+            ':payerLedgerDelta': -amountMinor,
+            ':inc': 1,
+            ':currentVersion': request.payerAccountBalanceVersion,
+          },
+        },
+      },
+      {
+        Update: {
+          TableName: this.tableName,
+          Key: counterpartyAccountKey,
+          UpdateExpression:
+            'SET availableBalanceMinor = availableBalanceMinor + :counterpartyAvailableDelta, ledgerBalanceMinor = ledgerBalanceMinor + :counterpartyLedgerDelta, #version = #version + :inc',
+          ConditionExpression: `${EXPRESSION_ATTRIBUTE_NAMES.VERSION} = :currentVersion`,
+          ExpressionAttributeNames: {
+            [EXPRESSION_ATTRIBUTE_NAMES.VERSION]: 'version',
+          },
+          ExpressionAttributeValues: {
+            ':counterpartyAvailableDelta': amountMinor,
+            ':counterpartyLedgerDelta': amountMinor,
+            ':inc': 1,
+            ':currentVersion': request.counterpartyAccountBalanceVersion,
+          },
+        },
+      },
+      {
+        Update: {
+          TableName: this.tableName,
+          Key: {
+            PK: holdPartitionKey,
+            SK: HOLD_ITEM_CONSTANTS.SORT_KEYS.META,
+          },
+          UpdateExpression: holdUpdateExpression,
+          ConditionExpression:
+            '(#status = :pendingStatus OR #status = :partiallyCapturedStatus) AND amountMinor >= :newCapturedAmount AND (attribute_not_exists(counterpartyAccountNumber) OR counterpartyAccountNumber = :counterpartyAccountNumber) AND (attribute_not_exists(capturedAmountMinor) OR capturedAmountMinor = :expectedCapturedAmount)',
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: {
+            ...expressionAttributeValues,
+          },
+        },
+      },
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: holdEventItem,
+          ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
+        },
+      },
+      buildTransactionHeaderPutItem(this.tableName, request.transaction),
+      ...buildPostingPutItems(this.tableName, request.transaction),
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: idempotencyItem,
+          ConditionExpression: CONDITION_EXPRESSIONS.ATTRIBUTE_NOT_EXISTS,
+        },
+      },
+    ];
+
+    try {
+      await this.client.send(
+        new TransactWriteCommand({
+          TransactItems: transactItems,
+        })
+      );
+
+      const completedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING?.CAPTURE_HOLD_REPOSITORY_SUCCESS ??
+          'CaptureHoldRepositorySuccess',
+        METRIC_UNITS.COUNT,
+        1
+      );
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING?.CAPTURE_HOLD_REPOSITORY_DURATION ??
+          'CaptureHoldRepositoryDuration',
+        METRIC_UNITS.MILLISECONDS,
+        completedTiming.duration ?? 0
+      );
+
+      this.logger?.debug('Hold partially captured successfully in repository', {
+        holdId: request.hold.holdId,
+        transactionId: request.transaction.id,
+        userId: request.userId,
+        payerAccountId: request.payerAccountId,
+        counterpartyAccountId: request.counterpartyAccountId,
+        capturedAmountMinor: amountMinor,
+        ...TimingUtils.createTimingMetadata(completedTiming),
+      });
+
+      return {
+        hold: request.hold,
+        transactionId: request.transaction.id,
+        created: true,
+      };
+    } catch (error) {
+      const failedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.BANKING?.CAPTURE_HOLD_REPOSITORY_ERROR ??
+          'CaptureHoldRepositoryError',
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      this.logger?.error('Hold partial capture transaction failed', {
+        holdId: request.hold.holdId,
+        transactionId: request.transaction.id,
+        userId: request.userId,
+        payerAccountId: request.payerAccountId,
+        counterpartyAccountId: request.counterpartyAccountId,
+        capturedAmountMinor: amountMinor,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+
+      return this.handlePartialCaptureError(error, request);
+    }
+  }
+
   private async handleReserveError(
     error: unknown,
     request: ReserveHoldRequest
@@ -1011,6 +1388,38 @@ export class DynamoHoldRepository implements HoldRepository {
     );
   }
 
+  private async handlePartialReleaseError(
+    error: unknown,
+    request: PartialReleaseHoldRequest
+  ): Promise<PartialReleaseHoldResult> {
+    if (!(error instanceof TransactionCanceledException)) {
+      throw new RepositoryError(
+        `hold_release_partial_${request.hold.holdId}`,
+        error as Error
+      );
+    }
+
+    const reasons = error.CancellationReasons ?? [];
+    const hasConditionalFailure = reasons.some(
+      reason => reason.Code === DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED
+    );
+
+    if (!hasConditionalFailure) {
+      throw new RepositoryError(
+        `hold_release_partial_${request.hold.holdId}`,
+        error as Error
+      );
+    }
+
+    try {
+      return await this.buildPartialReleaseIdempotentResult(request);
+    } catch {
+      throw new OptimisticLockError(
+        `hold_release_partial_${request.hold.holdId}`
+      );
+    }
+  }
+
   private async handleCaptureError(
     error: unknown,
     request: CaptureHoldRequest
@@ -1081,6 +1490,118 @@ export class DynamoHoldRepository implements HoldRepository {
       `hold_capture_${request.hold.holdId}`,
       error as Error
     );
+  }
+
+  private async handlePartialCaptureError(
+    error: unknown,
+    request: PartialCaptureHoldRequest
+  ): Promise<PartialCaptureHoldResult> {
+    if (!(error instanceof TransactionCanceledException)) {
+      throw new RepositoryError(
+        `hold_capture_partial_${request.hold.holdId}`,
+        error as Error
+      );
+    }
+
+    const reasons = error.CancellationReasons ?? [];
+
+    if (reasons[0]?.Code === DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED) {
+      const balance = await this.getAccountBalanceItem(request.payerAccountId);
+      if (!balance) {
+        throw new OptimisticLockError(
+          `hold_capture_partial_${request.hold.holdId}`
+        );
+      }
+
+      if (balance.availableBalanceMinor < request.captureAmountMinor) {
+        throw new InsufficientFundsError(
+          request.captureAmountMinor,
+          balance.availableBalanceMinor
+        );
+      }
+
+      throw new OptimisticLockError(
+        `hold_capture_partial_${request.hold.holdId}`
+      );
+    }
+
+    if (reasons[1]?.Code === DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED) {
+      throw new OptimisticLockError(
+        `hold_capture_partial_${request.hold.holdId}`
+      );
+    }
+
+    if (
+      reasons.some(
+        reason => reason.Code === DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED
+      )
+    ) {
+      const lastReason = reasons[reasons.length - 1];
+      if (lastReason?.Code === DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED) {
+        return this.buildPartialCaptureIdempotentResult(request);
+      }
+      throw new OptimisticLockError(
+        `hold_capture_partial_${request.hold.holdId}`
+      );
+    }
+
+    throw new RepositoryError(
+      `hold_capture_partial_${request.hold.holdId}`,
+      error as Error
+    );
+  }
+
+  private async buildPartialCaptureIdempotentResult(
+    request: PartialCaptureHoldRequest,
+    cachedHold?: Hold | null
+  ): Promise<PartialCaptureHoldResult> {
+    const record = await this.getHoldIdempotencyRecord(
+      request.userId,
+      request.idempotencyKey,
+      'CAPTURE_PARTIAL'
+    );
+    const hold =
+      cachedHold ?? (await this.getHold(record.holdId ?? request.hold.holdId));
+    if (!hold) {
+      throw new RepositoryError(
+        `hold_idempotency_lookup_${request.hold.holdId}`,
+        new Error('Hold not found after idempotency lookup')
+      );
+    }
+
+    const transactionId =
+      record.transactionId ??
+      hold.relatedTransactionId ??
+      request.transaction.id;
+
+    if (!transactionId) {
+      throw new RepositoryError(
+        `hold_idempotency_lookup_${hold.holdId}`,
+        new Error('Missing transactionId on idempotent partial capture replay')
+      );
+    }
+
+    return { hold, transactionId, created: false };
+  }
+
+  private async buildPartialReleaseIdempotentResult(
+    request: PartialReleaseHoldRequest,
+    cachedHold?: Hold | null
+  ): Promise<PartialReleaseHoldResult> {
+    const record = await this.getHoldIdempotencyRecord(
+      request.userId,
+      request.idempotencyKey,
+      'RELEASE_PARTIAL'
+    );
+    const hold =
+      cachedHold ?? (await this.getHold(record.holdId ?? request.hold.holdId));
+    if (!hold) {
+      throw new RepositoryError(
+        `hold_idempotency_lookup_${request.hold.holdId}`,
+        new Error('Hold not found after idempotency lookup')
+      );
+    }
+    return { hold, created: false };
   }
 
   private async buildCaptureIdempotentResult(

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runContractOperationHandler } from './runContractOperation';
 import { ERROR_CODES } from '../shared/errors';
 import { blue, PAYNOTE_DELIVERY_BLUE_ID } from '@demo-bank-app/paynotes';
+import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 
 const hoisted = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
@@ -89,7 +90,7 @@ describe('runContractOperationHandler', () => {
     vi.useRealTimers();
   });
 
-  it('accepts a delivery and disables capture', async () => {
+  it('accepts a delivery without forcing hold capture lock', async () => {
     const payNotePayload = buildPayNotePayload();
 
     contractRepository.getContractBySessionId.mockResolvedValue({
@@ -129,7 +130,7 @@ describe('runContractOperationHandler', () => {
       {
         params: {
           sessionId: 'session-1',
-          operation: 'markPayNoteAcceptedByClient',
+          operation: 'acceptPayNote',
         },
         body: {},
       } as any,
@@ -140,13 +141,13 @@ describe('runContractOperationHandler', () => {
     expect(myOsClient.runDocumentOperation).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session-1',
-        operation: 'markPayNoteAcceptedByClient',
+        operation: 'acceptPayNote',
         payload: expect.objectContaining({
           acceptedAt: '2024-02-01T12:00:00.000Z',
         }),
       })
     );
-    expect(holdRepository.disableHoldCapture).toHaveBeenCalledWith('hold-1');
+    expect(holdRepository.disableHoldCapture).not.toHaveBeenCalled();
     expect(myOsClient.bootstrapDocument).not.toHaveBeenCalled();
     expect(payNoteDeliveryRepository.saveDelivery).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -182,7 +183,7 @@ describe('runContractOperationHandler', () => {
       {
         params: {
           sessionId: 'session-1',
-          operation: 'markPayNoteRejectedByClient',
+          operation: 'rejectPayNote',
         },
         body: {},
       } as any,
@@ -193,6 +194,33 @@ describe('runContractOperationHandler', () => {
     expect(response.body.error).toBe(
       ERROR_CODES.PAYNOTE_DELIVERY_DECISION_ALREADY_RECORDED
     );
+    expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for hidden contract types', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: paynoteBlueIds['PayNote/Payment Mandate'],
+      displayName: 'Payment Mandate',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      createdAt: '2024-02-01T10:00:00.000Z',
+      updatedAt: '2024-02-01T10:00:00.000Z',
+    });
+
+    const response = await runContractOperationHandler(
+      {
+        params: {
+          sessionId: 'session-1',
+          operation: 'authorizeSpend',
+        },
+        body: {},
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe(ERROR_CODES.CONTRACT_NOT_FOUND);
     expect(myOsClient.runDocumentOperation).not.toHaveBeenCalled();
   });
 });

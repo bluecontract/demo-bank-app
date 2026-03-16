@@ -26,6 +26,23 @@ export interface UserRepository {
   save(user: User): Promise<User>;
   findById(id: User['id']): Promise<User | null>;
   findByEmail(email: User['email']): Promise<User | null>;
+  updateProfile(
+    id: User['id'],
+    updates: { merchantName?: string; avatarDataUrl?: string }
+  ): Promise<User>;
+}
+
+export type MerchantDirectoryEntry = {
+  merchantId: string;
+  name: string;
+  logoUrl?: string;
+  ownerUserId: string;
+  updatedAt: string;
+};
+
+export interface MerchantDirectoryRepository {
+  upsertMerchantProfile(entry: MerchantDirectoryEntry): Promise<void>;
+  getMerchantsByIds(merchantIds: string[]): Promise<MerchantDirectoryEntry[]>;
 }
 
 // Service ports

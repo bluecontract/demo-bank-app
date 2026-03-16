@@ -3,6 +3,7 @@ import type {
   ContractStatusTimestamps,
 } from '@demo-bank-app/contracts';
 import { getSupportedContractForDocument } from '@demo-bank-app/shared-bank-api-contract';
+import { toCompactBlueJsonValue } from './blue/compactBlue';
 
 const mergeUnique = (existing?: string[], incoming?: string[]) => {
   const set = new Set<string>(existing ?? []);
@@ -32,6 +33,14 @@ const resolveEventField = <T>(
   incoming: T | undefined
 ) => (incoming !== undefined ? incoming : existing);
 
+const isConditionalCheckFailed = (error: unknown): boolean =>
+  Boolean(
+    error &&
+      typeof error === 'object' &&
+      'name' in error &&
+      (error as { name?: string }).name === 'ConditionalCheckFailedException'
+  );
+
 const getDocumentName = (document?: Record<string, unknown>) => {
   if (!document) {
     return undefined;
@@ -48,6 +57,73 @@ const getDocumentName = (document?: Record<string, unknown>) => {
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const toCompactRecord = (
+  value: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const compact = toCompactBlueJsonValue(value);
+  return isPlainObject(compact) ? compact : value;
+};
+
+const toCompactUnknown = (value: unknown): unknown =>
+  value === undefined ? undefined : toCompactBlueJsonValue(value);
+
+const toCompactArray = (
+  value: unknown[] | undefined
+): unknown[] | undefined => {
+  if (!value) {
+    return undefined;
+  }
+  const compact = toCompactUnknown(value);
+  if (Array.isArray(compact)) {
+    return compact;
+  }
+  if (isPlainObject(compact) && Array.isArray(compact.items)) {
+    return compact.items;
+  }
+  return value;
+};
+
+const linkSessionToCanonicalContract = async (input: {
+  contractRepository: ContractRepository;
+  sessionId: string;
+  contractId: string;
+  createdAt: string;
+  documentId?: string;
+}) => {
+  const { contractRepository, sessionId, contractId, createdAt, documentId } =
+    input;
+
+  try {
+    await contractRepository.linkSessionToContract?.({
+      sessionId,
+      contractId,
+      createdAt,
+    });
+  } catch (error) {
+    if (!isConditionalCheckFailed(error)) {
+      throw error;
+    }
+
+    const existingBySession = await contractRepository.getContractBySessionId(
+      sessionId
+    );
+    if (
+      existingBySession &&
+      (existingBySession.contractId === contractId ||
+        (documentId &&
+          existingBySession.documentId &&
+          existingBySession.documentId === documentId))
+    ) {
+      return;
+    }
+
+    throw error;
+  }
+};
 
 const areJsonValuesEqual = (left: unknown, right: unknown): boolean => {
   if (left === right) {
@@ -90,11 +166,14 @@ export const upsertContractRecord = async (input: {
   document: Record<string, unknown> | undefined;
   sessionId?: string;
   documentId?: string;
+  customerChannelKey?: string;
   eventType?: string;
+  eventEpoch?: number;
   userId?: string;
   accountNumber?: string;
   relatedTransactionIds?: string[];
   relatedHoldIds?: string[];
+  merchantId?: string;
   status?: string;
   statusTimestamps?: ContractStatusTimestamps;
   triggerEvent?: unknown;
@@ -113,17 +192,59 @@ export const upsertContractRecord = async (input: {
   const existingByDocumentId = input.documentId
     ? await input.contractRepository.getContractByDocumentId(input.documentId)
     : null;
+  let canonicalSessionIdOverride: string | undefined;
+
+  let claimedCanonicalContractId: string | undefined;
+  if (
+    !existingByDocumentId &&
+    input.documentId &&
+    input.sessionId &&
+    ((input.eventType === 'DOCUMENT_EPOCH_ADVANCED' &&
+      input.eventEpoch === 0) ||
+      input.eventType === 'DOCUMENT_CREATED') &&
+    input.contractRepository.claimCanonicalSessionByDocumentId
+  ) {
+    const claimResult =
+      await input.contractRepository.claimCanonicalSessionByDocumentId({
+        documentId: input.documentId,
+        sessionId: input.sessionId,
+        createdAt: input.now,
+      });
+    claimedCanonicalContractId = claimResult.canonicalContractId;
+
+    if (!claimResult.isCanonicalOwner) {
+      await linkSessionToCanonicalContract({
+        contractRepository: input.contractRepository,
+        sessionId: input.sessionId,
+        contractId: claimResult.canonicalContractId,
+        createdAt: input.now,
+        documentId: input.documentId,
+      });
+      return claimResult.canonicalContractId;
+    }
+  }
+
   if (
     existingByDocumentId &&
     input.sessionId &&
     existingByDocumentId.sessionId &&
     input.sessionId !== existingByDocumentId.sessionId
   ) {
-    return existingByDocumentId.contractId;
+    await linkSessionToCanonicalContract({
+      contractRepository: input.contractRepository,
+      sessionId: input.sessionId,
+      contractId: existingByDocumentId.contractId,
+      createdAt: existingByDocumentId.createdAt ?? input.now,
+      documentId: existingByDocumentId.documentId ?? input.documentId,
+    });
+    canonicalSessionIdOverride = existingByDocumentId.sessionId;
   }
 
   const contractId =
-    existingByDocumentId?.contractId ?? input.sessionId ?? input.documentId;
+    existingByDocumentId?.contractId ??
+    claimedCanonicalContractId ??
+    input.sessionId ??
+    input.documentId;
   if (!contractId) {
     return null;
   }
@@ -131,7 +252,11 @@ export const upsertContractRecord = async (input: {
   const existing =
     existingByDocumentId ??
     (await input.contractRepository.getContract(contractId));
-  if (!existing && input.eventType === 'DOCUMENT_EPOCH_ADVANCED') {
+  const shouldSkipEpochAdvancedCreate =
+    !existing &&
+    input.eventType === 'DOCUMENT_EPOCH_ADVANCED' &&
+    input.eventEpoch !== 0;
+  if (shouldSkipEpochAdvancedCreate) {
     return null;
   }
   const status = input.status ?? existing?.status;
@@ -145,7 +270,8 @@ export const upsertContractRecord = async (input: {
   );
   const documentName =
     getDocumentName(input.document) ?? existing?.documentName;
-  const nextSessionId = input.sessionId ?? existing?.sessionId;
+  const nextSessionId =
+    canonicalSessionIdOverride ?? input.sessionId ?? existing?.sessionId;
   const nextDocumentId = input.documentId ?? existing?.documentId;
   const nextDocument = input.document ?? existing?.document;
   const nextTriggerEvent = resolveEventField(
@@ -166,16 +292,22 @@ export const upsertContractRecord = async (input: {
   );
   const nextAccountNumber = input.accountNumber ?? existing?.accountNumber;
   const nextUserId = input.userId ?? existing?.userId;
+  const nextMerchantId = input.merchantId ?? existing?.merchantId;
+  const nextCustomerChannelKey =
+    input.customerChannelKey ?? existing?.customerChannelKey;
+  const compactDocument = toCompactRecord(nextDocument);
+  const compactTriggerEvent = toCompactUnknown(nextTriggerEvent);
+  const compactEmittedEvents = toCompactArray(nextEmittedEvents);
 
   const summaryInputsChanged =
-    !areJsonValuesEqual(nextDocument, existing?.document) ||
+    !areJsonValuesEqual(compactDocument, existing?.document) ||
     nextDocumentId !== existing?.documentId ||
     nextSessionId !== existing?.sessionId ||
     status !== existing?.status ||
     statusUpdatedAt !== existing?.statusUpdatedAt ||
     !areJsonValuesEqual(nextStatusTimestamps, existing?.statusTimestamps) ||
-    !areJsonValuesEqual(nextTriggerEvent, existing?.triggerEvent) ||
-    !areJsonValuesEqual(nextEmittedEvents, existing?.emittedEvents);
+    !areJsonValuesEqual(compactTriggerEvent, existing?.triggerEvent) ||
+    !areJsonValuesEqual(compactEmittedEvents, existing?.emittedEvents);
   const updatedAt =
     existing?.updatedAt && !summaryInputsChanged
       ? existing.updatedAt
@@ -186,24 +318,36 @@ export const upsertContractRecord = async (input: {
     typeBlueId: supported.typeBlueId,
     displayName: supported.displayName,
     documentName,
+    customerChannelKey: nextCustomerChannelKey,
     sessionId: nextSessionId,
     documentId: nextDocumentId,
-    document: nextDocument,
+    document: compactDocument,
     status,
     statusUpdatedAt,
     statusTimestamps: nextStatusTimestamps,
-    triggerEvent: nextTriggerEvent,
-    emittedEvents: nextEmittedEvents,
+    triggerEvent: compactTriggerEvent,
+    emittedEvents: compactEmittedEvents,
     relatedTransactionIds: nextRelatedTransactionIds,
     relatedHoldIds: nextRelatedHoldIds,
     accountNumber: nextAccountNumber,
     userId: nextUserId,
+    merchantId: nextMerchantId,
     summary: existing?.summary,
     summaryUpdatedAt: existing?.summaryUpdatedAt,
     summarySourceUpdatedAt: existing?.summarySourceUpdatedAt,
+    summarySourceEpoch: existing?.summarySourceEpoch,
     summaryInputBlueId: existing?.summaryInputBlueId,
     summaryModel: existing?.summaryModel,
     summaryError: existing?.summaryError,
+    summaryDocument: existing?.summaryDocument,
+    summaryDocumentName: existing?.summaryDocumentName,
+    summaryStatus: existing?.summaryStatus,
+    summaryStatusUpdatedAt: existing?.summaryStatusUpdatedAt,
+    summaryStatusTimestamps: existing?.summaryStatusTimestamps,
+    summaryTriggerEvent: existing?.summaryTriggerEvent,
+    summaryEmittedEvents: existing?.summaryEmittedEvents,
+    pendingActions: existing?.pendingActions,
+    monitoringSubscriptions: existing?.monitoringSubscriptions,
     createdAt: existing?.createdAt ?? input.now,
     updatedAt,
   });

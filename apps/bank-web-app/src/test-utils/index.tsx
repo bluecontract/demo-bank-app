@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { ReactNode } from 'react';
+import { routerFutureConfig } from '../app/routerFutureConfig';
 
 export function createTestWrapper() {
   const queryClient = new QueryClient({
@@ -15,7 +16,7 @@ export function createTestWrapper() {
   });
 
   return ({ children }: { children: ReactNode }) => (
-    <BrowserRouter>
+    <BrowserRouter future={routerFutureConfig}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </BrowserRouter>
   );

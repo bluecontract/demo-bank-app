@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { listContractsHandler } from './listContracts';
+import { createContractSummaryFixtures } from './contractSummaryFixtures';
 
 const hoisted = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
@@ -16,23 +17,28 @@ vi.mock('../auth/middleware', () => ({
 
 describe('listContractsHandler', () => {
   const logger = {
-    info: vi.fn(),
+    debug: vi.fn(),
   };
 
   const contractRepository = {
     listContractsByUserId: vi.fn(),
-    updateContractSummary: vi.fn(),
+    getContractPollingMarkerByUserId: vi.fn(),
+  };
+  const merchantDirectoryRepository = {
+    getMerchantsByIds: vi.fn(),
   };
 
   beforeEach(() => {
     hoisted.getDependenciesMock.mockReset();
     hoisted.extractAuthInfoMock.mockReset();
-    logger.info.mockReset();
+    logger.debug.mockReset();
     contractRepository.listContractsByUserId.mockReset();
+    merchantDirectoryRepository.getMerchantsByIds.mockReset();
 
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       contractRepository,
+      merchantDirectoryRepository,
     });
 
     hoisted.extractAuthInfoMock.mockResolvedValue({
@@ -42,17 +48,19 @@ describe('listContractsHandler', () => {
 
   it('returns contract summaries and forwards updatedSince', async () => {
     const updatedSince = '2024-01-02T10:00:00.000Z';
-    const summaries = [
+    const { all: summaries, visible } = createContractSummaryFixtures();
+
+    const merchantId = 'merchant-1';
+    summaries[0] = { ...summaries[0], merchantId };
+    merchantDirectoryRepository.getMerchantsByIds.mockResolvedValue([
       {
-        contractId: 'contract-1',
-        typeBlueId: 'type-1',
-        displayName: 'PayNote',
-        sessionId: 'session-1',
-        status: 'accepted',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        updatedAt: '2024-01-02T12:00:00.000Z',
+        merchantId,
+        name: 'Blue Appliances',
+        logoUrl: 'data:image/png;base64,abc',
+        ownerUserId: 'owner-1',
+        updatedAt: '2024-01-02T00:00:00.000Z',
       },
-    ];
+    ]);
 
     contractRepository.listContractsByUserId.mockResolvedValue(summaries);
 
@@ -64,12 +72,27 @@ describe('listContractsHandler', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(response.body.items).toEqual(summaries);
+    expect(response.body.merchantDirectory).toEqual({
+      [merchantId]: {
+        merchantId,
+        name: 'Blue Appliances',
+        logoUrl: 'data:image/png;base64,abc',
+      },
+    });
+    expect(response.body.items).toEqual([
+      expect.objectContaining({
+        contractId: visible[0].contractId,
+        from: {
+          merchantId,
+          name: 'Blue Appliances',
+        },
+      }),
+    ]);
     expect(contractRepository.listContractsByUserId).toHaveBeenCalledWith(
       'user-1',
       { updatedSince }
     );
-    expect(logger.info).toHaveBeenCalledWith('Listing contracts', {
+    expect(logger.debug).toHaveBeenCalledWith('Listing contracts', {
       userId: 'user-1',
       updatedSince,
     });

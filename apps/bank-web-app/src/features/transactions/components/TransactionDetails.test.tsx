@@ -1,7 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { vi } from 'vitest';
 import { TransactionDetails } from './TransactionDetails';
 import { ActivityDetail } from '../hooks/useActivityDetail';
+import { useActiveContractSession } from '../../contracts/hooks';
+import { navigateTo } from '../../../lib/navigation';
 
 vi.mock('../../../lib/formatCurrency', () => ({
   formatCurrency: vi.fn((amount: number) => `$${(amount / 100).toFixed(2)}`),
@@ -13,6 +15,21 @@ vi.mock('../../../lib/formatAccountNumber', () => ({
     return `**** ${number.slice(-4)}`;
   }),
 }));
+
+vi.mock('../../contracts/hooks', () => ({
+  useActiveContractSession: vi.fn(),
+}));
+
+vi.mock('../../../lib/navigation', () => ({
+  navigateTo: vi.fn(),
+}));
+
+const mockUseActiveContractSession = useActiveContractSession as ReturnType<
+  typeof vi.fn
+>;
+const mockNavigateTo = navigateTo as ReturnType<typeof vi.fn>;
+
+const merchantFrom = { name: 'Merchant' };
 
 const mockTransaction: Extract<ActivityDetail, { kind: 'POSTED_TRANSACTION' }> =
   {
@@ -60,6 +77,14 @@ describe('TransactionDetails', () => {
     accounts: mockAccounts,
   };
 
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseActiveContractSession.mockReturnValue({
+      activeSessionId: null,
+      setActiveSession: vi.fn(),
+    });
+  });
+
   it('should render transaction details for outgoing transfer', () => {
     render(<TransactionDetails {...defaultProps} />);
 
@@ -67,7 +92,7 @@ describe('TransactionDetails', () => {
       screen.getByRole('heading', { name: 'Outgoing transfer' })
     ).toBeInTheDocument();
     expect(screen.getByText('-$10.00')).toBeInTheDocument();
-    expect(screen.getByText('Standard Transfer')).toBeInTheDocument();
+    expect(screen.getByText('Operation')).toBeInTheDocument();
     expect(screen.getAllByText('01/01/2024')).toHaveLength(2);
     expect(screen.getByText('txn-123')).toBeInTheDocument();
   });
@@ -99,12 +124,10 @@ describe('TransactionDetails', () => {
   it('should display account names with account numbers', () => {
     render(<TransactionDetails {...defaultProps} />);
 
-    expect(
-      screen.getByText('To **** 4321 (Test Account 2)')
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('From: **** 7890 (Test Account 1)')
-    ).toBeInTheDocument();
+    expect(screen.getByText('From account')).toBeInTheDocument();
+    expect(screen.getByText('To account')).toBeInTheDocument();
+    expect(screen.getByText('**** 7890 (Test Account 1)')).toBeInTheDocument();
+    expect(screen.getByText('**** 4321 (Test Account 2)')).toBeInTheDocument();
   });
 
   it('should display correct account information for incoming transfer with names', () => {
@@ -125,12 +148,10 @@ describe('TransactionDetails', () => {
 
     render(<TransactionDetails {...props} transaction={incomingTransaction} />);
 
-    expect(
-      screen.getByText('From **** 7890 (Test Account 1)')
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('To: **** 4321 (Test Account 2)')
-    ).toBeInTheDocument();
+    expect(screen.getByText('From account')).toBeInTheDocument();
+    expect(screen.getByText('To account')).toBeInTheDocument();
+    expect(screen.getByText('**** 7890 (Test Account 1)')).toBeInTheDocument();
+    expect(screen.getByText('**** 4321 (Test Account 2)')).toBeInTheDocument();
   });
 
   it('should display transaction status correctly', () => {
@@ -193,8 +214,8 @@ describe('TransactionDetails', () => {
 
     render(<TransactionDetails {...propsWithoutAccountNames} />);
 
-    expect(screen.getByText('To **** 4321')).toBeInTheDocument();
-    expect(screen.getByText('From: **** 7890')).toBeInTheDocument();
+    expect(screen.getByText('**** 4321')).toBeInTheDocument();
+    expect(screen.getByText('**** 7890')).toBeInTheDocument();
   });
 
   it('should display payment number as transaction ID', () => {
@@ -223,10 +244,178 @@ describe('TransactionDetails', () => {
     expect(
       screen.getByRole('heading', { name: 'Card purchase' })
     ).toBeInTheDocument();
-    expect(screen.getByText('Card Purchase')).toBeInTheDocument();
-    expect(screen.getByText('**** 4242')).toBeInTheDocument();
+    expect(screen.getAllByText('**** 4242')).toHaveLength(2);
     expect(screen.getByText('Demo Shop')).toBeInTheDocument();
     expect(screen.getByText('ch_123')).toBeInTheDocument();
     expect(screen.getByText('hold-123')).toBeInTheDocument();
+  });
+
+  it('should show empty related contracts state by default', () => {
+    render(<TransactionDetails {...defaultProps} />);
+
+    expect(screen.getByText('Linked contracts')).toBeInTheDocument();
+    expect(screen.getByText('No related contracts found.')).toBeInTheDocument();
+  });
+
+  it('should render related contracts list when provided', () => {
+    render(
+      <TransactionDetails
+        {...defaultProps}
+        relatedContracts={[
+          {
+            contractId: 'contract-1',
+            typeBlueId: 'type-1',
+            displayName: 'PayNote Voucher',
+            sessionId: 'session-1',
+            status: 'accepted',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-02T12:00:00.000Z',
+            from: merchantFrom,
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText('PayNote Voucher')).toBeInTheDocument();
+    expect(screen.getByText('Status: Accepted')).toBeInTheDocument();
+    expect(
+      screen.queryByText('No related contracts found.')
+    ).not.toBeInTheDocument();
+  });
+
+  it('should render related proposal when provided', () => {
+    render(
+      <TransactionDetails
+        {...defaultProps}
+        relatedContracts={[
+          {
+            kind: 'proposal',
+            deliveryId: 'delivery-1',
+            deliverySessionId: 'session-delivery-1',
+            name: 'Slow Digestion PayNote',
+            amountMinor: 1200,
+            currency: 'USD',
+            clientDecisionStatus: 'pending',
+            transactionId: 'txn-123',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-02T00:00:00.000Z',
+            from: merchantFrom,
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByText('Slow Digestion PayNote')).toBeInTheDocument();
+    expect(screen.getByText('$12.00 USD')).toBeInTheDocument();
+    expect(screen.queryByText('Proposal')).not.toBeInTheDocument();
+  });
+
+  it('navigates to proposal details when clicking a linked proposal', () => {
+    const setActiveSession = vi.fn();
+    mockUseActiveContractSession.mockReturnValue({
+      activeSessionId: null,
+      setActiveSession,
+    });
+
+    render(
+      <TransactionDetails
+        {...defaultProps}
+        relatedContracts={[
+          {
+            kind: 'proposal',
+            deliveryId: 'delivery-1',
+            deliverySessionId: 'session-delivery-1',
+            name: 'Slow Digestion PayNote',
+            amountMinor: 1200,
+            currency: 'USD',
+            clientDecisionStatus: 'pending',
+            transactionId: 'txn-123',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-02T00:00:00.000Z',
+            from: merchantFrom,
+          },
+        ]}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Slow Digestion PayNote/i })
+    );
+
+    expect(setActiveSession).toHaveBeenCalledWith('session-delivery-1');
+    expect(mockNavigateTo).toHaveBeenCalledWith(
+      '/contracts/session-delivery-1?kind=proposal'
+    );
+  });
+
+  it('should hide proposal when matching contract exists', () => {
+    render(
+      <TransactionDetails
+        {...defaultProps}
+        relatedContracts={[
+          {
+            contractId: 'contract-1',
+            typeBlueId: 'type-1',
+            displayName: 'PayNote',
+            sessionId: 'session-1',
+            status: 'accepted',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-02T12:00:00.000Z',
+            from: merchantFrom,
+          },
+          {
+            kind: 'proposal',
+            deliveryId: 'delivery-1',
+            deliverySessionId: 'delivery-session-1',
+            payNoteSessionIds: ['session-1'],
+            name: 'Slow Digestion PayNote',
+            amountMinor: 1200,
+            currency: 'USD',
+            clientDecisionStatus: 'accepted',
+            transactionId: 'txn-123',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-02T00:00:00.000Z',
+            from: merchantFrom,
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getAllByText('PayNote').length).toBeGreaterThan(0);
+    expect(
+      screen.queryByText('Slow Digestion PayNote')
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Proposal')).not.toBeInTheDocument();
+  });
+
+  it('navigates to contract details when clicking a linked contract', () => {
+    const setActiveSession = vi.fn();
+    mockUseActiveContractSession.mockReturnValue({
+      activeSessionId: null,
+      setActiveSession,
+    });
+
+    render(
+      <TransactionDetails
+        {...defaultProps}
+        relatedContracts={[
+          {
+            contractId: 'contract-1',
+            typeBlueId: 'type-1',
+            displayName: 'PayNote Voucher',
+            sessionId: 'session-1',
+            status: 'accepted',
+            createdAt: '2024-01-01T00:00:00.000Z',
+            updatedAt: '2024-01-02T12:00:00.000Z',
+            from: merchantFrom,
+          },
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /PayNote Voucher/i }));
+
+    expect(setActiveSession).toHaveBeenCalledWith('session-1');
+    expect(mockNavigateTo).toHaveBeenCalledWith('/contracts/session-1');
   });
 });

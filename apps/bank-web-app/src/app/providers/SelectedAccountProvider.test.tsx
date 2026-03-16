@@ -12,6 +12,8 @@ const mockAccount = {
   name: 'Test Account',
   currency: 'USD' as const,
   createdAt: '2023-01-01T00:00:00Z',
+  accountType: 'DEPOSIT' as const,
+  creditLimitMinor: undefined,
   ledgerBalanceMinor: 100000,
   availableBalanceMinor: 100000,
   status: 'ACTIVE',

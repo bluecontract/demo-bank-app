@@ -28,6 +28,7 @@ Everyone sees the same terms and same timeline.
 - **Docker** - Required for LocalStack (AWS service emulation)
 - **AWS SAM CLI** - Required for local Lambda development and testing
 - **Localstack samlocal** - Required for local Lambda development and testing
+- **AWS CLI** (optional) - Required for `npm run logs:summary`
 
 #### Install AWS SAM CLI
 
@@ -89,47 +90,81 @@ npm run docker:check
 npm run serve:all
 ```
 
+Install dependencies only from the repository root. Do not run `npm install`
+inside `apps/*` or `libs/*`, because that can create nested workspace
+`node_modules` and make Blue packages resolve to different versions across the
+repo.
+
+If the Blue dependency guard fails, repair the workspace installs from the repo
+root:
+
+```bash
+find apps libs -type d -name node_modules -prune -exec rm -rf {} +
+npm install
+```
+
+### Cursor Cloud environment
+
+This repo includes a repo-level Cursor Cloud environment:
+
+- `.cursor/environment.json`
+- `.cursor/Dockerfile.cloud`
+
+When a Cursor Cloud agent starts, the environment installs Docker, AWS CLI, SAM
+CLI, Playwright dependencies, and prepares `.localstack.env` automatically.
+No manual bootstrap script is required in Cursor Cloud. In fresh shells, load:
+
+```bash
+source .localstack.env
+```
+
 The app will be available at:
 
 - **Frontend**: http://localhost:4200
 - **Backend API**: http://localhost:3000
-- **LocalStack**: http://localhost:4566
+- **LocalStack**: http://localhost:4566 (or your `LOCALSTACK_EDGE_PORT`)
 
 ### Available Scripts
 
-| Command                        | Description                                    |
-| ------------------------------ | ---------------------------------------------- |
-| `npm start`                    | Start development server                       |
-| `npm run dev`                  | Start development server (alias)               |
-| `npm test`                     | Run tests for affected projects                |
-| `npm run test:all`             | Run tests for all projects                     |
-| `npm run test:integration`     | Run integration tests for affected projects    |
-| `npm run test:integration:all` | Run integration tests for all projects         |
-| `npm run test:watch`           | Run tests in watch mode                        |
-| `npm run e2e`                  | Run E2E tests locally                          |
-| `npm run e2e:dev`              | Run E2E tests against dev environment          |
-| `npm run e2e:prod`             | Run E2E tests against production environment   |
-| `npm run build`                | Build affected projects                        |
-| `npm run build:all`            | Build all projects                             |
-| `npm run lint`                 | Lint affected projects                         |
-| `npm run lint:all`             | Lint all projects                              |
-| `npm run lint:fix`             | Lint and auto-fix affected issues              |
-| `npm run typecheck`            | Run TypeScript type checking for all projects  |
-| `npm run format`               | Format code with Prettier                      |
-| `npm run format:check`         | Check code formatting                          |
-| `npm run format:staged`        | Format only staged files with Prettier         |
-| `npm run security:audit`       | Run security audit on production dependencies  |
-| `npm run security:audit:dev`   | Run security audit on development dependencies |
-| `npm run security:audit:fix`   | Fix security vulnerabilities                   |
-| `npm run pre-commit`           | Run pre-commit checks manually                 |
-| `npm run validate-commit`      | Validate commit message format                 |
-| `npm run generate-docs`        | Generate OpenAPI docs from TypeScript          |
-| `npm run wait-for-backend`     | Wait for backend to be ready                   |
-| `npm run clean`                | Reset Nx cache                                 |
-| `npm run graph`                | View dependency graph                          |
-| `npm run serve:all`            | Start all services with Nx                     |
-| `npm run serve:stack`          | Start backend stack (LocalStack + Lambda)      |
-| `npm run docker:check`         | Verify Docker is running                       |
+| Command                        | Description                                      |
+| ------------------------------ | ------------------------------------------------ |
+| `npm start`                    | Start development server                         |
+| `npm run dev`                  | Start development server (alias)                 |
+| `npm test`                     | Run tests for affected projects                  |
+| `npm run test:all`             | Run tests for all projects                       |
+| `npm run test:integration`     | Run integration tests for affected projects      |
+| `npm run test:integration:all` | Run integration tests for all projects           |
+| `npm run test:watch`           | Run tests in watch mode                          |
+| `npm run e2e`                  | Run E2E tests locally                            |
+| `npm run e2e:dev`              | Run E2E tests against dev environment            |
+| `npm run e2e:prod`             | Run E2E tests against production environment     |
+| `npm run build`                | Build affected projects                          |
+| `npm run build:all`            | Build all projects                               |
+| `npm run lint`                 | Lint affected projects                           |
+| `npm run lint:all`             | Lint all projects                                |
+| `npm run lint:fix`             | Lint and auto-fix affected issues                |
+| `npm run typecheck`            | Run TypeScript type checking for all projects    |
+| `npm run deps:blue:check`      | Verify all workspaces resolve the same Blue deps |
+| `npm run verify:quick`         | Lint, typecheck, build, and run affected tests   |
+| `npm run verify:full`          | Lint, typecheck, build, and run full test suite  |
+| `npm run verify:full:stepwise` | Run full verify step-by-step for cloud/debugging |
+| `npm run verify:full:resume`   | Resume full verify from a named step             |
+| `npm run format`               | Format code with Prettier                        |
+| `npm run format:check`         | Check code formatting                            |
+| `npm run format:staged`        | Format only staged files with Prettier           |
+| `npm run security:audit`       | Run security audit on production dependencies    |
+| `npm run security:audit:dev`   | Run security audit on development dependencies   |
+| `npm run security:audit:fix`   | Fix security vulnerabilities                     |
+| `npm run pre-commit`           | Run pre-commit checks manually                   |
+| `npm run validate-commit`      | Validate commit message format                   |
+| `npm run generate-docs`        | Generate OpenAPI docs from TypeScript            |
+| `npm run wait-for-backend`     | Wait for backend to be ready                     |
+| `npm run clean`                | Reset Nx cache                                   |
+| `npm run graph`                | View dependency graph                            |
+| `npm run serve:all`            | Start all services with Nx                       |
+| `npm run serve:stack`          | Start backend stack (LocalStack + Lambda)        |
+| `npm run docker:check`         | Verify Docker is running                         |
+| `npm run logs:summary`         | Tail summary lambda logs (LocalStack)            |
 
 > **💡 Affected vs All**: By default, commands run only on "affected" projects (those changed since the last commit). Use `:all` variants to run on all projects.
 
@@ -146,11 +181,167 @@ nx serve localstack           # ensures LocalStack is running
 nx serve @demo-bank-app/bank-api  # Backend API only (starts localstack)
 nx serve @demo-bank-app/bank-web-app # Frontend only
 
+# LocalStack credentials (for bank-api)
+# Uses the localstack profile defined in apps/bank-api/.aws/{config,credentials}
+# so you don't need AWS SSO to run locally.
+
 # Check service status
-docker ps --filter 'name=localstack-demo-bank-app'
+docker ps --filter "name=${LOCALSTACK_CONTAINER_NAME:-localstack-demo-bank-app}"
 
 # Stop services when done
-docker stop localstack-demo-bank-app
+docker stop "${LOCALSTACK_CONTAINER_NAME:-localstack-demo-bank-app}"
+```
+
+If `.localstack.env` exists (worktree setup), load it before `serve` commands:
+
+```bash
+source .localstack.env
+npm run serve:all
+```
+
+`apps/bank-api/scripts/deploy-localstack.sh` auto-loads `.localstack.env` as a fallback when key LocalStack variables are missing and fails fast with a clear error when the configured endpoint is unreachable.
+
+#### Troubleshooting LocalStack deploy
+
+- If you see `ResourceConflictException` / `Alias already exists` during local deploy, the LocalStack deploy wrapper auto-deletes the conflicting Lambda alias and retries.
+- `npm run serve:all` preserves local data (DynamoDB + Secrets); the wrapper only deletes Lambda aliases when this specific conflict occurs.
+
+### Git Worktrees + LocalStack (Parallel Agents)
+
+Each worktree should run its own LocalStack container and ports. Use a
+worktree-local `.localstack.env` plus a worktree-specific SAM env file.
+
+#### Quick setup script
+
+```bash
+scripts/setup-worktree-localstack.sh wt1 4567 5510-5559 3001 4201 /Users/you/secrets/demo-bank-app.bank-api.json
+```
+
+This writes `.localstack.env` at the repo root and creates/updates
+`apps/bank-api/env.local.worktree.json` with the matching LocalStack endpoint.
+If a shared secrets file path is provided, its values are merged into the
+worktree env file.
+The secrets file path is stored in `.localstack.env` as `SHARED_SECRETS_FILE`.
+If you place `bank-api.env.local.json` at the repo root, the script will use it
+automatically.
+Re-run the script per worktree with a unique port/container name.
+
+You can also let it auto-pick the nearest free ports:
+
+```bash
+scripts/setup-worktree-localstack.sh wt1
+```
+
+Auto-pick selects the closest free ports to defaults (LocalStack 4566, API 3000,
+Web 4200) and finds a free LocalStack port range if needed.
+The script prints the chosen ports and stores them in `.localstack.env`.
+Auto-picks are cached per worktree to avoid collisions in parallel runs
+(registry: `${TMPDIR:-/tmp}/demo-bank-app-localstack-ports.registry`).
+
+To disable the LocalStack port range mapping, pass an empty third arg:
+
+```bash
+scripts/setup-worktree-localstack.sh wt1 "" ""
+```
+
+#### Shared secrets (one-time)
+
+Create a JSON file outside the repo (gitignored), for example:
+
+```json
+{
+  "MYOS_API_KEY": "…",
+  "MYOS_ACCOUNT_ID": "…",
+  "OPENAI_API_KEY": "…"
+}
+```
+
+You can also use the env.local.json shape if you prefer:
+
+```json
+{
+  "Parameters": {
+    "MYOS_API_KEY": "…",
+    "MYOS_ACCOUNT_ID": "…",
+    "OPENAI_API_KEY": "…"
+  }
+}
+```
+
+Pass this path to the setup script and it will be merged into
+`apps/bank-api/env.local.worktree.json`.
+
+#### Stop a worktree stack
+
+```bash
+scripts/stop-worktree-localstack.sh
+```
+
+The stop script only stops the LocalStack container that matches the current
+worktree label.
+
+#### Manual setup
+
+1. Create `.localstack.env` at the repo root (not committed):
+
+```bash
+LOCALSTACK_CONTAINER_NAME=localstack-demo-bank-app-wt1
+LOCALSTACK_WORKTREE_ID=wt1
+LOCALSTACK_CONTAINER_LABEL=com.demo-bank-app.worktree=wt1
+LOCALSTACK_EDGE_PORT=4567
+LOCALSTACK_PORT_RANGE=5510-5559
+AWS_ENDPOINT_URL=http://localhost:4567
+LOCALSTACK_DOCKER_ENDPOINT_URL=http://host.docker.internal:4567
+BANK_API_PORT=3001
+WEB_APP_PORT=4201
+WEB_APP_PREVIEW_PORT=4301
+BANK_API_URL=http://localhost:3001
+VITE_API_URL=http://localhost:3001
+E2E_BASE_URL=http://localhost:4201
+ENV_VARS_FILE=env.local.worktree.json
+```
+
+- Set `LOCALSTACK_PORT_RANGE=` (empty) to skip the 4510-4559 mapping if you do
+  not need it.
+- `AWS_ENDPOINT_URL` is for host-side tools/tests.
+- `LOCALSTACK_DOCKER_ENDPOINT_URL` is for SAM containers.
+- `.localstack.env` and `env.local.worktree.json` are ignored by git.
+
+2. Create a worktree-specific SAM env file:
+
+```bash
+cp apps/bank-api/env.local.json apps/bank-api/env.local.worktree.json
+# Edit AWS_ENDPOINT_URL and AwsEndpointUrl to match LOCALSTACK_DOCKER_ENDPOINT_URL
+```
+
+3. Load the env and run:
+
+```bash
+source .localstack.env
+npm run serve:all
+```
+
+#### Running two worktrees in parallel
+
+Pick unique ports for each worktree, then run `npm run serve:all` in both:
+
+```bash
+# Worktree 1
+scripts/setup-worktree-localstack.sh wt1 4567 5510-5559 3001 4201
+source .localstack.env
+npm run serve:all
+
+# Worktree 2
+scripts/setup-worktree-localstack.sh wt2 4568 5610-5659 3002 4202
+source .localstack.env
+npm run serve:all
+```
+
+### Logs
+
+```bash
+# Summary lambda (LocalStack CloudWatch)
+npm run logs:summary
 ```
 
 ## 🧪 Testing
@@ -184,10 +375,68 @@ npm run e2e
 
 The E2E command automatically waits for the backend to become healthy before running tests.
 
+#### Stepwise full verify for cloud / sandbox debugging
+
+`npm run verify:full` remains the local one-shot command. For cloud agents and
+long-running debugging sessions, use the stepwise variant instead:
+
+```bash
+npm run verify:full:stepwise
+```
+
+This runs the same sequence as `verify:full`, but keeps each step as a separate
+command boundary:
+
+```bash
+npx nx run @demo-bank-app/bank-web-app:build
+npm run lint
+npm run typecheck
+npm run build:all
+npm run test:all
+npm run test:integration:all
+npm run e2e
+```
+
+To resume from a later stage after a failure:
+
+```bash
+VERIFY_FULL_STEP_FROM=test-integration-all npm run verify:full:stepwise
+VERIFY_FULL_STEP_FROM=e2e npm run verify:full:stepwise
+```
+
+For a friendlier resume interface, use:
+
+```bash
+npm run verify:full:resume -- test-integration-all
+npm run verify:full:resume -- e2e
+```
+
+Optional aliases accepted by `verify:full:resume`:
+
+- `frontend-build` -> `web-build`
+- `types` -> `typecheck`
+- `build` -> `build-all`
+- `unit` / `test` -> `test-all`
+- `integration` -> `test-integration-all`
+- `end-to-end` -> `e2e`
+
+Allowed `VERIFY_FULL_STEP_FROM` values:
+
+- `web-build`
+- `lint`
+- `typecheck`
+- `build-all`
+- `test-all`
+- `test-integration-all`
+- `e2e`
+
 **Environment Variables:**
 
-- `E2E_BASE_URL`: Frontend URL for E2E tests (default: http://localhost:4300)
-- `BACKEND_URL`: Backend URL for health checks (default: http://localhost:3000)
+- `E2E_BASE_URL`: Frontend URL for E2E tests (default: http://localhost:4200)
+- `BANK_API_URL`: Backend URL for health checks (default: http://localhost:3000)
+- `BACKEND_HEALTHCHECK_DELAYS`: Comma-separated retry delays in seconds
+  (default: `1,5,10,20,30,60`).
+- `HEALTHCHECK_TIMEOUT_MS`: Per-attempt timeout in milliseconds (default: 5000).
 
 ### Security Auditing
 
@@ -221,6 +470,27 @@ npx nx preview bank-web-app
 npm run clean  # Reset Nx cache
 npm run graph  # View dependency graph
 ```
+
+#### Datadog Toggle For `bank-api` (AWS deploy)
+
+- Default behavior: Datadog is disabled.
+- Enable Datadog by setting environment variable `ENABLE_DATADOG=true`.
+- When enabled, `apps/bank-api/scripts/deploy-aws.sh` renders a Datadog-enabled
+  template from `apps/bank-api/template.yaml` (single source of truth) and
+  deploys with the same `samconfig` environment (`dev` / `prod`) plus Datadog
+  parameter overrides.
+- Datadog layer versions default to latest for the AWS region at deploy time
+  (`Datadog-Node22-x` and `Datadog-Extension`), with optional overrides.
+
+GitHub Actions environment configuration (per `dev` / `prod`):
+
+- Variable: `ENABLE_DATADOG` (`true`/`false`)
+- Variable: `BANK_API_DATADOG_SITE` (for example `datadoghq.eu`)
+- Secret: `BANK_API_DATADOG_API_KEY_SECRET_ARN`
+- Optional variable: `BANK_API_DATADOG_NODE_LAYER_VERSION`
+- Optional variable: `BANK_API_DATADOG_EXTENSION_LAYER_VERSION`
+
+`DDVersion` is set from commit SHA automatically in CI.
 
 ## 📚 Project Documentation
 

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../api/client';
 import { useAuthErrorHandler } from '../../../hooks/useAuthErrorHandler';
+import { hydrateMerchantLogos } from '../../../lib/merchantDirectory';
 import type { PayNoteDeliverySummary } from '../../../types/api';
 
 type PayNoteDeliveryError = Error & { status?: number };
@@ -18,6 +19,7 @@ export function usePayNoteDeliveries() {
     queryKey: ['paynote-deliveries'],
     queryFn: async (): Promise<PayNoteDeliverySummary[]> => {
       const response = await apiClient.banking.listPayNoteDeliveries({
+        query: undefined,
         overrideClientOptions: { credentials: 'include' },
       });
 
@@ -25,7 +27,10 @@ export function usePayNoteDeliveries() {
         throw makeError('Failed to fetch PayNote deliveries', response.status);
       }
 
-      return response.body.items;
+      return hydrateMerchantLogos(
+        response.body.items,
+        response.body.merchantDirectory
+      );
     },
     staleTime: 30 * 1000,
     gcTime: 2 * 60 * 1000,

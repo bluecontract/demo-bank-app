@@ -1,45 +1,43 @@
 import { test, expect } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import {
-  URLS,
   TEST_DATA,
   UI_TEXT,
-  createUniqueEmail,
   createUniqueAccountName,
   waitForModalToClose,
   waitForModalToOpen,
   waitForTooltipToAppear,
-  DASHBOARD_HEADING_TEXT,
   waitForTransferCompletion,
   completeStandardTransferViaStepper,
+  signUpAndReachDashboard,
+  createAccountViaModal,
 } from '../constants';
+
+const getAccountCard = (page: Page, accountName: string): Locator =>
+  page
+    .getByRole('heading', { name: accountName })
+    .locator('xpath=ancestor::div[contains(@class,"app-surface")][1]');
+
+const selectAccountByName = async (page: Page, accountName: string) => {
+  const accountCard = getAccountCard(page, accountName);
+  await accountCard.click();
+  await expect(accountCard).toHaveAttribute('aria-pressed', 'true');
+};
 
 test.describe('Banking Core Flows', () => {
   test.describe.configure({ timeout: 60000 });
   test.beforeEach(async ({ page }) => {
-    const testUserEmail = createUniqueEmail('banking-user');
-
-    // Sign up and get to dashboard
-    await page.goto(URLS.SIGNUP);
-    await page.fill('input[name="email"]', testUserEmail);
-    await page.click('button[type="submit"]');
-
-    await page.waitForURL(URLS.DASHBOARD, {
-      timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
-    });
-    await expect(page.getByText(DASHBOARD_HEADING_TEXT)).toBeVisible();
+    await signUpAndReachDashboard(page, 'banking-user');
   });
 
   test('should create account and display in horizontal list', async ({
     page,
   }) => {
     // Create account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-
-    const accountName = createUniqueAccountName();
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    const accountName = await createAccountViaModal(
+      page,
+      createUniqueAccountName()
+    );
 
     // Verify account appears in horizontal list
     await expect(page.getByText(accountName)).toBeVisible();
@@ -58,11 +56,7 @@ test.describe('Banking Core Flows', () => {
     ];
 
     for (const accountName of accountNames) {
-      await page.click('text=Add new account');
-      await waitForModalToOpen(page, 'modal-content');
-      await page.fill('input#accountName', accountName);
-      await page.click('button[type="submit"]');
-      await waitForModalToClose(page, 'modal-content');
+      await createAccountViaModal(page, accountName);
     }
 
     // Verify all accounts exist
@@ -92,11 +86,7 @@ test.describe('Banking Core Flows', () => {
     );
 
     // Create account with long name
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', longAccountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, longAccountName);
 
     // Verify account name is displayed
     await expect(page.getByText(longAccountName)).toBeVisible();
@@ -115,15 +105,13 @@ test.describe('Banking Core Flows', () => {
 
   test('should fund account with modal and confirmation', async ({ page }) => {
     // Create account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('fund-test');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, createUniqueAccountName('fund-test'));
 
     // Fund the account
-    await page.click('text=Fund Account');
+    await page
+      .getByRole('button', { name: 'Fund', exact: true })
+      .first()
+      .click();
     await waitForModalToOpen(page, 'modal-content');
 
     // Enter amount (the input expects dollar format)
@@ -155,21 +143,16 @@ test.describe('Banking Core Flows', () => {
     const targetAccount = createUniqueAccountName('target');
 
     // Create source account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', sourceAccount);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, sourceAccount);
 
     // Create target account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', targetAccount);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, targetAccount);
 
     // Fund source account first
-    await page.click('text=Fund Account');
+    await page
+      .getByRole('button', { name: 'Fund', exact: true })
+      .first()
+      .click();
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '200.00');
     await page.click('button[type="submit"]');
@@ -196,7 +179,10 @@ test.describe('Banking Core Flows', () => {
       page.waitForURL('**/transfer/new**', {
         timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
       }),
-      page.click('text=New transfer'),
+      page
+        .getByRole('button', { name: 'New transfer', exact: true })
+        .first()
+        .click(),
     ]);
 
     await completeStandardTransferViaStepper(page, {
@@ -207,7 +193,7 @@ test.describe('Banking Core Flows', () => {
     });
 
     await expect(
-      page.getByRole('heading', { name: 'Transaction History' })
+      page.getByRole('heading', { name: 'Transactions' })
     ).toBeVisible();
 
     // Verify source account balance updated - target the balance display specifically
@@ -222,15 +208,13 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     // Create and select an account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('history-test');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, createUniqueAccountName('history-test'));
 
     // Fund the account to create transaction history
-    await page.click('text=Fund Account');
+    await page
+      .getByRole('button', { name: 'Fund', exact: true })
+      .first()
+      .click();
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '75.25');
     await page.click('button[type="submit"]');
@@ -240,31 +224,35 @@ test.describe('Banking Core Flows', () => {
 
     // Verify transaction history displays
     await expect(
-      page.getByRole('heading', { name: 'Transaction History' })
+      page.getByRole('heading', { name: 'Transactions' })
     ).toBeVisible();
-    await expect(page.getByText('Account:')).toBeVisible();
 
     // Verify funding transaction appears - scope to transaction list
-    await expect(
-      page
-        .locator('[data-testid="transaction-history-list"]')
-        .getByText('+$75.25')
-    ).toBeVisible();
+    const fundingRow = page
+      .locator('[data-testid="transaction-history-list"]')
+      .locator('[data-testid^="activity-item-"]')
+      .filter({ hasText: 'Funding' })
+      .filter({ hasText: '$75.25' })
+      .first();
+    await expect(fundingRow).toBeVisible({
+      timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
+    });
   });
 
   test('should show transaction details for incoming transfer', async ({
     page,
   }) => {
     // Create account and fund it
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('incoming-details');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(
+      page,
+      createUniqueAccountName('incoming-details')
+    );
 
     // Fund account
-    await page.click('text=Fund Account');
+    await page
+      .getByRole('button', { name: 'Fund', exact: true })
+      .first()
+      .click();
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '85.50');
     await page.click('button[type="submit"]');
@@ -277,49 +265,44 @@ test.describe('Banking Core Flows', () => {
       page.locator('[data-testid="transaction-history-list"]')
     ).toBeVisible();
 
-    // Click on the first transaction to open details modal
-    await page.click('[data-testid^="activity-item-"]');
+    // Click on the first transaction to open details page
+    await Promise.all([
+      page.waitForURL('**/transactions/**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      page.click('[data-testid^="activity-item-"]'),
+    ]);
 
-    // Wait for modal to open and verify content
+    await expect(page.getByTestId('transaction-details-page')).toBeVisible();
     await expect(
-      page.locator('[data-testid="transaction-modal-content"]')
+      page.getByRole('heading', { name: 'Transaction details' })
     ).toBeVisible();
-    await expect(page.getByText('Transaction Details')).toBeVisible();
-    // Use a more specific selector for the incoming transfer heading
+
+    const details = page.getByTestId('transaction-details');
     await expect(
-      page
-        .locator('[data-testid="transaction-modal-content"]')
-        .getByRole('heading', { name: 'Incoming transfer' })
+      details.getByRole('heading', { name: 'Incoming transfer' })
     ).toBeVisible();
-    // Scope the amount to the modal
-    await expect(
-      page
-        .locator('[data-testid="transaction-modal-content"]')
-        .getByText('+$85.50')
-    ).toBeVisible();
+    await expect(details.getByText('+$85.50')).toBeVisible();
   });
 
   test('should show transaction details for outgoing transfer', async ({
     page,
   }) => {
     // Create two accounts
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const account1 = createUniqueAccountName('outgoing-source');
-    await page.fill('input#accountName', account1);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
-
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const account2 = createUniqueAccountName('outgoing-dest');
-    await page.fill('input#accountName', account2);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    const account1 = await createAccountViaModal(
+      page,
+      createUniqueAccountName('outgoing-source')
+    );
+    const account2 = await createAccountViaModal(
+      page,
+      createUniqueAccountName('outgoing-dest')
+    );
 
     // Fund first account
-    await page.click(`text=${account1}`);
-    await page.click('text=Fund Account');
+    await selectAccountByName(page, account1);
+    await getAccountCard(page, account1)
+      .getByRole('button', { name: 'Fund', exact: true })
+      .click();
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '100.00');
     await page.click('button[type="submit"]');
@@ -335,11 +318,9 @@ test.describe('Banking Core Flows', () => {
     });
 
     // Get destination account number using the correct selector
-    await page.click(`text=${account2}`);
-    // Find the account number for the selected account (should be the visible one)
-    const destinationAccountNumber = await page
+    await selectAccountByName(page, account2);
+    const destinationAccountNumber = await getAccountCard(page, account2)
       .locator('.account-number')
-      .last()
       .textContent();
     const cleanDestinationNumber = destinationAccountNumber!.replace(
       /[^\d]/g,
@@ -347,12 +328,14 @@ test.describe('Banking Core Flows', () => {
     );
 
     // Transfer money from first to second account
-    await page.click(`text=${account1}`);
+    await selectAccountByName(page, account1);
     await Promise.all([
       page.waitForURL('**/transfer/new**', {
         timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
       }),
-      page.click('text=New transfer'),
+      getAccountCard(page, account1)
+        .getByRole('button', { name: 'New transfer', exact: true })
+        .click(),
     ]);
 
     await completeStandardTransferViaStepper(page, {
@@ -363,7 +346,7 @@ test.describe('Banking Core Flows', () => {
     });
 
     await expect(
-      page.getByRole('heading', { name: 'Transaction History' })
+      page.getByRole('heading', { name: 'Transactions' })
     ).toBeVisible();
 
     // Wait for transaction history to load
@@ -372,34 +355,34 @@ test.describe('Banking Core Flows', () => {
     ).toBeVisible();
 
     // Wait specifically for the outgoing transfer transaction to appear (-$40)
-    await expect(
-      page.locator('[data-testid="transaction-history-list"]').getByText('-$40')
-    ).toBeVisible({
+    const outgoingRow = page
+      .locator('[data-testid="transaction-history-list"]')
+      .locator('[data-testid^="activity-item-"]')
+      .filter({ hasText: 'Outgoing' })
+      .filter({ hasText: '$40' })
+      .first();
+    await expect(outgoingRow).toBeVisible({
       timeout: TEST_DATA.TIMEOUTS.BALANCE_UPDATE,
     });
 
     // Click on the outgoing transfer transaction specifically
-    await page
-      .locator('[data-testid="transaction-history-list"]')
-      .getByText('-$40')
-      .locator('..')
-      .click();
+    await Promise.all([
+      page.waitForURL('**/transactions/**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      outgoingRow.click(),
+    ]);
 
-    // Wait for modal to open and verify content
+    await expect(page.getByTestId('transaction-details-page')).toBeVisible();
     await expect(
-      page.locator('[data-testid="transaction-modal-content"]')
+      page.getByRole('heading', { name: 'Transaction details' })
     ).toBeVisible();
-    await expect(page.getByText('Transaction Details')).toBeVisible();
 
-    // Check for either outgoing or incoming transfer heading (depends on transaction perspective)
-    const modalContent = page.locator(
-      '[data-testid="transaction-modal-content"]'
-    );
+    const details = page.getByTestId('transaction-details');
     await expect(
-      modalContent.getByRole('heading', { name: 'Outgoing transfer' })
+      details.getByRole('heading', { name: 'Outgoing transfer' })
     ).toBeVisible();
-    // If it's outgoing, check for negative amount
-    await expect(modalContent.getByText('-$40')).toBeVisible();
+    await expect(details.getByText('-$40')).toBeVisible();
   });
 
   test('should show hold details when selecting a hold activity item', async ({
@@ -467,38 +450,36 @@ test.describe('Banking Core Flows', () => {
     });
 
     // Create account so the activity feed mounts
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, accountName);
 
     // Wait for activity list to render mocked hold
     const holdRow = page.getByTestId('activity-item-hold_created-hold-123');
     await expect(holdRow).toBeVisible();
 
-    await holdRow.click();
+    await Promise.all([
+      page.waitForURL('**/transactions/**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      holdRow.click(),
+    ]);
 
-    const modal = page.locator('[data-testid="transaction-modal-content"]');
-    await expect(modal).toBeVisible();
-    await expect(modal.getByText('Hold Details')).toBeVisible();
-    await expect(modal.getByText('Hold overview')).toBeVisible();
+    await expect(page.getByTestId('transaction-details-page')).toBeVisible();
     await expect(
-      modal
-        .locator('[data-testid="modal-hold-details"]')
-        .locator('text=Hold ID: hold-123')
-        .first()
+      page.getByRole('heading', { name: 'Transaction details' })
+    ).toBeVisible();
+
+    const holdDetails = page.getByTestId('hold-details');
+    await expect(
+      holdDetails.getByRole('heading', { name: 'Hold overview' })
     ).toBeVisible();
     await expect(
-      modal
-        .getByTestId('modal-hold-details')
-        .getByText('$123.45', { exact: true })
-        .first()
+      holdDetails.locator('text=Hold ID: hold-123').first()
     ).toBeVisible();
+    await expect(holdDetails.locator('text=$123.45').first()).toBeVisible();
     await expect(
-      modal.getByText('Pending hold for vendor authorization')
+      holdDetails.getByText('Pending hold for vendor authorization')
     ).toBeVisible();
-    await expect(modal.getByText('Hold placed')).toBeVisible();
+    await expect(holdDetails.getByText('Hold placed')).toBeVisible();
 
     await page.unroute('**/v1/activity/**');
     await page.unroute('**/v1/accounts/**/activity/**');
@@ -608,57 +589,66 @@ test.describe('Banking Core Flows', () => {
       });
     });
 
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await page.route('**/v1/transactions/**/contracts', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: [
+            {
+              contractId: 'contract-paynote-1',
+              typeBlueId: 'type-paynote',
+              displayName: 'PayNote',
+              documentName: 'Slow Digestion PayNote',
+              sessionId: 'session-paynote-1',
+              documentId: payNoteDocumentId,
+              status: 'reserved',
+              createdAt: new Date('2024-03-10T12:00:00.000Z').toISOString(),
+              updatedAt: new Date('2024-03-10T12:00:00.000Z').toISOString(),
+            },
+          ],
+        }),
+      });
+    });
+
+    await createAccountViaModal(page, accountName);
 
     const activityRow = page.getByTestId('activity-item-txn-txn-paynote-001');
     await expect(activityRow).toBeVisible();
 
-    await activityRow.click();
+    await Promise.all([
+      page.waitForURL('**/transactions/**', {
+        timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+      }),
+      activityRow.click(),
+    ]);
 
-    const modal = page.locator('[data-testid="transaction-modal-content"]');
-    await expect(modal).toBeVisible();
+    await expect(page.getByTestId('transaction-details-page')).toBeVisible();
     await expect(
-      modal.getByText('PayNote Transfer', { exact: true })
-    ).toBeVisible();
-    await expect(
-      modal.getByText('This transaction is part of a PayNote transfer.')
+      page.getByRole('heading', { name: 'Transaction details' })
     ).toBeVisible();
 
-    await modal.getByRole('button', { name: 'See details' }).click();
-
-    const payNoteView = modal.getByTestId('paynote-details-view');
-    await expect(payNoteView).toBeVisible();
-    await expect(
-      payNoteView.getByText('PayNote transfer details')
-    ).toBeVisible();
-    await expect(payNoteView.getByText('PayNote Document')).toBeVisible();
-    await expect(payNoteView.getByText('Transaction Request')).toBeVisible();
-    await expect(payNoteView.getByText('Triggering Event')).toBeVisible();
-
-    await payNoteView.getByTestId('paynote-back-button').click();
-
-    await expect(modal.getByTestId('modal-transaction-details')).toBeVisible();
+    const details = page.getByTestId('transaction-details');
+    await expect(details.getByText('Linked contracts')).toBeVisible();
+    await expect(details.getByText('Slow Digestion PayNote')).toBeVisible();
 
     await page.unroute('**/v1/activity/**');
     await page.unroute('**/v1/activity/**/records/**');
     await page.unroute('**/v1/activity/**/paynotes/**');
     await page.unroute('**/v1/accounts/**/transactions/**');
+    await page.unroute('**/v1/transactions/**/contracts');
   });
 
   test('should update account balance after fund and transfer operations', async ({
     page,
   }) => {
     // Create account
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const accountName = createUniqueAccountName('balance-test');
-    await page.fill('input#accountName', accountName);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    await createAccountViaModal(page, createUniqueAccountName('balance-test'));
 
     // Initial balance should be $0
     await expect(
@@ -666,7 +656,10 @@ test.describe('Banking Core Flows', () => {
     ).toBeVisible();
 
     // Fund account
-    await page.click('text=Fund Account');
+    await page
+      .getByRole('button', { name: 'Fund', exact: true })
+      .first()
+      .click();
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '250.00');
     await page.click('button[type="submit"]');
@@ -682,7 +675,10 @@ test.describe('Banking Core Flows', () => {
     });
 
     // Fund again
-    await page.click('text=Fund Account');
+    await page
+      .getByRole('button', { name: 'Fund', exact: true })
+      .first()
+      .click();
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '75.00');
     await page.click('button[type="submit"]');
@@ -702,23 +698,20 @@ test.describe('Banking Core Flows', () => {
     page,
   }) => {
     // Create two accounts
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const account1 = createUniqueAccountName('switch-account1');
-    await page.fill('input#accountName', account1);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
-
-    await page.click('text=Add new account');
-    await waitForModalToOpen(page, 'modal-content');
-    const account2 = createUniqueAccountName('switch-account2');
-    await page.fill('input#accountName', account2);
-    await page.click('button[type="submit"]');
-    await waitForModalToClose(page, 'modal-content');
+    const account1 = await createAccountViaModal(
+      page,
+      createUniqueAccountName('switch-account1')
+    );
+    const account2 = await createAccountViaModal(
+      page,
+      createUniqueAccountName('switch-account2')
+    );
 
     // Fund first account to create transaction history
-    await page.click(`text=${account1}`);
-    await page.click('text=Fund Account');
+    await selectAccountByName(page, account1);
+    await getAccountCard(page, account1)
+      .getByRole('button', { name: 'Fund', exact: true })
+      .click();
     await waitForModalToOpen(page, 'modal-content');
     await page.fill('input#amount', '200.00');
     await page.click('button[type="submit"]');
@@ -733,7 +726,7 @@ test.describe('Banking Core Flows', () => {
     await expect(page.locator('[data-testid^="activity-item-"]')).toBeVisible();
 
     // Switch to second account
-    await page.click(`text=${account2}`);
+    await selectAccountByName(page, account2);
 
     // Wait for account switch to complete and transaction history to load
     await expect(
@@ -743,7 +736,7 @@ test.describe('Banking Core Flows', () => {
     const account2Card = page
       .getByRole('heading', { name: account2 })
       .locator('xpath=ancestor::div[contains(@class,"app-surface")]');
-    await expect(account2Card).toHaveClass(/ring-2/);
+    await expect(account2Card).toHaveAttribute('aria-pressed', 'true');
 
     // Check if there are no transaction items for the second account
     // If the account switching is not working properly, just check that we have less transactions
@@ -755,7 +748,7 @@ test.describe('Banking Core Flows', () => {
       .toBeLessThanOrEqual(1);
 
     // Click back to first account
-    await page.click(`text=${account1}`);
+    await selectAccountByName(page, account1);
 
     // Verify first account still has transaction history
     await expect(
@@ -766,6 +759,6 @@ test.describe('Banking Core Flows', () => {
     const account1Card = page
       .getByRole('heading', { name: account1 })
       .locator('xpath=ancestor::div[contains(@class,"app-surface")]');
-    await expect(account1Card).toHaveClass(/ring-2/);
+    await expect(account1Card).toHaveAttribute('aria-pressed', 'true');
   });
 });

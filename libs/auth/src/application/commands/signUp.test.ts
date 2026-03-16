@@ -4,6 +4,7 @@ import type { SignUpCommand, SignUpDependencies } from './signUp';
 import { User } from '../../domain/entities/User';
 import {
   TokenGenerationError,
+  MerchantDirectoryOwnershipError,
   UserAlreadyExistsError,
 } from '../../infrastructure/errors';
 import type { UserRepository, JwtService, Logger, Metrics } from '../ports';
@@ -14,6 +15,7 @@ describe('signUp', () => {
     save: vi.fn(),
     findById: vi.fn(),
     findByEmail: vi.fn(),
+    updateProfile: vi.fn(),
   };
 
   const mockJwtService: JwtService = {
@@ -101,6 +103,39 @@ describe('signUp', () => {
       'UserSignUp',
       'Count',
       1
+    );
+  });
+
+  it('should persist merchantId when provided', async () => {
+    const command: SignUpCommand = {
+      email: 'merchant@example.com',
+      isTest: false,
+      marketingEmailsOptIn: true,
+      merchantId: 'merchant-123',
+    };
+
+    const mockUser = new User({
+      id: 'merchant-user-123',
+      email: 'merchant@example.com',
+      createdAt: new Date(),
+      isTest: false,
+      marketingEmailsOptIn: true,
+      merchantId: 'merchant-123',
+    });
+    const mockToken = 'jwt-token-merchant';
+
+    vi.mocked(mockUserRepository.save).mockResolvedValue(mockUser);
+    vi.mocked(mockJwtService.generateToken).mockResolvedValue(mockToken);
+
+    const result = await signUp(command, dependencies);
+
+    expect(result.user.id).toBe('merchant-user-123');
+    expect(result.user.merchantId).toBe('merchant-123');
+    expect(mockUserRepository.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'merchant@example.com',
+        merchantId: 'merchant-123',
+      })
     );
   });
 
@@ -255,6 +290,27 @@ describe('signUp', () => {
       'UserSignUpUnknownError',
       'Count',
       1
+    );
+  });
+
+  it('should rethrow MerchantDirectoryOwnershipError', async () => {
+    const command: SignUpCommand = {
+      email: 'merchant.user@example.com',
+      marketingEmailsOptIn: true,
+      merchantId: 'merchant-123',
+      merchantName: 'Merchant Demo',
+    };
+
+    const ownershipError = new MerchantDirectoryOwnershipError('merchant-123');
+    vi.mocked(mockUserRepository.save).mockRejectedValue(ownershipError);
+
+    await expect(signUp(command, dependencies)).rejects.toThrow(ownershipError);
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      'Merchant ownership conflict during sign-up',
+      expect.objectContaining({
+        userEmail: 'merchant.user@example.com',
+        merchantId: 'merchant-123',
+      })
     );
   });
 });

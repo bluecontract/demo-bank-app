@@ -5,6 +5,12 @@ import {
   type MaybeAuthenticatedTsRestRequestContext,
 } from '../auth/middleware';
 import { getDependencies } from '../paynote/dependencies';
+import { filterCustomerVisibleContracts } from './contractVisibility';
+import {
+  buildMerchantDirectoryResponse,
+  buildMerchantDirectoryMap,
+  resolveMerchantFrom,
+} from '../shared/merchantDirectory';
 
 export const listContractsHandler = async (
   request: ServerInferRequest<
@@ -12,20 +18,32 @@ export const listContractsHandler = async (
   >,
   context: { request: MaybeAuthenticatedTsRestRequestContext }
 ) => {
-  const { contractRepository, logger } = await getDependencies();
+  const { contractRepository, logger, merchantDirectoryRepository } =
+    await getDependencies();
   const { userId } = await extractAuthInfo(context.request);
   const updatedSince = request.query?.updatedSince;
 
-  logger.info('Listing contracts', { userId, updatedSince });
+  logger.debug('Listing contracts', { userId, updatedSince });
 
   const items = await contractRepository.listContractsByUserId(userId, {
     updatedSince,
   });
+  const visibleItems = filterCustomerVisibleContracts(items);
+  const directory = await buildMerchantDirectoryMap(
+    visibleItems.map(item => item.merchantId),
+    merchantDirectoryRepository
+  );
 
   return {
     status: 200 as const,
     body: {
-      items,
+      merchantDirectory: buildMerchantDirectoryResponse(directory),
+      items: visibleItems.map(item => ({
+        ...item,
+        from: resolveMerchantFrom(item.merchantId, directory, {
+          includeLogo: false,
+        }),
+      })),
     },
   };
 };

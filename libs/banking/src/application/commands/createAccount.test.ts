@@ -11,6 +11,7 @@ describe('createAccount', () => {
   beforeEach(() => {
     mockRepository = {
       saveAccount: vi.fn(),
+      updateAccountBalance: vi.fn(),
       getAccountById: vi.fn(),
       getAccountIdByNumber: vi.fn(),
       getAccountsByUserId: vi.fn(),
@@ -59,6 +60,8 @@ describe('createAccount', () => {
     expect(result.ledgerBalanceMinor).toBeInstanceOf(Money);
     expect(result.availableBalanceMinor).toBeInstanceOf(Money);
     expect(result.balanceVersion).toBe(0);
+    expect(result.accountType).toBe('DEPOSIT');
+    expect(result.creditLimitMinor).toBeUndefined();
     expect(mockAccountNumberGenerator.generate).toHaveBeenCalledTimes(1);
     expect(mockRepository.saveAccount).toHaveBeenCalledTimes(1);
     expect(mockRepository.saveAccount).toHaveBeenCalledWith(
@@ -68,6 +71,7 @@ describe('createAccount', () => {
         ownerUserId: command.ownerId,
         status: 'ACTIVE',
         currency: 'USD',
+        accountType: 'DEPOSIT',
       })
     );
   });
@@ -147,6 +151,32 @@ describe('createAccount', () => {
 
     // Then
     expect(result.status).toBe('ACTIVE');
+  });
+
+  it('should create credit line account when requested', async () => {
+    const command = {
+      ownerId: 'user-123',
+      name: 'Merchant Credit Line',
+      accountType: 'CREDIT_LINE' as const,
+      creditLimitMinor: 500_000,
+    };
+
+    vi.mocked(mockAccountNumberGenerator.generate).mockReturnValue(
+      '1234567890'
+    );
+    vi.mocked(mockRepository.saveAccount).mockImplementation(
+      async account => account
+    );
+
+    const result = await createAccount(command, {
+      repository: mockRepository,
+      accountNumberGenerator: mockAccountNumberGenerator,
+    });
+
+    expect(result.accountType).toBe('CREDIT_LINE');
+    expect(result.creditLimitMinor?.toCents()).toBe(500_000);
+    expect(result.ledgerBalanceMinor.toCents()).toBe(500_000);
+    expect(result.availableBalanceMinor.toCents()).toBe(500_000);
   });
 
   it('should set creation timestamp as ISO string', async () => {

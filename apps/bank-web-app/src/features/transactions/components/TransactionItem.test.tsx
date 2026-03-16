@@ -32,6 +32,13 @@ const debitTransaction: ActivityItem = {
   counterpartyAccountNumber: '0987654321',
 };
 
+const pendingDebitTransaction: ActivityItem = {
+  ...debitTransaction,
+  activityId: 'TXN#txn-457',
+  transactionId: 'txn-457',
+  status: 'PENDING',
+};
+
 const holdCreated: ActivityItem = {
   kind: 'HOLD_CREATED',
   activityId: 'HOLD#hold-1',
@@ -83,6 +90,15 @@ const cardTransaction: ActivityItem = {
   processorChargeId: 'ch_123',
 };
 
+const merchantOrderTransaction: ActivityItem = {
+  ...debitTransaction,
+  activityId: 'TXN#txn-888',
+  transactionId: 'txn-888',
+  description: 'Order #823451',
+  cardLast4: '2832',
+  merchantName: 'Abt.com',
+};
+
 describe('TransactionItem', () => {
   it('renders posted credit transaction with details and click handler', () => {
     const onSelect = vi.fn();
@@ -95,11 +111,12 @@ describe('TransactionItem', () => {
       />
     );
 
-    expect(screen.getByText('Incoming')).toBeInTheDocument();
-    expect(screen.getByText('COMPLETED')).toBeInTheDocument();
-    expect(screen.getByText('Deposit from employer')).toBeInTheDocument();
-    expect(screen.getByText('From: 123 456 7890')).toBeInTheDocument();
-    expect(screen.getByText('+$1,000')).toBeInTheDocument();
+    expect(screen.getAllByText('Captured').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Deposit from employer').length).toBeGreaterThan(
+      0
+    );
+    expect(screen.getAllByText('123 456 7890').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$1,000').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByTestId('activity-row'));
     expect(onSelect).toHaveBeenCalledWith(postedTransaction);
@@ -112,9 +129,25 @@ describe('TransactionItem', () => {
       <TransactionItem item={debitTransaction} onActivitySelect={onSelect} />
     );
 
-    expect(screen.getByText('Outgoing')).toBeInTheDocument();
-    expect(screen.getByText('To: 098 765 4321')).toBeInTheDocument();
-    expect(screen.getByText('-$500')).toBeInTheDocument();
+    expect(screen.getAllByText('Bill payment').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('098 765 4321').length).toBeGreaterThan(0);
+    const amounts = screen.getAllByText('-$500');
+    expect(amounts.length).toBeGreaterThan(0);
+    amounts.forEach(amount => {
+      expect(amount).toHaveClass('text-[var(--color-danger)]');
+    });
+  });
+
+  it('renders pending outgoing transaction without minus sign', () => {
+    render(
+      <TransactionItem
+        item={pendingDebitTransaction}
+        onActivitySelect={vi.fn()}
+      />
+    );
+
+    expect(screen.getAllByText('$500').length).toBeGreaterThan(0);
+    expect(screen.queryByText('-$500')).not.toBeInTheDocument();
   });
 
   it('renders hold created entry and triggers click handler', () => {
@@ -128,10 +161,16 @@ describe('TransactionItem', () => {
       />
     );
 
-    expect(screen.getByText('Hold Created')).toBeInTheDocument();
-    expect(screen.getByText('HOLD PLACED')).toBeInTheDocument();
-    expect(screen.getByText('$450')).toBeInTheDocument();
-    expect(screen.getByText('To: 111 111 1222')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('Coffee shop authorization').length
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText('Hold').length).toBeGreaterThan(0);
+    const amounts = screen.getAllByText('$450');
+    expect(amounts.length).toBeGreaterThan(0);
+    amounts.forEach(amount => {
+      expect(amount).toHaveClass('text-[var(--color-ink)]');
+    });
+    expect(screen.getAllByText('111 111 1222').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByTestId('hold-created'));
     expect(onSelect).toHaveBeenCalledWith(holdCreated);
@@ -140,20 +179,24 @@ describe('TransactionItem', () => {
   it('renders hold captured entry with linked transaction subtitle', () => {
     render(<TransactionItem item={holdCaptured} onActivitySelect={vi.fn()} />);
 
-    expect(screen.getByText('Hold Captured')).toBeInTheDocument();
-    expect(screen.getByText('HOLD CAPTURED')).toBeInTheDocument();
-    expect(screen.getByText('To: 222 233 3344')).toBeInTheDocument();
-    expect(screen.getByText('txn: txn-789')).toBeInTheDocument();
-    expect(screen.getByText('$95')).toBeInTheDocument();
+    expect(screen.getAllByText('Fuel purchase').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Captured').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('222 233 3344').length).toBeGreaterThan(0);
+    const amounts = screen.getAllByText('-$95');
+    expect(amounts.length).toBeGreaterThan(0);
+    amounts.forEach(amount => {
+      expect(amount).toHaveClass('text-[var(--color-danger)]');
+    });
   });
 
-  it('renders failed hold with failure messaging', () => {
+  it('renders failed hold without failure messaging details', () => {
     render(<TransactionItem item={holdFailed} onActivitySelect={vi.fn()} />);
 
-    expect(screen.getByText('Hold Failed')).toBeInTheDocument();
-    expect(screen.getByText('HOLD FAILED')).toBeInTheDocument();
-    expect(screen.getByText('Failure: INSUFFICIENT_FUNDS')).toBeInTheDocument();
-    expect(screen.getByText('Available balance too low')).toBeInTheDocument();
+    expect(screen.getAllByText('Online order').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Failed').length).toBeGreaterThan(0);
+    expect(
+      screen.queryByText('Available balance too low')
+    ).not.toBeInTheDocument();
   });
 
   it('renders card transactions with merchant and card context', () => {
@@ -161,13 +204,26 @@ describe('TransactionItem', () => {
       <TransactionItem item={cardTransaction} onActivitySelect={vi.fn()} />
     );
 
-    expect(screen.getByText('Demo Shop')).toBeInTheDocument();
-    expect(screen.getByText('Card: **** 4242')).toBeInTheDocument();
-    expect(screen.getByText('Charge: ch_123')).toBeInTheDocument();
-    expect(screen.queryByText('To: 999 999 9999')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Demo Shop').length).toBeGreaterThan(0);
+    const cardLabels = screen.getAllByText('***4242');
+    expect(cardLabels.length).toBeGreaterThan(0);
+    expect(screen.queryByText('999 999 9999')).not.toBeInTheDocument();
   });
 
-  it('renders a PayNote badge when paynote metadata is present', () => {
+  it('appends merchant name to transaction title when available', () => {
+    render(
+      <TransactionItem
+        item={merchantOrderTransaction}
+        onActivitySelect={vi.fn()}
+      />
+    );
+
+    expect(
+      screen.getAllByText('Order #823451 at Abt.com').length
+    ).toBeGreaterThan(0);
+  });
+
+  it('does not render a PayNote icon when paynote metadata is present', () => {
     const payNoteTransaction: ActivityItem = {
       ...debitTransaction,
       payNote: { payNoteDocumentId: 'doc-paynote-1' },
@@ -177,6 +233,6 @@ describe('TransactionItem', () => {
       <TransactionItem item={payNoteTransaction} onActivitySelect={vi.fn()} />
     );
 
-    expect(screen.getByText('PAYNOTE')).toBeInTheDocument();
+    expect(screen.queryByLabelText('PayNote')).not.toBeInTheDocument();
   });
 });

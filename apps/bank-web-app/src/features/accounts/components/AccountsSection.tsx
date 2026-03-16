@@ -6,7 +6,11 @@ interface AccountsSectionProps {
   onCreateAccount: () => void;
   onTransfer: (accountId: string) => void;
   onFund?: (accountId: string) => void;
+  onEditCreditLimit?: (accountId: string) => void;
   isCreatingAccount?: boolean;
+  showActions?: boolean;
+  showAddAccountCard?: boolean;
+  cardSize?: 'default' | 'compact';
 }
 
 export function AccountsSection({
@@ -14,32 +18,27 @@ export function AccountsSection({
   onCreateAccount,
   onTransfer,
   onFund,
+  onEditCreditLimit,
   isCreatingAccount = false,
+  showActions = true,
+  showAddAccountCard = true,
+  cardSize = 'default',
 }: AccountsSectionProps) {
   return (
-    <section className="app-surface">
-      <div className="flex items-center justify-between px-6 pt-6">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-[color:var(--color-muted)]">
-            Accounts
-          </p>
-          <h2 className="mt-2 text-xl font-semibold text-slate-900">
-            Your portfolios
-          </h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="app-chip app-chip-neutral">
-            {accounts.length} active
-          </span>
-          <span className="app-chip">USD</span>
-        </div>
+    <section className="app-surface rounded-none sm:rounded-[20px] shadow-none sm:shadow-[var(--shadow-soft)]">
+      <div className="px-4 pt-4">
+        <h2 className="text-base font-semibold text-slate-900">Accounts</h2>
       </div>
       <HorizontalAccountsList
         accounts={accounts}
         onCreateAccount={onCreateAccount}
         onTransfer={onTransfer}
         onFund={onFund}
+        onEditCreditLimit={onEditCreditLimit}
         isCreatingAccount={isCreatingAccount}
+        showActions={showActions}
+        showAddAccountCard={showAddAccountCard}
+        cardSize={cardSize}
       />
     </section>
   );

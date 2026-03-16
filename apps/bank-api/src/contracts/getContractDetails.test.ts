@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 import { getContractDetailsHandler } from './getContractDetails';
 import { ERROR_CODES } from '../shared/errors';
 
@@ -22,6 +23,10 @@ describe('getContractDetailsHandler', () => {
 
   const contractRepository = {
     getContractBySessionId: vi.fn(),
+    getContractSummarySnapshot: vi.fn(),
+  };
+  const merchantDirectoryRepository = {
+    getMerchantsByIds: vi.fn(),
   };
 
   beforeEach(() => {
@@ -29,10 +34,15 @@ describe('getContractDetailsHandler', () => {
     hoisted.extractAuthInfoMock.mockReset();
     logger.info.mockReset();
     contractRepository.getContractBySessionId.mockReset();
+    contractRepository.getContractSummarySnapshot.mockReset();
+
+    merchantDirectoryRepository.getMerchantsByIds.mockResolvedValue([]);
+    contractRepository.getContractSummarySnapshot.mockResolvedValue(null);
 
     hoisted.getDependenciesMock.mockResolvedValue({
       logger,
       contractRepository,
+      merchantDirectoryRepository,
     });
 
     hoisted.extractAuthInfoMock.mockResolvedValue({
@@ -76,6 +86,28 @@ describe('getContractDetailsHandler', () => {
     expect(response.body.error).toBe(ERROR_CODES.CONTRACT_NOT_FOUND);
   });
 
+  it('returns 404 when contract type is hidden from customer', async () => {
+    contractRepository.getContractBySessionId.mockResolvedValue({
+      contractId: 'contract-1',
+      typeBlueId: paynoteBlueIds['PayNote/Payment Mandate'],
+      displayName: 'Payment Mandate',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-02T00:00:00.000Z',
+    });
+
+    const response = await getContractDetailsHandler(
+      {
+        params: { sessionId: 'session-1' },
+      } as any,
+      { request: {} as any }
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe(ERROR_CODES.CONTRACT_NOT_FOUND);
+  });
+
   it('returns contract details for the current user', async () => {
     contractRepository.getContractBySessionId.mockResolvedValue({
       contractId: 'contract-1',
@@ -84,12 +116,30 @@ describe('getContractDetailsHandler', () => {
       sessionId: 'session-1',
       documentId: 'doc-1',
       status: 'accepted',
+      merchantId: 'merchant-1',
       statusUpdatedAt: '2024-01-02T00:00:00.000Z',
       statusTimestamps: { acceptedAt: '2024-01-02T00:00:00.000Z' },
       relatedTransactionIds: ['txn-1'],
       relatedHoldIds: ['hold-1'],
       accountNumber: '1234567890',
       document: { name: 'Test PayNote' },
+      summary: {
+        story: {
+          headline: 'PayNote updated',
+          overview: ['A contract summary.'],
+          bullets: [],
+        },
+        listPreview: 'PayNote updated.',
+        nextSteps: {
+          title: 'Next steps',
+          items: ['Review the contract details.'],
+        },
+        lastChange: {
+          short: 'PayNote updated.',
+          more: 'The contract was updated.',
+        },
+      },
+      summaryUpdatedAt: '2024-01-02T00:00:01.000Z',
       userId: 'user-1',
       createdAt: '2024-01-01T00:00:00.000Z',
       updatedAt: '2024-01-02T00:00:00.000Z',
@@ -108,7 +158,11 @@ describe('getContractDetailsHandler', () => {
         contractId: 'contract-1',
         displayName: 'PayNote',
         sessionId: 'session-1',
+        currentSummaryEpoch: 0,
         relatedTransactionIds: ['txn-1'],
+        from: {
+          name: 'Merchant',
+        },
       })
     );
   });

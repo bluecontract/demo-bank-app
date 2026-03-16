@@ -56,7 +56,7 @@ sequenceDiagram
   UI->>API: Query delivery/PayNote details
   API->>DB: Read delivery/PayNote state
   UI->>API: Accept/Reject delivery
-  API->>MyOS: POST /documents/{deliverySessionId}/markPayNoteAcceptedByClient or POST /documents/{deliverySessionId}/markPayNoteRejectedByClient
+  API->>MyOS: POST /documents/{deliverySessionId}/acceptPayNote or POST /documents/{deliverySessionId}/rejectPayNote
   API->>BANK: [on paynote accepted] Disable capture + bootstrap PayNote
   API->>MyOS: POST /documents/bootstrap (PayNote)
   MyOS-->>API: DOCUMENT_EPOCH_ADVANCED (Document Session Bootstrap)

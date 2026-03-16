@@ -1,6 +1,6 @@
 ---
-description: 
-globs: *.ts
+description:
+globs: **/*.test.*, **/*.spec.*, apps/**/src/**/*.integration.test.*
 alwaysApply: false
 ---
 # Testing - Node.js / React / Vitest / Playwright

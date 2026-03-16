@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import { SignInForm } from './SignInForm';
 import { ApiProvider } from '../../../app/providers/ApiProvider';
 import { AuthProvider } from '../../../app/providers/AuthProvider';
+import { routerFutureConfig } from '../../../app/routerFutureConfig';
 
 const { mockSignIn, mockHealth } = vi.hoisted(() => ({
   mockSignIn: vi.fn(),
@@ -35,7 +36,7 @@ const createWrapper = () => {
   });
 
   return ({ children }: { children: React.ReactNode }) => (
-    <BrowserRouter>
+    <BrowserRouter future={routerFutureConfig}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <ApiProvider>{children}</ApiProvider>

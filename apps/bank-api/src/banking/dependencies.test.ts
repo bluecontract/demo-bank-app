@@ -43,6 +43,7 @@ describe('Banking Dependencies', () => {
     expect(deps).toHaveProperty('cardRepository');
     expect(deps).toHaveProperty('cardHasher');
     expect(deps.config).toHaveProperty('cardConfig');
+    expect(deps.config).toHaveProperty('defaultMerchantCreditLimitMinor');
     expect(deps.logger).toBeInstanceOf(PowertoolsLogger);
     expect(deps.metrics).toBeInstanceOf(PowertoolsMetrics);
   });

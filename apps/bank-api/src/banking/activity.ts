@@ -18,6 +18,7 @@ const toResponseItem = (item: ActivityItem) => {
     cardId: item.cardId,
     cardLast4: item.cardLast4,
     merchantName: item.merchantName,
+    merchantId: item.merchantId,
     merchantStatementDescriptor: item.merchantStatementDescriptor,
     processorChargeId: item.processorChargeId,
   };

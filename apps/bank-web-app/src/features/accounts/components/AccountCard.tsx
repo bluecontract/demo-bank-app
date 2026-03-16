@@ -3,24 +3,37 @@ import { Button } from '../../../ui/Button';
 import { Tooltip } from '../../../ui/Tooltip';
 import { formatCurrency, formatAccountNumber } from '../../../lib';
 import { Account } from '../../../types/api';
+import {
+  ACCOUNT_CARD_HEIGHT_CLASSES,
+  ACCOUNT_CARD_SELECTED_RING_CLASS,
+} from './accountCardStyles';
 
 interface AccountCardProps {
   account: Account;
   isSelected?: boolean;
-  onDetailsClick?: (accountId: string) => void;
+  showActions?: boolean;
+  size?: 'default' | 'compact';
+  onSelect?: (accountId: string) => void;
   onTransferClick?: (accountId: string) => void;
   onFundClick?: (accountId: string) => void;
+  onEditCreditLimitClick?: (accountId: string) => void;
 }
 
 export function AccountCard({
   account,
   isSelected = false,
-  onDetailsClick,
+  showActions = true,
+  size = 'default',
+  onSelect,
   onTransferClick,
   onFundClick,
+  onEditCreditLimitClick,
 }: AccountCardProps) {
-  const handleDetailsClick = () => {
-    onDetailsClick?.(account.accountId);
+  const isCreditLine = account.accountType === 'CREDIT_LINE';
+  const isSelectable = Boolean(onSelect);
+
+  const handleSelect = () => {
+    onSelect?.(account.accountId);
   };
 
   const handleTransferClick = () => {
@@ -31,71 +44,98 @@ export function AccountCard({
     onFundClick?.(account.accountId);
   };
 
+  const handleEditCreditLimitClick = () => {
+    onEditCreditLimitClick?.(account.accountId);
+  };
+
   const cardClassName = isSelected
-    ? 'ring-2 ring-[rgba(43,190,156,0.35)] bg-white'
-    : 'hover:shadow-md';
+    ? ACCOUNT_CARD_SELECTED_RING_CLASS
+    : 'sm:hover:shadow-md';
+  const heightClass = ACCOUNT_CARD_HEIGHT_CLASSES[size];
+  const radiusClass =
+    size === 'compact' ? 'rounded-lg' : 'rounded-lg sm:rounded-2xl';
 
   return (
     <Card
-      className={cardClassName}
-      onClick={onDetailsClick ? handleDetailsClick : undefined}
+      className={`${cardClassName} ${heightClass} ${radiusClass} p-4 flex flex-col gap-3 shadow-none sm:shadow-[var(--shadow-soft)]`}
+      onClick={isSelectable ? handleSelect : undefined}
+      role={isSelectable ? 'button' : undefined}
+      tabIndex={isSelectable ? 0 : undefined}
+      aria-pressed={isSelectable ? isSelected : undefined}
+      aria-label={isSelectable ? `Select ${account.name}` : undefined}
+      onKeyDown={
+        isSelectable
+          ? event => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleSelect();
+              }
+            }
+          : undefined
+      }
     >
-      <div className="space-y-4">
-        {/* Account Name and Fund Button */}
-        <div className="flex items-start justify-between">
-          <div className="flex-1 mr-2 min-w-0">
-            <Tooltip content={account.name} position="top">
-              <h3 className="text-lg font-semibold text-slate-900 truncate">
-                {account.name}
-              </h3>
-            </Tooltip>
-            <p className="account-number mt-2">
-              {formatAccountNumber(account.accountNumber)}
-            </p>
-          </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={event => {
-              event.stopPropagation();
-              handleFundClick();
-            }}
-            className="px-3 whitespace-normal leading-tight text-sm py-2 mt-1"
-          >
-            Fund Account
-          </Button>
+      <div className="flex flex-col gap-3 h-full">
+        <div className="min-w-0">
+          <Tooltip content={account.name} position="top">
+            <h3 className="text-sm font-semibold text-slate-900 truncate">
+              {account.name}
+            </h3>
+          </Tooltip>
+          <p className="account-number mt-1 text-xs text-slate-500">
+            {formatAccountNumber(account.accountNumber)}
+          </p>
         </div>
 
-        {/* Balance */}
         <div className="balance-display text-slate-900">
           {formatCurrency(account.availableBalanceMinor)}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-2">
-          <Button
-            variant="primary"
-            size="md"
+        {isCreditLine ? (
+          <div className="flex items-center justify-between text-xs text-slate-500">
+            {account.creditLimitMinor !== undefined && (
+              <span>Limit: {formatCurrency(account.creditLimitMinor)}</span>
+            )}
+            {showActions && onEditCreditLimitClick && (
+              <button
+                type="button"
+                className="font-semibold text-[var(--color-primary)] hover:underline"
+                onClick={event => {
+                  event.stopPropagation();
+                  handleEditCreditLimitClick();
+                }}
+              >
+                Edit
+              </button>
+            )}
+          </div>
+        ) : showActions && onFundClick ? (
+          <button
+            type="button"
+            className="text-xs font-semibold text-[var(--color-primary)] hover:underline self-start"
             onClick={event => {
               event.stopPropagation();
-              handleDetailsClick();
+              handleFundClick();
             }}
-            className="flex-[0.4]"
           >
-            Details
-          </Button>
-          <Button
-            variant="secondary"
-            size="md"
-            onClick={event => {
-              event.stopPropagation();
-              handleTransferClick();
-            }}
-            className="flex-[0.6] whitespace-nowrap"
-          >
-            New transfer
-          </Button>
-        </div>
+            Fund
+          </button>
+        ) : null}
+
+        {showActions && onTransferClick && (
+          <div className="mt-auto flex">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={event => {
+                event.stopPropagation();
+                handleTransferClick();
+              }}
+              className="w-full whitespace-nowrap"
+            >
+              New transfer
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );

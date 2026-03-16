@@ -1,47 +1,58 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { TransactionItem } from './TransactionItem';
-import { TransactionDetailsModal } from './TransactionDetailsModal';
 import { ActivityItem } from '../hooks/useActivity';
 import { Spinner } from '../../../ui/Spinner';
-import { Account } from '../../../types/api';
+import { buildTransactionDetailsPath } from '../lib/activityRoutes';
+import {
+  collapseActivityLifecycle,
+  getActivityKey,
+} from '../lib/activityUtils';
 
 interface TransactionListProps {
   activityItems: ActivityItem[];
   accountId: string;
-  currentAccountNumber?: string;
-  accounts?: Account[];
   isLoading: boolean;
   isError: boolean;
   isEmpty: boolean;
+  collapseLifecycle?: boolean;
   'data-testid'?: string;
 }
 
 export function TransactionList({
   activityItems,
   accountId,
-  currentAccountNumber,
-  accounts = [],
   isLoading,
   isError,
   isEmpty,
+  collapseLifecycle = true,
   'data-testid': testId,
 }: TransactionListProps) {
-  const [selectedActivity, setSelectedActivity] = useState<ActivityItem | null>(
-    null
-  );
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const handleActivitySelect = (activity: ActivityItem) => {
-    setSelectedActivity(activity);
+    if (!accountId) {
+      return;
+    }
+    navigate(buildTransactionDetailsPath(accountId, activity.activityId), {
+      state: {
+        from: `${location.pathname}${location.search}`,
+        selectedActivity: activity,
+      },
+    });
   };
 
-  const handleCloseModal = () => {
-    setSelectedActivity(null);
-  };
+  const displayItems = useMemo(
+    () =>
+      collapseLifecycle
+        ? collapseActivityLifecycle(activityItems)
+        : activityItems,
+    [activityItems, collapseLifecycle]
+  );
 
-  useEffect(() => {
-    // Reset selection when account context changes to avoid stale details
-    setSelectedActivity(null);
-  }, [accountId, currentAccountNumber]);
+  const shouldShowEmpty =
+    isEmpty || (!isLoading && !isError && displayItems.length === 0);
 
   if (isLoading) {
     return (
@@ -78,7 +89,7 @@ export function TransactionList({
     );
   }
 
-  if (isEmpty) {
+  if (shouldShowEmpty) {
     return (
       <div
         className="flex-1 flex items-center justify-center"
@@ -100,63 +111,27 @@ export function TransactionList({
     );
   }
 
-  const getHoldEventTimestamp = (item: ActivityItem) => {
-    if (item.kind === 'HOLD_CREATED') {
-      return item.createdAt;
-    }
-    if (item.kind === 'HOLD_CAPTURED') {
-      return item.capturedAt;
-    }
-    if (item.kind === 'HOLD_RELEASED') {
-      return item.releasedAt;
-    }
-    if (item.kind === 'HOLD_FAILED') {
-      return item.failedAt;
-    }
-    return '';
-  };
-
-  const getActivityKey = (item: ActivityItem) =>
-    item.kind === 'POSTED_TRANSACTION'
-      ? `txn-${item.transactionId}`
-      : `hold-${item.holdId}-${item.kind}-${getHoldEventTimestamp(item)}`;
-
   const getActivityTestId = (item: ActivityItem) =>
     item.kind === 'POSTED_TRANSACTION'
       ? `activity-item-txn-${item.transactionId}`
       : `activity-item-${item.kind.toLowerCase()}-${item.holdId}`;
 
   return (
-    <>
-      <div className="flex-1 flex flex-col min-h-0" data-testid={testId}>
-        <div className="flex-1 overflow-y-auto bg-white/80 rounded-2xl border border-slate-200">
-          <div className="divide-y divide-slate-100">
-            {activityItems.map(item => {
-              return (
-                <TransactionItem
-                  key={getActivityKey(item)}
-                  item={item}
-                  onActivitySelect={handleActivitySelect}
-                  data-testid={getActivityTestId(item)}
-                />
-              );
-            })}
-          </div>
+    <div className="flex-1 flex flex-col min-h-0" data-testid={testId}>
+      <div className="flex-1 overflow-y-auto">
+        <div className="divide-y divide-slate-200">
+          {displayItems.map(item => {
+            return (
+              <TransactionItem
+                key={getActivityKey(item)}
+                item={item}
+                onActivitySelect={handleActivitySelect}
+                data-testid={getActivityTestId(item)}
+              />
+            );
+          })}
         </div>
       </div>
-
-      {selectedActivity && (
-        <TransactionDetailsModal
-          isOpen={!!selectedActivity}
-          onClose={handleCloseModal}
-          accountId={accountId}
-          accountNumber={currentAccountNumber}
-          activityId={selectedActivity.activityId}
-          selectedActivity={selectedActivity}
-          currentAccountNumber={currentAccountNumber}
-          accounts={accounts}
-        />
-      )}
-    </>
+    </div>
   );
 }

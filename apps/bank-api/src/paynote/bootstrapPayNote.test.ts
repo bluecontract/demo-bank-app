@@ -38,6 +38,7 @@ describe('bootstrapPayNoteHandler', () => {
     saveContract: vi.fn(),
     updateContractSummary: vi.fn(),
     listContractsByUserId: vi.fn(),
+    getContractPollingMarkerByUserId: vi.fn(),
   };
 
   const createPayNote = () => ({
@@ -108,6 +109,7 @@ describe('bootstrapPayNoteHandler', () => {
         getPayNote: vi.fn(),
         getPayNoteBySessionId: vi.fn(),
         savePayNote: vi.fn(),
+        markEventProcessed: vi.fn().mockResolvedValue(true),
       },
       myOsClient,
       bankingRepository: {} as any,

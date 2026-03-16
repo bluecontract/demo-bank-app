@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ContractSummary } from '../../../types/api';
 import { getContractKey } from '../lib/dedupeContracts';
+import { getContractLastChangeAt } from '../lib/contractTimestamps';
+import {
+  getItemUpdatedAt,
+  type ContractOrProposalItem,
+} from '../lib/contractsAndProposals';
+import { getItemReviewKey } from '../lib/contractReview';
 
 const REVIEWED_KEY = 'demo-bank-contracts-reviewed';
 const REVIEWED_EVENT = 'demo-bank-contracts-reviewed-change';
@@ -27,39 +33,74 @@ const readReviewedMap = (): Record<string, string> => {
   return {};
 };
 
-const notifyReviewedChange = (next: Record<string, string>) => {
+const notifyReviewedChange = (
+  next: Record<string, string>,
+  sourceId?: string
+) => {
   if (typeof window === 'undefined') {
     return;
   }
-  window.dispatchEvent(new CustomEvent(REVIEWED_EVENT, { detail: next }));
+  window.dispatchEvent(
+    new CustomEvent(REVIEWED_EVENT, { detail: { map: next, sourceId } })
+  );
 };
 
-const writeReviewedMap = (next: Record<string, string>) => {
+const writeReviewedMap = (next: Record<string, string>, sourceId?: string) => {
   if (typeof window === 'undefined') {
     return;
   }
   window.localStorage.setItem(REVIEWED_KEY, JSON.stringify(next));
-  notifyReviewedChange(next);
+  notifyReviewedChange(next, sourceId);
 };
 
 export const useContractReviewState = () => {
-  const [reviewedMap, setReviewedMap] = useState<Record<string, string>>(() =>
-    readReviewedMap()
+  const initialReviewedMap = useMemo(() => readReviewedMap(), []);
+  const instanceIdRef = useRef(
+    `contracts-reviewed-${Math.random().toString(36).slice(2)}`
+  );
+  const reviewedMapRef = useRef(initialReviewedMap);
+  const [reviewedMap, setReviewedMap] =
+    useState<Record<string, string>>(initialReviewedMap);
+
+  useEffect(() => {
+    reviewedMapRef.current = reviewedMap;
+  }, [reviewedMap]);
+
+  const updateReviewedMap = useCallback((key: string, updatedAtMs: number) => {
+    const timestamp = new Date(Math.max(updatedAtMs, Date.now())).toISOString();
+    const next = { ...reviewedMapRef.current, [key]: timestamp };
+    reviewedMapRef.current = next;
+    setReviewedMap(next);
+    writeReviewedMap(next, instanceIdRef.current);
+  }, []);
+
+  const markReviewed = useCallback(
+    (contract: ContractSummary) => {
+      const key = getContractKey(contract);
+      if (!key) {
+        return;
+      }
+
+      const lastChange = getContractLastChangeAt(contract);
+      const updatedAtMs = lastChange ? Date.parse(lastChange) : 0;
+      const safeUpdatedAtMs = Number.isNaN(updatedAtMs) ? 0 : updatedAtMs;
+      updateReviewedMap(key, safeUpdatedAtMs);
+    },
+    [updateReviewedMap]
   );
 
-  const markReviewed = useCallback((contract: ContractSummary) => {
-    const key = getContractKey(contract);
-    if (!key) {
-      return;
-    }
-
-    const timestamp = contract.updatedAt ?? new Date().toISOString();
-    setReviewedMap(prev => {
-      const next = { ...prev, [key]: timestamp };
-      writeReviewedMap(next);
-      return next;
-    });
-  }, []);
+  const markItemReviewed = useCallback(
+    (item: ContractOrProposalItem) => {
+      const key = getItemReviewKey(item);
+      if (!key) {
+        return;
+      }
+      const updatedAtMs = Date.parse(getItemUpdatedAt(item));
+      const safeUpdatedAtMs = Number.isNaN(updatedAtMs) ? 0 : updatedAtMs;
+      updateReviewedMap(key, safeUpdatedAtMs);
+    },
+    [updateReviewedMap]
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -67,9 +108,17 @@ export const useContractReviewState = () => {
     }
 
     const handleChange = (event: Event) => {
-      const next =
-        (event as CustomEvent<Record<string, string>>).detail ??
-        readReviewedMap();
+      const detail = (
+        event as CustomEvent<{
+          map?: Record<string, string>;
+          sourceId?: string;
+        }>
+      ).detail;
+      if (detail?.sourceId === instanceIdRef.current) {
+        return;
+      }
+      const next = detail?.map ?? readReviewedMap();
+      reviewedMapRef.current = next;
       setReviewedMap(next);
     };
 
@@ -77,5 +126,5 @@ export const useContractReviewState = () => {
     return () => window.removeEventListener(REVIEWED_EVENT, handleChange);
   }, []);
 
-  return { reviewedMap, markReviewed };
+  return { reviewedMap, markReviewed, markItemReviewed };
 };

@@ -9,12 +9,19 @@
       "options": {
         "commands": [
           "nx build bank-api --configuration=development",
-          "mv dist/apps/bank-api/lambda/main.cjs dist/apps/bank-api/lambda/main.js",
-          "cd apps/bank-api && samlocal deploy --no-confirm-changeset --resolve-s3",
-          "cd apps/bank-api && npm run seed-funding-source",
-          "cd apps/bank-api && sam local start-api --port 3000 --no-memory-limit --docker-volume-basedir . --env-vars env.local.json"
+          "cd apps/bank-api && if [ -f ../../.localstack.env ]; then set -a; . ../../.localstack.env; set +a; fi; ./scripts/deploy-localstack.sh --no-confirm-changeset --resolve-s3 --parameter-overrides AwsEndpointUrl=${LOCALSTACK_DOCKER_ENDPOINT_URL:-http://host.docker.internal:${LOCALSTACK_EDGE_PORT:-4566}}",
+          "cd apps/bank-api && if [ -f ../../.localstack.env ]; then set -a; . ../../.localstack.env; set +a; fi; npm run seed-secrets",
+          "cd apps/bank-api && if [ -f ../../.localstack.env ]; then set -a; . ../../.localstack.env; set +a; fi; npm run seed-funding-source",
+          "cd apps/bank-api && if [ -f ../../.localstack.env ]; then set -a; . ../../.localstack.env; set +a; fi; ./scripts/start-local-api.sh"
         ],
-        "parallel": false
+        "parallel": false,
+        "env": {
+          "AWS_PROFILE": "localstack",
+          "AWS_CONFIG_FILE": ".aws/config",
+          "AWS_SHARED_CREDENTIALS_FILE": ".aws/credentials",
+          "AWS_EC2_METADATA_DISABLED": "true",
+          "AWS_REGION": "eu-west-1"
+        }
       },
       "dependsOn": ["localstack:serve"]
     },
@@ -92,6 +99,41 @@
       },
       "dependsOn": ["^build", "localstack:serve"]
     },
+    "test:paynotes:integration": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx vitest run --config vitest.paynotes.integration.config.ts",
+        "cwd": "apps/bank-api"
+      },
+      "dependsOn": ["^build", "localstack:serve"]
+    },
+    "test:paynotes:integration:serial": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx vitest run --config vitest.paynotes.integration.serial.config.ts",
+        "cwd": "apps/bank-api"
+      },
+      "dependsOn": ["^build", "localstack:serve"]
+    },
+    "test:paynotes:e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx vitest run --config vitest.paynotes.e2e.config.ts",
+        "cwd": "apps/bank-api"
+      }
+    },
+    "test:paynotes:all": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "npx vitest run --config vitest.paynotes.integration.config.ts",
+          "npx vitest run --config vitest.paynotes.integration.serial.config.ts"
+        ],
+        "cwd": "apps/bank-api",
+        "parallel": false
+      },
+      "dependsOn": ["^build", "localstack:serve"]
+    },
     "test:debug": {
       "executor": "nx:run-commands",
       "options": {
@@ -117,9 +159,7 @@
     "deploy": {
       "executor": "nx:run-commands",
       "options": {
-        "commands": [
-          "sam deploy --config-env {args.environment} --no-confirm-changeset --no-fail-on-empty-changeset"
-        ],
+        "commands": ["./scripts/deploy-aws.sh {args.environment}"],
         "cwd": "apps/bank-api",
         "parallel": false
       },

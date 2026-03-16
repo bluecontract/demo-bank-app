@@ -3,9 +3,14 @@ import { signUpHandler, signInHandler } from './handlers';
 import { getDependencies, resetDependencies } from './dependencies';
 import {
   UserAlreadyExistsError,
+  MerchantDirectoryOwnershipError,
+  UserNotFoundError,
   UserValidationError,
+  signUp,
+  signIn,
 } from '@demo-bank-app/auth';
-import { signUp, signIn } from '@demo-bank-app/auth';
+import { createAccount } from '@demo-bank-app/banking';
+import { getDependencies as getBankingDependencies } from '../banking/dependencies';
 
 // Mock dependencies for unit tests
 vi.mock('./dependencies', () => ({
@@ -13,19 +18,35 @@ vi.mock('./dependencies', () => ({
   resetDependencies: vi.fn(),
 }));
 
-vi.mock('@demo-bank-app/auth', () => ({
-  signIn: vi.fn(),
-  signUp: vi.fn(),
-  UserAlreadyExistsError: vi.fn(),
-  UserNotFoundError: vi.fn(),
-  UserValidationError: vi.fn(),
+vi.mock('../banking/dependencies', () => ({
+  getDependencies: vi.fn(),
+}));
+
+vi.mock('@demo-bank-app/auth', async () => {
+  const actual = await vi.importActual<typeof import('@demo-bank-app/auth')>(
+    '@demo-bank-app/auth'
+  );
+  return {
+    ...actual,
+    signIn: vi.fn(),
+    signUp: vi.fn(),
+  };
+});
+
+vi.mock('@demo-bank-app/banking', () => ({
+  createAccount: vi.fn(),
 }));
 
 const mockSignUp = vi.mocked(signUp);
 const mockSignIn = vi.mocked(signIn);
 const mockGetDependencies = vi.mocked(getDependencies);
+const mockGetBankingDependencies = vi.mocked(getBankingDependencies);
+const mockCreateAccount = vi.mocked(createAccount);
 
 const mockLogger = { error: vi.fn(), info: vi.fn(), debug: vi.fn() };
+const mockMerchantDirectoryRepository = {
+  upsertMerchantProfile: vi.fn(),
+};
 
 // Helper for mock responseHeaders
 const createMockHeaders = () => {
@@ -48,6 +69,7 @@ describe('Auth Handlers', () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockResolvedValue({
@@ -80,10 +102,89 @@ describe('Auth Handlers', () => {
       expect(responseHeaders.get('Set-Cookie')).toContain('demoAuth=jwt-token');
     });
 
+    it('should forward merchantId when provided', async () => {
+      const mockDeps = {
+        logger: mockLogger,
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
+      };
+      mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
+      mockGetBankingDependencies.mockResolvedValueOnce({
+        repository: { getAccountsByUserId: vi.fn().mockResolvedValue([]) },
+        accountNumberGenerator: {},
+        logger: mockLogger,
+        metrics: {},
+        config: { defaultMerchantCreditLimitMinor: 500_000 },
+      } as any);
+      mockCreateAccount.mockResolvedValue({} as any);
+      mockSignUp.mockResolvedValue({
+        user: {
+          id: 'merchant-user-id',
+          email: 'merchant@example.com',
+          merchantName: 'Merchant Demo',
+          isTest: false,
+          createdAt: '2021-01-01',
+          marketingEmailsOptIn: true,
+          merchantId: 'merchant-123',
+        },
+        token: 'jwt-token',
+      });
+      const responseHeaders = createMockHeaders();
+
+      const result = await signUpHandler(
+        {
+          body: {
+            email: 'merchant@example.com',
+            merchantName: 'Merchant Demo',
+            marketingEmailsOptIn: true,
+            merchantId: 'merchant-123',
+          },
+          query: {},
+        },
+        { responseHeaders } as any
+      );
+
+      expect(result.body).toMatchObject({
+        userId: 'merchant-user-id',
+        email: 'merchant@example.com',
+        merchantName: 'Merchant Demo',
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-123',
+      });
+      expect(mockSignUp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'merchant@example.com',
+          merchantName: 'Merchant Demo',
+          marketingEmailsOptIn: true,
+          merchantId: 'merchant-123',
+        }),
+        expect.anything()
+      );
+      expect(mockCreateAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerId: 'merchant-user-id',
+          accountType: 'CREDIT_LINE',
+          creditLimitMinor: 500_000,
+        }),
+        expect.anything()
+      );
+      expect(
+        mockMerchantDirectoryRepository.upsertMerchantProfile
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          merchantId: 'merchant-123',
+          name: 'Merchant Demo',
+          logoUrl: undefined,
+          ownerUserId: 'merchant-user-id',
+        })
+      );
+    });
+
     it('should return 409 for UserAlreadyExistsError', async () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockRejectedValue(
@@ -110,10 +211,78 @@ describe('Auth Handlers', () => {
       });
     });
 
+    it('should recover merchant signup when user already exists', async () => {
+      const mockDeps = {
+        logger: mockLogger,
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
+      };
+      const mockRepository = {
+        getAccountsByUserId: vi.fn().mockResolvedValue([]),
+      };
+
+      mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
+      mockGetBankingDependencies.mockResolvedValueOnce({
+        repository: mockRepository,
+        accountNumberGenerator: {},
+        logger: mockLogger,
+        metrics: {},
+        config: { defaultMerchantCreditLimitMinor: 500_000 },
+      } as any);
+
+      mockSignUp.mockRejectedValue(
+        new UserAlreadyExistsError('merchant@example.com')
+      );
+      mockSignIn.mockResolvedValue({
+        user: {
+          id: 'merchant-user-id',
+          email: 'merchant@example.com',
+          isTest: false,
+          createdAt: '2021-01-01',
+          marketingEmailsOptIn: true,
+        },
+        token: 'jwt-token',
+      });
+      mockCreateAccount.mockResolvedValue({} as any);
+
+      const responseHeaders = createMockHeaders();
+      const result = await signUpHandler(
+        {
+          body: {
+            email: 'merchant@example.com',
+            merchantName: 'Existing Merchant',
+            marketingEmailsOptIn: true,
+            merchantId: 'merchant-123',
+          },
+          query: {},
+        },
+        { responseHeaders } as any
+      );
+
+      expect(mockSignIn).toHaveBeenCalledWith(
+        { email: 'merchant@example.com' },
+        mockDeps
+      );
+      expect(mockRepository.getAccountsByUserId).toHaveBeenCalledWith(
+        'merchant-user-id'
+      );
+      expect(mockCreateAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerId: 'merchant-user-id',
+          accountType: 'CREDIT_LINE',
+          creditLimitMinor: 500_000,
+        }),
+        expect.anything()
+      );
+      expect(result.status).toBe(201);
+      expect(responseHeaders.get('Set-Cookie')).toContain('demoAuth=jwt-token');
+    });
+
     it('should return 400 for UserValidationError', async () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       mockSignUp.mockRejectedValue(
@@ -122,7 +291,13 @@ describe('Auth Handlers', () => {
       const responseHeaders = createMockHeaders();
       await expect(
         signUpHandler(
-          { body: { email: '', marketingEmailsOptIn: true }, query: {} },
+          {
+            body: {
+              email: '',
+              marketingEmailsOptIn: true,
+            },
+            query: {},
+          },
           {
             responseHeaders,
           } as any
@@ -134,6 +309,7 @@ describe('Auth Handlers', () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = {
@@ -148,7 +324,13 @@ describe('Auth Handlers', () => {
       const responseHeaders = createMockHeaders();
       await expect(
         signUpHandler(
-          { body: { email: '', marketingEmailsOptIn: true }, query: {} },
+          {
+            body: {
+              email: '',
+              marketingEmailsOptIn: true,
+            },
+            query: {},
+          },
           {
             responseHeaders,
           } as any
@@ -160,6 +342,7 @@ describe('Auth Handlers', () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
       const error = new Error('Database connection failed');
@@ -168,7 +351,10 @@ describe('Auth Handlers', () => {
       await expect(
         signUpHandler(
           {
-            body: { email: 'testuser@example.com', marketingEmailsOptIn: true },
+            body: {
+              email: 'testuser@example.com',
+              marketingEmailsOptIn: true,
+            },
             query: {},
           },
           {
@@ -176,6 +362,67 @@ describe('Auth Handlers', () => {
           } as any
         )
       ).rejects.toThrow('Database connection failed');
+    });
+
+    it('should return 400 when merchantId is provided without merchantName', async () => {
+      const mockDeps = {
+        logger: mockLogger,
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
+      };
+      mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
+
+      const responseHeaders = createMockHeaders();
+      const result = await signUpHandler(
+        {
+          body: {
+            email: 'merchant@example.com',
+            marketingEmailsOptIn: true,
+            merchantId: 'merchant-123',
+          },
+          query: {},
+        },
+        { responseHeaders } as any
+      );
+
+      expect(result.status).toBe(400);
+      expect(result.body).toEqual({
+        error: 'VALIDATION_ERROR',
+        message: 'Merchant name is required when signing up as a merchant',
+      });
+    });
+
+    it('should return 409 when merchant id is already owned by another user', async () => {
+      const mockDeps = {
+        logger: mockLogger,
+        config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
+        merchantDirectoryRepository: mockMerchantDirectoryRepository,
+      };
+      mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
+      mockSignUp.mockRejectedValue(
+        new MerchantDirectoryOwnershipError('merchant-123')
+      );
+
+      const responseHeaders = createMockHeaders();
+      const result = await signUpHandler(
+        {
+          body: {
+            email: 'new-merchant@example.com',
+            marketingEmailsOptIn: true,
+            merchantId: 'merchant-123',
+            merchantName: 'New Merchant',
+          },
+          query: {},
+        },
+        { responseHeaders } as any
+      );
+
+      expect(result.status).toBe(409);
+      expect(result.body).toEqual({
+        error: 'MERCHANT_ALREADY_REGISTERED',
+        message: 'Merchant ID is already registered by another account.',
+      });
+      expect(mockCreateAccount).not.toHaveBeenCalled();
     });
   });
 
@@ -193,6 +440,7 @@ describe('Auth Handlers', () => {
           isTest: false,
           createdAt: '2021-01-01',
           marketingEmailsOptIn: true,
+          merchantId: 'merchant-789',
         },
         token: 'jwt-token',
       });
@@ -208,31 +456,31 @@ describe('Auth Handlers', () => {
         userId: 'test-user-id',
         email: 'testuser@example.com',
         marketingEmailsOptIn: true,
+        merchantId: 'merchant-789',
       });
       expect(responseHeaders.get('Set-Cookie')).toContain('demoAuth=jwt-token');
     });
 
-    it('should return 404 for UserNotFoundError', async () => {
+    it('should return 401 for UserNotFoundError', async () => {
       const mockDeps = {
         logger: mockLogger,
         config: { jwtTtlSeconds: 604800, testUserTtlSeconds: 600 },
       };
       mockGetDependencies.mockResolvedValueOnce(mockDeps as any);
-      class UserNotFoundError extends Error {
-        code = 'USER_NOT_FOUND';
-        constructor(email: string) {
-          super(email);
-        }
-      }
       mockSignIn.mockRejectedValue(
         new UserNotFoundError('missinguser@example.com')
       );
       const responseHeaders = createMockHeaders();
-      await expect(
-        signInHandler({ body: { email: 'missinguser@example.com' } }, {
-          responseHeaders,
-        } as any)
-      ).rejects.toThrow('missinguser@example.com');
+      const result = await signInHandler(
+        { body: { email: 'missinguser@example.com' } },
+        { responseHeaders } as any
+      );
+      expect(result.status).toBe(401);
+      expect(result.body).toEqual({
+        error: 'UNAUTHORIZED',
+        message:
+          'User not found. Please check the email and try again or sign up.',
+      });
     });
 
     it('should return 400 for UserValidationError', async () => {

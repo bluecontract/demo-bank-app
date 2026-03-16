@@ -1,0 +1,1699 @@
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type SyntheticEvent,
+} from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../../app/providers/AuthProvider';
+import { DashboardShell } from '../../features/dashboard/components';
+import {
+  useActiveContractSession,
+  useContractDetails,
+  useDecideContractPendingAction,
+  useContractHistory,
+  useContractReviewState,
+  useRelatedContracts,
+  useProposalDetails,
+  useProposalSummary,
+  useProposalDecision,
+  useArchiveContract,
+  useUnarchiveContract,
+} from '../../features/contracts/hooks';
+import {
+  getDocumentDescription,
+  getDocumentName,
+  getPayNoteInitialStateMeta,
+  restoreInlineTypes,
+} from '../../features/contracts/lib/contractDocumentUtils';
+import { getContractLastChangeAt } from '../../features/contracts/lib/contractTimestamps';
+import {
+  isContractRelatedContract,
+  getRelatedContractSessionId,
+  getRelatedContractTarget,
+  getVisibleRelatedContracts,
+  isProposalRelatedContract,
+} from '../../features/transactions/lib/relatedContracts';
+import {
+  useActivity,
+  type ActivityItem,
+} from '../../features/transactions/hooks/useActivity';
+import { useRelatedActivityItems } from '../../features/transactions/hooks/useRelatedActivityItems';
+import { TransactionItem } from '../../features/transactions/components/TransactionItem';
+import { buildTransactionDetailsPath } from '../../features/transactions/lib/activityRoutes';
+import { getActivityKey } from '../../features/transactions/lib/activityUtils';
+import { useAccounts } from '../../features/accounts/hooks/useAccounts';
+import {
+  ContractOperationsList,
+  resolveContractOperations,
+} from '../../features/contracts/components/ContractOperationsList';
+import { ContractAiChatDrawer } from '../../features/contracts/components/ContractAiChatDrawer';
+import { Avatar } from '../../ui/Avatar';
+import { Button } from '../../ui/Button';
+import { Dropdown, DropdownItem } from '../../ui/Dropdown';
+import { Markdown } from '../../ui/Markdown';
+import { Spinner, SpinnerWithText } from '../../ui/Spinner';
+import { formatShortDateTime } from '../../lib/formatDate';
+import { formatStatusLabel } from '../../lib/formatStatusLabel';
+import { blue } from '../../lib/blue';
+import {
+  getSupportedContractByTypeBlueId,
+  resolveCurrentSummaryEpoch,
+  resolveActivePendingAction,
+} from '@demo-bank-app/shared-bank-api-contract';
+import type {
+  ContractDetails,
+  ContractSummary,
+  PayNoteDeliveryDetailsSanitized,
+  RelatedContractItem,
+} from '../../types/api';
+import { buildRequestModel } from '../../features/contracts/lib/operationFormModel';
+
+type LocationState = {
+  from?: string;
+  kind?: 'contract' | 'proposal';
+};
+
+interface ProposalActionCardProps {
+  proposal: PayNoteDeliveryDetailsSanitized | null;
+  sessionId: string | null;
+  onDecisionRecorded?: (
+    decision: 'accepted' | 'rejected',
+    decisionUpdatedAt: string
+  ) => void;
+}
+
+function ProposalActionCard({
+  proposal,
+  sessionId,
+  onDecisionRecorded,
+}: ProposalActionCardProps) {
+  const [isDecisionRequested, setDecisionRequested] = useState(false);
+  const [decisionOverride, setDecisionOverride] = useState<
+    'accepted' | 'rejected' | null
+  >(null);
+  const decisionSessionId = proposal?.deliverySessionId ?? sessionId;
+  const { accept, reject, isPending } = useProposalDecision({
+    sessionId: decisionSessionId,
+    onAccepted: () => {
+      const decisionUpdatedAt = new Date().toISOString();
+      setDecisionRequested(false);
+      setDecisionOverride('accepted');
+      onDecisionRecorded?.('accepted', decisionUpdatedAt);
+    },
+    onRejected: () => {
+      const decisionUpdatedAt = new Date().toISOString();
+      setDecisionRequested(false);
+      setDecisionOverride('rejected');
+      onDecisionRecorded?.('rejected', decisionUpdatedAt);
+    },
+    onError: () => {
+      setDecisionRequested(false);
+    },
+  });
+
+  useEffect(() => {
+    setDecisionRequested(false);
+    setDecisionOverride(null);
+  }, [proposal?.deliverySessionId, proposal?.clientDecisionStatus, sessionId]);
+
+  if (!proposal) {
+    return null;
+  }
+
+  const decisionStatus =
+    decisionOverride ?? proposal.clientDecisionStatus ?? 'pending';
+  const isDecisionLocked =
+    decisionStatus === 'accepted' || decisionStatus === 'rejected';
+  const isDecisionPending = isPending || isDecisionRequested;
+  const pendingTitle = 'Approve the Contract';
+  const pendingDescription =
+    'If you reject the contract, the source transaction will be handled as a standard transfer.';
+  const title =
+    decisionStatus === 'pending'
+      ? pendingTitle
+      : proposal.payNote?.name?.trim() || 'Contract decision';
+  const description =
+    decisionStatus === 'pending'
+      ? pendingDescription
+      : 'Review the latest contract decision below.';
+
+  if (decisionStatus === 'accepted') {
+    const contractName = proposal.payNote?.name?.trim() || 'this contract';
+    return (
+      <div className="rounded-xl sm:rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4">
+        <h3 className="text-lg font-semibold text-emerald-900">
+          Thank you for accepting {contractName}.
+        </h3>
+        <p className="mt-2 text-sm text-emerald-900/80">
+          We are starting it for you.
+        </p>
+      </div>
+    );
+  }
+
+  if (decisionStatus === 'rejected') {
+    const contractName = proposal.payNote?.name?.trim() || 'this contract';
+    return (
+      <div className="rounded-xl sm:rounded-2xl border border-rose-200 bg-rose-50/60 p-4">
+        <h3 className="text-lg font-semibold text-rose-900">
+          You rejected {contractName}.
+        </h3>
+        <p className="mt-2 text-sm text-rose-900/80">
+          The source transaction will be handled as a standard transfer.
+        </p>
+      </div>
+    );
+  }
+
+  const handleAccept = () => {
+    if (!decisionSessionId || isDecisionLocked || isDecisionPending) return;
+    setDecisionRequested(true);
+    accept();
+  };
+
+  const handleReject = () => {
+    if (!decisionSessionId || isDecisionLocked || isDecisionPending) return;
+    setDecisionRequested(true);
+    reject();
+  };
+
+  return (
+    <div className="rounded-xl sm:rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
+      <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+      <p className="mt-2 text-sm text-slate-600">{description}</p>
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-rose-500 text-rose-500 hover:bg-rose-50 focus:ring-rose-500"
+          onClick={handleReject}
+          disabled={isDecisionLocked || isDecisionPending}
+        >
+          Reject
+        </Button>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={handleAccept}
+          disabled={isDecisionLocked || isDecisionPending}
+        >
+          Accept
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AiAssistantIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 21 22"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M10.25 4.14286C13.9976 4.14286 17.0357 7.18092 17.0357 10.9286V19.0714C17.0357 19.821 16.4281 20.4286 15.6786 20.4286H4.82143C4.0719 20.4286 3.46429 19.821 3.46429 19.0714V10.9286C3.46429 7.18092 6.50235 4.14286 10.25 4.14286ZM10.25 4.14286V0.75M5.5 16.3571H15M0.75 11.6071V17.0357M19.75 11.6071V17.0357M7.53571 13.6429C6.78618 13.6429 6.17857 13.0352 6.17857 12.2857C6.17857 11.5362 6.78618 10.9286 7.53571 10.9286C8.28524 10.9286 8.89286 11.5362 8.89286 12.2857C8.89286 13.0352 8.28524 13.6429 7.53571 13.6429ZM12.9643 13.6429C12.2148 13.6429 11.6071 13.0352 11.6071 12.2857C11.6071 11.5362 12.2148 10.9286 12.9643 10.9286C13.7138 10.9286 14.3214 11.5362 14.3214 12.2857C14.3214 13.0352 13.7138 13.6429 12.9643 13.6429Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+interface MockPendingActionCardProps {
+  title?: string | null;
+  summary?: string | null;
+  left?: string | null;
+  right?: string | null;
+}
+
+function MockPendingActionCard({
+  title,
+  summary,
+  left,
+  right,
+}: MockPendingActionCardProps) {
+  const resolvedTitle = title?.trim() || 'Pending action';
+  const resolvedSummary = summary?.trim() || null;
+  const leftLabel = left?.trim() || 'Reject';
+  const rightLabel = right?.trim() || 'Accept';
+
+  return (
+    <div className="rounded-xl sm:rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
+      <h3 className="text-2xl font-semibold leading-8 text-slate-900">
+        {resolvedTitle}
+      </h3>
+      {resolvedSummary && (
+        <p className="mt-3 text-base text-slate-600">{resolvedSummary}</p>
+      )}
+      <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+        <Button variant="outline" size="sm">
+          {leftLabel}
+        </Button>
+        <Button variant="primary" size="sm">
+          {rightLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+type ContractPendingAction = NonNullable<
+  ContractDetails['pendingActions']
+>[number];
+type CustomerContractPendingAction = Extract<
+  ContractPendingAction,
+  { type: 'customerActionOptions' | 'customerActionInput' }
+>;
+
+type PendingActionOption = {
+  label: string;
+  description?: string;
+  variant?: 'primary' | 'secondary' | 'reject';
+  inputSchema?: unknown;
+  inputRequired?: boolean;
+  inputTitle?: string;
+  inputPlaceholder?: string;
+};
+
+const isCustomerPendingAction = (
+  action: ContractPendingAction
+): action is CustomerContractPendingAction =>
+  action.type === 'customerActionOptions' ||
+  action.type === 'customerActionInput';
+
+interface ContractPendingActionCardProps {
+  action: ContractPendingAction;
+  sessionId: string | null;
+}
+
+function ContractPendingActionCard({
+  action,
+  sessionId,
+}: ContractPendingActionCardProps) {
+  const decisionMutation = useDecideContractPendingAction();
+  const isPending = decisionMutation.isPending;
+  const [activeInputActionLabel, setActiveInputActionLabel] = useState<
+    string | null
+  >(null);
+  const [textInputValue, setTextInputValue] = useState('');
+  const [booleanInputValue, setBooleanInputValue] = useState(false);
+  const [jsonInputValue, setJsonInputValue] = useState('');
+  const [inputError, setInputError] = useState<string | null>(null);
+
+  const isCustomerAction = isCustomerPendingAction(action);
+  const customerAction = isCustomerAction ? action : null;
+  const options = useMemo<PendingActionOption[]>(() => {
+    if (!customerAction) {
+      return [];
+    }
+    return (customerAction.actions ?? []).reduce<PendingActionOption[]>(
+      (acc, option) => {
+        if (!option || typeof option !== 'object') {
+          return acc;
+        }
+        const label =
+          typeof option.label === 'string' ? option.label.trim() : undefined;
+        if (!label) {
+          return acc;
+        }
+        const variant =
+          option.variant === 'primary' ||
+          option.variant === 'secondary' ||
+          option.variant === 'reject'
+            ? option.variant
+            : undefined;
+        const description =
+          typeof option.description === 'string'
+            ? option.description.trim()
+            : undefined;
+        acc.push({
+          label,
+          ...(description ? { description } : {}),
+          ...(variant ? { variant } : {}),
+          ...(option.inputSchema !== undefined
+            ? { inputSchema: option.inputSchema }
+            : {}),
+          ...(typeof option.inputRequired === 'boolean'
+            ? { inputRequired: option.inputRequired }
+            : {}),
+          ...(typeof option.inputTitle === 'string'
+            ? { inputTitle: option.inputTitle }
+            : {}),
+          ...(typeof option.inputPlaceholder === 'string'
+            ? { inputPlaceholder: option.inputPlaceholder }
+            : {}),
+        });
+        return acc;
+      },
+      []
+    );
+  }, [customerAction]);
+
+  const activeInputAction = useMemo(
+    () =>
+      options.find(
+        option =>
+          option.label === activeInputActionLabel &&
+          option.inputSchema !== undefined
+      ) ?? null,
+    [options, activeInputActionLabel]
+  );
+
+  const activeInputModel = useMemo(() => {
+    if (!activeInputAction?.inputSchema) {
+      return null;
+    }
+    try {
+      const schemaNode = blue.jsonValueToNode(activeInputAction.inputSchema);
+      return buildRequestModel(
+        schemaNode,
+        blue,
+        activeInputAction.inputTitle || activeInputAction.label
+      );
+    } catch {
+      return null;
+    }
+  }, [activeInputAction]);
+  const activeInputDescription =
+    activeInputAction?.description || activeInputModel?.description;
+
+  const resetInputState = useCallback(() => {
+    setInputError(null);
+    setTextInputValue('');
+    setBooleanInputValue(false);
+    setJsonInputValue('');
+  }, []);
+
+  const closeInputEditor = useCallback(() => {
+    setActiveInputActionLabel(null);
+    resetInputState();
+  }, [resetInputState]);
+
+  useEffect(() => {
+    if (!activeInputAction) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isPending) {
+        closeInputEditor();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeInputAction, closeInputEditor, isPending]);
+
+  const runApproveRejectDecision = (decision: 'accepted' | 'rejected') => {
+    if (!sessionId || isPending) {
+      return;
+    }
+    decisionMutation.mutate({
+      sessionId,
+      actionId: action.actionId,
+      decision: {
+        kind: 'approveReject',
+        input: decision,
+      },
+    });
+  };
+
+  const runSelectOptionDecision = (label: string) => {
+    if (!sessionId || isPending) {
+      return;
+    }
+    decisionMutation.mutate({
+      sessionId,
+      actionId: action.actionId,
+      decision: {
+        kind: 'selectOption',
+        input: label,
+      },
+    });
+  };
+
+  const openInputEditor = (option: PendingActionOption) => {
+    if (isPending || option.inputSchema === undefined) {
+      return;
+    }
+    setActiveInputActionLabel(option.label);
+    resetInputState();
+  };
+
+  const resolveInputPayload = ():
+    | { ok: true; value: unknown }
+    | { ok: false; error: string } => {
+    if (!activeInputAction) {
+      return { ok: false, error: 'Input action is not selected.' };
+    }
+
+    const required = activeInputAction.inputRequired === true;
+    const kind = activeInputModel?.kind ?? 'raw';
+
+    if (kind === 'boolean') {
+      return { ok: true, value: booleanInputValue };
+    }
+
+    if (kind === 'integer' || kind === 'double') {
+      const trimmed = textInputValue.trim();
+      if (!trimmed) {
+        return required
+          ? { ok: false, error: 'Input is required.' }
+          : { ok: true, value: undefined };
+      }
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed)) {
+        return { ok: false, error: 'Input must be a number.' };
+      }
+      if (kind === 'integer' && !Number.isInteger(parsed)) {
+        return { ok: false, error: 'Input must be an integer.' };
+      }
+      return { ok: true, value: parsed };
+    }
+
+    if (kind === 'text' || kind === 'timestamp') {
+      const trimmed = textInputValue.trim();
+      if (!trimmed) {
+        return required
+          ? { ok: false, error: 'Input is required.' }
+          : { ok: true, value: undefined };
+      }
+      return { ok: true, value: trimmed };
+    }
+
+    const trimmedJson = jsonInputValue.trim();
+    if (!trimmedJson) {
+      return required
+        ? { ok: false, error: 'Input is required.' }
+        : { ok: true, value: undefined };
+    }
+
+    try {
+      return { ok: true, value: JSON.parse(trimmedJson) };
+    } catch {
+      return { ok: false, error: 'Input must be a valid JSON value.' };
+    }
+  };
+
+  const submitInputDecision = () => {
+    if (!sessionId || isPending || !activeInputAction) {
+      return;
+    }
+
+    const resolvedPayload = resolveInputPayload();
+    if (!resolvedPayload.ok) {
+      setInputError(resolvedPayload.error);
+      return;
+    }
+
+    setInputError(null);
+    decisionMutation.mutate(
+      {
+        sessionId,
+        actionId: action.actionId,
+        decision: {
+          kind: 'submitInput',
+          input: {
+            actionLabel: activeInputAction.label,
+            value: resolvedPayload.value,
+          },
+        },
+      },
+      {
+        onSuccess: () => {
+          closeInputEditor();
+        },
+      }
+    );
+  };
+
+  const resolveButtonLook = (
+    variant: PendingActionOption['variant']
+  ): { variant: 'primary' | 'secondary' | 'outline'; className?: string } => {
+    if (variant === 'primary') {
+      return { variant: 'primary' };
+    }
+    if (variant === 'reject') {
+      return {
+        variant: 'outline',
+        className:
+          'border-rose-500 text-rose-500 hover:bg-rose-50 focus:ring-rose-500',
+      };
+    }
+    return { variant: 'secondary' };
+  };
+
+  const description =
+    customerAction && typeof customerAction.message === 'string'
+      ? customerAction.message
+      : 'summary' in action
+      ? action.summary
+      : undefined;
+
+  return (
+    <>
+      <div className="rounded-xl sm:rounded-2xl border-2 border-[color:var(--color-primary)] bg-white p-4">
+        <h3 className="text-lg font-semibold text-slate-900">{action.title}</h3>
+        {description && (
+          <p className="mt-2 whitespace-pre-line text-sm text-slate-600">
+            {description}
+          </p>
+        )}
+        {isCustomerAction ? (
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+            {options.map(option => {
+              const look = resolveButtonLook(option.variant);
+              return (
+                <Button
+                  key={option.label}
+                  variant={look.variant}
+                  size="sm"
+                  className={look.className}
+                  onClick={() =>
+                    option.inputSchema !== undefined
+                      ? openInputEditor(option)
+                      : runSelectOptionDecision(option.label)
+                  }
+                  disabled={isPending}
+                >
+                  {option.label}
+                </Button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-rose-500 text-rose-500 hover:bg-rose-50 focus:ring-rose-500"
+              onClick={() => runApproveRejectDecision('rejected')}
+              disabled={isPending}
+            >
+              Reject
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => runApproveRejectDecision('accepted')}
+              disabled={isPending}
+            >
+              Accept
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {activeInputAction && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => {
+            if (!isPending) {
+              closeInputEditor();
+            }
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={activeInputAction.inputTitle ?? activeInputAction.label}
+        >
+          <div
+            className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-lg font-semibold text-slate-900">
+                {activeInputAction.inputTitle ?? activeInputAction.label}
+              </p>
+              <button
+                type="button"
+                aria-label="Close input dialog"
+                className="rounded-full p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+                onClick={closeInputEditor}
+                disabled={isPending}
+              >
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M5 5L15 15M15 5L5 15"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+            {activeInputDescription ? (
+              <p className="mt-1 text-sm text-slate-500">
+                {activeInputDescription}
+              </p>
+            ) : null}
+            {activeInputModel?.kind === 'boolean' ? (
+              <div className="mt-4 flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={booleanInputValue ? 'secondary' : 'primary'}
+                  onClick={() => setBooleanInputValue(false)}
+                  disabled={isPending}
+                >
+                  False
+                </Button>
+                <Button
+                  size="sm"
+                  variant={booleanInputValue ? 'primary' : 'secondary'}
+                  onClick={() => setBooleanInputValue(true)}
+                  disabled={isPending}
+                >
+                  True
+                </Button>
+              </div>
+            ) : activeInputModel?.kind === 'text' ? (
+              <textarea
+                className="mt-4 min-h-[160px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
+                placeholder={activeInputAction.inputPlaceholder}
+                value={textInputValue}
+                onChange={event => setTextInputValue(event.target.value)}
+                disabled={isPending}
+              />
+            ) : activeInputModel &&
+              ['integer', 'double', 'timestamp'].includes(
+                activeInputModel.kind
+              ) ? (
+              <input
+                type={
+                  activeInputModel.kind === 'integer' ||
+                  activeInputModel.kind === 'double'
+                    ? 'number'
+                    : 'datetime-local'
+                }
+                className="mt-4 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
+                placeholder={activeInputAction.inputPlaceholder}
+                value={textInputValue}
+                onChange={event => setTextInputValue(event.target.value)}
+                disabled={isPending}
+              />
+            ) : (
+              <textarea
+                className="mt-4 min-h-[160px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
+                placeholder={
+                  activeInputAction.inputPlaceholder ??
+                  'Provide input as JSON (for example: {"message":"..."})'
+                }
+                value={jsonInputValue}
+                onChange={event => setJsonInputValue(event.target.value)}
+                disabled={isPending}
+              />
+            )}
+            {inputError && (
+              <p className="mt-2 text-xs text-rose-600">{inputError}</p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={closeInputEditor}
+                disabled={isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={submitInputDecision}
+                disabled={isPending}
+              >
+                Submit
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export function ContractDetailsPage() {
+  const { user, signOut } = useAuth();
+  const { data: accounts } = useAccounts();
+  const { setActiveSession } = useActiveContractSession();
+  const reviewState = useContractReviewState();
+  const { markReviewed } = reviewState;
+  const archiveMutation = useArchiveContract();
+  const unarchiveMutation = useUnarchiveContract();
+  const { sessionId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = (location.state as LocationState | null) ?? null;
+  const kindParam = new URLSearchParams(location.search).get('kind');
+  const kindFromParam =
+    kindParam === 'proposal' || kindParam === 'contract' ? kindParam : null;
+  const requestedKind = locationState?.kind ?? kindFromParam;
+  const backTarget = locationState?.from || '/contracts';
+
+  const [activeKind, setActiveKind] = useState<'contract' | 'proposal'>(
+    requestedKind ?? 'contract'
+  );
+  const lastSessionIdRef = useRef<string | null>(sessionId ?? null);
+  const isSessionChanged = lastSessionIdRef.current !== (sessionId ?? null);
+  const resolvedKind = isSessionChanged
+    ? requestedKind ?? 'contract'
+    : activeKind;
+  if (isSessionChanged) {
+    lastSessionIdRef.current = sessionId ?? null;
+  }
+  const [expandedSections, setExpandedSections] = useState({
+    actions: true,
+    linkedTransactions: false,
+    linkedContracts: false,
+    activity: false,
+  });
+  const [expandedHistory, setExpandedHistory] = useState<
+    Record<string, boolean>
+  >({});
+  const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+
+  useEffect(() => {
+    if (activeKind !== resolvedKind) {
+      setActiveKind(resolvedKind);
+    }
+  }, [activeKind, resolvedKind]);
+
+  useEffect(() => {
+    setExpandedHistory({});
+    setExpandedSections({
+      actions: true,
+      linkedTransactions: false,
+      linkedContracts: false,
+      activity: false,
+    });
+    setIsAiChatOpen(false);
+  }, [sessionId]);
+
+  const contractQuery = useContractDetails(sessionId ?? null);
+  const proposalQuery = useProposalDetails(
+    resolvedKind === 'proposal' ? sessionId ?? null : null
+  );
+
+  useEffect(() => {
+    if (
+      resolvedKind === 'contract' &&
+      contractQuery.isError &&
+      contractQuery.error?.status === 404
+    ) {
+      setActiveKind('proposal');
+    }
+  }, [resolvedKind, contractQuery.error, contractQuery.isError]);
+
+  useEffect(() => {
+    if (
+      resolvedKind === 'proposal' &&
+      proposalQuery.isError &&
+      proposalQuery.error?.status === 404 &&
+      contractQuery.data
+    ) {
+      setActiveKind('contract');
+
+      const searchParams = new URLSearchParams(location.search);
+      const shouldNormalizeKind =
+        searchParams.get('kind') === 'proposal' ||
+        locationState?.kind === 'proposal';
+      if (shouldNormalizeKind) {
+        searchParams.delete('kind');
+        const nextSearch = searchParams.toString();
+        navigate(
+          {
+            pathname: location.pathname,
+            search: nextSearch ? `?${nextSearch}` : '',
+          },
+          {
+            replace: true,
+            state: {
+              ...(locationState ?? {}),
+              kind: 'contract',
+            },
+          }
+        );
+      }
+    }
+  }, [
+    resolvedKind,
+    proposalQuery.isError,
+    proposalQuery.error,
+    contractQuery.data,
+    location.pathname,
+    location.search,
+    locationState,
+    navigate,
+  ]);
+
+  useEffect(() => {
+    if (!sessionId) {
+      return;
+    }
+    setActiveSession(sessionId);
+    return () => setActiveSession(null);
+  }, [sessionId, setActiveSession]);
+
+  const contractData = contractQuery.data ?? null;
+  const contractType = contractData
+    ? getSupportedContractByTypeBlueId(contractData.typeBlueId)?.typeName ??
+      null
+    : null;
+  const isDeliveryContract = contractType === 'PayNote/PayNote Delivery';
+  const proposal = proposalQuery.data ?? null;
+  const contract = resolvedKind === 'contract' ? contractData : null;
+  const aiChatSessionId = contract?.sessionId ?? null;
+  const relatedActivitySource = contract
+    ? contract
+    : proposal
+    ? {
+        accountNumber: proposal.accountNumber ?? undefined,
+        relatedTransactionIds: proposal.transactionId
+          ? [proposal.transactionId]
+          : [],
+        relatedHoldIds: proposal.holdId ? [proposal.holdId] : [],
+      }
+    : null;
+  const linkedActivityAccount = accounts?.find(
+    account => account.accountNumber === relatedActivitySource?.accountNumber
+  );
+  const relatedTransactionIds =
+    relatedActivitySource?.relatedTransactionIds ?? [];
+  const relatedHoldIds = relatedActivitySource?.relatedHoldIds ?? [];
+  const hasRelatedContractIds =
+    relatedTransactionIds.length > 0 || relatedHoldIds.length > 0;
+  const pollingActivityAccountNumber =
+    hasRelatedContractIds && relatedActivitySource?.accountNumber
+      ? relatedActivitySource.accountNumber
+      : null;
+  const linkedActivityQuery = useActivity({
+    accountNumber: pollingActivityAccountNumber,
+  });
+  const linkedActivityItems = linkedActivityQuery.data?.items ?? [];
+  const { groupedRelatedItems: linkedGroupedRelatedItems } =
+    useRelatedActivityItems({
+      activityItems: linkedActivityItems,
+      relatedTransactionIds,
+      relatedHoldIds,
+    });
+  const relatedContractsQuery = useRelatedContracts({
+    transactionIds: relatedTransactionIds,
+    holdIds: relatedHoldIds,
+    enabled: hasRelatedContractIds,
+  });
+  const relatedContracts = relatedContractsQuery.data ?? [];
+  const { visibleRelatedContracts } =
+    getVisibleRelatedContracts(relatedContracts);
+  const filteredRelatedContracts = useMemo(() => {
+    const relatedItems = visibleRelatedContracts.filter(
+      item => getRelatedContractSessionId(item) !== (sessionId ?? undefined)
+    );
+    if (resolvedKind === 'contract') {
+      return relatedItems.filter(isContractRelatedContract);
+    }
+    return relatedItems;
+  }, [visibleRelatedContracts, sessionId, resolvedKind]);
+  const isLoading =
+    !contract &&
+    !proposal &&
+    (resolvedKind === 'contract'
+      ? contractQuery.isLoading
+      : proposalQuery.isLoading);
+  const isError =
+    !contract &&
+    !proposal &&
+    (resolvedKind === 'contract'
+      ? contractQuery.isError
+      : proposalQuery.isError);
+
+  const reviewSummary = useMemo<ContractSummary | null>(() => {
+    if (!contract) {
+      return null;
+    }
+    return {
+      contractId: contract.contractId,
+      typeBlueId: contract.typeBlueId,
+      displayName: contract.displayName,
+      sessionId: contract.sessionId,
+      documentId: contract.documentId,
+      status: contract.status,
+      archivedAt: contract.archivedAt,
+      summaryPreview: contract.summary?.listPreview,
+      summaryUpdatedAt: contract.summaryUpdatedAt,
+      summarySourceUpdatedAt: contract.summarySourceUpdatedAt,
+      createdAt: contract.createdAt,
+      updatedAt: contract.updatedAt,
+      from: { name: 'Merchant' },
+    };
+  }, [contract]);
+
+  useEffect(() => {
+    if (!reviewSummary) {
+      return;
+    }
+    if (resolvedKind === 'contract') {
+      markReviewed(reviewSummary);
+    }
+  }, [resolvedKind, reviewSummary, markReviewed]);
+
+  useEffect(() => {
+    if (isDeliveryContract && resolvedKind !== 'proposal') {
+      setActiveKind('proposal');
+    }
+  }, [resolvedKind, isDeliveryContract]);
+
+  const resolvedDocument = useMemo(
+    () => (contract ? restoreInlineTypes(contract.document) : null),
+    [contract]
+  );
+  const payNoteInitialStateMeta = useMemo(
+    () => getPayNoteInitialStateMeta(resolvedDocument),
+    [resolvedDocument]
+  );
+
+  const contractTitle =
+    (contract ? getDocumentName(resolvedDocument) : null) ??
+    contract?.displayName ??
+    null;
+  const proposalTitle = proposal?.payNote?.name?.trim() || null;
+  const headerTitle = contractTitle || proposalTitle || 'Contract';
+  const senderFrom = contract?.from ?? proposal?.from ?? null;
+  const senderName =
+    senderFrom?.name ?? contract?.displayName ?? proposalTitle ?? 'Contract';
+  const senderLogo = senderFrom?.logoUrl ?? undefined;
+  const proposalSummarySessionId =
+    proposal?.deliverySessionId ?? sessionId ?? null;
+  const proposalSummaryQuery = useProposalSummary(
+    proposalSummarySessionId,
+    Boolean(proposal && proposalSummarySessionId)
+  );
+  const proposalSummary = proposalSummaryQuery.data?.summary ?? null;
+  const summary = contract ? contract?.summary ?? null : proposalSummary;
+  const hasSummaryContent =
+    Boolean(summary?.story?.headline?.trim()) ||
+    Boolean(summary?.story?.overview?.length);
+  const resolvedSummary = hasSummaryContent ? summary : null;
+  const summaryErrorMessage = contract
+    ? contract?.summaryError ?? null
+    : proposalSummaryQuery.error instanceof Error
+    ? proposalSummaryQuery.error.message
+    : null;
+  const summaryHeadline =
+    resolvedSummary?.story?.headline?.trim() ||
+    getDocumentName(resolvedDocument) ||
+    headerTitle;
+  const summaryOverview = resolvedSummary?.story?.overview ?? [];
+  const summaryOverviewParagraphs = summaryOverview
+    .map(paragraph => paragraph.trim())
+    .filter(Boolean);
+  const availableOperations = useMemo(
+    () => (contract ? resolveContractOperations(contract) : []),
+    [contract]
+  );
+  const hasAvailableOperations = availableOperations.length > 0;
+  const isMockSummaryEnabled =
+    Boolean(contract) && payNoteInitialStateMeta.llmSummaryDisabled;
+  const useContractOverviewLayout =
+    resolvedKind === 'contract' && !isMockSummaryEnabled;
+  const isSummaryLoading =
+    proposalSummaryQuery.isLoading && !resolvedSummary && !!proposal;
+  const isSummaryFetching =
+    proposalSummaryQuery.isFetching && !!resolvedSummary;
+  const proposalSummaryFallback = proposalSummaryQuery.timedOut
+    ? 'Sorry, contract summary is not available.'
+    : 'Summary not available yet.';
+  const summaryFallbackText =
+    (summaryOverview[0] ??
+      (contract ? getDocumentDescription(resolvedDocument) : null)) ||
+    (contract ? 'Summary unavailable.' : proposalSummaryFallback);
+
+  const historySessionId =
+    resolvedKind === 'contract' ? contractData?.sessionId ?? null : null;
+  const historyQuery = useContractHistory(
+    historySessionId,
+    resolvedKind === 'contract' && Boolean(historySessionId)
+  );
+  const historyRefetch = historyQuery.refetch;
+  const historySyncRef = useRef<{
+    sessionId: string | null;
+    summaryUpdatedAt: string | null;
+  }>({
+    sessionId: null,
+    summaryUpdatedAt: null,
+  });
+
+  useEffect(() => {
+    if (resolvedKind !== 'contract') {
+      historySyncRef.current = {
+        sessionId: null,
+        summaryUpdatedAt: null,
+      };
+      return;
+    }
+
+    const currentSnapshot = {
+      sessionId: historySessionId,
+      summaryUpdatedAt: contractData?.summaryUpdatedAt ?? null,
+    };
+    const previousSnapshot = historySyncRef.current;
+    const shouldRefetchHistory =
+      previousSnapshot.sessionId !== null &&
+      previousSnapshot.sessionId === currentSnapshot.sessionId &&
+      previousSnapshot.summaryUpdatedAt !== currentSnapshot.summaryUpdatedAt;
+
+    historySyncRef.current = currentSnapshot;
+
+    if (shouldRefetchHistory && typeof historyRefetch === 'function') {
+      void historyRefetch();
+    }
+  }, [
+    resolvedKind,
+    historySessionId,
+    contractData?.summaryUpdatedAt,
+    historyRefetch,
+  ]);
+
+  const historyItems = historyQuery.data?.items ?? [];
+  const hasHistory = resolvedKind === 'contract' && historyItems.length > 0;
+  const hasLinkedTransactions =
+    Boolean(relatedActivitySource) && linkedGroupedRelatedItems.length > 0;
+  const hasLinkedContracts = filteredRelatedContracts.length > 0;
+  const hasVisibleSections =
+    Boolean(contract && hasAvailableOperations) ||
+    hasLinkedTransactions ||
+    hasLinkedContracts ||
+    hasHistory;
+  const mockPendingAction = payNoteInitialStateMeta.action;
+  const currentSummaryEpoch = resolveCurrentSummaryEpoch(
+    contract?.currentSummaryEpoch
+  );
+  const pendingContractActions =
+    resolvedKind === 'contract' ? contract?.pendingActions ?? [] : [];
+  const pendingContractAction = resolveActivePendingAction({
+    actions: pendingContractActions,
+    currentSummaryEpoch,
+  });
+  const shouldShowMockPendingAction =
+    resolvedKind !== 'proposal' &&
+    Boolean(contract) &&
+    payNoteInitialStateMeta.llmSummaryDisabled &&
+    Boolean(
+      mockPendingAction &&
+        (mockPendingAction.title ||
+          mockPendingAction.summary ||
+          mockPendingAction.left ||
+          mockPendingAction.right)
+    );
+  const isArchivePending =
+    archiveMutation.isPending || unarchiveMutation.isPending;
+
+  const contractStatusStyles: Record<string, string> = {
+    accepted: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
+    rejected: 'bg-rose-50 text-rose-700 border border-rose-100',
+    pending: 'bg-amber-50 text-amber-700 border border-amber-100',
+    bootstrapped: 'bg-sky-50 text-sky-700 border border-sky-100',
+  };
+
+  const handleLinkedContractClick = (item: RelatedContractItem) => {
+    const target = getRelatedContractTarget(item);
+    const itemSessionId = getRelatedContractSessionId(item);
+    if (!target || !itemSessionId) {
+      return;
+    }
+    const nextKind = isProposalRelatedContract(item) ? 'proposal' : 'contract';
+    setActiveKind(nextKind);
+    setActiveSession(itemSessionId);
+    navigate(target, {
+      state: {
+        from: `${location.pathname}${location.search}`,
+        kind: nextKind,
+      },
+    });
+  };
+
+  const handleLinkedActivitySelect = (activity: ActivityItem) => {
+    if (
+      !relatedActivitySource?.accountNumber ||
+      !linkedActivityAccount?.accountId
+    ) {
+      return;
+    }
+
+    navigate(
+      buildTransactionDetailsPath(
+        linkedActivityAccount.accountId,
+        activity.activityId
+      ),
+      {
+        state: {
+          from: `${location.pathname}${location.search}`,
+          selectedActivity: activity,
+        },
+      }
+    );
+  };
+
+  const handleArchiveToggle = () => {
+    if (!contract?.sessionId || isArchivePending) {
+      return;
+    }
+    if (contract.archivedAt) {
+      unarchiveMutation.mutate({ sessionId: contract.sessionId });
+    } else {
+      archiveMutation.mutate({ sessionId: contract.sessionId });
+    }
+  };
+
+  const handleBack = () => {
+    navigate(backTarget);
+  };
+
+  const handleSectionToggle =
+    (
+      section: 'actions' | 'linkedTransactions' | 'linkedContracts' | 'activity'
+    ) =>
+    (event: SyntheticEvent<HTMLDetailsElement>) => {
+      const isOpen = event.currentTarget.open;
+      setExpandedSections(prev => ({
+        ...prev,
+        [section]: isOpen,
+      }));
+    };
+  const sectionContainerClassName =
+    'w-full rounded-none border-y border-slate-200 bg-white px-4 py-4 sm:rounded-2xl sm:border sm:p-4';
+  const sectionSummaryClassName =
+    'flex min-h-6 cursor-pointer list-none items-center gap-2 text-base leading-6 font-semibold text-slate-900 [&::-webkit-details-marker]:hidden';
+  const sectionBodyClassName = 'mt-4 border-t border-slate-200 pt-4';
+
+  const renderSectionChevron = (isOpen: boolean) => (
+    <svg
+      className={`h-5 w-5 shrink-0 text-slate-500 transition-transform ${
+        isOpen ? 'rotate-180' : ''
+      }`}
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+
+  const handleProposalDecisionRecorded = (
+    decision: 'accepted' | 'rejected',
+    decisionUpdatedAt: string
+  ) => {
+    if (!proposal) {
+      return;
+    }
+    reviewState.markItemReviewed?.({
+      ...proposal,
+      kind: 'proposal',
+      clientDecisionStatus: decision,
+      updatedAt: decisionUpdatedAt,
+    });
+  };
+  const pendingActionsContent = pendingContractAction ? (
+    <ContractPendingActionCard
+      action={pendingContractAction}
+      sessionId={sessionId ?? null}
+    />
+  ) : shouldShowMockPendingAction ? (
+    <MockPendingActionCard
+      title={mockPendingAction?.title}
+      summary={mockPendingAction?.summary}
+      left={mockPendingAction?.left}
+      right={mockPendingAction?.right}
+    />
+  ) : resolvedKind === 'proposal' ? (
+    <ProposalActionCard
+      proposal={proposal}
+      sessionId={sessionId ?? null}
+      onDecisionRecorded={handleProposalDecisionRecorded}
+    />
+  ) : null;
+
+  if (isLoading) {
+    return (
+      <div className="app-shell flex items-center justify-center">
+        <SpinnerWithText
+          text="Loading contract..."
+          size="xl"
+          color="green"
+          textClassName="text-slate-700 text-lg"
+          data-testid="contract-details-loading"
+        />
+      </div>
+    );
+  }
+
+  if (isError || !sessionId) {
+    return (
+      <div className="app-shell flex items-center justify-center">
+        <div className="app-surface p-4 text-center text-lg text-slate-700">
+          Unable to load contract details. Please return to contracts.
+          <div className="mt-4">
+            <Button onClick={handleBack}>Back to contracts</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <DashboardShell
+      data-testid="contract-details-page"
+      contentWidth="full"
+      pollingActivityAccountNumber={pollingActivityAccountNumber}
+      header={
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleBack}
+              aria-label="Back to contracts"
+              className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-slate-600 transition hover:text-slate-900"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+            </button>
+            <h1 className="text-3xl font-semibold text-slate-900">Contract</h1>
+          </div>
+          <div className="hidden lg:flex items-center gap-3">
+            <span className="text-sm text-slate-600">
+              {user?.email || 'Guest'}
+            </span>
+            <button
+              type="button"
+              onClick={signOut}
+              className="rounded-full border border-slate-200 bg-white/80 p-2 text-slate-600 transition hover:text-slate-900"
+              aria-label="Sign out"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 3v6m6.364-2.364A9 9 0 105.636 6.636"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <div className="flex w-full max-w-[1120px] flex-col gap-4">
+        <section className="app-surface w-full rounded-none p-4 shadow-none sm:rounded-[20px] sm:shadow-[var(--shadow-soft)]">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-extrabold leading-6 text-slate-900">
+                {headerTitle}
+              </h2>
+            </div>
+            {contract && (
+              <Dropdown
+                trigger={
+                  <div className="flex size-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:text-slate-900">
+                    <svg
+                      className="h-5 w-5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <circle cx="10" cy="4" r="1.5" />
+                      <circle cx="10" cy="10" r="1.5" />
+                      <circle cx="10" cy="16" r="1.5" />
+                    </svg>
+                  </div>
+                }
+                align="right"
+                triggerAriaLabel="More options"
+              >
+                <DropdownItem
+                  onClick={handleArchiveToggle}
+                  className={
+                    isArchivePending ? 'opacity-60 cursor-not-allowed' : ''
+                  }
+                >
+                  {contract.archivedAt
+                    ? 'Restore contract'
+                    : 'Archive contract'}
+                </DropdownItem>
+              </Dropdown>
+            )}
+          </div>
+
+          <div
+            className={`mt-4 flex flex-col gap-4 ${
+              pendingActionsContent ? 'lg:flex-row lg:items-start' : ''
+            }`}
+          >
+            <div
+              className={
+                pendingActionsContent ? 'min-w-0 flex-1 lg:max-w-[720px]' : ''
+              }
+            >
+              <div className="w-full rounded-xl border border-slate-200 bg-white p-4 sm:rounded-2xl sm:p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Avatar
+                      name={senderName}
+                      src={senderLogo}
+                      size="md"
+                      className="h-10 w-10 text-sm sm:h-12 sm:w-12 sm:text-base"
+                    />
+                    <div className="truncate text-sm font-semibold leading-6 text-slate-900">
+                      {senderName}
+                    </div>
+                  </div>
+                  {aiChatSessionId && contract?.updatedAt && !isAiChatOpen ? (
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold leading-6 text-[color:var(--color-primary)] opacity-70 hover:opacity-100"
+                      aria-label="Talk with AI"
+                      onClick={() => setIsAiChatOpen(true)}
+                    >
+                      <AiAssistantIcon className="h-4 w-4" />
+                      Talk with AI
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-4 space-y-3 text-slate-700">
+                  {summaryErrorMessage && (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-sm text-rose-700">
+                      {summaryErrorMessage}
+                    </div>
+                  )}
+
+                  {isSummaryFetching && summary && (
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <Spinner size="sm" color="green" />
+                      Updating summary...
+                    </div>
+                  )}
+
+                  {isSummaryLoading && (
+                    <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
+                      <Spinner size="sm" color="green" />
+                      Generating summary...
+                    </div>
+                  )}
+
+                  {resolvedSummary ? (
+                    <div>
+                      <h3 className="text-[32px] leading-[40px] font-semibold text-slate-900">
+                        {summaryHeadline}
+                      </h3>
+                      {isMockSummaryEnabled && summaryOverview.length > 0 ? (
+                        <Markdown className="prose prose-sm mt-2 max-w-none break-words text-base leading-6 text-slate-600">
+                          {summaryOverview.join('\n\n')}
+                        </Markdown>
+                      ) : (
+                        summaryOverviewParagraphs.map((paragraph, index) => (
+                          <p
+                            key={`${summaryHeadline}-overview-${index}`}
+                            className={
+                              useContractOverviewLayout && index === 0
+                                ? 'mt-2 whitespace-pre-line break-words text-base font-medium text-slate-700 leading-6'
+                                : 'mt-2 whitespace-pre-line break-words text-base text-slate-600 leading-6'
+                            }
+                          >
+                            {paragraph}
+                          </p>
+                        ))
+                      )}
+                    </div>
+                  ) : !isSummaryLoading ? (
+                    <p className="text-sm text-slate-600">
+                      {summaryFallbackText}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            {pendingActionsContent ? (
+              <div className="w-full lg:w-[384px] lg:shrink-0">
+                {pendingActionsContent}
+              </div>
+            ) : null}
+          </div>
+        </section>
+
+        {hasVisibleSections ? (
+          <div className="flex w-full flex-col gap-4">
+            {contract && hasAvailableOperations && (
+              <details
+                className={sectionContainerClassName}
+                open={expandedSections.actions}
+                onToggle={handleSectionToggle('actions')}
+              >
+                <summary className={sectionSummaryClassName}>
+                  {renderSectionChevron(expandedSections.actions)}
+                  <span>Actions</span>
+                </summary>
+                <div className={sectionBodyClassName}>
+                  <ContractOperationsList
+                    contract={contract}
+                    operations={availableOperations}
+                  />
+                </div>
+              </details>
+            )}
+
+            {hasLinkedTransactions && relatedActivitySource && (
+              <details
+                className={sectionContainerClassName}
+                open={expandedSections.linkedTransactions}
+                onToggle={handleSectionToggle('linkedTransactions')}
+              >
+                <summary className={sectionSummaryClassName}>
+                  {renderSectionChevron(expandedSections.linkedTransactions)}
+                  <span>Linked transactions</span>
+                </summary>
+                <div className={sectionBodyClassName}>
+                  <div className="space-y-2">
+                    {linkedGroupedRelatedItems.map(item => (
+                      <div
+                        key={getActivityKey(item)}
+                        className="rounded-lg border border-slate-200 bg-white"
+                      >
+                        <TransactionItem
+                          item={item}
+                          onActivitySelect={handleLinkedActivitySelect}
+                          variant="linked"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </details>
+            )}
+
+            {hasLinkedContracts && (
+              <details
+                className={sectionContainerClassName}
+                open={expandedSections.linkedContracts}
+                onToggle={handleSectionToggle('linkedContracts')}
+              >
+                <summary className={sectionSummaryClassName}>
+                  {renderSectionChevron(expandedSections.linkedContracts)}
+                  <span>Linked contracts</span>
+                </summary>
+                <div className={`${sectionBodyClassName} space-y-3`}>
+                  {filteredRelatedContracts.map(contractItem => {
+                    const isProposal = isProposalRelatedContract(contractItem);
+                    const isSelectable = isProposal
+                      ? Boolean(contractItem.deliverySessionId)
+                      : Boolean(contractItem.sessionId);
+                    let primaryName = 'Contract';
+                    let statusValue: string | undefined;
+                    let contractDate: string | null = null;
+                    let displayName = 'Contract';
+
+                    if (isProposal) {
+                      primaryName =
+                        contractItem.name?.trim() || 'PayNote proposal';
+                      statusValue =
+                        contractItem.clientDecisionStatus ?? 'pending';
+                      contractDate = formatShortDateTime(
+                        contractItem.updatedAt ?? contractItem.createdAt
+                      );
+                      displayName = 'Proposal';
+                    } else {
+                      primaryName =
+                        contractItem.documentName?.trim() ||
+                        contractItem.displayName;
+                      statusValue = contractItem.status ?? 'pending';
+                      contractDate = formatShortDateTime(
+                        getContractLastChangeAt(contractItem) ??
+                          contractItem.updatedAt ??
+                          contractItem.createdAt
+                      );
+                      displayName = contractItem.displayName;
+                    }
+
+                    const statusKey = statusValue?.toLowerCase() ?? '';
+                    const statusStyle =
+                      contractStatusStyles[statusKey] ??
+                      'bg-slate-100 text-slate-700 border border-slate-200';
+
+                    return (
+                      <button
+                        key={
+                          isProposal
+                            ? `proposal-${contractItem.deliveryId}`
+                            : contractItem.contractId
+                        }
+                        type="button"
+                        className={`w-full rounded-xl border p-4 text-left transition ${
+                          isSelectable
+                            ? 'border-slate-200 bg-white/80 hover:border-emerald-200 hover:shadow-md'
+                            : 'border-slate-200 bg-white/50 opacity-60 cursor-not-allowed'
+                        }`}
+                        onClick={() => {
+                          if (!isSelectable) {
+                            return;
+                          }
+                          handleLinkedContractClick(contractItem);
+                        }}
+                        disabled={!isSelectable}
+                      >
+                        <div className="sm:hidden">
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {primaryName}
+                          </p>
+                          {contractDate && (
+                            <p className="mt-1 text-xs text-slate-500">
+                              {contractDate}
+                            </p>
+                          )}
+                        </div>
+                        <div className="hidden space-y-2 sm:block">
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {primaryName}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <span className="app-chip app-chip-neutral">
+                              {displayName}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-1 text-xs font-semibold ${statusStyle}`}
+                            >
+                              {formatStatusLabel(statusValue)}
+                            </span>
+                            {contractDate && (
+                              <span className="text-xs text-slate-500">
+                                {contractDate}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </details>
+            )}
+
+            {hasHistory && (
+              <details
+                className={sectionContainerClassName}
+                open={expandedSections.activity}
+                onToggle={handleSectionToggle('activity')}
+              >
+                <summary className={sectionSummaryClassName}>
+                  {renderSectionChevron(expandedSections.activity)}
+                  <span>Activity</span>
+                </summary>
+                <div className={`${sectionBodyClassName} space-y-3`}>
+                  {historyItems.map(item => (
+                    <div
+                      key={item.id}
+                      className="rounded-xl border border-slate-200 bg-white/80 p-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-semibold text-slate-900">
+                            {item.short}
+                          </p>
+                        </div>
+                        {item.createdAt && (
+                          <span className="text-xs text-slate-500">
+                            {formatShortDateTime(item.createdAt)}
+                          </span>
+                        )}
+                      </div>
+                      {item.more && (
+                        <div className="mt-2 text-sm text-slate-600">
+                          {expandedHistory[item.id] && (
+                            <p className="whitespace-pre-line break-words leading-relaxed">
+                              {item.more}
+                            </p>
+                          )}
+                          <button
+                            type="button"
+                            className="mt-2 text-xs font-semibold text-[color:var(--color-primary)]"
+                            onClick={() =>
+                              setExpandedHistory(prev => ({
+                                ...prev,
+                                [item.id]: !prev[item.id],
+                              }))
+                            }
+                          >
+                            {expandedHistory[item.id] ? 'Less' : 'More'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      {aiChatSessionId && contract?.updatedAt ? (
+        <ContractAiChatDrawer
+          isOpen={isAiChatOpen}
+          sessionId={aiChatSessionId}
+          documentTitle={headerTitle}
+          contractUpdatedAt={contract.updatedAt}
+          userId={user?.userId ?? null}
+          onClose={() => setIsAiChatOpen(false)}
+        />
+      ) : null}
+    </DashboardShell>
+  );
+}

@@ -1,5 +1,9 @@
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  AUTH_SESSION_EXPIRED_KEY,
+  AUTH_STORAGE_KEY,
+} from '../app/auth/constants';
 
 export function useAuthErrorHandler() {
   const navigate = useNavigate();
@@ -16,11 +20,27 @@ export function useAuthErrorHandler() {
         errorWithStatus?.status === 401 ||
         errorWithStatus?.response?.status === 401
       ) {
-        // Show session expired message
-        alert('Your session has expired. Please sign in again.');
-
-        // Redirect to sign in page
-        navigate('/signin');
+        let alreadyHandled = false;
+        try {
+          alreadyHandled =
+            sessionStorage.getItem(AUTH_SESSION_EXPIRED_KEY) === 'true';
+        } catch {
+          alreadyHandled = false;
+        }
+        if (!alreadyHandled) {
+          try {
+            sessionStorage.setItem(AUTH_SESSION_EXPIRED_KEY, 'true');
+          } catch {
+            // Ignore unavailable sessionStorage
+          }
+          try {
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+          } catch {
+            // Ignore unavailable localStorage
+          }
+          document.cookie = 'demoAuth=; Max-Age=0; path=/';
+          navigate('/signin', { replace: true });
+        }
 
         return true; // Indicates we handled the error
       }

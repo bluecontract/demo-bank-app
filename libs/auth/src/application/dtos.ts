@@ -4,6 +4,9 @@ export interface UserResult {
   createdAt: string;
   isTest: boolean;
   marketingEmailsOptIn: boolean;
+  merchantId?: string;
+  merchantName?: string;
+  avatarDataUrl?: string;
 }
 
 export interface AuthResult {

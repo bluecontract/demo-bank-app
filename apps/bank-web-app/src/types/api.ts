@@ -1,5 +1,5 @@
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
-import { ClientInferResponseBody } from '@ts-rest/core';
+import { ClientInferRequest, ClientInferResponseBody } from '@ts-rest/core';
 
 // Health check types
 export type HealthCheck = ClientInferResponseBody<
@@ -93,6 +93,21 @@ export type PayNoteDeliveryDetails = ClientInferResponseBody<
   200
 >;
 
+export type PayNoteDeliveryDetailsSanitized = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['getPayNoteDeliveryBySessionId'],
+  200
+>;
+
+export type PayNoteDeliverySummaryFetch = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['getPayNoteDeliverySummary'],
+  200
+>;
+
+export type PayNoteDeliverySummaryGeneration = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['generatePayNoteDeliverySummary'],
+  200
+>;
+
 // Contract types
 export type ContractListResponse = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['listContracts'],
@@ -101,18 +116,45 @@ export type ContractListResponse = ClientInferResponseBody<
 
 export type ContractSummary = ContractListResponse['items'][number];
 
+export type RelatedContractsListResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['listTransactionContracts'],
+  200
+>;
+
+export type RelatedContractItem = RelatedContractsListResponse['items'][number];
+
 export type ContractDetails = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['getContractDetails'],
   200
 >;
+
+export type ContractHistoryResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['listContractHistory'],
+  200
+>;
+
+export type ContractHistoryEntry = ContractHistoryResponse['items'][number];
 
 export type ContractSummaryGeneration = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['generateContractSummary'],
   200
 >;
 
+export type ContractDocumentSummary = ContractSummaryGeneration['summary'];
+
 export type ContractOperationResponse = ClientInferResponseBody<
   (typeof bankApiContract)['banking']['runContractOperation'],
+  200
+>;
+
+export type ContractAiChatRequest = ClientInferRequest<
+  (typeof bankApiContract)['banking']['contractAiChat']
+>['body'];
+
+export type ContractAiChatMessage = ContractAiChatRequest['messages'][number];
+
+export type ContractAiChatResponse = ClientInferResponseBody<
+  (typeof bankApiContract)['banking']['contractAiChat'],
   200
 >;
 

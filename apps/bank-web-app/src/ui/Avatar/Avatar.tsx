@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BRAND_GRADIENT_CLASS } from '../styleConstants';
 
 interface AvatarProps {
   name: string;
@@ -59,7 +60,7 @@ export function Avatar({
   };
 
   const backgroundColorClass = name.trim()
-    ? 'bg-gradient-to-br from-emerald-400 via-teal-500 to-emerald-600'
+    ? BRAND_GRADIENT_CLASS
     : 'bg-gray-400';
 
   const baseClasses = `${sizeClasses[size]} ${backgroundColorClass} rounded-full flex items-center justify-center text-white font-semibold shadow-sm ring-2 ring-white/70`;

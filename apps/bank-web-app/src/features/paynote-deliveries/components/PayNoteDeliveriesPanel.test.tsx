@@ -86,7 +86,7 @@ describe('PayNoteDeliveriesPanel', () => {
 
     expect(mutateMock).toHaveBeenCalledWith({
       sessionId: 'session-1',
-      operation: 'markPayNoteAcceptedByClient',
+      operation: 'acceptPayNote',
       deliveryId: 'delivery-1',
     });
   });

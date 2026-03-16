@@ -10,7 +10,9 @@ import { DynamoHoldRepository } from './DynamoHoldRepository';
 import type {
   ReserveHoldRequest,
   ReleaseHoldRequest,
+  PartialReleaseHoldRequest,
   CaptureHoldRequest,
+  PartialCaptureHoldRequest,
 } from '../application/HoldRepository';
 import { hashIdempotencyKey } from '../domain/idempotency';
 import {
@@ -33,6 +35,7 @@ const baseRequest = (): ReserveHoldRequest => {
     payerAccountNumber: '1234567890',
     counterpartyAccountNumber: '5555555555',
     amountMinor: 5_000,
+    capturedAmountMinor: 0,
     currency: 'USD' as const,
     status: 'PENDING' as const,
     description: 'Test hold',
@@ -69,6 +72,7 @@ const baseReleaseRequest = (): ReleaseHoldRequest => {
       holdId: 'hold-release',
       payerAccountNumber: '1234567890',
       amountMinor: 4_000,
+      capturedAmountMinor: 0,
       currency: 'USD',
       status: 'RELEASED',
       description: 'Test hold release',
@@ -80,6 +84,37 @@ const baseReleaseRequest = (): ReleaseHoldRequest => {
       at: '2024-01-03T00:00:00.000Z',
       type: 'RELEASED',
       reason: 'Customer request',
+    },
+    idempotencyKey,
+    idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
+    userId: 'user-1',
+  };
+};
+
+const basePartialReleaseRequest = (): PartialReleaseHoldRequest => {
+  const idempotencyKey = 'partial-release-idem-key';
+
+  return {
+    accountId: 'acc-123',
+    accountBalanceVersion: 3,
+    availableBalanceMinor: 6_000,
+    releaseAmountMinor: 2_000,
+    expectedAmountMinor: 6_000,
+    expectedCapturedAmountMinor: 2_000,
+    hold: {
+      holdId: 'hold-partial-release',
+      payerAccountNumber: '1234567890',
+      amountMinor: 4_000,
+      capturedAmountMinor: 2_000,
+      currency: 'USD',
+      status: 'PARTIALLY_CAPTURED',
+      description: 'Partial release test hold',
+      createdAt: '2024-01-02T00:00:00.000Z',
+    },
+    holdEvent: {
+      at: '2024-01-03T00:00:00.000Z',
+      type: 'RELEASED',
+      reason: 'Adjust reserve amount',
     },
     idempotencyKey,
     idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
@@ -122,6 +157,7 @@ const baseCaptureRequest = (): CaptureHoldRequest => {
     payerAccountNumber: debitPosting.accountNumber,
     counterpartyAccountNumber: creditPosting.accountNumber,
     amountMinor,
+    capturedAmountMinor: amountMinor,
     currency: 'USD' as const,
     status: 'CAPTURED' as const,
     description: 'Captured hold',
@@ -142,6 +178,71 @@ const baseCaptureRequest = (): CaptureHoldRequest => {
       counterpartyAccountNumber: hold.counterpartyAccountNumber!,
     },
     transaction,
+    idempotencyKey,
+    idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
+    userId: 'user-1',
+  };
+};
+
+const basePartialCaptureRequest = (): PartialCaptureHoldRequest => {
+  const idempotencyKey = 'partial-capture-key';
+  const captureAmountMinor = 2_000;
+  const holdId = 'hold-partial';
+  const payerAccountId = 'acc-123';
+  const counterpartyAccountId = 'acc-456';
+  const debitPosting = new Posting({
+    accountId: payerAccountId,
+    amount: new Money(captureAmountMinor),
+    side: 'DEBIT',
+    accountNumber: '1234567890',
+    counterpartyAccountNumber: '5555555555',
+  });
+  const creditPosting = new Posting({
+    accountId: counterpartyAccountId,
+    amount: new Money(captureAmountMinor),
+    side: 'CREDIT',
+    accountNumber: '5555555555',
+    counterpartyAccountNumber: '1234567890',
+  });
+  const transaction = Transaction.createWithId(
+    [debitPosting, creditPosting],
+    {
+      idempotencyKey,
+      description: 'Partial capture funds',
+      originHoldId: holdId,
+    },
+    'txn-partial'
+  );
+
+  const hold = {
+    holdId,
+    payerAccountNumber: debitPosting.accountNumber,
+    counterpartyAccountNumber: creditPosting.accountNumber,
+    amountMinor: 6_000,
+    capturedAmountMinor: captureAmountMinor,
+    currency: 'USD' as const,
+    status: 'PARTIALLY_CAPTURED' as const,
+    description: 'Partially captured hold',
+    createdAt: '2024-01-02T00:00:00.000Z',
+    relatedTransactionId: transaction.id,
+  };
+
+  return {
+    payerAccountId,
+    payerAccountBalanceVersion: 3,
+    counterpartyAccountId,
+    counterpartyAccountBalanceVersion: 5,
+    hold,
+    holdEvent: {
+      at: '2024-01-05T00:00:00.000Z',
+      type: 'CAPTURED_PARTIAL',
+      transactionId: transaction.id,
+      counterpartyAccountNumber: hold.counterpartyAccountNumber,
+      amountMinor: captureAmountMinor,
+      remainingAmountMinor: 4_000,
+    },
+    transaction,
+    captureAmountMinor,
     idempotencyKey,
     idempotencyKeyHash: hashIdempotencyKey(idempotencyKey),
     userId: 'user-1',
@@ -206,6 +307,32 @@ describe('DynamoHoldRepository', () => {
       '#status = :pendingStatus'
     );
     expect(transactItems[3]?.Put?.Item?.command).toBe('RELEASE');
+  });
+
+  it('performs partial release transact write successfully', async () => {
+    const { repository, send } = createRepository();
+    send.mockResolvedValue({});
+
+    const request = basePartialReleaseRequest();
+    const result = await repository.partialReleaseHold(request);
+
+    expect(result.created).toBe(true);
+    expect(result.hold).toEqual(request.hold);
+    const command = send.mock.calls[0][0];
+    expect(command).toBeInstanceOf(TransactWriteCommand);
+    const transactItems =
+      (command as TransactWriteCommand).input.TransactItems ?? [];
+    expect(transactItems).toHaveLength(4);
+    expect(transactItems[0]?.Update?.UpdateExpression).toContain(
+      'availableBalanceMinor = availableBalanceMinor + :amount'
+    );
+    expect(
+      transactItems[0]?.Update?.ExpressionAttributeValues?.[':amount']
+    ).toBe(request.releaseAmountMinor);
+    expect(transactItems[1]?.Update?.ConditionExpression).toContain(
+      '#status = :pendingStatus OR #status = :partiallyCapturedStatus'
+    );
+    expect(transactItems[3]?.Put?.Item?.command).toBe('RELEASE_PARTIAL');
   });
 
   it('throws InsufficientFundsError when balance check fails', async () => {
@@ -692,6 +819,85 @@ describe('DynamoHoldRepository', () => {
       await expect(repository.captureHold(request)).rejects.toBeInstanceOf(
         OptimisticLockError
       );
+    });
+  });
+
+  describe('partialCaptureHold', () => {
+    it('performs partial capture transact write successfully', async () => {
+      const { repository, send } = createRepository();
+      send.mockResolvedValue({});
+
+      const request = basePartialCaptureRequest();
+      const result = await repository.partialCaptureHold(request);
+
+      expect(result.created).toBe(true);
+      expect(result.hold).toEqual(request.hold);
+      expect(result.transactionId).toBe(request.transaction.id);
+
+      const command = send.mock.calls[0][0];
+      expect(command).toBeInstanceOf(TransactWriteCommand);
+      const items = (command as TransactWriteCommand).input.TransactItems ?? [];
+      expect(items).toHaveLength(8);
+      expect(items[2]?.Update?.ConditionExpression).toContain(
+        '#status = :pendingStatus OR #status = :partiallyCapturedStatus'
+      );
+      expect(items[2]?.Update?.ConditionExpression).toContain(
+        'capturedAmountMinor'
+      );
+
+      const idempotencyPut = items[items.length - 1]?.Put?.Item;
+      expect(idempotencyPut?.command).toBe('CAPTURE_PARTIAL');
+      expect(idempotencyPut?.transactionId).toBe(request.transaction.id);
+    });
+
+    it('returns existing hold when partial capture idempotency record exists', async () => {
+      const { repository, send } = createRepository();
+      const request = basePartialCaptureRequest();
+      const error = new TransactionCanceledException({
+        message: 'Cancelled',
+        $metadata: {
+          httpStatusCode: 400,
+          requestId: 'req-13',
+          attempts: 1,
+          totalRetryDelay: 0,
+        },
+      });
+      (error as TransactionCanceledException).CancellationReasons = [
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'None' },
+        { Code: 'ConditionalCheckFailed' },
+      ];
+
+      send.mockImplementation(async command => {
+        if (command instanceof TransactWriteCommand) {
+          throw error;
+        }
+        if (command instanceof GetCommand) {
+          const projection = command.input.ProjectionExpression;
+          if (projection && projection.includes('holdId')) {
+            return {
+              Item: {
+                holdId: request.hold.holdId,
+                transactionId: request.transaction.id,
+                command: 'CAPTURE_PARTIAL',
+              },
+            };
+          }
+          return { Item: buildHoldMetaItem(request.hold) };
+        }
+        throw new Error('Unexpected command');
+      });
+
+      const result = await repository.partialCaptureHold(request);
+
+      expect(result.created).toBe(false);
+      expect(result.hold).toEqual(request.hold);
+      expect(result.transactionId).toBe(request.transaction.id);
     });
   });
 

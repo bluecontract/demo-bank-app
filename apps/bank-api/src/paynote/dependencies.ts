@@ -25,10 +25,14 @@ import {
   DynamoPayNoteDeliveryRepository,
   DynamoPayNoteRepository,
   DynamoPayNoteBootstrapRepository,
+  DynamoBootstrapContextRepository,
+  DynamoPendingBootstrapEventRepository,
   type PayNoteVerificationRepository,
   type PayNoteDeliveryRepository,
   type PayNoteRepository,
   type PayNoteBootstrapRepository,
+  type BootstrapContextRepository,
+  type PendingBootstrapEventRepository,
   type BankingFacade,
   type MyOsClient,
   type BlueIdCalculator,
@@ -40,6 +44,12 @@ import {
   DynamoContractRepository,
   type ContractRepository,
 } from '@demo-bank-app/contracts';
+import { DynamoContractSummaryInputStore } from '../summary/inputStore';
+import {
+  AuthEnvironmentConfiguration,
+  DynamoMerchantDirectoryRepository,
+  type MerchantDirectoryRepository,
+} from '@demo-bank-app/auth';
 
 export type PaynoteDependencies = {
   logger: PowertoolsLogger;
@@ -49,9 +59,13 @@ export type PaynoteDependencies = {
   payNoteDeliveryRepository: PayNoteDeliveryRepository;
   payNoteRepository: PayNoteRepository;
   payNoteBootstrapRepository: PayNoteBootstrapRepository;
+  bootstrapContextRepository: BootstrapContextRepository;
+  pendingBootstrapEventRepository: PendingBootstrapEventRepository;
   contractRepository: ContractRepository;
   bankingRepository: BankingRepository;
   holdRepository: HoldRepository;
+  merchantDirectoryRepository: MerchantDirectoryRepository;
+  summaryInputStore: DynamoContractSummaryInputStore;
   myOsClient: MyOsClient;
   bankingFacade: BankingFacade;
   blueIdCalculator: BlueIdCalculator;
@@ -62,18 +76,44 @@ export type PaynoteDependencies = {
 
 let cachedDependencies: PaynoteDependencies | null = null;
 
-const initializeDependencies = (): PaynoteDependencies => {
+export const createResolveMerchantOwnerUserId = (
+  merchantDirectoryRepository: MerchantDirectoryRepository
+) => {
+  return async (merchantId: string): Promise<string | undefined> => {
+    const entries = await merchantDirectoryRepository.getMerchantsByIds([
+      merchantId,
+    ]);
+    const entry = entries.find(item => item.merchantId === merchantId);
+    return entry?.ownerUserId;
+  };
+};
+
+export const createResolveMerchantNameById = (
+  merchantDirectoryRepository: MerchantDirectoryRepository
+) => {
+  return async (merchantId: string): Promise<string | undefined> => {
+    const entries = await merchantDirectoryRepository.getMerchantsByIds([
+      merchantId,
+    ]);
+    const entry = entries.find(item => item.merchantId === merchantId);
+    return entry?.name;
+  };
+};
+
+const initializeDependencies = async (): Promise<PaynoteDependencies> => {
   const logger = getLogger();
   const awsRegion = process.env.AWS_REGION || 'eu-west-1';
   const awsEndpoint = process.env.AWS_ENDPOINT_URL;
   const openAiSecretArn = process.env.OPENAI_API_KEY_SECRET_ARN?.trim();
   const myOsSecretArn = process.env.MYOS_SECRET_ARN?.trim();
   const bankingConfig = new BankingEnvironmentConfiguration();
+  const authConfig = await new AuthEnvironmentConfiguration().getAuthConfig();
 
   const tableName =
     process.env.BANKING_DYNAMO_TABLE_NAME?.trim() ||
     process.env.AUTH_DYNAMO_TABLE_NAME?.trim() ||
     bankingConfig.dynamoTableName;
+  const authTableName = authConfig.dynamoTableName;
 
   const secretsResilienceConfig =
     AwsResilienceConfigBuilder.forSecretsManager();
@@ -125,7 +165,26 @@ const initializeDependencies = (): PaynoteDependencies => {
     endpoint: awsEndpoint,
   });
 
+  const bootstrapContextRepository = new DynamoBootstrapContextRepository({
+    tableName: authTableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
+  const pendingBootstrapEventRepository =
+    new DynamoPendingBootstrapEventRepository({
+      tableName: authTableName,
+      region: awsRegion,
+      endpoint: awsEndpoint,
+    });
+
   const contractRepository = new DynamoContractRepository({
+    tableName,
+    region: awsRegion,
+    endpoint: awsEndpoint,
+  });
+
+  const summaryInputStore = new DynamoContractSummaryInputStore({
     tableName,
     region: awsRegion,
     endpoint: awsEndpoint,
@@ -143,12 +202,22 @@ const initializeDependencies = (): PaynoteDependencies => {
     ...(awsEndpoint && { endpoint: awsEndpoint }),
   });
 
+  const merchantDirectoryRepository = new DynamoMerchantDirectoryRepository({
+    tableName: authTableName,
+    region: awsRegion,
+    ...(awsEndpoint && { endpoint: awsEndpoint }),
+  });
+  const resolveMerchantOwnerUserId = createResolveMerchantOwnerUserId(
+    merchantDirectoryRepository
+  );
+
   const myOsClient = createHttpMyOsGateway(getMyOsCredentials);
 
   const bankingFacade = createBankingFacade({
     bankingRepository,
     holdRepository,
     logger,
+    resolveMerchantOwnerUserId,
   });
 
   const blueIdCalculator = createBlueIdCalculator();
@@ -177,9 +246,13 @@ const initializeDependencies = (): PaynoteDependencies => {
     payNoteDeliveryRepository,
     payNoteRepository,
     payNoteBootstrapRepository,
+    bootstrapContextRepository,
+    pendingBootstrapEventRepository,
     contractRepository,
     bankingRepository,
     holdRepository,
+    merchantDirectoryRepository,
+    summaryInputStore,
     myOsClient,
     bankingFacade,
     blueIdCalculator,
@@ -191,7 +264,7 @@ const initializeDependencies = (): PaynoteDependencies => {
 
 export const getDependencies = async (): Promise<PaynoteDependencies> => {
   if (!cachedDependencies) {
-    cachedDependencies = initializeDependencies();
+    cachedDependencies = await initializeDependencies();
   }
 
   return cachedDependencies;

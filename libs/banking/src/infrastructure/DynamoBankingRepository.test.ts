@@ -53,11 +53,17 @@ vi.mock('@aws-sdk/client-dynamodb', async importOriginal => {
 });
 
 // Get typed access to mocked constructors
-const { GetCommand, QueryCommand, TransactWriteCommand, BatchGetCommand } =
-  await import('@aws-sdk/lib-dynamodb');
+const {
+  GetCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+  BatchGetCommand,
+} = await import('@aws-sdk/lib-dynamodb');
 const mockGetCommand = vi.mocked(GetCommand);
 const mockQueryCommand = vi.mocked(QueryCommand);
 const mockTransactWriteCommand = vi.mocked(TransactWriteCommand);
+const mockUpdateCommand = vi.mocked(UpdateCommand);
 const mockBatchGetCommand = vi.mocked(BatchGetCommand);
 
 // Helper function to create test accounts with default balance and version
@@ -742,6 +748,55 @@ describe('DynamoBankingRepository', () => {
           idempotencyKey: 'test-key-123',
         })
       ).rejects.toThrow(TransactionIdempotencyRecordNotFoundError);
+    });
+  });
+
+  describe('updateAccountBalance', () => {
+    it('should update balance and increment version', async () => {
+      const account = createTestAccount({
+        accountType: 'CREDIT_LINE',
+        creditLimitMinor: new Money(5000),
+        ledgerBalanceMinor: new Money(5000),
+        availableBalanceMinor: new Money(5000),
+        balanceVersion: 2,
+      });
+
+      mockSend.mockResolvedValueOnce({});
+
+      const updatedAccount = await repository.updateAccountBalance(account);
+
+      expect(updatedAccount.balanceVersion).toBe(3);
+      expect(mockUpdateCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TableName: 'test-banking-table',
+          Key: { PK: `ACCOUNT#${account.id}`, SK: 'BALANCE' },
+          ExpressionAttributeValues: expect.objectContaining({
+            ':creditLimit': 5000,
+            ':currentVersion': 2,
+          }),
+        })
+      );
+    });
+
+    it('should throw OptimisticLockError on conditional check failure', async () => {
+      const account = createTestAccount({
+        accountType: 'CREDIT_LINE',
+        creditLimitMinor: new Money(5000),
+        ledgerBalanceMinor: new Money(5000),
+        availableBalanceMinor: new Money(5000),
+        balanceVersion: 2,
+      });
+
+      const conditionalError = Object.assign(
+        new Error('ConditionalCheckFailedException'),
+        { name: 'ConditionalCheckFailedException' }
+      );
+
+      mockSend.mockRejectedValueOnce(conditionalError);
+
+      await expect(repository.updateAccountBalance(account)).rejects.toThrow(
+        OptimisticLockError
+      );
     });
   });
 

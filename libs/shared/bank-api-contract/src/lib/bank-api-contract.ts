@@ -1,9 +1,14 @@
 import { initContract } from '@ts-rest/core';
 import { z } from 'zod';
-import { createSanitizedStringSchema } from './sanitization';
+import {
+  createSanitizedOptionalStringSchema,
+  createSanitizedStringSchema,
+} from './sanitization';
+import { BooleanQueryParamSchema } from './queryParams';
 import {
   AccountDto,
   CreateAccountRequestDto,
+  SetCreditLimitRequestDto,
   FundingReqDto,
   ProblemDto,
   TransferResponseDto,
@@ -23,10 +28,17 @@ import {
   PayNoteDetailsDto,
   PayNoteDeliveryListResponseDto,
   PayNoteDeliveryDetailsDto,
+  PayNoteDeliveryDetailsSanitizedDto,
+  RejectPayNoteDeliveryRequestDto,
+  RelatedContractListResponseDto,
   ContractListResponseDto,
   ContractDetailsDto,
+  ContractHistoryResponseDto,
+  ContractPendingActionDecisionRequestDto,
   ContractSummaryGenerationDto,
   ContractOperationResponseDto,
+  ContractAiChatRequestDto,
+  ContractAiChatResponseDto,
   NotImplementedResponseDto,
 } from './schemas';
 
@@ -53,20 +65,79 @@ export const HealthCheckSchema = z.object({
   environment: z.string(),
 });
 
-// Auth schemas
-export const SignUpRequestSchema = z.object({
-  email: createSanitizedStringSchema(z.string().email()),
-  marketingEmailsOptIn: z.boolean(),
+const PollCursorSchema = z.string().min(1);
+const PollChangeSummarySchema = z.object({
+  cursor: PollCursorSchema,
+  changed: z.boolean(),
+  latestUpdatedAt: z.string().datetime({ offset: true }).optional(),
 });
 
-export const SignInRequestSchema = SignUpRequestSchema.pick({
-  email: true,
+const PollActivitySummarySchema = z.object({
+  accountNumber: z.string().length(10),
+  cursor: PollCursorSchema,
+  changed: z.boolean(),
+  latestActivityAt: z.string().datetime({ offset: true }).optional(),
+});
+
+const PollChangesResponseSchema = z.object({
+  serverTime: z.string().datetime({ offset: true }),
+  contracts: PollChangeSummarySchema.optional(),
+  proposals: PollChangeSummarySchema.optional(),
+  activity: PollActivitySummarySchema.optional(),
+});
+
+// Auth schemas
+const MAX_AVATAR_DATA_URL_LENGTH = 200_000;
+const MerchantNameSchema = createSanitizedStringSchema(
+  z.string().trim().min(1).max(140)
+);
+const AvatarDataUrlSchema = z
+  .string()
+  .trim()
+  .max(
+    MAX_AVATAR_DATA_URL_LENGTH,
+    `Avatar must be ${MAX_AVATAR_DATA_URL_LENGTH} characters or less`
+  )
+  .refine(value => value.startsWith('data:image/'), {
+    message: 'Avatar must be a data URL',
+  });
+
+export const SignUpRequestSchema = z
+  .object({
+    email: createSanitizedStringSchema(z.string().email()),
+    merchantName: MerchantNameSchema.optional(),
+    marketingEmailsOptIn: z.boolean(),
+    merchantId: createSanitizedOptionalStringSchema(
+      z.string().trim().min(1).optional()
+    ),
+    avatarDataUrl: AvatarDataUrlSchema.optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.merchantId && !data.merchantName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Merchant name is required when signing up as a merchant',
+        path: ['merchantName'],
+      });
+    }
+  });
+
+export const SignInRequestSchema = z.object({
+  email: createSanitizedStringSchema(z.string().email()),
 });
 
 export const AuthSuccessResponseSchema = z.object({
   userId: z.string(),
   email: z.string().email(),
+  merchantName: z.string().optional(),
   marketingEmailsOptIn: z.boolean(),
+  merchantId: z.string().optional(),
+  avatarDataUrl: z.string().optional(),
+});
+
+export const UpdateUserProfileRequestSchema = z.object({
+  merchantName: MerchantNameSchema.optional(),
+  avatarDataUrl: AvatarDataUrlSchema.optional(),
 });
 
 export const AuthErrorResponseSchema = z.object({
@@ -118,6 +189,18 @@ export const bankApiContract = c.router(
       summary: 'Sign in with existing email',
     },
 
+    updateUserProfile: {
+      method: 'PATCH',
+      path: '/auth/profile',
+      body: UpdateUserProfileRequestSchema,
+      responses: {
+        200: AuthSuccessResponseSchema,
+        400: ProblemDto,
+        401: ProblemDto,
+      },
+      summary: 'Update signed-in user profile',
+    },
+
     banking: {
       createAccount: {
         method: 'POST',
@@ -146,6 +229,21 @@ export const bankApiContract = c.router(
         pathParams: z.object({ accountId: z.string().uuid() }),
         responses: { 200: AccountDto, 404: ProblemDto },
         summary: 'Get a bank account by ID',
+      },
+
+      setCreditLimit: {
+        method: 'POST',
+        path: '/v1/accounts/:accountId/credit-limit',
+        pathParams: z.object({ accountId: z.string().uuid() }),
+        body: SetCreditLimitRequestDto,
+        responses: {
+          200: AccountDto,
+          400: ProblemDto,
+          403: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Update credit limit for a credit line account',
       },
 
       listCards: {
@@ -346,11 +444,41 @@ export const bankApiContract = c.router(
       listPayNoteDeliveries: {
         method: 'GET',
         path: '/v1/paynotes/deliveries',
+        query: z
+          .object({
+            clientDecisionStatus: z
+              .enum(['pending', 'accepted', 'rejected'])
+              .optional(),
+          })
+          .optional(),
         responses: {
           200: PayNoteDeliveryListResponseDto,
           401: ProblemDto,
         },
         summary: 'List PayNote deliveries identified for the current user.',
+      },
+
+      pollChanges: {
+        method: 'GET',
+        path: '/v1/poll/changes',
+        query: z
+          .object({
+            includeContracts: BooleanQueryParamSchema,
+            includeProposals: BooleanQueryParamSchema,
+            includeActivity: BooleanQueryParamSchema,
+            activityAccountNumber: z.string().length(10).optional(),
+            contractsCursor: z.string().optional(),
+            proposalsCursor: z.string().optional(),
+            activityCursor: z.string().optional(),
+          })
+          .optional(),
+        responses: {
+          200: PollChangesResponseSchema,
+          400: ProblemDto,
+          401: ProblemDto,
+        },
+        summary:
+          'Poll lightweight change markers for contracts, proposals, and optional activity.',
       },
 
       getPayNoteDelivery: {
@@ -363,6 +491,79 @@ export const bankApiContract = c.router(
           404: ProblemDto,
         },
         summary: 'Get PayNote Delivery details for the current user.',
+      },
+
+      getPayNoteDeliveryBySessionId: {
+        method: 'GET',
+        path: '/v1/paynotes/deliveries/by-session/:sessionId',
+        pathParams: z.object({ sessionId: z.string() }),
+        responses: {
+          200: PayNoteDeliveryDetailsSanitizedDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary:
+          'Get PayNote Delivery (proposal) details by session id; sanitized view without raw document.',
+      },
+
+      getPayNoteDeliverySummary: {
+        method: 'GET',
+        path: '/v1/paynotes/deliveries/:sessionId/summary',
+        pathParams: z.object({ sessionId: z.string() }),
+        responses: {
+          200: ContractSummaryGenerationDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          500: ProblemDto,
+        },
+        summary: 'Get cached PayNote proposal summary for the current user.',
+      },
+
+      generatePayNoteDeliverySummary: {
+        method: 'POST',
+        path: '/v1/paynotes/deliveries/:sessionId/summary',
+        pathParams: z.object({ sessionId: z.string() }),
+        body: z
+          .object({
+            force: z.boolean().optional(),
+          })
+          .optional(),
+        responses: {
+          200: ContractSummaryGenerationDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          500: ProblemDto,
+        },
+        summary:
+          'Generate (or return cached) PayNote proposal summary for the current user.',
+      },
+
+      acceptPayNoteDelivery: {
+        method: 'POST',
+        path: '/v1/paynotes/deliveries/:sessionId/accept',
+        pathParams: z.object({ sessionId: z.string() }),
+        body: z.unknown().optional(),
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Accept a PayNote delivery (proposal).',
+      },
+
+      rejectPayNoteDelivery: {
+        method: 'POST',
+        path: '/v1/paynotes/deliveries/:sessionId/reject',
+        pathParams: z.object({ sessionId: z.string() }),
+        body: RejectPayNoteDeliveryRequestDto,
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+        },
+        summary: 'Reject a PayNote delivery (proposal).',
       },
 
       listContracts: {
@@ -394,6 +595,76 @@ export const bankApiContract = c.router(
         summary: 'Get contract details by session id.',
       },
 
+      listContractHistory: {
+        method: 'GET',
+        path: '/v1/contracts/:sessionId/history',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        responses: {
+          200: ContractHistoryResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'List contract history entries by session id.',
+      },
+
+      archiveContract: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/archive',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        body: z.unknown().optional(),
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Archive a contract by session id.',
+      },
+
+      unarchiveContract: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/unarchive',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        body: z.unknown().optional(),
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+        },
+        summary: 'Unarchive a contract by session id.',
+      },
+
+      listTransactionContracts: {
+        method: 'GET',
+        path: '/v1/transactions/:txnId/contracts',
+        pathParams: z.object({
+          txnId: z.string(),
+        }),
+        responses: {
+          200: RelatedContractListResponseDto,
+          401: ProblemDto,
+        },
+        summary: 'List contracts related to a transaction.',
+      },
+
+      listHoldContracts: {
+        method: 'GET',
+        path: '/v1/holds/:holdId/contracts',
+        pathParams: z.object({
+          holdId: z.string(),
+        }),
+        responses: {
+          200: RelatedContractListResponseDto,
+          401: ProblemDto,
+        },
+        summary: 'List contracts related to a hold.',
+      },
+
       generateContractSummary: {
         method: 'POST',
         path: '/v1/contracts/:sessionId/summary',
@@ -415,9 +686,26 @@ export const bankApiContract = c.router(
           'Generate (or return cached) contract summary for the current document state.',
       },
 
+      contractAiChat: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/ai-chat',
+        pathParams: z.object({
+          sessionId: z.string(),
+        }),
+        body: ContractAiChatRequestDto,
+        responses: {
+          200: ContractAiChatResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          500: ProblemDto,
+        },
+        summary:
+          'Chat with an assistant about a contract and prepare eligible operations.',
+      },
+
       runContractOperation: {
         method: 'POST',
-        path: '/v1/contracts/:sessionId/:operation',
+        path: '/v1/contracts/:sessionId/operations/:operation',
         pathParams: z.object({
           sessionId: z.string(),
           operation: z.string(),
@@ -430,6 +718,24 @@ export const bankApiContract = c.router(
           409: ProblemDto,
         },
         summary: 'Run a MyOS document operation on a contract session.',
+      },
+
+      decideContractPendingAction: {
+        method: 'POST',
+        path: '/v1/contracts/:sessionId/pending-actions/:actionId/decision',
+        pathParams: z.object({
+          sessionId: z.string(),
+          actionId: z.string(),
+        }),
+        body: ContractPendingActionDecisionRequestDto,
+        responses: {
+          200: ContractOperationResponseDto,
+          401: ProblemDto,
+          404: ProblemDto,
+          409: ProblemDto,
+          500: ProblemDto,
+        },
+        summary: 'Decide a pending action linked to a contract session.',
       },
 
       authorizeCard: {

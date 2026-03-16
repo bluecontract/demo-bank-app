@@ -185,9 +185,7 @@ export async function captureHold(
       [debitPosting, creditPosting],
       {
         idempotencyKey: cmd.idempotencyKey,
-        description:
-          existingHold.description ??
-          `Captured hold ${existingHold.holdId} to ${resolvedCounterparty}`,
+        description: existingHold.description ?? 'Card purchase capture',
         createdAt: capturedAt,
         originHoldId: existingHold.holdId,
         payNoteDocumentId:
@@ -200,6 +198,7 @@ export async function captureHold(
     const updatedHold: Hold = {
       ...existingHold,
       status: 'CAPTURED',
+      capturedAmountMinor: existingHold.amountMinor,
       counterpartyAccountNumber: resolvedCounterparty,
       relatedTransactionId: transaction.id,
     };
@@ -215,6 +214,8 @@ export async function captureHold(
         type: 'CAPTURED',
         transactionId: transaction.id,
         counterpartyAccountNumber: resolvedCounterparty,
+        amountMinor: existingHold.amountMinor,
+        remainingAmountMinor: 0,
         payNoteDocumentId: cmd.payNoteDocumentId,
       },
       transaction,

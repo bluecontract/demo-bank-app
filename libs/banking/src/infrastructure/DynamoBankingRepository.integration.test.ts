@@ -11,6 +11,18 @@ import { Transaction } from '../domain/entities/Transaction';
 import { Money } from '../domain/valueObjects/Money';
 import { Posting } from '../domain/valueObjects/Posting';
 
+const resolveLocalstackEndpoint = () => {
+  const envEndpoint =
+    process.env.AWS_ENDPOINT_URL?.trim() ||
+    process.env.LOCALSTACK_ENDPOINT_URL?.trim();
+  if (envEndpoint) {
+    return envEndpoint;
+  }
+
+  const port = process.env.LOCALSTACK_EDGE_PORT?.trim() || '4566';
+  return `http://localhost:${port}`;
+};
+
 // Helper function to create test accounts with required properties
 const createTestAccount = (
   overrides: Partial<ConstructorParameters<typeof Account>[0]> = {}
@@ -32,7 +44,7 @@ const createTestAccount = (
 
 const TEST_CONFIG = {
   tableName: `demo-bank-app-banking-dynamo-repository-integration-test-${Date.now()}`,
-  localstackEndpoint: 'http://localhost:4566',
+  localstackEndpoint: resolveLocalstackEndpoint(),
   region: 'us-east-1',
 };
 

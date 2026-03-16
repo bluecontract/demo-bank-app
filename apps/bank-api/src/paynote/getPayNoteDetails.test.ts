@@ -109,7 +109,9 @@ describe('getPayNoteDetailsHandler', () => {
       getAccountForUser: hoistedFacade.getAccountForUserMock,
       transferFunds: vi.fn(),
       reserveFunds: vi.fn(),
-      captureHold: vi.fn(),
+      captureHold: vi.fn().mockResolvedValue({
+        holdId: 'hold-1',
+      }),
     };
 
     const payNoteRepository = {
@@ -128,6 +130,7 @@ describe('getPayNoteDetailsHandler', () => {
       getDeliveryByCardTransactionDetails: vi.fn(),
       saveDelivery: vi.fn(),
       listDeliveriesByUserId: vi.fn(),
+      getDeliveryPollingMarkerByUserId: vi.fn(),
     };
 
     const blueIdCalculator = {

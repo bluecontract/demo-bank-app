@@ -8,6 +8,7 @@ import { AccountResult } from '../dtos';
 // Mock repository implementation
 const createMockRepository = () => ({
   saveAccount: vi.fn(),
+  updateAccountBalance: vi.fn(),
   saveTransactionWithAccounts: vi.fn(),
   getAccountById: vi.fn(),
   getAccountIdByNumber: vi.fn(),
@@ -48,6 +49,8 @@ describe('getAccount', () => {
       status: 'ACTIVE',
       currency: 'USD',
       createdAt,
+      accountType: 'DEPOSIT',
+      creditLimitMinor: undefined,
       ledgerBalanceMinor: new Money(10000),
       availableBalanceMinor: new Money(9500),
       balanceVersion: 1,
@@ -129,6 +132,8 @@ describe('getAccount', () => {
       status: 'SUSPENDED',
       currency: 'USD',
       createdAt,
+      accountType: 'DEPOSIT',
+      creditLimitMinor: undefined,
       ledgerBalanceMinor: new Money(10000),
       availableBalanceMinor: new Money(9500),
       balanceVersion: 1,

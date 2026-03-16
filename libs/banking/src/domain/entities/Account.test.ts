@@ -32,6 +32,8 @@ describe('Account', () => {
       expect(account.status).toBe('ACTIVE');
       expect(account.currency).toBe('USD');
       expect(account.createdAt).toEqual(new Date('2024-01-01'));
+      expect(account.accountType).toBe('DEPOSIT');
+      expect(account.creditLimitMinor).toBeUndefined();
     });
 
     it('should throw error for empty name', () => {
@@ -189,6 +191,51 @@ describe('Account', () => {
         )
       );
     });
+
+    it('should require credit limit for credit line accounts', () => {
+      expect(
+        () =>
+          new Account({
+            id: 'acc-123',
+            accountNumber: '1234567890',
+            name: 'Credit Line',
+            ownerUserId: 'user-456',
+            status: 'ACTIVE',
+            currency: 'USD',
+            createdAt: new Date(),
+            accountType: 'CREDIT_LINE',
+            ledgerBalanceMinor: new Money(0),
+            availableBalanceMinor: new Money(0),
+            balanceVersion: 0,
+          })
+      ).toThrow(
+        new InvalidAccountError(
+          'creditLimitMinor',
+          'Credit limit must be provided for credit line accounts'
+        )
+      );
+    });
+
+    it('should allow credit line balance to exceed credit limit', () => {
+      const account = new Account({
+        id: 'acc-123',
+        accountNumber: '1234567890',
+        name: 'Credit Line',
+        ownerUserId: 'user-456',
+        status: 'ACTIVE',
+        currency: 'USD',
+        createdAt: new Date(),
+        accountType: 'CREDIT_LINE',
+        creditLimitMinor: new Money(1000),
+        ledgerBalanceMinor: new Money(1200),
+        availableBalanceMinor: new Money(1000),
+        balanceVersion: 0,
+      });
+
+      expect(account.creditLimitMinor?.toCents()).toBe(1000);
+      expect(account.ledgerBalanceMinor.toCents()).toBe(1200);
+      expect(account.availableBalanceMinor.toCents()).toBe(1000);
+    });
   });
 
   describe('isActive', () => {
@@ -242,6 +289,78 @@ describe('Account', () => {
       const account = createTestAccount({ ownerUserId: 'user-123' });
 
       expect(account.isOwnedBy('user-456')).toBe(false);
+    });
+  });
+
+  describe('updateCreditLimit', () => {
+    it('should update balances when increasing limit', () => {
+      const account = new Account({
+        id: 'acc-123',
+        accountNumber: '1234567890',
+        name: 'Credit Line',
+        ownerUserId: 'user-456',
+        status: 'ACTIVE',
+        currency: 'USD',
+        createdAt: new Date('2024-01-01'),
+        accountType: 'CREDIT_LINE',
+        creditLimitMinor: new Money(1000),
+        ledgerBalanceMinor: new Money(800),
+        availableBalanceMinor: new Money(700),
+        balanceVersion: 0,
+      });
+
+      account.updateCreditLimit(new Money(1500));
+
+      expect(account.creditLimitMinor?.toCents()).toBe(1500);
+      expect(account.ledgerBalanceMinor.toCents()).toBe(1300);
+      expect(account.availableBalanceMinor.toCents()).toBe(1200);
+    });
+
+    it('should reject limits below used credit', () => {
+      const account = new Account({
+        id: 'acc-123',
+        accountNumber: '1234567890',
+        name: 'Credit Line',
+        ownerUserId: 'user-456',
+        status: 'ACTIVE',
+        currency: 'USD',
+        createdAt: new Date('2024-01-01'),
+        accountType: 'CREDIT_LINE',
+        creditLimitMinor: new Money(1000),
+        ledgerBalanceMinor: new Money(800),
+        availableBalanceMinor: new Money(700),
+        balanceVersion: 0,
+      });
+
+      expect(() => account.updateCreditLimit(new Money(250))).toThrow(
+        new InvalidAccountError(
+          'creditLimitMinor',
+          'Credit limit cannot be lower than used credit'
+        )
+      );
+    });
+
+    it('should allow lowering limit when account is above limit', () => {
+      const account = new Account({
+        id: 'acc-123',
+        accountNumber: '1234567890',
+        name: 'Credit Line',
+        ownerUserId: 'user-456',
+        status: 'ACTIVE',
+        currency: 'USD',
+        createdAt: new Date('2024-01-01'),
+        accountType: 'CREDIT_LINE',
+        creditLimitMinor: new Money(1000),
+        ledgerBalanceMinor: new Money(1200),
+        availableBalanceMinor: new Money(1100),
+        balanceVersion: 0,
+      });
+
+      account.updateCreditLimit(new Money(900));
+
+      expect(account.creditLimitMinor?.toCents()).toBe(900);
+      expect(account.ledgerBalanceMinor.toCents()).toBe(1100);
+      expect(account.availableBalanceMinor.toCents()).toBe(1000);
     });
   });
 

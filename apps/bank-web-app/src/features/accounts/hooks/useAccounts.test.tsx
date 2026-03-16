@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { useAccounts } from './useAccounts';
 import { apiClient } from '../../../api/client';
 import { ReactNode } from 'react';
+import { routerFutureConfig } from '../../../app/routerFutureConfig';
 
 // Mock the API client
 vi.mock('../../../api/client');
@@ -25,7 +26,7 @@ const createWrapper = () => {
   });
 
   return ({ children }: { children: ReactNode }) => (
-    <BrowserRouter>
+    <BrowserRouter future={routerFutureConfig}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </BrowserRouter>
   );
@@ -38,6 +39,8 @@ const mockAccounts = [
     name: 'My Checking Account',
     currency: 'USD' as const,
     createdAt: '2023-01-01T00:00:00Z',
+    accountType: 'DEPOSIT' as const,
+    creditLimitMinor: undefined,
     ledgerBalanceMinor: 1030000,
     availableBalanceMinor: 1030000,
     status: 'ACTIVE',
@@ -48,6 +51,8 @@ const mockAccounts = [
     name: 'My Savings Account',
     currency: 'USD' as const,
     createdAt: '2023-01-01T00:00:00Z',
+    accountType: 'DEPOSIT' as const,
+    creditLimitMinor: undefined,
     ledgerBalanceMinor: 500000,
     availableBalanceMinor: 500000,
     status: 'ACTIVE',

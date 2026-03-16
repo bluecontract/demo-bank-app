@@ -15,6 +15,8 @@ const mockAccounts = [
     name: 'Checking Account',
     currency: 'USD' as const,
     createdAt: '2023-01-01T00:00:00Z',
+    accountType: 'DEPOSIT' as const,
+    creditLimitMinor: undefined,
     ledgerBalanceMinor: 100000,
     availableBalanceMinor: 100000,
     status: 'ACTIVE',
@@ -25,6 +27,8 @@ const mockAccounts = [
     name: 'Savings Account',
     currency: 'USD' as const,
     createdAt: '2023-01-02T00:00:00Z',
+    accountType: 'DEPOSIT' as const,
+    creditLimitMinor: undefined,
     ledgerBalanceMinor: 250000,
     availableBalanceMinor: 250000,
     status: 'ACTIVE',
@@ -67,6 +71,19 @@ describe('HorizontalAccountsList', () => {
     expect(screen.getByText('Add new account')).toBeInTheDocument();
   });
 
+  it('should hide add account card when disabled', () => {
+    render(
+      <HorizontalAccountsList
+        accounts={mockAccounts}
+        onCreateAccount={vi.fn()}
+        onTransfer={vi.fn()}
+        showAddAccountCard={false}
+      />
+    );
+
+    expect(screen.queryByText('Add new account')).not.toBeInTheDocument();
+  });
+
   it('should call onCreateAccount when add account button is clicked', () => {
     const mockOnCreateAccount = vi.fn();
     render(
@@ -96,7 +113,7 @@ describe('HorizontalAccountsList', () => {
     expect(mockOnTransfer).toHaveBeenCalledWith('1');
   });
 
-  it('should select account when details button is clicked', () => {
+  it('should select account when account card is clicked', () => {
     render(
       <HorizontalAccountsList
         accounts={mockAccounts}
@@ -105,8 +122,10 @@ describe('HorizontalAccountsList', () => {
       />
     );
 
-    const detailsButtons = screen.getAllByText('Details');
-    fireEvent.click(detailsButtons[0]);
+    const cardButton = screen.getByRole('button', {
+      name: 'Select Checking Account',
+    });
+    fireEvent.click(cardButton);
     expect(mockSetSelectedAccount).toHaveBeenCalledWith(mockAccounts[0]);
   });
 
@@ -124,7 +143,7 @@ describe('HorizontalAccountsList', () => {
       />
     );
 
-    const selectedCard = container.querySelector('.ring-2');
+    const selectedCard = container.querySelector('.border-2');
     expect(selectedCard).toBeInTheDocument();
   });
 

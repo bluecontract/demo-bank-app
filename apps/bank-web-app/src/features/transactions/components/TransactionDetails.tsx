@@ -1,7 +1,18 @@
 import { ActivityDetail } from '../hooks/useActivityDetail';
+import type { RelatedContractItem } from '../../../types/api';
 import { Card } from '../../../ui/Card';
 import { formatCurrency } from '../../../lib/formatCurrency';
 import { formatAccountNumber } from '../../../lib/formatAccountNumber';
+import { formatShortDate } from '../../../lib/formatDate';
+import { Spinner } from '../../../ui/Spinner';
+import { navigateTo } from '../../../lib/navigation';
+import { useActiveContractSession } from '../../contracts/hooks';
+import {
+  getRelatedContractTarget,
+  getRelatedContractSessionId,
+  getVisibleRelatedContracts,
+  isProposalRelatedContract,
+} from '../lib/relatedContracts';
 
 type Account = {
   accountId: string;
@@ -19,20 +30,64 @@ interface TransactionDetailsProps {
   currentAccountId: string;
   currentAccountNumber: string;
   accounts: Account[];
+  userEmail?: string;
   'data-testid'?: string;
-  showPayNoteHelper?: boolean;
-  onViewPayNoteDetails?: () => void;
+  relatedContracts?: RelatedContractItem[] | null;
+  isRelatedContractsLoading?: boolean;
+  relatedContractsError?: string;
 }
+
+const formatStatusText = (value?: string): string | null => {
+  if (!value) {
+    return null;
+  }
+  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+};
+
+const getRelatedContractName = (contract: RelatedContractItem): string => {
+  if (isProposalRelatedContract(contract)) {
+    return contract.name?.trim() || 'PayNote proposal';
+  }
+  return contract.documentName?.trim() || contract.displayName;
+};
+
+const getRelatedContractPreview = (
+  contract: RelatedContractItem
+): string | null => {
+  const summaryPreview = contract.summaryPreview?.trim();
+  if (summaryPreview) {
+    return summaryPreview;
+  }
+
+  if (isProposalRelatedContract(contract)) {
+    if (contract.amountMinor != null) {
+      const currency = contract.currency ? ` ${contract.currency}` : '';
+      return `${formatCurrency(contract.amountMinor)}${currency}`;
+    }
+    if (contract.transactionId) {
+      return `Transaction ${contract.transactionId}`;
+    }
+    return (
+      formatStatusText(contract.clientDecisionStatus) ?? 'Proposal updated'
+    );
+  }
+
+  const statusLabel = formatStatusText(contract.status);
+  return statusLabel ? `Status: ${statusLabel}` : 'Contract updated';
+};
 
 export function TransactionDetails({
   transaction,
   currentAccountId,
   currentAccountNumber,
   accounts,
+  userEmail,
   'data-testid': testId,
-  showPayNoteHelper = false,
-  onViewPayNoteDetails,
+  relatedContracts,
+  isRelatedContractsLoading = false,
+  relatedContractsError,
 }: TransactionDetailsProps) {
+  const { setActiveSession } = useActiveContractSession();
   const getTransactionDirection = () => {
     return transaction.side === 'CREDIT' ? 'Incoming' : 'Outgoing';
   };
@@ -77,15 +132,13 @@ export function TransactionDetails({
       transaction.merchantName ||
       transaction.processorChargeId
   );
-  const methodLabel = isCardTransaction
-    ? 'Card Purchase'
-    : showPayNoteHelper
-    ? 'PayNote Transfer'
-    : 'Standard Transfer';
+  const operationLabel = isCardTransaction
+    ? 'Card purchase'
+    : `${getTransactionDirection()} transfer`;
 
   const getStatusBadge = (status: string) => {
     const baseClasses =
-      'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border';
+      'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold';
 
     switch (status.toLowerCase()) {
       case 'completed':
@@ -100,26 +153,48 @@ export function TransactionDetails({
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric',
-    });
-  };
-
   const getDisplayStatus = (status: string) => {
     return status.toLowerCase() === 'posted' ? 'Completed' : status;
   };
 
+  const { visibleRelatedContracts } =
+    getVisibleRelatedContracts(relatedContracts);
+
+  const handleContractClick = (contract: RelatedContractItem) => {
+    const sessionId = getRelatedContractSessionId(contract);
+    const target = getRelatedContractTarget(contract);
+    if (!sessionId || !target) {
+      return;
+    }
+    setActiveSession(sessionId);
+    navigateTo(target);
+  };
+
+  const headerContext = [
+    userEmail?.trim() || undefined,
+    transaction.cardLast4 ? `**** ${transaction.cardLast4}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(', ');
+
+  const counterpartyDisplay = counterpartyAccountNumber
+    ? formatAccountWithName(counterpartyAccountNumber, counterpartyAccountName)
+    : '—';
+  const currentAccountDisplay = formatAccountWithName(
+    currentAccountNumber,
+    currentAccountName
+  );
+  const fromAccountDisplay = isCredit
+    ? counterpartyDisplay
+    : currentAccountDisplay;
+  const toAccountDisplay = isCredit
+    ? currentAccountDisplay
+    : counterpartyDisplay;
+
   const detailRows: Array<{ label: string; value: string }> = [
-    {
-      label: 'Operation',
-      value: isCardTransaction
-        ? 'Card purchase'
-        : `${getTransactionDirection()} transfer`,
-    },
-    { label: 'Method', value: methodLabel },
+    { label: 'Operation', value: operationLabel },
+    { label: 'From account', value: fromAccountDisplay },
+    { label: 'To account', value: toAccountDisplay },
   ];
 
   if (isCardTransaction) {
@@ -149,140 +224,165 @@ export function TransactionDetails({
         value: transaction.originHoldId,
       });
     }
-  } else {
-    detailRows.push({
-      label: 'To account',
-      value: isCredit
-        ? formatAccountNumber(currentAccountNumber)
-        : counterpartyAccountNumber
-        ? formatAccountNumber(counterpartyAccountNumber)
-        : '—',
-    });
-    detailRows.push({
-      label: 'From account',
-      value: isCredit
-        ? counterpartyAccountNumber
-          ? formatAccountNumber(counterpartyAccountNumber)
-          : '—'
-        : formatAccountNumber(currentAccountNumber),
-    });
   }
 
   detailRows.push(
     { label: 'Amount', value: formattedAmount },
-    { label: 'Payment creation date', value: formatDate(transaction.postedAt) },
+    {
+      label: 'Payment creation date',
+      value: formatShortDate(transaction.postedAt),
+    },
     { label: 'Payment number', value: transaction.transactionId }
   );
 
+  const statusLabel =
+    transaction.status.toLowerCase() === 'pending'
+      ? 'Waiting'
+      : getDisplayStatus(transaction.status);
+
   return (
-    <div className="max-w-2xl mx-auto" data-testid={testId}>
-      <Card className="p-0">
-        <div className="px-4 py-3 border-b border-slate-200">
-          <div className="mb-1">
-            <h1 className="text-lg font-semibold text-slate-900">
+    <div className="flex w-full flex-col gap-4" data-testid={testId}>
+      <Card className="!p-4">
+        <div className="flex flex-col gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-semibold text-slate-900">
               {isCardTransaction
                 ? 'Card purchase'
                 : `${getTransactionDirection()} transfer`}
             </h1>
-          </div>
-          {!isCardTransaction && counterpartyAccountNumber && (
-            <p className="text-sm text-slate-600">
-              {isCredit ? 'From' : 'To'}{' '}
-              {formatAccountWithName(
-                counterpartyAccountNumber,
-                counterpartyAccountName
-              )}
-            </p>
-          )}
-          {isCardTransaction && (
-            <p className="text-sm text-slate-600">
-              {transaction.merchantName ?? 'Card purchase'}
-              {transaction.cardLast4 ? ` • **** ${transaction.cardLast4}` : ''}
-            </p>
-          )}
-        </div>
-
-        <div className="px-4 py-4 bg-white/70">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-slate-600">
-              {formatDate(transaction.postedAt)}
-            </span>
-            <span className={getStatusBadge(transaction.status)}>
-              {getDisplayStatus(transaction.status)}
-            </span>
-          </div>
-
-          <div className="flex items-center mb-3">
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
-                isCredit ? 'bg-emerald-50' : 'bg-rose-50'
-              }`}
-            >
-              <span
-                className={`text-lg ${
-                  isCredit ? 'text-emerald-600' : 'text-rose-600'
-                }`}
-              >
-                {isCredit ? '↓' : '↑'}
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-600">
+              <span className={getStatusBadge(transaction.status)}>
+                {statusLabel}
               </span>
+              {headerContext && (
+                <span className="text-sm text-slate-500">{headerContext}</span>
+              )}
             </div>
-            <span className="text-3xl font-bold text-slate-900">
-              {displayAmount}
-            </span>
           </div>
 
-          <div className="text-sm text-slate-600">
-            {!isCardTransaction && counterpartyAccountNumber && (
-              <>
-                {isCredit ? 'To' : 'From'}:{' '}
-                {formatAccountWithName(
-                  currentAccountNumber,
-                  currentAccountName
-                )}
-                <br />
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="px-4 py-4">
-          <div className="space-y-3">
-            {detailRows.map(row => (
-              <div key={row.label} className="flex justify-between">
-                <span className="text-sm text-slate-600">{row.label}</span>
-                <span className="text-sm text-slate-900">{row.value}</span>
+          <div className="w-full max-w-[720px] rounded-xl border border-slate-200 bg-white/70 p-4">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between text-sm text-slate-500">
+                <span>{formatShortDate(transaction.postedAt)}</span>
               </div>
-            ))}
+
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex size-8 items-center justify-center rounded-full ${
+                    isCredit
+                      ? 'bg-emerald-50 text-emerald-600'
+                      : 'bg-rose-50 text-rose-600'
+                  }`}
+                >
+                  <span className="text-lg">{isCredit ? '↓' : '↑'}</span>
+                </div>
+                <span className="text-3xl font-semibold text-slate-900">
+                  {displayAmount}
+                </span>
+              </div>
+
+              <div className="h-px bg-slate-200" />
+
+              <div className="grid gap-3 text-sm">
+                {detailRows.map(row => (
+                  <div
+                    key={row.label}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4"
+                  >
+                    <span className="text-slate-500">{row.label}</span>
+                    <span className="text-slate-900 text-right">
+                      {row.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
         {transaction.description && (
-          <div className="px-4 py-3 border-t border-slate-200">
-            <h3 className="text-sm font-medium text-slate-900 mb-1">
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-4">
+            <h3 className="text-sm font-medium text-slate-900 mb-2">
               Description
             </h3>
-            <div className="bg-white/80 rounded-xl p-3 border border-slate-200">
-              <p className="text-sm text-slate-700 leading-relaxed">
-                {transaction.description}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {showPayNoteHelper && (
-          <div className="px-4 py-3 border-t border-slate-200">
-            <p className="text-sm text-slate-700">
-              This transaction is part of a PayNote transfer.{' '}
-              <button
-                type="button"
-                className="text-emerald-700 font-medium hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] rounded"
-                onClick={() => onViewPayNoteDetails?.()}
-              >
-                See details
-              </button>
+            <p className="text-sm text-slate-700 leading-relaxed">
+              {transaction.description}
             </p>
           </div>
         )}
+      </Card>
+
+      <Card className="!p-4">
+        <h3 className="text-base font-semibold text-slate-900">
+          Linked contracts
+        </h3>
+
+        {isRelatedContractsLoading && (
+          <div className="flex items-center justify-center py-4">
+            <Spinner size="md" color="green" />
+          </div>
+        )}
+
+        {!isRelatedContractsLoading && relatedContractsError && (
+          <div className="mt-4 rounded-xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-600">
+            {relatedContractsError}
+          </div>
+        )}
+
+        {!isRelatedContractsLoading &&
+          !relatedContractsError &&
+          visibleRelatedContracts.length === 0 && (
+            <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm text-slate-500">
+              No related contracts found.
+            </div>
+          )}
+
+        {!isRelatedContractsLoading &&
+          !relatedContractsError &&
+          visibleRelatedContracts.length > 0 && (
+            <div className="mt-4 space-y-3">
+              {visibleRelatedContracts.map(contract => {
+                const isProposal = isProposalRelatedContract(contract);
+                const isSelectable = isProposal
+                  ? Boolean(contract.deliverySessionId)
+                  : Boolean(contract.sessionId);
+                const primaryName = getRelatedContractName(contract);
+                const preview = getRelatedContractPreview(contract);
+
+                return (
+                  <button
+                    key={
+                      isProposal
+                        ? `proposal-${contract.deliveryId}`
+                        : contract.contractId
+                    }
+                    type="button"
+                    className={`w-full rounded-xl border p-4 text-left transition ${
+                      isSelectable
+                        ? 'border-slate-200 bg-white/80 hover:border-emerald-200 hover:shadow-md'
+                        : 'border-slate-200 bg-white/50 opacity-60 cursor-not-allowed'
+                    }`}
+                    onClick={() => {
+                      if (!isSelectable) {
+                        return;
+                      }
+                      handleContractClick(contract);
+                    }}
+                    disabled={!isSelectable}
+                  >
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {primaryName}
+                      </p>
+                      {preview && (
+                        <p className="text-sm text-slate-600">{preview}</p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
       </Card>
     </div>
   );

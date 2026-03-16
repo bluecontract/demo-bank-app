@@ -4,11 +4,14 @@ import {
   InvalidAccountError,
   authorizeCard,
 } from '@demo-bank-app/banking';
+import { resolveMonitoringReportStatusFromHoldStatus } from '@demo-bank-app/contracts';
 import { ServerInferRequest } from '@ts-rest/core';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
 import { getDependencies } from './dependencies';
+import { getDependencies as getPaynoteDependencies } from '../paynote/dependencies';
 import { requireProcessorAuth } from '../auth/processorAuth';
 import { ERROR_CODES, problemResponse } from '../shared/errors';
+import { reportCardTransactionToMonitoringSubscribers } from '../contracts/reportMonitoringTransaction';
 
 export const authorizeCardHandler = async (
   request: ServerInferRequest<
@@ -20,6 +23,7 @@ export const authorizeCardHandler = async (
 ) => {
   const {
     repository,
+    contractRepository,
     cardRepository,
     holdRepository,
     cardHasher,
@@ -91,6 +95,56 @@ export const authorizeCardHandler = async (
       cardId: result.card.cardId,
       accountNumber: result.card.accountNumber,
     });
+
+    try {
+      const merchantId =
+        result.hold.merchantId ?? request.body.merchant.merchantId;
+      const reportStatus =
+        resolveMonitoringReportStatusFromHoldStatus(result.hold.status) ??
+        'authorized';
+
+      let ownerUserId: string | undefined = result.card.ownerUserId;
+      if (!ownerUserId) {
+        const accountId = await repository.getAccountIdByNumber(
+          result.card.accountNumber
+        );
+        if (accountId) {
+          const account = await repository.getAccountById(accountId);
+          ownerUserId = account?.ownerUserId;
+        }
+      }
+
+      if (merchantId && ownerUserId) {
+        const { myOsClient } = await getPaynoteDependencies();
+        await reportCardTransactionToMonitoringSubscribers({
+          contractRepository,
+          myOsClient,
+          logger,
+          userId: ownerUserId,
+          merchantId,
+          reportEvent: {
+            type: 'PayNote/Card Transaction Report',
+            status: reportStatus,
+            amountMinor: result.hold.amountMinor,
+            currency: result.hold.currency,
+            occurredAt: result.hold.createdAt ?? new Date().toISOString(),
+            merchantId,
+            transactionId: result.hold.holdId,
+            cardTransactionDetails: result.hold.cardTransactionDetails,
+          },
+          reportTransactionId: result.hold.holdId,
+          relatedHoldId: result.hold.holdId,
+        });
+      }
+    } catch (error) {
+      logger.warn(
+        'Failed to report card authorization to monitoring subscribers',
+        {
+          authorizationId: result.hold.holdId,
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+    }
 
     return {
       status: 200 as const,

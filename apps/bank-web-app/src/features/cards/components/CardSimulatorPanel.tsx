@@ -45,6 +45,7 @@ export function CardSimulatorPanel() {
   const [cvc, setCvc] = useState('');
   const [amount, setAmount] = useState('12.00');
   const [merchantName, setMerchantName] = useState(DEFAULT_MERCHANT);
+  const [merchantId, setMerchantId] = useState('');
   const [statementDescriptor, setStatementDescriptor] = useState('DEMO SHOP');
   const [processorChargeId, setProcessorChargeId] = useState('');
   const [processorToken, setProcessorToken] = useState(DEFAULT_TOKEN);
@@ -107,6 +108,7 @@ export function CardSimulatorPanel() {
 
       const chargeId = processorChargeId || `ch_${Date.now()}`;
 
+      const trimmedMerchantId = merchantId.trim();
       const response = await fetch(
         `${baseUrl}/v1/card-processor/authorizations`,
         {
@@ -125,7 +127,9 @@ export function CardSimulatorPanel() {
             currency: 'USD',
             merchant: {
               name: merchantName || DEFAULT_MERCHANT,
-              statementDescriptor: statementDescriptor || merchantName,
+              statementDescriptor:
+                statementDescriptor || merchantName || DEFAULT_MERCHANT,
+              ...(trimmedMerchantId ? { merchantId: trimmedMerchantId } : {}),
             },
             processorChargeId: chargeId,
           }),
@@ -278,7 +282,7 @@ export function CardSimulatorPanel() {
               placeholder="12.00"
             />
             <p className="mt-1 text-xs text-[color:var(--color-muted)]">
-              For capture, amount must match the hold amount.
+              Capture supports partial amounts up to the authorized total.
             </p>
           </div>
           <div>
@@ -325,6 +329,17 @@ export function CardSimulatorPanel() {
                 placeholder="ch_..."
               />
             </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-slate-600">
+              Merchant ID (optional)
+            </label>
+            <Input
+              value={merchantId}
+              onChange={event => setMerchantId(event.target.value)}
+              placeholder="merchant-demo"
+            />
           </div>
 
           <div>

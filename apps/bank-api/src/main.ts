@@ -1,6 +1,14 @@
-import { createLambdaHandler, tsr } from '@ts-rest/serverless/aws';
+import {
+  TsRestResponse,
+  createLambdaHandler,
+  tsr,
+} from '@ts-rest/serverless/aws';
 import { bankApiContract } from '@demo-bank-app/shared-bank-api-contract';
-import { signUpHandler, signInHandler } from './auth/handlers';
+import {
+  signUpHandler,
+  signInHandler,
+  updateUserProfileHandler,
+} from './auth/handlers';
 
 import { createErrorHandler } from './errors';
 import {
@@ -14,6 +22,7 @@ import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { createAccountHandler } from './banking/createAccount';
 import { listAccountsHandler } from './banking/listAccounts';
 import { getAccountHandler } from './banking/getAccount';
+import { setCreditLimitHandler } from './banking/setCreditLimit';
 import { fundAccountHandler } from './banking/fundAccount';
 import { transferMoneyHandler } from './banking/transferMoney';
 import { getTransactionHandler } from './banking/getTransaction';
@@ -31,14 +40,54 @@ import { payNoteWebhookHandler } from './paynote/webhook';
 import { getPayNoteDetailsHandler } from './paynote/getPayNoteDetails';
 import { listPayNoteDeliveriesHandler } from './paynote/listPayNoteDeliveries';
 import { getPayNoteDeliveryHandler } from './paynote/getPayNoteDelivery';
+import { getPayNoteDeliveryBySessionIdHandler } from './paynote/getPayNoteDeliveryBySessionId';
+import { getPayNoteDeliverySummaryHandler } from './paynote/getPayNoteDeliverySummary';
+import { acceptPayNoteDeliveryHandler } from './paynote/acceptPayNoteDelivery';
+import { rejectPayNoteDeliveryHandler } from './paynote/rejectPayNoteDelivery';
+import { generatePayNoteDeliverySummaryHandler } from './paynote/generatePayNoteDeliverySummary';
+import { pollChangesHandler } from './polling/pollChanges';
 import { runContractOperationHandler } from './contracts/runContractOperation';
+import { decideContractPendingActionHandler } from './contracts/decideContractPendingAction';
 import { listContractsHandler } from './contracts/listContracts';
 import { getContractDetailsHandler } from './contracts/getContractDetails';
+import { listContractHistoryHandler } from './contracts/listContractHistory';
+import { archiveContractHandler } from './contracts/archiveContract';
+import { unarchiveContractHandler } from './contracts/unarchiveContract';
 import { generateContractSummaryHandler } from './contracts/generateContractSummary';
+import { contractAiChatHandler } from './contracts/aiChat';
+import { listTransactionContractsHandler } from './contracts/listTransactionContracts';
+import { listHoldContractsHandler } from './contracts/listHoldContracts';
 
 const metrics = getMetrics();
 const logger = getLogger();
 const securityHeaders = getSecurityHeaders();
+
+const normalizeResponse = async (
+  response: TsRestResponse
+): Promise<TsRestResponse> => {
+  if (response.rawBody !== undefined) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  const status = response.status;
+
+  const rawBody = (() => {
+    if (status === 204 || status === 304) {
+      return Promise.resolve<null>(null);
+    }
+    const contentType = headers.get('content-type');
+    if (contentType?.startsWith('text/') || contentType?.includes('json')) {
+      return response.text();
+    }
+    return response.arrayBuffer();
+  })();
+
+  return new TsRestResponse(await rawBody, {
+    status,
+    headers,
+  });
+};
 
 // Create the ts-rest handler
 export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
@@ -60,11 +109,13 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
 
     signUp: signUpHandler,
     signIn: signInHandler,
+    updateUserProfile: updateUserProfileHandler,
 
     banking: {
       createAccount: createAccountHandler,
       listAccounts: listAccountsHandler,
       getAccount: getAccountHandler,
+      setCreditLimit: setCreditLimitHandler,
       listCards: listCardsHandler,
       issueCard: issueCardHandler,
       getCard: getCardHandler,
@@ -79,11 +130,24 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
       getPayNoteDetails: getPayNoteDetailsHandler,
       payNoteWebhook: payNoteWebhookHandler,
       listPayNoteDeliveries: listPayNoteDeliveriesHandler,
+      pollChanges: pollChangesHandler,
       getPayNoteDelivery: getPayNoteDeliveryHandler,
+      getPayNoteDeliveryBySessionId: getPayNoteDeliveryBySessionIdHandler,
+      getPayNoteDeliverySummary: getPayNoteDeliverySummaryHandler,
+      generatePayNoteDeliverySummary: generatePayNoteDeliverySummaryHandler,
+      acceptPayNoteDelivery: acceptPayNoteDeliveryHandler,
+      rejectPayNoteDelivery: rejectPayNoteDeliveryHandler,
       listContracts: listContractsHandler,
       getContractDetails: getContractDetailsHandler,
+      listContractHistory: listContractHistoryHandler,
+      archiveContract: archiveContractHandler,
+      unarchiveContract: unarchiveContractHandler,
+      listTransactionContracts: listTransactionContractsHandler,
+      listHoldContracts: listHoldContractsHandler,
       generateContractSummary: generateContractSummaryHandler,
+      contractAiChat: contractAiChatHandler,
       runContractOperation: runContractOperationHandler,
+      decideContractPendingAction: decideContractPendingActionHandler,
       authorizeCard: authorizeCardHandler,
       captureCardAuthorization: captureCardAuthorizationHandler,
     },
@@ -91,7 +155,7 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
   {
     cors: {
       origin: true,
-      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
       allowHeaders: [
         'Content-Type',
         'X-Amz-Date',
@@ -122,6 +186,9 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
     errorHandler: createErrorHandler(logger),
     responseHandlers: [
       async response => {
+        return normalizeResponse(response);
+      },
+      async response => {
         // Add security headers for all requests
         Object.entries(securityHeaders).forEach(([key, value]) => {
           response.headers.set(key, value);
@@ -138,6 +205,9 @@ export const handler: APIGatewayProxyHandlerV2 = createLambdaHandler(
         return response;
       },
       async (response, request) => {
+        if (request.method.toUpperCase() === 'OPTIONS') {
+          response.headers.set('Access-Control-Max-Age', '600');
+        }
         logger.debug('Sending response', {
           status: response.status,
           method: request.method,

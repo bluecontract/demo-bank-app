@@ -2,6 +2,8 @@ export * from './DynamoPayNoteVerificationRepository';
 export * from './DynamoPayNoteDeliveryRepository';
 export * from './DynamoPayNoteRepository';
 export * from './DynamoPayNoteBootstrapRepository';
+export * from './DynamoBootstrapContextRepository';
+export * from './DynamoPendingBootstrapEventRepository';
 export * from './blueIdCalculator';
 export * from './systemClock';
 export * from './randomIdGenerator';

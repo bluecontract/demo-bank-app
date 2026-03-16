@@ -31,6 +31,7 @@ const mockConfig = {
     cardBinPrefix: '123456',
     cardProcessorToken: 'processor-token',
   },
+  defaultMerchantCreditLimitMinor: 500_000,
 };
 
 const authHeaders = new Headers({ Authorization: 'Bearer processor-token' });
@@ -43,7 +44,7 @@ const baseRequest = {
     cvc: '123',
     amountMinor: 1500,
     currency: 'USD',
-    merchant: { name: 'Demo Shop' },
+    merchant: { name: 'Demo Shop', merchantId: 'merchant-123' },
     processorChargeId: 'ch_123',
     description: 'Demo purchase',
   },

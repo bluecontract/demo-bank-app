@@ -30,8 +30,23 @@ Before submitting any artifact or code:
 2. Analyse surrounding context from existing documentation (e.g. when planning architecture changes, analyse current architecture documentation)
 3. Ensure that documentation is updated.
 
+## Quality Gates
+Quick Verify:
+- npm run verify:quick
+
+Full Verify:
+- npm run verify:full
+
+If only docs/config changes, skip test runs and state why.
+
 ## Tools
 Leverage available tools and MCP servers as needed
+
+## Skills
+Use agents/skills/* for tests, logs, debug, deploy, and code review. Open each SKILL.md before use.
+
+## Code Review (Required)
+- Before handing over changes to the user (even without a commit), run the code review skill and address any high-priority items.
 
 ## Rules
 1. Load specific rules according to the development step and context.
@@ -41,4 +56,6 @@ Leverage available tools and MCP servers as needed
 Phase 1 - Problem Exploration: `fullcycle-problem-exploration.mdc`
 Phase 2 - Requirements: `fullcycle-requirements-analysis.mdc`
 Phase 3 - Architecture & ADR: `fullcycle-architecture-design.mdc`
+Implementation Guardrails: `fullcycle-implementation.mdc`
+Testing: `tech-testing.mdc`
 Documentation: `fullcycle-docs.mdc`

@@ -11,7 +11,7 @@ import {
   type FieldModel,
   type PathSegment,
 } from '../lib/operationFormModel';
-import { useRunContractOperation } from '../hooks/useRunContractOperation';
+import { useRunContractOperation } from '../hooks';
 
 interface OperationFormProps {
   operation: ContractOperation;
@@ -24,6 +24,12 @@ type Breadcrumb = {
   label: string;
   field: FieldModel;
   path: PathSegment[];
+};
+
+const OPTIONAL_RAW_REQUEST_MODEL: FieldModel = {
+  kind: 'raw',
+  label: 'Request payload',
+  required: false,
 };
 
 const isComplexField = (field: FieldModel) =>
@@ -121,8 +127,27 @@ export function OperationForm({
   onClose,
 }: OperationFormProps) {
   const runOperation = useRunContractOperation();
+  const model = useMemo(() => {
+    if (!operation.request) {
+      return null;
+    }
+    return buildRequestModel(operation.request, blue, 'Request');
+  }, [operation]);
+
+  const hasRequest = Boolean(operation.request && model);
+  const isUnknownRequestSchema = Boolean(hasRequest && model?.kind === 'raw');
+  const supportsOptionalPayloadEditor = Boolean(
+    isUnknownRequestSchema || !operation.request
+  );
+  const requiresInput = hasRequest && !isUnknownRequestSchema;
+  const requestModel = useMemo(
+    () =>
+      model ??
+      (supportsOptionalPayloadEditor ? OPTIONAL_RAW_REQUEST_MODEL : null),
+    [model, supportsOptionalPayloadEditor]
+  );
   const [mode, setMode] = useState<'form' | 'confirm' | 'success'>(() =>
-    operation.request ? 'form' : 'confirm'
+    requiresInput ? 'form' : 'confirm'
   );
   const [values, setValues] = useState<unknown>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -134,47 +159,54 @@ export function OperationForm({
   const previousOperationName = useRef<string | null>(null);
   const previousIsOpen = useRef(false);
 
-  const model = useMemo(() => {
-    if (!operation.request) {
-      return null;
-    }
-    return buildRequestModel(operation.request, blue, 'Request');
-  }, [operation]);
-
-  const hasRequest = Boolean(operation.request && model);
-
   useEffect(() => {
     const didOpen = isOpen && !previousIsOpen.current;
     const operationChanged = operation.name !== previousOperationName.current;
 
     if (isOpen && (didOpen || operationChanged)) {
-      if (!model) {
+      if (!requestModel) {
         setValues({});
       } else {
-        setValues(createEmptyValue(model));
+        setValues(createEmptyValue(requestModel));
       }
       setErrors({});
       setBreadcrumbs([]);
       setDictionaryDrafts({});
       setPayloadPreview({});
-      setMode(hasRequest ? 'form' : 'confirm');
+      setMode(requiresInput ? 'form' : 'confirm');
     }
 
     previousIsOpen.current = isOpen;
     previousOperationName.current = operation.name;
-  }, [hasRequest, isOpen, model, operation.name]);
+  }, [isOpen, operation.name, requestModel, requiresInput]);
   const isConfirming = mode === 'confirm';
   const isSuccess = mode === 'success';
   const operationTitle = operation.label || operation.name;
+  const isOperationPending = runOperation.isPending;
+  const operationErrorMessage =
+    runOperation.error instanceof Error ? runOperation.error.message : null;
 
   const handleReview = () => {
-    if (!model) {
+    if (!requestModel) {
       setPayloadPreview({});
       setMode('confirm');
       return;
     }
 
-    const { payload, errors: validationErrors } = buildPayload(model, values);
+    if (supportsOptionalPayloadEditor && requestModel.kind === 'raw') {
+      const rawValue = typeof values === 'string' ? values.trim() : '';
+      if (!rawValue) {
+        setErrors({});
+        setPayloadPreview({});
+        setMode('confirm');
+        return;
+      }
+    }
+
+    const { payload, errors: validationErrors } = buildPayload(
+      requestModel,
+      values
+    );
 
     if (validationErrors.length > 0) {
       const mappedErrors = validationErrors.reduce<Record<string, string>>(
@@ -199,7 +231,7 @@ export function OperationForm({
   };
 
   const handleConfirmCancel = () => {
-    if (hasRequest) {
+    if (requiresInput) {
       runOperation.reset?.();
       setMode('form');
       return;
@@ -208,7 +240,10 @@ export function OperationForm({
   };
 
   const handleConfirm = () => {
-    const body = hasRequest ? payloadPreview ?? {} : {};
+    const body =
+      requiresInput || supportsOptionalPayloadEditor
+        ? payloadPreview ?? {}
+        : {};
     runOperation.mutate(
       {
         sessionId,
@@ -231,8 +266,8 @@ export function OperationForm({
 
   const currentContext = breadcrumbs.length
     ? breadcrumbs[breadcrumbs.length - 1]
-    : model
-    ? { label: model.label, field: model, path: [] }
+    : requestModel
+    ? { label: requestModel.label, field: requestModel, path: [] }
     : null;
 
   const openNested = (
@@ -315,7 +350,7 @@ export function OperationForm({
           <>
             <input
               type="text"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               value={typeof value === 'string' ? value : ''}
               onChange={event => updateValue(path, event.target.value)}
               disabled={disabled}
@@ -330,7 +365,7 @@ export function OperationForm({
               type="number"
               inputMode="numeric"
               step={1}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               value={
                 typeof value === 'string' || typeof value === 'number'
                   ? value
@@ -348,7 +383,7 @@ export function OperationForm({
             <input
               type="number"
               step="any"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               value={
                 typeof value === 'string' || typeof value === 'number'
                   ? value
@@ -377,7 +412,7 @@ export function OperationForm({
             <input
               type="datetime-local"
               step="1"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               value={typeof value === 'string' ? value : ''}
               onChange={event => updateValue(path, event.target.value)}
               disabled={disabled}
@@ -389,7 +424,7 @@ export function OperationForm({
         return (
           <>
             <textarea
-              className="w-full min-h-[120px] rounded-lg border border-slate-200 bg-slate-900/95 px-3 py-2 text-xs font-mono text-emerald-100 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full min-h-[120px] rounded-lg border border-slate-200 bg-slate-900/95 px-3 py-2 text-xs font-mono text-emerald-100 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               placeholder='Enter JSON (example: {"message": "Hello"})'
               value={typeof value === 'string' ? value : ''}
               onChange={event => updateValue(path, event.target.value)}
@@ -550,7 +585,7 @@ export function OperationForm({
 
     return (
       <div className="space-y-3">
-        {Object.entries(entries).map(([key, entryValue]) => (
+        {Object.entries(entries).map(([key]) => (
           <div
             key={key}
             className="rounded-xl border border-slate-200 bg-white/70 p-4"
@@ -599,7 +634,7 @@ export function OperationForm({
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <input
               type="text"
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
               placeholder="Key"
               value={draft.key}
               onChange={event =>
@@ -622,7 +657,7 @@ export function OperationForm({
                 <input
                   type="datetime-local"
                   step="1"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
                   placeholder="Value"
                   value={typeof draft.value === 'string' ? draft.value : ''}
                   onChange={event =>
@@ -643,7 +678,7 @@ export function OperationForm({
                       ? 'text'
                       : 'number'
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(43,190,156,0.2)]"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary-focus)]"
                   placeholder="Value"
                   value={
                     typeof draft.value === 'string' ||
@@ -769,7 +804,7 @@ export function OperationForm({
                 </p>
               )}
             </div>
-            {hasRequest ? (
+            {requiresInput ? (
               <span className="app-chip">Input required</span>
             ) : (
               <span className="app-chip app-chip-neutral">No input</span>
@@ -816,10 +851,8 @@ export function OperationForm({
                 </Button>
               </div>
 
-              {runOperation.isError && (
-                <p className="text-sm text-rose-600">
-                  {runOperation.error?.message ?? 'Unable to run operation.'}
-                </p>
+              {operationErrorMessage && (
+                <p className="text-sm text-rose-600">{operationErrorMessage}</p>
               )}
             </div>
           )}
@@ -831,11 +864,21 @@ export function OperationForm({
                 <span className="font-semibold">"{operationTitle}"</span>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-3">
+                {supportsOptionalPayloadEditor && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setMode('form')}
+                    disabled={isOperationPending}
+                  >
+                    Edit payload
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={handleConfirmCancel}
-                  disabled={runOperation.isPending}
+                  disabled={isOperationPending}
                 >
                   Cancel
                 </Button>
@@ -843,16 +886,14 @@ export function OperationForm({
                   variant="primary"
                   size="sm"
                   onClick={handleConfirm}
-                  disabled={runOperation.isPending}
+                  disabled={isOperationPending}
                 >
-                  {runOperation.isPending ? 'Running...' : 'Confirm'}
+                  {isOperationPending ? 'Running...' : 'Confirm'}
                 </Button>
-                {runOperation.isPending && <Spinner size="sm" color="green" />}
+                {isOperationPending && <Spinner size="sm" color="green" />}
               </div>
-              {runOperation.isError && (
-                <p className="text-sm text-rose-600">
-                  {runOperation.error?.message ?? 'Unable to run operation.'}
-                </p>
+              {operationErrorMessage && (
+                <p className="text-sm text-rose-600">{operationErrorMessage}</p>
               )}
             </div>
           )}

@@ -111,6 +111,7 @@ export interface MyOsClient {
   bootstrapDocument(input: {
     credentials: MyOsCredentials;
     payload: MyOsBootstrapPayload;
+    idempotencyKey?: string;
   }): Promise<MyOsBootstrapResponse>;
 
   runDocumentOperation(input: {
@@ -130,6 +131,7 @@ export interface PayNoteDeliveryRecord {
   deliveryDocumentId?: string;
   deliverySessionId?: string;
   deliverySessionIds?: string[];
+  deliveryEpoch?: number;
   synchronySessionId?: string;
   cardTransactionDetails?: CardTransactionDetails;
   cardTransactionDetailsKey?: string;
@@ -137,6 +139,7 @@ export interface PayNoteDeliveryRecord {
   userId?: string;
   holdId?: string;
   transactionId?: string;
+  merchantId?: string;
   transactionIdentificationStatus?: string;
   clientDecisionStatus?: string;
   deliveryStatus?: string;
@@ -150,6 +153,16 @@ export interface PayNoteDeliveryRecord {
   identificationReportedAt?: string;
   decisionRecordedAt?: string;
   payNoteBootstrapRequestedAt?: string;
+  paymentMandateDocumentId?: string;
+  paymentMandateBootstrapSessionId?: string;
+  paymentMandateStatus?: 'not_required' | 'pending' | 'attached' | 'failed';
+  summary?: Record<string, unknown>;
+  summaryUpdatedAt?: string;
+  summarySourceUpdatedAt?: string;
+  summarySourceEpoch?: number;
+  summaryInputBlueId?: string;
+  summaryModel?: string;
+  summaryError?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -157,18 +170,34 @@ export interface PayNoteDeliveryRecord {
 export interface PayNoteDeliverySummary {
   deliveryId: string;
   deliverySessionId?: string;
+  payNoteSessionIds?: string[];
+  payNoteDocumentId?: string;
   name?: string;
+  proposalDescription?: string;
   amountMinor?: number;
   currency?: string;
+  merchantId?: string;
+  summaryPreview?: string;
   deliveryStatus?: string;
   transactionIdentificationStatus?: string;
   clientDecisionStatus?: string;
+  transactionId?: string;
+  holdId?: string;
+  paymentMandateDocumentId?: string;
+  paymentMandateStatus?: 'not_required' | 'pending' | 'attached' | 'failed';
   createdAt: string;
   updatedAt: string;
 }
 
+export interface PayNoteDeliveryPollingMarker {
+  revision: number;
+  latestUpdatedAt?: string;
+}
+
 export interface PayNoteDeliveryRepository {
   markEventProcessed(eventId: string): Promise<boolean>;
+  finalizeEventProcessing?(eventId: string): Promise<void>;
+  releaseEventProcessing?(eventId: string): Promise<void>;
   getDelivery(deliveryId: string): Promise<PayNoteDeliveryRecord | null>;
   getDeliveryByDocumentId(
     documentId: string
@@ -186,7 +215,21 @@ export interface PayNoteDeliveryRepository {
     details: CardTransactionDetails
   ): Promise<PayNoteDeliveryRecord | null>;
   saveDelivery(record: PayNoteDeliveryRecord): Promise<void>;
+  updateDeliverySummary(input: {
+    deliveryId: string;
+    summary?: Record<string, unknown>;
+    summaryUpdatedAt?: string;
+    summarySourceUpdatedAt?: string;
+    summarySourceEpoch?: number;
+    summaryInputBlueId?: string;
+    summaryModel?: string;
+    summaryError?: string | null;
+    userId?: string;
+  }): Promise<void>;
   listDeliveriesByUserId(userId: string): Promise<PayNoteDeliverySummary[]>;
+  getDeliveryPollingMarkerByUserId(
+    userId: string
+  ): Promise<PayNoteDeliveryPollingMarker>;
 }
 
 export interface PayNoteRecord {
@@ -197,11 +240,37 @@ export interface PayNoteRecord {
   userId?: string;
   holdId?: string;
   transactionId?: string;
+  merchantId?: string;
+  lastSourceEventCreatedAt?: string;
+  lastSourceEventEpoch?: number;
+  lastCaptureLockEventId?: string;
+  lastCaptureUnlockEventId?: string;
   payerAccountNumber?: string;
   payeeAccountNumber?: string;
   document?: Record<string, unknown>;
   transactionRequest?: unknown;
   triggerEvent?: unknown;
+  pendingMandateChargeAttempts?: Record<
+    string,
+    {
+      mandateDocumentId: string;
+      eventType: string;
+      requestId?: string;
+      queuedAt: string;
+      retryCount: number;
+      nextRetryAt?: string;
+      lastReason?: string;
+    }
+  >;
+  transferMandateAttemptsByHoldId?: Record<
+    string,
+    {
+      mandateDocumentId: string;
+      mandateSessionId: string;
+      chargeAttemptId: string;
+      updatedAt: string;
+    }
+  >;
   createdAt: string;
   updatedAt: string;
 }
@@ -210,6 +279,12 @@ export interface PayNoteRepository {
   getPayNote(documentId: string): Promise<PayNoteRecord | null>;
   getPayNoteBySessionId(sessionId: string): Promise<PayNoteRecord | null>;
   savePayNote(record: PayNoteRecord): Promise<void>;
+  markEventProcessed(eventId: string): Promise<boolean>;
+  getEventProcessingStatus?(
+    eventId: string
+  ): Promise<'processing' | 'completed' | null>;
+  finalizeEventProcessing?(eventId: string): Promise<void>;
+  releaseEventProcessing?(eventId: string): Promise<void>;
 }
 
 export interface PayNoteBootstrapRecord {
@@ -226,6 +301,54 @@ export interface PayNoteBootstrapRepository {
     bootstrapSessionId: string
   ): Promise<PayNoteBootstrapRecord | null>;
   saveBootstrap(record: PayNoteBootstrapRecord): Promise<void>;
+}
+
+export interface BootstrapContextRecord {
+  bootstrapSessionId: string;
+  merchantId?: string;
+  accountNumber?: string;
+  userId?: string;
+  holdId?: string;
+  transactionId?: string;
+  payerAccountNumber?: string;
+  payeeAccountNumber?: string;
+  customerChannelKey?: string;
+  requestingSessionId?: string;
+  requestId?: string;
+  createdAt: string;
+}
+
+export interface BootstrapContextRepository {
+  getContextBySessionId(
+    bootstrapSessionId: string
+  ): Promise<BootstrapContextRecord | null>;
+  getBootstrapSessionIdByTargetSessionId?(
+    targetSessionId: string
+  ): Promise<string | null>;
+  saveContext(record: BootstrapContextRecord): Promise<void>;
+  saveTargetSessionBootstrapLink?(input: {
+    targetSessionId: string;
+    bootstrapSessionId: string;
+    createdAt: string;
+  }): Promise<void>;
+}
+
+export interface PendingBootstrapEventRecord {
+  bootstrapSessionId: string;
+  eventId: string;
+  createdAt: string;
+  ttl?: number;
+}
+
+export interface PendingBootstrapEventRepository {
+  addPending(record: PendingBootstrapEventRecord): Promise<void>;
+  listPending(
+    bootstrapSessionId: string
+  ): Promise<PendingBootstrapEventRecord[]>;
+  deletePending(input: {
+    bootstrapSessionId: string;
+    eventId: string;
+  }): Promise<void>;
 }
 
 export interface BankingAccount {
@@ -259,7 +382,17 @@ export interface CaptureHoldRequest {
   holdId: string;
   userId: string;
   idempotencyKey: string;
+  amountMinor?: number;
   counterpartyAccountNumber?: string;
+  payNoteDocumentId?: string;
+}
+
+export interface ReleaseHoldRequest {
+  holdId: string;
+  userId: string;
+  idempotencyKey: string;
+  amountMinor?: number;
+  reason?: string;
   payNoteDocumentId?: string;
 }
 
@@ -279,6 +412,13 @@ export interface BankingFacade {
   ): Promise<BankingAccount | null>;
 
   /**
+   * Resolves an active merchant credit line account when available.
+   */
+  getActiveCreditLineAccountByMerchantId?(
+    merchantId: string
+  ): Promise<BankingAccount | null>;
+
+  /**
    * Transfers funds between two bank accounts.
    */
   transferFunds(request: TransferFundsRequest): Promise<void>;
@@ -291,7 +431,13 @@ export interface BankingFacade {
   /**
    * Captures a previously reserved hold.
    */
-  captureHold(request: CaptureHoldRequest): Promise<void>;
+  captureHold(request: CaptureHoldRequest): Promise<Hold>;
+
+  /**
+   * Releases funds from a previously reserved hold.
+   * When amountMinor is provided, release is partial.
+   */
+  releaseHold?(request: ReleaseHoldRequest): Promise<Hold>;
 }
 
 export interface ClockPort {
@@ -319,4 +465,4 @@ export interface PayNoteValidationProvider {
     explanation: string;
   }>;
 }
-import type { CardTransactionDetails } from '@demo-bank-app/banking';
+import type { CardTransactionDetails, Hold } from '@demo-bank-app/banking';

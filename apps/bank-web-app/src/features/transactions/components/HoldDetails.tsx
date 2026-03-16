@@ -1,7 +1,17 @@
 import { ActivityDetail } from '../hooks/useActivityDetail';
+import type { RelatedContractItem } from '../../../types/api';
 import { Card } from '../../../ui/Card';
+import { Spinner } from '../../../ui/Spinner';
 import { formatCurrency } from '../../../lib/formatCurrency';
 import { formatAccountNumber } from '../../../lib/formatAccountNumber';
+import { navigateTo } from '../../../lib/navigation';
+import { useActiveContractSession } from '../../contracts/hooks';
+import {
+  getRelatedContractTarget,
+  getRelatedContractSessionId,
+  getVisibleRelatedContracts,
+  isProposalRelatedContract,
+} from '../lib/relatedContracts';
 
 type Account = {
   accountId: string;
@@ -21,15 +31,57 @@ interface HoldDetailsProps {
   currentAccountNumber?: string;
   isLoadingAccounts?: boolean;
   'data-testid'?: string;
-  showPayNoteHelper?: boolean;
-  onViewPayNoteDetails?: () => void;
+  relatedContracts?: RelatedContractItem[] | null;
+  isRelatedContractsLoading?: boolean;
+  relatedContractsError?: string;
 }
+
+const formatRelatedContractStatus = (value?: string): string | null => {
+  if (!value) {
+    return null;
+  }
+  return value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+};
+
+const getRelatedContractName = (contract: RelatedContractItem): string => {
+  if (isProposalRelatedContract(contract)) {
+    return contract.name?.trim() || 'PayNote proposal';
+  }
+  return contract.documentName?.trim() || contract.displayName;
+};
+
+const getRelatedContractPreview = (
+  contract: RelatedContractItem
+): string | null => {
+  const summaryPreview = contract.summaryPreview?.trim();
+  if (summaryPreview) {
+    return summaryPreview;
+  }
+
+  if (isProposalRelatedContract(contract)) {
+    if (contract.amountMinor != null) {
+      const currency = contract.currency ? ` ${contract.currency}` : '';
+      return `${formatCurrency(contract.amountMinor)}${currency}`;
+    }
+    if (contract.transactionId) {
+      return `Transaction ${contract.transactionId}`;
+    }
+    return (
+      formatRelatedContractStatus(contract.clientDecisionStatus) ??
+      'Proposal updated'
+    );
+  }
+
+  const statusLabel = formatRelatedContractStatus(contract.status);
+  return statusLabel ? `Status: ${statusLabel}` : 'Contract updated';
+};
 
 const statusStyles: Record<
   Extract<ActivityDetail, { kind: 'HOLD' }>['status'],
   string
 > = {
   PENDING: 'bg-amber-50 text-amber-700 border border-amber-100',
+  PARTIALLY_CAPTURED: 'bg-lime-50 text-lime-700 border border-lime-100',
   CAPTURED: 'bg-emerald-50 text-emerald-700 border border-emerald-100',
   RELEASED: 'bg-sky-50 text-sky-700 border border-sky-100',
   EXPIRED: 'bg-slate-100 text-slate-700 border border-slate-200',
@@ -42,6 +94,7 @@ const timelineIcons: Record<
 > = {
   CREATED: '⏳',
   CAPTURED: '✔',
+  CAPTURED_PARTIAL: '➗',
   RELEASED: '↺',
   FAILED: '✖',
 };
@@ -101,6 +154,9 @@ type HoldStatus = Extract<ActivityDetail, { kind: 'HOLD' }>['status'];
 const deriveStatus = (
   hold: Extract<ActivityDetail, { kind: 'HOLD' }>
 ): HoldStatus => {
+  if (hold.status === 'PARTIALLY_CAPTURED') {
+    return 'PARTIALLY_CAPTURED';
+  }
   if (hold.failedAt || hold.status === 'FAILED') {
     return 'FAILED';
   }
@@ -116,6 +172,23 @@ const deriveStatus = (
   return 'PENDING';
 };
 
+const formatStatusLabel = (status: HoldStatus) => {
+  switch (status) {
+    case 'PARTIALLY_CAPTURED':
+      return 'Partially captured';
+    case 'CAPTURED':
+      return 'Captured';
+    case 'RELEASED':
+      return 'Released';
+    case 'FAILED':
+      return 'Failed';
+    case 'EXPIRED':
+      return 'Expired';
+    default:
+      return 'Pending';
+  }
+};
+
 export function HoldDetails({
   hold,
   accounts,
@@ -123,9 +196,11 @@ export function HoldDetails({
   currentAccountNumber,
   isLoadingAccounts,
   'data-testid': testId,
-  showPayNoteHelper = false,
-  onViewPayNoteDetails,
+  relatedContracts,
+  isRelatedContractsLoading = false,
+  relatedContractsError,
 }: HoldDetailsProps) {
+  const { setActiveSession } = useActiveContractSession();
   const formattedAmount = formatCurrency(hold.amountMinor);
   const timeline = [...hold.timeline].sort(
     (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()
@@ -150,11 +225,20 @@ export function HoldDetails({
   const isCardHold = Boolean(
     hold.cardLast4 || hold.merchantName || hold.processorChargeId
   );
-  const methodLabel = isCardHold
-    ? 'Card Authorization'
-    : showPayNoteHelper
-    ? 'PayNote Transfer'
-    : 'Standard Transfer';
+  const methodLabel = isCardHold ? 'Card Authorization' : 'Standard Transfer';
+
+  const { visibleRelatedContracts } =
+    getVisibleRelatedContracts(relatedContracts);
+
+  const handleContractClick = (contract: RelatedContractItem) => {
+    const sessionId = getRelatedContractSessionId(contract);
+    const target = getRelatedContractTarget(contract);
+    if (!sessionId || !target) {
+      return;
+    }
+    setActiveSession(sessionId);
+    navigateTo(target);
+  };
 
   const detailRows: Array<{ label: string; value: string }> = [
     { label: 'Method', value: methodLabel },
@@ -163,6 +247,21 @@ export function HoldDetails({
     { label: 'Amount', value: formattedAmount },
     { label: 'Hold created', value: formatDateTime(hold.createdAt) },
   ];
+
+  if (displayStatus !== 'PENDING') {
+    if (typeof hold.capturedAmountMinor === 'number') {
+      detailRows.push({
+        label: 'Captured amount',
+        value: formatCurrency(hold.capturedAmountMinor),
+      });
+    }
+    if (typeof hold.remainingAmountMinor === 'number') {
+      detailRows.push({
+        label: 'Remaining amount',
+        value: formatCurrency(hold.remainingAmountMinor),
+      });
+    }
+  }
 
   if (isCardHold) {
     detailRows.push({
@@ -253,7 +352,7 @@ export function HoldDetails({
             <span
               className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${statusStyles[displayStatus]}`}
             >
-              {displayStatus.charAt(0) + displayStatus.slice(1).toLowerCase()}
+              {formatStatusLabel(displayStatus)}
             </span>
           </div>
         </div>
@@ -291,20 +390,78 @@ export function HoldDetails({
           </div>
         )}
 
-        {showPayNoteHelper && (
-          <div className="px-4 py-3 border-t border-slate-200">
-            <p className="text-sm text-slate-700">
-              This transaction is part of a PayNote transfer.{' '}
-              <button
-                type="button"
-                className="text-emerald-700 font-medium hover:text-emerald-800 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] rounded"
-                onClick={() => onViewPayNoteDetails?.()}
-              >
-                See details
-              </button>
-            </p>
-          </div>
-        )}
+        <div className="px-4 py-3 border-t border-slate-200">
+          <h3 className="text-sm font-medium text-slate-900 mb-2">
+            Related contracts
+          </h3>
+
+          {isRelatedContractsLoading && (
+            <div className="flex items-center justify-center py-4">
+              <Spinner size="md" color="green" />
+            </div>
+          )}
+
+          {!isRelatedContractsLoading && relatedContractsError && (
+            <div className="rounded-xl border border-slate-200 bg-white/70 p-4 text-sm text-slate-600">
+              {relatedContractsError}
+            </div>
+          )}
+
+          {!isRelatedContractsLoading &&
+            !relatedContractsError &&
+            visibleRelatedContracts.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-200 bg-white/70 p-4 text-sm text-slate-500">
+                No related contracts found.
+              </div>
+            )}
+
+          {!isRelatedContractsLoading &&
+            !relatedContractsError &&
+            visibleRelatedContracts.length > 0 && (
+              <div className="space-y-2">
+                {visibleRelatedContracts.map(contract => {
+                  const isProposal = isProposalRelatedContract(contract);
+                  const isSelectable = isProposal
+                    ? Boolean(contract.deliverySessionId)
+                    : Boolean(contract.sessionId);
+                  const primaryName = getRelatedContractName(contract);
+                  const preview = getRelatedContractPreview(contract);
+
+                  return (
+                    <button
+                      key={
+                        isProposal
+                          ? `proposal-${contract.deliveryId}`
+                          : contract.contractId
+                      }
+                      type="button"
+                      className={`w-full text-left rounded-xl border p-3 shadow-sm transition ${
+                        isSelectable
+                          ? 'border-slate-200 bg-white/80 hover:border-emerald-200 hover:shadow-md'
+                          : 'border-slate-200 bg-white/50 opacity-60 cursor-not-allowed'
+                      }`}
+                      onClick={() => {
+                        if (!isSelectable) {
+                          return;
+                        }
+                        handleContractClick(contract);
+                      }}
+                      disabled={!isSelectable}
+                    >
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-slate-900 truncate">
+                          {primaryName}
+                        </p>
+                        {preview && (
+                          <p className="text-sm text-slate-600">{preview}</p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+        </div>
 
         <div className="px-4 py-4 border-t border-slate-200">
           <h3 className="text-sm font-medium text-slate-900">Timeline</h3>
@@ -321,6 +478,8 @@ export function HoldDetails({
                   <div className="text-sm font-medium text-slate-900">
                     {event.type === 'CREATED' && 'Hold placed'}
                     {event.type === 'CAPTURED' && 'Hold captured'}
+                    {event.type === 'CAPTURED_PARTIAL' &&
+                      'Hold partially captured'}
                     {event.type === 'RELEASED' && 'Hold released'}
                     {event.type === 'FAILED' && 'Hold failed'}
                   </div>
@@ -344,6 +503,42 @@ export function HoldDetails({
                     {event.type === 'CAPTURED' && (
                       <>
                         <div>Captured hold: {hold.holdId}</div>
+                        {typeof event.amountMinor === 'number' && (
+                          <div>Amount: {formatCurrency(event.amountMinor)}</div>
+                        )}
+                        {typeof event.remainingAmountMinor === 'number' && (
+                          <div>
+                            Remaining:{' '}
+                            {formatCurrency(event.remainingAmountMinor)}
+                          </div>
+                        )}
+                        <div>
+                          Transaction ID:{' '}
+                          {event.transactionId ?? 'Not provided'}
+                        </div>
+                        {event.counterpartyAccountNumber && (
+                          <div>
+                            To account:{' '}
+                            {buildCounterpartyDisplay(
+                              accounts,
+                              event.counterpartyAccountNumber,
+                              isLoadingAccounts
+                            )}
+                          </div>
+                        )}
+                        {hold.processorChargeId && (
+                          <div>Charge: {hold.processorChargeId}</div>
+                        )}
+                      </>
+                    )}
+                    {event.type === 'CAPTURED_PARTIAL' && (
+                      <>
+                        <div>Captured hold: {hold.holdId}</div>
+                        <div>Amount: {formatCurrency(event.amountMinor)}</div>
+                        <div>
+                          Remaining:{' '}
+                          {formatCurrency(event.remainingAmountMinor)}
+                        </div>
                         <div>
                           Transaction ID:{' '}
                           {event.transactionId ?? 'Not provided'}

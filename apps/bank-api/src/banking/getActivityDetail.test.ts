@@ -50,6 +50,7 @@ const mockConfig = {
     cardBinPrefix: '123456',
     cardProcessorToken: 'processor-token',
   },
+  defaultMerchantCreditLimitMinor: 500_000,
 };
 
 const TEST_JWT_SECRET = 'test-secret';
@@ -155,6 +156,7 @@ describe('getActivityDetailHandler', () => {
       cardId: undefined,
       cardLast4: undefined,
       merchantName: undefined,
+      merchantId: undefined,
       merchantStatementDescriptor: undefined,
       processorChargeId: undefined,
     });
@@ -162,6 +164,68 @@ describe('getActivityDetailHandler', () => {
     expect(repositoryMock.getTransactionById).toHaveBeenCalledWith(
       transactionId
     );
+  });
+
+  it('returns merchant metadata when present on transaction activity detail', async () => {
+    const transactionId = 'txn-merchant';
+    const mockPosting = {
+      accountId: baseAccount.id,
+      side: 'DEBIT' as const,
+      amountMinor: 3100,
+      counterpartyAccountNumber: '2222333344',
+    } as any;
+
+    const mockTransaction = {
+      id: transactionId,
+      type: 'TRANSFER' as const,
+      status: 'POSTED' as const,
+      description: 'Merchant transaction',
+      createdAt: new Date('2024-01-03T00:00:00.000Z'),
+      postings: [mockPosting],
+      merchantName: 'Demo Shop',
+      merchantId: 'merchant-xyz',
+      merchantStatementDescriptor: 'DEMO SHOP',
+      processorChargeId: 'charge-123',
+    } as any;
+
+    vi.mocked(repositoryMock.getTransactionById).mockResolvedValue(
+      mockTransaction
+    );
+
+    const response = await getActivityDetailHandler(
+      {
+        params: {
+          accountNumber: baseAccount.accountNumber,
+          activityId: `TXN#${transactionId}`,
+        },
+      },
+      {
+        request: {
+          headers: setAuthHeader(new Headers()),
+        } as unknown as MaybeAuthenticatedTsRestRequestContext,
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      kind: 'POSTED_TRANSACTION',
+      activityId: `TXN#${transactionId}`,
+      transactionId,
+      amountMinor: 3100,
+      description: 'Merchant transaction',
+      postedAt: '2024-01-03T00:00:00.000Z',
+      originHoldId: undefined,
+      side: 'DEBIT',
+      type: 'TRANSFER',
+      status: 'POSTED',
+      counterpartyAccountNumber: '2222333344',
+      cardId: undefined,
+      cardLast4: undefined,
+      merchantName: 'Demo Shop',
+      merchantId: 'merchant-xyz',
+      merchantStatementDescriptor: 'DEMO SHOP',
+      processorChargeId: 'charge-123',
+    });
   });
 
   it('includes PayNote metadata when transaction is linked', async () => {
@@ -306,6 +370,8 @@ describe('getActivityDetailHandler', () => {
       activityId: `HOLD#${holdId}`,
       holdId,
       amountMinor: 5_000,
+      capturedAmountMinor: 0,
+      remainingAmountMinor: 5_000,
       currency: 'USD',
       status: 'PENDING',
       description: 'Test hold',
@@ -322,6 +388,7 @@ describe('getActivityDetailHandler', () => {
       cardId: undefined,
       cardLast4: undefined,
       merchantName: undefined,
+      merchantId: undefined,
       merchantStatementDescriptor: undefined,
       processorChargeId: undefined,
       timeline: [

@@ -15,6 +15,7 @@ export interface TransactionHeaderItem {
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
 }
@@ -39,6 +40,7 @@ export interface PostingItem {
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
 }
@@ -67,6 +69,7 @@ export function buildTransactionHeaderPutItem(
     ...(transaction.merchantName
       ? { merchantName: transaction.merchantName }
       : {}),
+    ...(transaction.merchantId ? { merchantId: transaction.merchantId } : {}),
     ...(transaction.merchantStatementDescriptor
       ? { merchantStatementDescriptor: transaction.merchantStatementDescriptor }
       : {}),
@@ -117,6 +120,7 @@ export function buildPostingPutItems(
       ...(transaction.merchantName
         ? { merchantName: transaction.merchantName }
         : {}),
+      ...(transaction.merchantId ? { merchantId: transaction.merchantId } : {}),
       ...(transaction.merchantStatementDescriptor
         ? {
             merchantStatementDescriptor:

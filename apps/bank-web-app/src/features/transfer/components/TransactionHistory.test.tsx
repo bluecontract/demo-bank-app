@@ -6,6 +6,7 @@ import { TransactionHistory } from './TransactionHistory';
 import { useSelectedAccount } from '../../../app/providers/SelectedAccountProvider';
 import { useActivity } from '../../transactions/hooks/useActivity';
 import { useAccounts } from '../../accounts/hooks/useAccounts';
+import { routerFutureConfig } from '../../../app/routerFutureConfig';
 
 vi.mock('../../../app/providers/SelectedAccountProvider', () => ({
   useSelectedAccount: vi.fn(),
@@ -47,6 +48,8 @@ const mockAccount = {
   name: 'Test Account',
   currency: 'USD' as const,
   createdAt: '2023-01-01T00:00:00Z',
+  accountType: 'DEPOSIT' as const,
+  creditLimitMinor: undefined,
   ledgerBalanceMinor: 100000,
   availableBalanceMinor: 100000,
   status: 'ACTIVE',
@@ -179,7 +182,9 @@ const mockCardGroupedActivity = [
 ];
 
 const renderWithRouter = (component: React.ReactElement) => {
-  return render(<MemoryRouter>{component}</MemoryRouter>);
+  return render(
+    <MemoryRouter future={routerFutureConfig}>{component}</MemoryRouter>
+  );
 };
 
 describe('TransactionHistory', () => {
@@ -192,7 +197,7 @@ describe('TransactionHistory', () => {
     });
   });
 
-  it('should show transaction history header even when no account is selected', () => {
+  it('should show transactions header even when no account is selected', () => {
     (useSelectedAccount as any).mockReturnValue({
       selectedAccount: null,
       setSelectedAccount: vi.fn(),
@@ -206,14 +211,14 @@ describe('TransactionHistory', () => {
 
     renderWithRouter(<TransactionHistory />);
 
-    expect(screen.getByText('Transaction History')).toBeInTheDocument();
+    expect(screen.getByText('Transactions')).toBeInTheDocument();
     expect(screen.queryByText('Account:')).not.toBeInTheDocument();
     expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
       /Empty:\s*true[\s\S]*Count:\s*0/
     );
   });
 
-  it('should show transaction history header with account number when account is selected', () => {
+  it('should show transactions header when account is selected', () => {
     (useSelectedAccount as any).mockReturnValue({
       selectedAccount: mockAccount,
       setSelectedAccount: vi.fn(),
@@ -227,9 +232,7 @@ describe('TransactionHistory', () => {
 
     renderWithRouter(<TransactionHistory />);
 
-    expect(screen.getByText('Transaction History')).toBeInTheDocument();
-    expect(screen.getByText('Account:')).toBeInTheDocument();
-    expect(screen.getByText('1234567890')).toBeInTheDocument();
+    expect(screen.getByText('Transactions')).toBeInTheDocument();
     expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
       /Count:\s*2/
     );
@@ -249,7 +252,7 @@ describe('TransactionHistory', () => {
 
     renderWithRouter(<TransactionHistory />);
 
-    expect(screen.getByText('Transaction History')).toBeInTheDocument();
+    expect(screen.getByText('Transactions')).toBeInTheDocument();
     expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
       /Loading:\s*true/
     );
@@ -269,7 +272,7 @@ describe('TransactionHistory', () => {
 
     renderWithRouter(<TransactionHistory />);
 
-    expect(screen.getByText('Transaction History')).toBeInTheDocument();
+    expect(screen.getByText('Transactions')).toBeInTheDocument();
     expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
       /Error:\s*true/
     );
@@ -289,7 +292,7 @@ describe('TransactionHistory', () => {
 
     renderWithRouter(<TransactionHistory />);
 
-    expect(screen.getByText('Transaction History')).toBeInTheDocument();
+    expect(screen.getByText('Transactions')).toBeInTheDocument();
     expect(screen.getByTestId('transaction-history-list')).toHaveTextContent(
       /Empty:\s*true[\s\S]*Count:\s*0/
     );

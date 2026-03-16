@@ -1,4 +1,4 @@
-import { Account } from '../../domain/entities/Account';
+import { Account, AccountType } from '../../domain/entities/Account';
 import { Money } from '../../domain/valueObjects/Money';
 import { randomUUID } from 'crypto';
 import type { Logger, Metrics } from '../../domain/types';
@@ -15,6 +15,8 @@ export interface CreateAccountCommand {
   ownerId: string;
   name: string;
   isTest?: boolean;
+  accountType?: AccountType;
+  creditLimitMinor?: number;
 }
 
 export interface CreateAccountDependencies {
@@ -33,6 +35,8 @@ function toAccountResult(account: Account): AccountResult {
     status: account.status,
     currency: account.currency,
     createdAt: account.createdAt,
+    accountType: account.accountType,
+    creditLimitMinor: account.creditLimitMinor,
     ledgerBalanceMinor: account.ledgerBalanceMinor,
     availableBalanceMinor: account.availableBalanceMinor,
     balanceVersion: account.balanceVersion,
@@ -44,7 +48,13 @@ export async function createAccount(
   dependencies: CreateAccountDependencies
 ): Promise<AccountResult> {
   const { repository, accountNumberGenerator, logger, metrics } = dependencies;
-  const { ownerId, name, isTest = false } = command;
+  const {
+    ownerId,
+    name,
+    isTest = false,
+    accountType = 'DEPOSIT',
+    creditLimitMinor,
+  } = command;
 
   const timing = TimingUtils.startTiming(
     OPERATION_NAMES.BANKING.ACCOUNT_CREATE
@@ -58,6 +68,13 @@ export async function createAccount(
   });
 
   try {
+    const creditLimit =
+      accountType === 'CREDIT_LINE' && creditLimitMinor !== undefined
+        ? new Money(creditLimitMinor)
+        : undefined;
+    const initialBalance =
+      accountType === 'CREDIT_LINE' && creditLimit ? creditLimit : Money.ZERO;
+
     const account = new Account({
       id: randomUUID(),
       accountNumber: accountNumberGenerator.generate(),
@@ -66,8 +83,10 @@ export async function createAccount(
       status: 'ACTIVE',
       currency: 'USD',
       createdAt: new Date(),
-      ledgerBalanceMinor: Money.ZERO,
-      availableBalanceMinor: Money.ZERO,
+      accountType,
+      creditLimitMinor: creditLimit,
+      ledgerBalanceMinor: initialBalance,
+      availableBalanceMinor: initialBalance,
       isTest,
       balanceVersion: 0,
     });

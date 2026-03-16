@@ -1,5 +1,5 @@
 // Re-export common types from entities and value objects
-export type { AccountStatus, Currency } from './entities/Account';
+export type { AccountStatus, AccountType, Currency } from './entities/Account';
 export type {
   TransactionType,
   TransactionStatus,
@@ -21,6 +21,7 @@ export type {
 // Configuration interfaces
 export interface BankingConfiguration {
   dynamoTableName: string;
+  defaultMerchantCreditLimitMinor?: number;
   environment: string;
   serviceName: string;
   logLevel: LogLevel;

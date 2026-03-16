@@ -4,10 +4,15 @@ import {
   GetCommand,
   QueryCommand,
   TransactWriteCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import type { UserRepository } from '../application/ports';
 import { User } from '../domain/entities/User';
-import { UserAlreadyExistsError, AuthRepositoryError } from './errors';
+import {
+  UserAlreadyExistsError,
+  AuthRepositoryError,
+  MerchantDirectoryOwnershipError,
+} from './errors';
 import { AwsResilienceConfigBuilder } from '@demo-bank-app/shared-config';
 import type { Logger, Metrics } from '@demo-bank-app/shared-observability';
 import {
@@ -45,7 +50,21 @@ interface UserProfileDbItem {
   createdAt: string;
   isTest: boolean;
   marketingEmailsOptIn: boolean;
+  merchantId?: User['merchantId'];
+  merchantName?: User['merchantName'];
+  avatarDataUrl?: User['avatarDataUrl'];
   ttl?: number; // Optional TTL for test users
+}
+
+interface MerchantProfileDbItem {
+  PK: string; // MERCHANT#{merchantId}
+  SK: 'PROFILE';
+  entityType: 'MERCHANT_PROFILE';
+  merchantId: string;
+  name: string;
+  logoUrl?: string;
+  ownerUserId: string;
+  updatedAt: string;
 }
 
 // Type for unknown DynamoDB items (when reading from DB)
@@ -59,6 +78,9 @@ interface UnknownDbItem {
   createdAt?: string;
   isTest?: boolean;
   marketingEmailsOptIn?: boolean;
+  merchantId?: string;
+  merchantName?: string;
+  avatarDataUrl?: string;
   ttl?: number;
   [key: string]: unknown; // Allow additional properties
 }
@@ -100,26 +122,38 @@ export class DynamoUserRepository implements UserRepository {
 
     const userProfileItem = this.buildUserProfileItem(user);
     const emailReservationItem = this.buildEmailReservationItem(user);
+    const merchantProfileItem = this.buildMerchantProfileItem(user);
+    const transactItems: Array<Record<string, unknown>> = [
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: emailReservationItem,
+          ConditionExpression: 'attribute_not_exists(PK)',
+        },
+      },
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: userProfileItem,
+          ConditionExpression: 'attribute_not_exists(PK)',
+        },
+      },
+    ];
+
+    if (merchantProfileItem) {
+      transactItems.push({
+        Put: {
+          TableName: this.tableName,
+          Item: merchantProfileItem,
+          ConditionExpression: 'attribute_not_exists(PK)',
+        },
+      });
+    }
 
     try {
       await this.client.send(
         new TransactWriteCommand({
-          TransactItems: [
-            {
-              Put: {
-                TableName: this.tableName,
-                Item: emailReservationItem,
-                ConditionExpression: 'attribute_not_exists(PK)',
-              },
-            },
-            {
-              Put: {
-                TableName: this.tableName,
-                Item: userProfileItem,
-                ConditionExpression: 'attribute_not_exists(PK)',
-              },
-            },
-          ],
+          TransactItems: transactItems,
         })
       );
 
@@ -158,8 +192,21 @@ export class DynamoUserRepository implements UserRepository {
 
       if (
         this.isConditionalCheckFailedException(error) ||
-        this.isTransactionCanceledException(error)
+        (this.isTransactionCanceledException(error) &&
+          (await this.hasUserWithEmail(user.email)))
       ) {
+        throw new UserAlreadyExistsError(user.email);
+      }
+
+      if (this.isTransactionCanceledException(error) && merchantProfileItem) {
+        const ownerUserId = await this.getMerchantOwnerUserId(
+          merchantProfileItem.merchantId
+        );
+        if (ownerUserId && ownerUserId !== user.id) {
+          throw new MerchantDirectoryOwnershipError(
+            merchantProfileItem.merchantId
+          );
+        }
         throw new UserAlreadyExistsError(user.email);
       }
 
@@ -341,6 +388,99 @@ export class DynamoUserRepository implements UserRepository {
     }
   }
 
+  async updateProfile(
+    userId: User['id'],
+    updates: { merchantName?: string; avatarDataUrl?: string }
+  ): Promise<User> {
+    const timing = TimingUtils.startTiming(
+      OPERATION_NAMES.AUTH.USER_REPOSITORY_SAVE
+    );
+
+    this.logger?.info('User repository profile update started', {
+      userId,
+      ...TimingUtils.createTimingMetadata(timing),
+    });
+
+    const updateExpressions: string[] = [];
+    const expressionAttributeNames: Record<string, string> = {};
+    const expressionAttributeValues: Record<string, string> = {};
+
+    if (updates.merchantName !== undefined) {
+      updateExpressions.push('#merchantName = :merchantName');
+      expressionAttributeNames['#merchantName'] = 'merchantName';
+      expressionAttributeValues[':merchantName'] = updates.merchantName;
+    }
+
+    if (updates.avatarDataUrl !== undefined) {
+      updateExpressions.push('#avatarDataUrl = :avatarDataUrl');
+      expressionAttributeNames['#avatarDataUrl'] = 'avatarDataUrl';
+      expressionAttributeValues[':avatarDataUrl'] = updates.avatarDataUrl;
+    }
+
+    if (updateExpressions.length === 0) {
+      const existing = await this.findById(userId);
+      if (!existing) {
+        throw new AuthRepositoryError('update user profile', undefined);
+      }
+      return existing;
+    }
+
+    try {
+      const result = await this.client.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: `USER#${userId}`,
+            SK: 'PROFILE',
+          },
+          UpdateExpression: `SET ${updateExpressions.join(', ')}`,
+          ExpressionAttributeNames: expressionAttributeNames,
+          ExpressionAttributeValues: expressionAttributeValues,
+          ConditionExpression: 'attribute_exists(PK)',
+          ReturnValues: 'ALL_NEW',
+        })
+      );
+
+      const completedTiming = TimingUtils.endTiming(timing);
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.AUTH.USER_REPOSITORY_SAVE_SUCCESS,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      this.logger?.info('User repository profile update completed', {
+        userId,
+        ...TimingUtils.createTimingMetadata(completedTiming),
+      });
+
+      if (!result.Attributes) {
+        throw new AuthRepositoryError('update user profile', undefined);
+      }
+
+      return this.mapToUser(result.Attributes as UnknownDbItem);
+    } catch (error: unknown) {
+      const failedTiming = TimingUtils.endTiming(timing);
+
+      this.logger?.error('User repository profile update failed', {
+        userId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+
+      this.metrics?.addMetric(
+        METRIC_NAMES.AUTH.USER_REPOSITORY_SAVE_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
+
+      throw new AuthRepositoryError(
+        'update user profile',
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
   private buildEmailReservationItem(user: User): EmailReservationDbItem {
     const item: EmailReservationDbItem = {
       PK: `EMAIL#${user.email}`,
@@ -368,6 +508,9 @@ export class DynamoUserRepository implements UserRepository {
       createdAt: user.createdAt.toISOString(),
       isTest: user.isTest,
       marketingEmailsOptIn: user.marketingEmailsOptIn,
+      ...(user.merchantId ? { merchantId: user.merchantId } : {}),
+      ...(user.merchantName ? { merchantName: user.merchantName } : {}),
+      ...(user.avatarDataUrl ? { avatarDataUrl: user.avatarDataUrl } : {}),
     };
 
     // Add TTL for test users
@@ -376,6 +519,76 @@ export class DynamoUserRepository implements UserRepository {
     }
 
     return item;
+  }
+
+  private buildMerchantProfileItem(user: User): MerchantProfileDbItem | null {
+    if (!user.merchantId || !user.merchantName) {
+      return null;
+    }
+
+    return {
+      PK: `MERCHANT#${user.merchantId}`,
+      SK: 'PROFILE',
+      entityType: 'MERCHANT_PROFILE',
+      merchantId: user.merchantId,
+      name: user.merchantName,
+      ...(user.avatarDataUrl ? { logoUrl: user.avatarDataUrl } : {}),
+      ownerUserId: user.id,
+      updatedAt: user.createdAt.toISOString(),
+    };
+  }
+
+  private async hasUserWithEmail(email: string): Promise<boolean> {
+    try {
+      const result = await this.client.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          IndexName: 'AUTH_GSI1',
+          KeyConditionExpression:
+            'AUTH_GSI1PK = :gsi1pk AND AUTH_GSI1SK = :gsi1sk',
+          ExpressionAttributeValues: {
+            ':gsi1pk': `EMAIL#${email}`,
+            ':gsi1sk': 'PROFILE',
+          },
+          Limit: 1,
+        })
+      );
+      return Boolean(result.Items?.length);
+    } catch (error: unknown) {
+      throw new AuthRepositoryError(
+        'detect user email conflict',
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  private async getMerchantOwnerUserId(
+    merchantId: string
+  ): Promise<string | null> {
+    try {
+      const result = await this.client.send(
+        new GetCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: `MERCHANT#${merchantId}`,
+            SK: 'PROFILE',
+          },
+          ProjectionExpression: 'ownerUserId',
+        })
+      );
+
+      const ownerUserId = result.Item?.ownerUserId;
+      if (typeof ownerUserId !== 'string' || ownerUserId.trim() === '') {
+        return null;
+      }
+
+      return ownerUserId;
+    } catch (error: unknown) {
+      throw new AuthRepositoryError(
+        'detect merchant ownership conflict',
+        error instanceof Error ? error : undefined
+      );
+    }
   }
 
   private mapToUser(item: UnknownDbItem): User {
@@ -420,12 +633,54 @@ export class DynamoUserRepository implements UserRepository {
       }
       const marketingEmailsOptIn = marketingOptInValue ?? false;
 
+      const merchantIdValue = item.merchantId;
+      if (
+        merchantIdValue !== undefined &&
+        merchantIdValue !== null &&
+        typeof merchantIdValue !== 'string'
+      ) {
+        throw new Error('Invalid user item: merchantId must be string');
+      }
+      const normalizedMerchantId = merchantIdValue?.trim();
+      if (merchantIdValue !== undefined && normalizedMerchantId === '') {
+        throw new Error('Invalid user item: merchantId cannot be empty');
+      }
+
+      const merchantNameValue = item.merchantName;
+      if (
+        merchantNameValue !== undefined &&
+        merchantNameValue !== null &&
+        typeof merchantNameValue !== 'string'
+      ) {
+        throw new Error('Invalid user item: merchantName must be string');
+      }
+      const normalizedMerchantName = merchantNameValue?.trim();
+      if (merchantNameValue !== undefined && normalizedMerchantName === '') {
+        throw new Error('Invalid user item: merchantName cannot be empty');
+      }
+
+      const avatarDataUrlValue = item.avatarDataUrl;
+      if (
+        avatarDataUrlValue !== undefined &&
+        avatarDataUrlValue !== null &&
+        typeof avatarDataUrlValue !== 'string'
+      ) {
+        throw new Error('Invalid user item: avatarDataUrl must be string');
+      }
+      const normalizedAvatarDataUrl = avatarDataUrlValue?.trim();
+      if (avatarDataUrlValue !== undefined && normalizedAvatarDataUrl === '') {
+        throw new Error('Invalid user item: avatarDataUrl cannot be empty');
+      }
+
       return new User({
         id: item.id,
         email: item.email,
         createdAt,
         isTest,
         marketingEmailsOptIn,
+        merchantId: normalizedMerchantId || undefined,
+        merchantName: normalizedMerchantName || undefined,
+        avatarDataUrl: normalizedAvatarDataUrl || undefined,
       });
     } catch (error: unknown) {
       throw new AuthRepositoryError(

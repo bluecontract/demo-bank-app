@@ -43,7 +43,7 @@ describe('Card', () => {
     );
 
     const card = screen.getByTestId('card');
-    expect(card).toHaveClass('bg-gradient-to-br');
+    expect(card.className).toContain('bg-[var(--color-primary)]');
   });
 
   it('should support dashed border variant', () => {

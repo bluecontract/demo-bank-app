@@ -11,6 +11,10 @@ import {
   FUNDING_SOURCE,
   CARD_SETTLEMENT,
 } from '@demo-bank-app/banking';
+import {
+  DynamoContractRepository,
+  type ContractRepository,
+} from '@demo-bank-app/contracts';
 import type {
   PowertoolsLogger,
   PowertoolsMetrics,
@@ -38,6 +42,12 @@ const initializeDependencies = async (
     ...(awsEndpoint && { endpoint: awsEndpoint }),
   });
 
+  const contractRepository: ContractRepository = new DynamoContractRepository({
+    tableName: envConfig.dynamoTableName,
+    region: awsRegion,
+    ...(awsEndpoint && { endpoint: awsEndpoint }),
+  });
+
   const accountNumberGenerator = new SimpleAccountNumberGenerator();
   const holdRepository = new DynamoHoldRepository({
     tableName: envConfig.dynamoTableName,
@@ -60,6 +70,7 @@ const initializeDependencies = async (
 
   return {
     repository,
+    contractRepository,
     holdRepository,
     accountNumberGenerator,
     cardRepository,
@@ -68,6 +79,8 @@ const initializeDependencies = async (
     metrics,
     config: {
       cardConfig,
+      defaultMerchantCreditLimitMinor:
+        envConfig.defaultMerchantCreditLimitMinor,
     },
   };
 };

@@ -2,6 +2,7 @@ import {
   DynamoUserRepository,
   AwsJwtService,
   AuthEnvironmentConfiguration,
+  DynamoMerchantDirectoryRepository,
 } from '@demo-bank-app/auth';
 import type {
   PowertoolsLogger,
@@ -32,14 +33,23 @@ const initializeDependencies = async (
     ...(awsEndpoint && { endpoint: awsEndpoint }),
   });
 
+  const merchantDirectoryRepository = new DynamoMerchantDirectoryRepository({
+    tableName: authConfig.dynamoTableName,
+    region: awsRegion,
+    ...(awsEndpoint && { endpoint: awsEndpoint }),
+  });
+
   const jwtService = new AwsJwtService({
     region: awsRegion,
     jwtSecretArn: authConfig.jwtSecretArn,
+    jwtTtlSeconds: authConfig.jwtTtlSeconds,
+    testUserTtlSeconds: authConfig.testUserTtlSeconds,
     ...(awsEndpoint && { endpoint: awsEndpoint }),
   });
 
   return {
     userRepository,
+    merchantDirectoryRepository,
     jwtService,
     logger,
     metrics,

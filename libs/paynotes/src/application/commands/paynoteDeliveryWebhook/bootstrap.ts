@@ -1,0 +1,2618 @@
+import type { BlueNode } from '@blue-labs/language';
+import {
+  CardTransactionPayNoteSchema,
+  MerchantToCustomerPayNoteSchema,
+  PayNoteDeliverySchema,
+  PaymentMandateSchema,
+  PayNoteSchema,
+} from '@blue-repository/types/packages/paynote/schemas';
+import type { Hold } from '@demo-bank-app/banking';
+import { buildCardTransactionDetailsKey } from '@demo-bank-app/banking';
+import { formatIsoDateHumanReadable } from '@demo-bank-app/shared-core';
+import type { LogEntry, MyOsClient, PayNoteDeliveryRecord } from '../../ports';
+import { runGuarantorUpdate } from '../documentOperations';
+import {
+  buildChannelBindingsFromContracts,
+  ensureTimelineChannel,
+  getCardTransactionDetailsFromDocument,
+  getPayNoteSummaryFromDocument,
+  getSynchronySessionIdFromDocument,
+} from '../../payNoteDelivery/blueUtils';
+import { blue } from '../../../blue';
+import { log, trace } from '../paynoteWebhook/logging';
+import { getString, toSimpleRecord } from '../paynoteWebhook/utils';
+import { resolveRuntimeContracts } from '../blueRuntime';
+import { isRecord } from '../typeGuards';
+import {
+  readEventObjectDocumentId,
+  readFetchedDocumentId,
+  readInitializedDocumentId,
+  toBlueNode,
+} from '../webhookUtils';
+import type {
+  HandlePayNoteDeliveryWebhookDependencies,
+  WebhookEventObject,
+} from './types';
+
+export type BootstrapRequest = {
+  rawEvent: unknown;
+  request: Record<string, unknown>;
+  documentNode: BlueNode | null;
+  documentPayload: Record<string, unknown> | null;
+};
+
+type ChannelBindings = Record<string, { email?: string; accountId?: string }>;
+
+type NormalizedBootstrapRequest = {
+  bootstrapAssignee?: string;
+  requestId?: string;
+  document?: Record<string, unknown> | null;
+  channelBindings: ChannelBindings;
+  initialMessages?: Record<string, unknown>;
+};
+
+const PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE =
+  'paymentMandateBootstrapApproval' as const;
+const PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TITLE =
+  'Authorize automated payments';
+const MAX_PAYMENT_MANDATE_COUNTERPARTIES = 20;
+
+type PayNoteBootstrapContext = {
+  payNoteDocument?: Record<string, unknown> | null;
+  payNoteDocumentNode: BlueNode | null;
+  requestingSessionId?: string;
+  requestingDeliveryCardDetails: ReturnType<
+    typeof getCardTransactionDetailsFromDocument
+  > | null;
+  deliveryId?: string;
+  senderIdentity?: string;
+  payeeIdentity?: string;
+  payerIdentity?: string;
+};
+
+const normalizeChannelBindings = (
+  bindings: unknown
+): Record<string, { email?: string; accountId?: string }> => {
+  if (!bindings || typeof bindings !== 'object') {
+    return {};
+  }
+
+  const record = bindings as Record<string, unknown>;
+  const output: Record<string, { email?: string; accountId?: string }> = {};
+
+  Object.entries(record).forEach(([key, value]) => {
+    if (!key) {
+      return;
+    }
+
+    const binding = toSimpleRecord(value);
+    if (!binding) {
+      return;
+    }
+
+    const accountId = getString(binding.accountId);
+    const email = getString(binding.email);
+
+    if (accountId) {
+      output[key] = { accountId };
+    } else if (email) {
+      output[key] = { email };
+    }
+  });
+
+  return output;
+};
+
+const getBindingIdentity = (binding?: {
+  email?: string;
+  accountId?: string;
+}): string | undefined => binding?.accountId ?? binding?.email;
+
+const getContractsFromDocument = (input: {
+  document?: Record<string, unknown>;
+  node?: BlueNode | null;
+}): Record<string, unknown> | null => {
+  const { document, node } = input;
+
+  if (document) {
+    const runtimeContracts = resolveRuntimeContracts(document);
+    if (runtimeContracts) {
+      return runtimeContracts;
+    }
+  }
+
+  if (!node) {
+    return null;
+  }
+
+  const original = blue.nodeToJson(node, 'original');
+  if (!isRecord(original) || !isRecord(original.contracts)) {
+    return null;
+  }
+  return original.contracts as Record<string, unknown>;
+};
+
+const validateBankControlledChannelBinding = (input: {
+  request: NormalizedBootstrapRequest;
+  requestedDocumentPayload: Record<string, unknown>;
+  channelKey: string;
+  accountId: string;
+}): { ok: true } | { ok: false; reason: string } => {
+  const { request, requestedDocumentPayload, channelKey, accountId } = input;
+  const requestBindingIdentity = getBindingIdentity(
+    request.channelBindings[channelKey]
+  );
+  if (requestBindingIdentity && requestBindingIdentity !== accountId) {
+    return {
+      ok: false,
+      reason: `${channelKey} binding is already set to ${requestBindingIdentity}`,
+    };
+  }
+
+  const contracts = getContractsFromDocument({
+    document: requestedDocumentPayload,
+    node: toBlueNode(requestedDocumentPayload),
+  });
+  if (!contracts) {
+    return { ok: true };
+  }
+
+  const contractsForValidation = { ...contracts };
+  const validation = ensureTimelineChannel(
+    contractsForValidation,
+    channelKey,
+    accountId
+  );
+  if (!validation.ok) {
+    return {
+      ok: false,
+      reason: validation.error ?? `${channelKey} is already bound`,
+    };
+  }
+
+  return { ok: true };
+};
+
+const extractBootstrapSessionId = (response: {
+  body?: unknown;
+}): string | undefined => {
+  const body = response.body as { sessionId?: unknown } | undefined;
+  return typeof body?.sessionId === 'string' ? body.sessionId : undefined;
+};
+
+const withInResponseTo = (
+  event: Record<string, unknown>,
+  requestId: string | undefined
+): Record<string, unknown> => {
+  if (!requestId) {
+    return event;
+  }
+  return {
+    ...event,
+    inResponseTo: {
+      requestId,
+    },
+  };
+};
+
+const resolveBootstrapFailureReason = (input: {
+  status: number;
+  body?: unknown;
+}): string => {
+  const { status, body } = input;
+  const bodyRecord = toSimpleRecord(body);
+  const detail =
+    getString(bodyRecord?.detail) ??
+    getString(bodyRecord?.message) ??
+    getString(bodyRecord?.error);
+  return detail
+    ? `Document bootstrap failed: ${detail}`
+    : `Document bootstrap failed with status ${status}.`;
+};
+
+type BootstrapResponseContext = {
+  eventId: string;
+  bootstrapAssignee?: string;
+  requestingSessionId?: string;
+  requestingContractSessionId?: string;
+  requestId?: string;
+  allowGuarantorUpdateResponse: boolean;
+  credentials: Awaited<ReturnType<MyOsClient['getCredentials']>>;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+};
+
+const emitBootstrapGuarantorEvent = async (input: {
+  context: BootstrapResponseContext;
+  responseEvent: Record<string, unknown>;
+  successMessage: string;
+  failureMessage: string;
+  missingSessionMessage: string;
+}): Promise<boolean> => {
+  const {
+    context,
+    responseEvent,
+    successMessage,
+    failureMessage,
+    missingSessionMessage,
+  } = input;
+  const {
+    eventId,
+    bootstrapAssignee,
+    requestingSessionId,
+    requestId,
+    allowGuarantorUpdateResponse,
+    credentials,
+    deps,
+    logs,
+  } = context;
+  if (!allowGuarantorUpdateResponse) {
+    trace(
+      logs,
+      'Skipped document bootstrap response via guarantorUpdate (requesting document does not expose guarantorUpdate)',
+      {
+        eventId,
+        bootstrapAssignee,
+        requestingSessionId: requestingSessionId ?? null,
+        requestId: requestId ?? null,
+      }
+    );
+    return true;
+  }
+
+  if (!requestingSessionId) {
+    log(logs, 'error', missingSessionMessage, {
+      eventId,
+      bootstrapAssignee,
+      requestId: requestId ?? null,
+    });
+    return false;
+  }
+
+  return runGuarantorUpdate({
+    myOsClient: deps.myOsClient,
+    credentials,
+    sessionId: requestingSessionId,
+    request: [withInResponseTo(responseEvent, requestId)],
+    logs,
+    logContext: {
+      eventId,
+      bootstrapAssignee,
+      requestId: requestId ?? null,
+    },
+    successMessage,
+    failureMessage,
+    missingCredentialsMessage:
+      'Skipped document bootstrap response (missing MyOS credentials)',
+  });
+};
+
+const respondBootstrapDecision = async (
+  context: BootstrapResponseContext,
+  input: {
+    status: 'accepted' | 'rejected';
+    reason?: string;
+  }
+): Promise<boolean> => {
+  const event: Record<string, unknown> = {
+    type: 'Conversation/Document Bootstrap Responded',
+    status: input.status,
+  };
+  if (input.reason && input.reason.trim().length > 0) {
+    event.reason = input.reason;
+  }
+
+  return emitBootstrapGuarantorEvent({
+    context,
+    responseEvent: event,
+    successMessage: `Reported document bootstrap ${input.status} via guarantorUpdate`,
+    failureMessage: `Failed to report document bootstrap ${input.status} via guarantorUpdate`,
+    missingSessionMessage:
+      'Failed to report document bootstrap decision (missing requesting session id)',
+  });
+};
+
+const respondBootstrapFailed = async (
+  context: BootstrapResponseContext,
+  reason: string
+): Promise<boolean> =>
+  emitBootstrapGuarantorEvent({
+    context,
+    responseEvent: {
+      type: 'Conversation/Document Bootstrap Failed',
+      reason,
+    },
+    successMessage: 'Reported document bootstrap failure via guarantorUpdate',
+    failureMessage:
+      'Failed to report document bootstrap failure via guarantorUpdate',
+    missingSessionMessage:
+      'Failed to report document bootstrap failure (missing requesting session id)',
+  });
+
+const rejectPayNoteBootstrapRequest = async (input: {
+  context: BootstrapResponseContext;
+  eventId: string;
+  deliveryId?: string;
+  reason: string;
+  logMessage: string;
+  logContext?: Record<string, unknown>;
+}): Promise<boolean> => {
+  const { context, logMessage, logContext, eventId, deliveryId, reason } =
+    input;
+  log(context.logs, 'error', logMessage, {
+    eventId,
+    deliveryId,
+    ...logContext,
+  });
+  await respondBootstrapDecision(context, { status: 'rejected', reason });
+  return true;
+};
+
+const normalizeBootstrapRequest = (
+  request: Record<string, unknown>
+): NormalizedBootstrapRequest => ({
+  bootstrapAssignee: getString(request.bootstrapAssignee),
+  requestId: getString(request.requestId),
+  document: toSimpleRecord(request.document),
+  channelBindings: normalizeChannelBindings(request.channelBindings),
+  initialMessages: toSimpleRecord(request.initialMessages) ?? undefined,
+});
+
+const normalizeBootstrapDocument = (
+  document: Record<string, unknown>
+): Record<string, unknown> => {
+  // Webhook-emitted MyOS documents are already bootstrap-ready; re-expanding
+  // inline types can invalidate them for /documents/bootstrap validation.
+  if (isRecord(document.type)) {
+    return document;
+  }
+  const node = toBlueNode(document);
+  if (!node) {
+    return document;
+  }
+  const restored = blue.restoreInlineTypes(node);
+  const normalized = blue.nodeToJson(restored, 'original');
+  return isRecord(normalized) ? normalized : document;
+};
+
+const buildPayNoteBootstrapContext = (input: {
+  request: NormalizedBootstrapRequest;
+  documentNode: BlueNode | null;
+  requestedDocumentPayload?: Record<string, unknown> | null;
+  eventObject?: WebhookEventObject;
+  documentPayload?: Record<string, unknown>;
+}): PayNoteBootstrapContext => {
+  const {
+    request,
+    documentNode,
+    requestedDocumentPayload,
+    eventObject,
+    documentPayload,
+  } = input;
+  const payNoteDocument = requestedDocumentPayload ?? null;
+  const requestingSessionId = getString(eventObject?.sessionId);
+  const requestingDeliveryCardDetails = documentPayload
+    ? getCardTransactionDetailsFromDocument(documentPayload) ?? null
+    : null;
+  const deliveryId = requestingDeliveryCardDetails
+    ? buildCardTransactionDetailsKey(requestingDeliveryCardDetails)
+    : undefined;
+  const deliveryContracts = getContractsFromDocument({
+    document: documentPayload,
+    node: documentPayload ? toBlueNode(documentPayload) : null,
+  });
+  const deliveryBindings = deliveryContracts
+    ? buildChannelBindingsFromContracts(deliveryContracts)
+    : {};
+  const senderIdentity = getBindingIdentity(deliveryBindings.payNoteSender);
+  const payeeIdentity = getBindingIdentity(
+    request.channelBindings.payeeChannel
+  );
+  const payerIdentity = getBindingIdentity(
+    request.channelBindings.payerChannel
+  );
+
+  return {
+    payNoteDocument,
+    payNoteDocumentNode: documentNode,
+    requestingSessionId,
+    requestingDeliveryCardDetails,
+    deliveryId,
+    senderIdentity,
+    payeeIdentity,
+    payerIdentity,
+  };
+};
+
+const ensureValidPayNoteBootstrapRequest = async (input: {
+  context: PayNoteBootstrapContext;
+  responseContext: BootstrapResponseContext;
+  eventId: string;
+}): Promise<Record<string, unknown> | null> => {
+  const { context, responseContext, eventId } = input;
+  const {
+    deliveryId,
+    payerIdentity,
+    payeeIdentity,
+    senderIdentity,
+    payNoteDocumentNode,
+    payNoteDocument,
+  } = context;
+
+  if (payerIdentity) {
+    await rejectPayNoteBootstrapRequest({
+      context: responseContext,
+      eventId,
+      deliveryId,
+      reason: 'Payer binding must not be provided by merchant.',
+      logMessage:
+        'PayNote bootstrap request rejected (payer binding supplied by merchant)',
+    });
+    return null;
+  }
+
+  if (!senderIdentity || !payeeIdentity || payeeIdentity !== senderIdentity) {
+    await rejectPayNoteBootstrapRequest({
+      context: responseContext,
+      eventId,
+      deliveryId,
+      reason: 'Payee binding must match the delivery sender.',
+      logMessage:
+        'PayNote bootstrap request rejected (payee does not match delivery sender)',
+    });
+    return null;
+  }
+
+  if (!payNoteDocument || !payNoteDocumentNode) {
+    await rejectPayNoteBootstrapRequest({
+      context: responseContext,
+      eventId,
+      deliveryId,
+      reason:
+        'Unsupported PayNote type. Expected PayNote/Card Transaction PayNote.',
+      logMessage:
+        'PayNote bootstrap request rejected (unsupported PayNote type)',
+    });
+    return null;
+  }
+
+  if (
+    !blue.isTypeOf(payNoteDocumentNode, CardTransactionPayNoteSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    await rejectPayNoteBootstrapRequest({
+      context: responseContext,
+      eventId,
+      deliveryId,
+      reason:
+        'Unsupported PayNote type. Expected PayNote/Card Transaction PayNote.',
+      logMessage:
+        'PayNote bootstrap request rejected (unsupported PayNote type)',
+    });
+    return null;
+  }
+
+  return payNoteDocument;
+};
+
+const resolveReferencedPaymentMandateDocumentId = (
+  payNoteDocument: Record<string, unknown>
+): string | undefined => getString(payNoteDocument.paymentMandateDocumentId);
+
+const validateReferencedPaymentMandateForBootstrap = async (input: {
+  mandateDocumentId: string;
+  now: string;
+  eventId: string;
+  deliveryId?: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<
+  { ok: true; mandateSessionId: string } | { ok: false; reason: string }
+> => {
+  const { mandateDocumentId, now, eventId, deliveryId, deps, logs } = input;
+
+  const mandateContract = await deps.contractRepository.getContractByDocumentId(
+    mandateDocumentId
+  );
+  const mandateSessionId = getString(mandateContract?.sessionId);
+  if (!mandateSessionId) {
+    log(
+      logs,
+      'warn',
+      'PayNote bootstrap request rejected (missing payment mandate session mapping)',
+      {
+        eventId,
+        deliveryId,
+        mandateDocumentId,
+      }
+    );
+    return {
+      ok: false,
+      reason: 'Unable to resolve payment mandate session for bootstrap.',
+    };
+  }
+
+  const fetchedMandate = await deps.myOsClient.fetchDocument(mandateSessionId);
+  if (fetchedMandate.kind !== 'success' || !fetchedMandate.document.document) {
+    log(
+      logs,
+      'warn',
+      'PayNote bootstrap request rejected (payment mandate document unavailable)',
+      {
+        eventId,
+        deliveryId,
+        mandateDocumentId,
+        mandateSessionId,
+        status: 'status' in fetchedMandate ? fetchedMandate.status : null,
+      }
+    );
+    return {
+      ok: false,
+      reason: 'Unable to load payment mandate document for bootstrap.',
+    };
+  }
+
+  const mandateNode = toBlueNode(fetchedMandate.document.document);
+  if (
+    !mandateNode ||
+    !blue.isTypeOf(mandateNode, PaymentMandateSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    log(
+      logs,
+      'warn',
+      'PayNote bootstrap request rejected (invalid payment mandate type)',
+      {
+        eventId,
+        deliveryId,
+        mandateDocumentId,
+        mandateSessionId,
+      }
+    );
+    return {
+      ok: false,
+      reason: 'Referenced payment mandate document is invalid.',
+    };
+  }
+
+  const mandateSimple = blue.nodeToJson(mandateNode, 'simple') as Record<
+    string,
+    unknown
+  > | null;
+  const revokedAt = getString(mandateSimple?.revokedAt);
+  if (revokedAt) {
+    return {
+      ok: false,
+      reason: 'Referenced payment mandate is revoked.',
+    };
+  }
+
+  const expiresAt = getString(mandateSimple?.expiresAt);
+  if (expiresAt) {
+    const expiresAtMs = Date.parse(expiresAt);
+    const nowMs = Date.parse(now);
+    if (
+      Number.isFinite(expiresAtMs) &&
+      Number.isFinite(nowMs) &&
+      expiresAtMs < nowMs
+    ) {
+      return {
+        ok: false,
+        reason: 'Referenced payment mandate is expired.',
+      };
+    }
+  }
+
+  return { ok: true, mandateSessionId };
+};
+
+const resolveExistingDelivery = async (input: {
+  deliveryId?: string;
+  requestingSessionId?: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<PayNoteDeliveryRecord | null> => {
+  const { deliveryId, requestingSessionId, deps } = input;
+  if (deliveryId) {
+    return deps.payNoteDeliveryRepository.getDelivery(deliveryId);
+  }
+  if (requestingSessionId) {
+    return deps.payNoteDeliveryRepository.getDeliveryBySessionId(
+      requestingSessionId
+    );
+  }
+  return null;
+};
+
+const resolveHoldForBootstrap = async (input: {
+  existingDelivery: PayNoteDeliveryRecord | null;
+  requestingDeliveryCardDetails: ReturnType<
+    typeof getCardTransactionDetailsFromDocument
+  > | null;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<Hold | null> => {
+  const { existingDelivery, requestingDeliveryCardDetails, deps } = input;
+  if (existingDelivery?.holdId) {
+    return deps.holdRepository.getHold(existingDelivery.holdId);
+  }
+  if (requestingDeliveryCardDetails) {
+    return deps.holdRepository.getHoldByCardTransactionDetails(
+      requestingDeliveryCardDetails
+    );
+  }
+  return null;
+};
+
+const isDeliveryDocumentNode = (node: BlueNode | null): boolean =>
+  Boolean(
+    node &&
+      blue.isTypeOf(node, PayNoteDeliverySchema, {
+        checkSchemaExtensions: true,
+      })
+  );
+
+const isPayNoteDocumentNode = (node: BlueNode | null): boolean =>
+  Boolean(
+    node &&
+      blue.isTypeOf(node, PayNoteSchema, {
+        checkSchemaExtensions: true,
+      })
+  );
+
+const isPaymentMandateDocumentNode = (node: BlueNode | null): boolean =>
+  Boolean(
+    node &&
+      blue.isTypeOf(node, PaymentMandateSchema, {
+        checkSchemaExtensions: true,
+      })
+  );
+
+const isPaymentMandateDocumentPayload = (input: {
+  node: BlueNode | null;
+}): boolean => {
+  return isPaymentMandateDocumentNode(input.node);
+};
+
+const readNonEmptyString = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const readTextValue = (value: unknown): string | undefined => {
+  const direct = readNonEmptyString(value);
+  if (direct) {
+    return direct;
+  }
+  const typed = toSimpleRecord(value);
+  return readNonEmptyString(typed?.value);
+};
+
+const resolvePaymentMandateBootstrapFields = (
+  node: BlueNode | null
+): { granterType?: string; granterId?: string } | null => {
+  if (!node || !isPaymentMandateDocumentNode(node)) {
+    return null;
+  }
+
+  try {
+    const output = blue.nodeToSchemaOutput(
+      node,
+      PaymentMandateSchema
+    ) as Record<string, unknown>;
+    return {
+      granterType: readNonEmptyString(output.granterType),
+      granterId: readNonEmptyString(output.granterId),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const supportsGuarantorUpdateResponses = (
+  contracts: Record<string, unknown> | null
+): boolean => {
+  if (!contracts) {
+    return false;
+  }
+  return (
+    isRecord(contracts.guarantorUpdate) && isRecord(contracts.guarantorChannel)
+  );
+};
+
+const resolveInitialMessageText = (input: {
+  initialMessages?: Record<string, unknown>;
+  preferredChannelKeys?: string[];
+}): string | undefined => {
+  const initialMessages = input.initialMessages;
+  if (!initialMessages) {
+    return undefined;
+  }
+
+  const perChannel = toSimpleRecord(initialMessages.perChannel);
+  if (perChannel && input.preferredChannelKeys?.length) {
+    for (const channelKey of input.preferredChannelKeys) {
+      if (!channelKey) {
+        continue;
+      }
+      const customerMessage = getString(perChannel[channelKey]);
+      if (customerMessage) {
+        return customerMessage;
+      }
+    }
+  }
+
+  const defaultMessage = getString(initialMessages.defaultMessage);
+  if (defaultMessage) {
+    return defaultMessage;
+  }
+
+  if (!perChannel) {
+    return undefined;
+  }
+
+  return (
+    getString(perChannel.granterChannel) ??
+    getString(perChannel.payerChannel) ??
+    getString(perChannel.payeeChannel)
+  );
+};
+
+const formatMandateExpiryDate = (expiresAt?: string): string | undefined => {
+  return formatIsoDateHumanReadable({
+    isoDate: expiresAt,
+    locale: 'en-US',
+    timeZone: 'UTC',
+    fallbackToInput: true,
+  });
+};
+
+const resolvePaymentMandateMerchantDisplayNames = async (input: {
+  counterparties: unknown;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<string[]> => {
+  const records = Array.isArray(input.counterparties)
+    ? input.counterparties.slice(0, MAX_PAYMENT_MANDATE_COUNTERPARTIES)
+    : [];
+  const resolved = await Promise.all(
+    records.map(async counterpartyValue => {
+      const counterparty = toSimpleRecord(counterpartyValue);
+      const counterpartyType = getString(counterparty?.counterpartyType);
+      const counterpartyId = getString(counterparty?.counterpartyId);
+      if (!counterpartyType || !counterpartyId) {
+        return undefined;
+      }
+
+      if (counterpartyType !== 'merchantId') {
+        return undefined;
+      }
+
+      if (typeof input.deps.resolveMerchantNameById === 'function') {
+        try {
+          const merchantName = getString(
+            await input.deps.resolveMerchantNameById(counterpartyId)
+          );
+          return merchantName;
+        } catch {
+          return undefined;
+        }
+      }
+
+      return undefined;
+    })
+  );
+
+  return resolved.filter((name): name is string => Boolean(name));
+};
+
+const buildPaymentMandateBootstrapSummary = async (input: {
+  request: NormalizedBootstrapRequest;
+  requestedDocumentPayload: Record<string, unknown>;
+  customerChannelKey?: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<string> => {
+  const mandateSimple =
+    toSimpleRecord(input.requestedDocumentPayload) ??
+    input.requestedDocumentPayload;
+  const granterType = readTextValue(mandateSimple.granterType);
+  const preferredMessageChannelKeys =
+    granterType === 'customer'
+      ? ['granterChannel', input.customerChannelKey]
+      : [input.customerChannelKey];
+  const initialMessage =
+    resolveInitialMessageText({
+      initialMessages: input.request.initialMessages,
+      preferredChannelKeys: preferredMessageChannelKeys.filter(
+        (channel): channel is string => Boolean(channel)
+      ),
+    }) ?? 'This payment authorization follows the contract terms.';
+  const merchantDisplayNames = await resolvePaymentMandateMerchantDisplayNames({
+    counterparties: mandateSimple.allowedPaymentCounterparties,
+    deps: input.deps,
+  });
+  const expiresAtLabel = formatMandateExpiryDate(
+    readNonEmptyString(mandateSimple.expiresAt)
+  );
+  const paidToLine = merchantDisplayNames.length
+    ? `Paid to ${merchantDisplayNames.join(', ')}.`
+    : 'Paid to the merchant specified in this contract.';
+  const validityLine = expiresAtLabel
+    ? `Valid until ${expiresAtLabel}, and can be revoked anytime.`
+    : 'Can be revoked anytime.';
+
+  const lines = [initialMessage, paidToLine, '', validityLine];
+
+  return lines.join('\n').trim();
+};
+
+const buildPaymentMandateBootstrapPendingActionId = (input: {
+  eventId: string;
+  requestIndex: number;
+}) => `payment-mandate-bootstrap:${input.eventId}:${input.requestIndex}`;
+
+const buildDocumentBootstrapIdempotencyKey = (input: {
+  scope: 'payment-mandate' | 'existing-doc' | 'delivery-doc' | 'paynote-doc';
+  eventId?: string;
+  requestIndex?: number;
+  stableKey?: string;
+}) => {
+  if (input.stableKey) {
+    return [
+      'paynote-bootstrap',
+      input.scope,
+      'stable',
+      encodeURIComponent(input.stableKey),
+    ].join(':');
+  }
+
+  if (!input.eventId || input.requestIndex === undefined) {
+    throw new Error(
+      `Missing event-based bootstrap idempotency inputs for scope "${input.scope}"`
+    );
+  }
+
+  return [
+    'paynote-bootstrap',
+    input.scope,
+    input.eventId,
+    String(input.requestIndex),
+  ].join(':');
+};
+
+const queuePaymentMandateBootstrapPendingAction = async (input: {
+  request: NormalizedBootstrapRequest;
+  requestedDocumentPayload: Record<string, unknown>;
+  requestingContractSessionId?: string;
+  eventId: string;
+  requestIndex: number;
+  now: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<{ ok: true } | { ok: false; reason: string }> => {
+  const {
+    request,
+    requestedDocumentPayload,
+    requestingContractSessionId,
+    eventId,
+    requestIndex,
+    now,
+    deps,
+    logs,
+  } = input;
+
+  if (!requestingContractSessionId) {
+    return {
+      ok: false,
+      reason:
+        'Payment mandate bootstrap from active PayNote requires requesting session context.',
+    };
+  }
+
+  const contract = await deps.contractRepository.getContractBySessionId(
+    requestingContractSessionId
+  );
+  if (!contract || contract.sessionId !== requestingContractSessionId) {
+    return {
+      ok: false,
+      reason:
+        'Unable to resolve requesting contract session for payment mandate bootstrap.',
+    };
+  }
+
+  const actionId = buildPaymentMandateBootstrapPendingActionId({
+    eventId,
+    requestIndex,
+  });
+  const existingAction = (contract.pendingActions ?? []).find(
+    action =>
+      action.actionId === actionId ||
+      (action.type === PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE &&
+        Boolean(request.requestId) &&
+        action.requestId === request.requestId)
+  );
+  if (existingAction) {
+    trace(logs, 'Payment mandate bootstrap pending action already exists', {
+      eventId,
+      requestingSessionId: requestingContractSessionId,
+      actionId,
+      existingActionId: existingAction.actionId,
+      requestId: request.requestId ?? null,
+    });
+    return { ok: true };
+  }
+
+  const summary = await buildPaymentMandateBootstrapSummary({
+    request,
+    requestedDocumentPayload,
+    customerChannelKey: getString(contract.customerChannelKey),
+    deps,
+  });
+
+  const nextAction = {
+    actionId,
+    type: PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TYPE,
+    status: 'pending',
+    title: PAYMENT_MANDATE_BOOTSTRAP_PENDING_ACTION_TITLE,
+    summary,
+    ...(request.requestId ? { requestId: request.requestId } : {}),
+    payload: {
+      requestId: request.requestId,
+      bootstrapAssignee: request.bootstrapAssignee,
+      initialMessages: request.initialMessages,
+      channelBindings: request.channelBindings,
+      paymentMandateDocument: requestedDocumentPayload,
+      requestEventId: eventId,
+      requestEventIndex: requestIndex,
+    },
+    createdAt: now,
+  } as const;
+
+  await deps.contractRepository.saveContract({
+    ...contract,
+    pendingActions: [...(contract.pendingActions ?? []), nextAction],
+    updatedAt: now,
+  });
+
+  log(
+    logs,
+    'info',
+    'Payment mandate bootstrap request recorded as pending action',
+    {
+      eventId,
+      requestingSessionId: requestingContractSessionId,
+      actionId,
+      requestId: request.requestId ?? null,
+    }
+  );
+
+  return { ok: true };
+};
+
+const handlePaymentMandateBootstrapRequest = async (input: {
+  request: NormalizedBootstrapRequest;
+  requestedDocumentNode: BlueNode | null;
+  requestedDocumentPayload: Record<string, unknown>;
+  isRequestingDeliveryDoc: boolean;
+  responseContext: BootstrapResponseContext;
+  eventId: string;
+  requestIndex: number;
+  now: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<boolean> => {
+  const {
+    request,
+    requestedDocumentNode,
+    requestedDocumentPayload,
+    isRequestingDeliveryDoc,
+    responseContext,
+    eventId,
+    requestIndex,
+    now,
+    deps,
+    logs,
+  } = input;
+
+  const mandateFields = resolvePaymentMandateBootstrapFields(
+    requestedDocumentNode
+  );
+  const granterType = mandateFields?.granterType;
+  if (granterType === 'customer') {
+    const queued = await queuePaymentMandateBootstrapPendingAction({
+      request,
+      requestedDocumentPayload,
+      requestingContractSessionId:
+        responseContext.requestingContractSessionId ??
+        responseContext.requestingSessionId,
+      eventId,
+      requestIndex,
+      now,
+      deps,
+      logs,
+    });
+
+    if (!queued.ok) {
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason: queued.reason,
+      });
+      return true;
+    }
+
+    return true;
+  }
+
+  if (!(isRequestingDeliveryDoc && granterType === 'merchant')) {
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason:
+        'Payment mandate bootstrap is supported only for customer-granted mandates in active PayNotes or merchant-granted mandates in delivery flow.',
+    });
+    return true;
+  }
+
+  const guarantorBindingValidation = validateBankControlledChannelBinding({
+    request,
+    requestedDocumentPayload,
+    channelKey: 'guarantorChannel',
+    accountId: responseContext.credentials.accountId,
+  });
+  if (!guarantorBindingValidation.ok) {
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason:
+        'guarantorChannel must be bound to the bank guarantor account for payment mandate bootstrap.',
+    });
+    return true;
+  }
+
+  const channelBindings: ChannelBindings = {
+    ...request.channelBindings,
+    guarantorChannel: { accountId: responseContext.credentials.accountId },
+  };
+
+  await respondBootstrapDecision(responseContext, {
+    status: 'accepted',
+  });
+
+  const bootstrapDocument = normalizeBootstrapDocument(
+    requestedDocumentPayload
+  );
+  const response = await deps.myOsClient.bootstrapDocument({
+    credentials: responseContext.credentials,
+    idempotencyKey: buildDocumentBootstrapIdempotencyKey({
+      scope: 'payment-mandate',
+      eventId,
+      requestIndex,
+    }),
+    payload: {
+      channelBindings,
+      document: bootstrapDocument,
+    },
+  });
+
+  if (!response.ok) {
+    await respondBootstrapFailed(
+      responseContext,
+      resolveBootstrapFailureReason({
+        status: response.status,
+        body: response.body,
+      })
+    );
+    return true;
+  }
+
+  const bootstrapSessionId = extractBootstrapSessionId(response);
+  if (bootstrapSessionId) {
+    const granterId = mandateFields?.granterId;
+    await deps.bootstrapContextRepository.saveContext({
+      bootstrapSessionId,
+      ...(granterId ? { merchantId: granterId } : {}),
+      ...(responseContext.requestingSessionId
+        ? { requestingSessionId: responseContext.requestingSessionId }
+        : {}),
+      ...(responseContext.requestId
+        ? { requestId: responseContext.requestId }
+        : {}),
+      createdAt: now,
+    });
+
+    if (deps.consumePendingBootstrapEvents) {
+      try {
+        await deps.consumePendingBootstrapEvents(bootstrapSessionId);
+      } catch (error) {
+        log(
+          logs,
+          'error',
+          'Failed consuming pending bootstrap events for payment mandate bootstrap',
+          {
+            eventId,
+            bootstrapSessionId,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      }
+    }
+  }
+
+  log(
+    logs,
+    'info',
+    'Merchant payment mandate bootstrap requested from delivery flow',
+    {
+      eventId,
+      requestingSessionId: responseContext.requestingSessionId ?? null,
+      requestId: responseContext.requestId ?? null,
+      bootstrapSessionId: bootstrapSessionId ?? null,
+    }
+  );
+
+  return true;
+};
+
+const resolveExistingDocAllowedBootstrapType = (input: {
+  node: BlueNode | null;
+}): string | null => {
+  const { node } = input;
+  if (
+    node &&
+    blue.isTypeOf(node, MerchantToCustomerPayNoteSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    return 'PayNote/Merchant To Customer PayNote';
+  }
+
+  if (
+    node &&
+    blue.isTypeOf(node, PayNoteSchema, {
+      checkSchemaExtensions: true,
+    })
+  ) {
+    return 'PayNote/PayNote';
+  }
+
+  return null;
+};
+
+const resolveRequestedMerchantId = (
+  requestedDocumentPayload: Record<string, unknown>
+): string | undefined => {
+  const voucher = toSimpleRecord(requestedDocumentPayload.voucher);
+  return (
+    getString(requestedDocumentPayload.payerMerchantId) ??
+    getString(requestedDocumentPayload.merchantId) ??
+    getString(voucher?.payerMerchantId) ??
+    getString(voucher?.merchantId)
+  );
+};
+
+const hasExplicitBootstrapAccountNumbers = (
+  requestedDocumentPayload: Record<string, unknown>
+): boolean => {
+  const simple =
+    toSimpleRecord(requestedDocumentPayload) ?? requestedDocumentPayload;
+  return Boolean(
+    getString(simple.payerAccountNumber) || getString(simple.payeeAccountNumber)
+  );
+};
+
+const isAccountActive = (account: {
+  status?: string;
+  isActive?: () => boolean;
+}): boolean => {
+  if (typeof account.isActive === 'function') {
+    try {
+      return account.isActive();
+    } catch {
+      return false;
+    }
+  }
+  return account.status === 'ACTIVE';
+};
+
+const resolveMerchantCreditLineAccountNumber = async (input: {
+  merchantId: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<string | undefined> => {
+  const resolveMerchantOwnerUserId = input.deps.resolveMerchantOwnerUserId;
+  if (typeof resolveMerchantOwnerUserId !== 'function') {
+    return undefined;
+  }
+
+  const ownerUserId = await resolveMerchantOwnerUserId(input.merchantId);
+  if (!ownerUserId) {
+    return undefined;
+  }
+
+  const accounts = await input.deps.bankingRepository.getAccountsByUserId(
+    ownerUserId
+  );
+  const activeCreditLine = accounts.find(
+    account => account.accountType === 'CREDIT_LINE' && isAccountActive(account)
+  );
+  return activeCreditLine?.accountNumber;
+};
+
+const validateActiveBootstrapBindings = (input: {
+  request: NormalizedBootstrapRequest;
+  requestingPayerAccountId?: string;
+  requestingPayeeAccountId?: string;
+}):
+  | { ok: true; boundClientAccountId: string }
+  | {
+      ok: false;
+      reason:
+        | 'missing_payer_or_payee_binding'
+        | 'missing_requesting_participant_bindings'
+        | 'no_matching_requesting_participant';
+    } => {
+  const { request, requestingPayerAccountId, requestingPayeeAccountId } = input;
+  const payerAccountId = getString(
+    request.channelBindings.payerChannel?.accountId
+  );
+  const payeeAccountId = getString(
+    request.channelBindings.payeeChannel?.accountId
+  );
+
+  if (!payerAccountId || !payeeAccountId) {
+    return { ok: false, reason: 'missing_payer_or_payee_binding' };
+  }
+
+  const requestingParticipantAccountIds = [
+    requestingPayerAccountId,
+    requestingPayeeAccountId,
+  ].filter((value): value is string => Boolean(value));
+
+  if (!requestingParticipantAccountIds.length) {
+    return { ok: false, reason: 'missing_requesting_participant_bindings' };
+  }
+
+  const boundAccountIds = [payerAccountId, payeeAccountId];
+  const boundClientAccountId = requestingParticipantAccountIds.find(accountId =>
+    boundAccountIds.includes(accountId)
+  );
+
+  if (!boundClientAccountId) {
+    return { ok: false, reason: 'no_matching_requesting_participant' };
+  }
+
+  return { ok: true, boundClientAccountId };
+};
+
+const resolveBootstrapCustomerChannelKey = (input: {
+  request: NormalizedBootstrapRequest;
+  accountId: string;
+}): 'payerChannel' | 'payeeChannel' | undefined => {
+  const { request, accountId } = input;
+  const payerAccountId = getString(
+    request.channelBindings.payerChannel?.accountId
+  );
+  if (payerAccountId && payerAccountId === accountId) {
+    return 'payerChannel';
+  }
+
+  const payeeAccountId = getString(
+    request.channelBindings.payeeChannel?.accountId
+  );
+  if (payeeAccountId && payeeAccountId === accountId) {
+    return 'payeeChannel';
+  }
+
+  return undefined;
+};
+
+const handleExistingDocBootstrapRequest = async (input: {
+  request: NormalizedBootstrapRequest;
+  requestedTypeName: string;
+  requestedDocumentPayload: Record<string, unknown>;
+  existingDelivery: PayNoteDeliveryRecord;
+  requestIndex: number;
+  requestingPayerAccountId?: string;
+  requestingPayeeAccountId?: string;
+  responseContext: BootstrapResponseContext;
+  eventId: string;
+  bootstrapAssignee: string;
+  now: string;
+  credentials: Awaited<ReturnType<MyOsClient['getCredentials']>>;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<boolean> => {
+  const {
+    request,
+    requestedTypeName,
+    requestedDocumentPayload,
+    existingDelivery,
+    requestIndex,
+    requestingPayerAccountId,
+    requestingPayeeAccountId,
+    responseContext,
+    eventId,
+    bootstrapAssignee,
+    now,
+    credentials,
+    deps,
+    logs,
+  } = input;
+
+  const bindingsValidation = validateActiveBootstrapBindings({
+    request,
+    requestingPayerAccountId,
+    requestingPayeeAccountId,
+  });
+  if (!bindingsValidation.ok) {
+    log(
+      logs,
+      'warn',
+      'Bootstrap request ignored (invalid payer/payee bindings for active PayNote bootstrap)',
+      {
+        eventId,
+        bootstrapAssignee,
+        requestedTypeName,
+        reason: bindingsValidation.reason,
+        requestingPayerAccountId,
+        requestingPayeeAccountId,
+      }
+    );
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason:
+        'Active PayNote bootstrap requires valid payer/payee bindings that match requesting participants.',
+    });
+    return true;
+  }
+
+  const guarantorBindingValidation = validateBankControlledChannelBinding({
+    request,
+    requestedDocumentPayload,
+    channelKey: 'guarantorChannel',
+    accountId: credentials.accountId,
+  });
+  if (!guarantorBindingValidation.ok) {
+    log(
+      logs,
+      'warn',
+      'Bootstrap request rejected (guarantor channel conflict)',
+      {
+        eventId,
+        bootstrapAssignee,
+        requestedTypeName,
+        reason: guarantorBindingValidation.reason,
+      }
+    );
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason:
+        'guarantorChannel must be bound to the bank guarantor account for bootstrap.',
+    });
+    return true;
+  }
+
+  if (hasExplicitBootstrapAccountNumbers(requestedDocumentPayload)) {
+    log(
+      logs,
+      'warn',
+      'Bootstrap request rejected (explicit account numbers are not allowed for active PayNote bootstrap)',
+      {
+        eventId,
+        bootstrapAssignee,
+        requestedTypeName,
+      }
+    );
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason:
+        'payerAccountNumber/payeeAccountNumber are not supported for bootstrap from active PayNotes.',
+    });
+    return true;
+  }
+
+  const merchantId =
+    existingDelivery.merchantId ??
+    resolveRequestedMerchantId(requestedDocumentPayload);
+  let payerAccountNumber: string | undefined;
+  let payeeAccountNumber: string | undefined;
+
+  if (requestedTypeName === 'PayNote/Merchant To Customer PayNote') {
+    const rootCustomerAccountNumber = existingDelivery.accountNumber;
+    if (!rootCustomerAccountNumber) {
+      log(
+        logs,
+        'warn',
+        'Bootstrap request rejected (missing root customer account for merchant-to-customer paynote)',
+        {
+          eventId,
+          bootstrapAssignee,
+          requestedTypeName,
+          deliveryId: existingDelivery.deliveryId,
+        }
+      );
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason:
+          'Unable to resolve root customer account for Merchant To Customer PayNote bootstrap.',
+      });
+      return true;
+    }
+
+    if (!merchantId) {
+      log(
+        logs,
+        'warn',
+        'Bootstrap request rejected (missing merchant id for merchant-to-customer paynote)',
+        {
+          eventId,
+          bootstrapAssignee,
+          requestedTypeName,
+          deliveryId: existingDelivery.deliveryId,
+        }
+      );
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason:
+          'Unable to resolve merchant for Merchant To Customer PayNote bootstrap.',
+      });
+      return true;
+    }
+
+    const merchantPayerAccountNumber =
+      await resolveMerchantCreditLineAccountNumber({
+        merchantId,
+        deps,
+      });
+    if (!merchantPayerAccountNumber) {
+      log(
+        logs,
+        'warn',
+        'Bootstrap request rejected (merchant credit line account not found)',
+        {
+          eventId,
+          bootstrapAssignee,
+          requestedTypeName,
+          merchantId,
+        }
+      );
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason:
+          'Unable to resolve merchant credit line account for Merchant To Customer PayNote bootstrap.',
+      });
+      return true;
+    }
+
+    payerAccountNumber = merchantPayerAccountNumber;
+    payeeAccountNumber = rootCustomerAccountNumber;
+  }
+
+  const bootstrapDocument = normalizeBootstrapDocument(
+    requestedDocumentPayload
+  );
+
+  const channelBindings: ChannelBindings = {
+    ...request.channelBindings,
+    guarantorChannel: { accountId: credentials.accountId },
+  };
+
+  trace(logs, 'Bootstrapping allow-listed child PayNote document', {
+    eventId,
+    bootstrapAssignee,
+    requestedTypeName,
+    boundClientAccountId: bindingsValidation.boundClientAccountId,
+    deliveryId: existingDelivery.deliveryId,
+  });
+
+  await respondBootstrapDecision(responseContext, {
+    status: 'accepted',
+  });
+
+  const response = await deps.myOsClient.bootstrapDocument({
+    credentials,
+    idempotencyKey: buildDocumentBootstrapIdempotencyKey({
+      scope: 'existing-doc',
+      eventId,
+      requestIndex,
+    }),
+    payload: {
+      channelBindings,
+      document: bootstrapDocument,
+    },
+  });
+
+  if (!response.ok) {
+    log(logs, 'error', 'Allow-listed child PayNote bootstrap failed', {
+      eventId,
+      bootstrapAssignee,
+      requestedTypeName,
+      boundClientAccountId: bindingsValidation.boundClientAccountId,
+      status: response.status,
+      body: response.body,
+    });
+    await respondBootstrapFailed(
+      responseContext,
+      resolveBootstrapFailureReason({
+        status: response.status,
+        body: response.body,
+      })
+    );
+    return true;
+  }
+
+  const bootstrapSessionId = extractBootstrapSessionId(response);
+
+  if (bootstrapSessionId) {
+    const customerChannelKey = resolveBootstrapCustomerChannelKey({
+      request,
+      accountId: bindingsValidation.boundClientAccountId,
+    });
+    await deps.bootstrapContextRepository.saveContext({
+      bootstrapSessionId,
+      ...(merchantId ? { merchantId } : {}),
+      ...(existingDelivery.accountNumber
+        ? { accountNumber: existingDelivery.accountNumber }
+        : {}),
+      ...(existingDelivery.userId ? { userId: existingDelivery.userId } : {}),
+      ...(existingDelivery.holdId ? { holdId: existingDelivery.holdId } : {}),
+      ...(existingDelivery.transactionId
+        ? { transactionId: existingDelivery.transactionId }
+        : {}),
+      ...(payerAccountNumber ? { payerAccountNumber } : {}),
+      ...(payeeAccountNumber ? { payeeAccountNumber } : {}),
+      ...(customerChannelKey ? { customerChannelKey } : {}),
+      ...(responseContext.requestingSessionId
+        ? { requestingSessionId: responseContext.requestingSessionId }
+        : {}),
+      ...(responseContext.requestId
+        ? { requestId: responseContext.requestId }
+        : {}),
+      createdAt: now,
+    });
+  }
+
+  if (bootstrapSessionId && deps.consumePendingBootstrapEvents) {
+    try {
+      await deps.consumePendingBootstrapEvents(bootstrapSessionId);
+    } catch (error) {
+      log(logs, 'error', 'Failed consuming pending bootstrap events', {
+        eventId,
+        bootstrapSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  log(logs, 'info', 'Allow-listed child PayNote bootstrap requested', {
+    eventId,
+    bootstrapAssignee,
+    requestedTypeName,
+    boundClientAccountId: bindingsValidation.boundClientAccountId,
+    deliveryId: existingDelivery.deliveryId,
+    bootstrapSessionId,
+  });
+
+  return true;
+};
+
+const resolveKnownDeliveryBySessionId = async (input: {
+  sessionId?: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+}): Promise<PayNoteDeliveryRecord | null> => {
+  const { sessionId, deps } = input;
+  if (!sessionId) {
+    return null;
+  }
+  const byDeliverySession =
+    await deps.payNoteDeliveryRepository.getDeliveryBySessionId(sessionId);
+  if (byDeliverySession) {
+    return byDeliverySession;
+  }
+  const byBootstrapSession =
+    await deps.payNoteDeliveryRepository.getDeliveryByBootstrapSessionId(
+      sessionId
+    );
+  if (byBootstrapSession) {
+    return byBootstrapSession;
+  }
+
+  const contractLookup = deps.contractRepository as {
+    getContractBySessionId?: (
+      sessionId: string
+    ) => Promise<{ documentId?: string } | null>;
+  };
+  if (typeof contractLookup.getContractBySessionId !== 'function') {
+    return null;
+  }
+
+  const contract = await contractLookup.getContractBySessionId(sessionId);
+  const contractDocumentId = getString(contract?.documentId);
+  if (!contractDocumentId) {
+    return null;
+  }
+
+  return deps.payNoteDeliveryRepository.getDeliveryByPayNoteDocumentId(
+    contractDocumentId
+  );
+};
+
+const resolveCanonicalRequestingContract = async (input: {
+  eventId: string;
+  sessionId?: string;
+  eventObject?: WebhookEventObject;
+  documentPayload?: Record<string, unknown>;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<{ sessionId?: string; documentId?: string } | null> => {
+  const { eventId, sessionId, eventObject, documentPayload, deps, logs } =
+    input;
+  if (!sessionId) {
+    return null;
+  }
+
+  const contractLookup = deps.contractRepository as {
+    getContractBySessionId?: (
+      sessionId: string
+    ) => Promise<{ sessionId?: string; documentId?: string } | null>;
+    getContractByDocumentId?: (
+      documentId: string
+    ) => Promise<{ sessionId?: string; documentId?: string } | null>;
+  };
+
+  const bySession = await contractLookup.getContractBySessionId?.(sessionId);
+  if (bySession) {
+    return bySession;
+  }
+
+  if (typeof contractLookup.getContractByDocumentId !== 'function') {
+    return null;
+  }
+
+  const knownDocumentId =
+    readEventObjectDocumentId(eventObject) ??
+    readInitializedDocumentId(documentPayload);
+  if (knownDocumentId) {
+    const byKnownDocument = await contractLookup.getContractByDocumentId(
+      knownDocumentId
+    );
+    if (byKnownDocument) {
+      trace(logs, 'Resolved requesting contract via webhook payload document', {
+        eventId,
+        requestingSessionId: sessionId,
+        canonicalRequestingSessionId:
+          getString(byKnownDocument.sessionId) ?? null,
+        documentId: knownDocumentId,
+      });
+      return byKnownDocument;
+    }
+  }
+
+  const fetchedDocument = await deps.myOsClient.fetchDocument(sessionId);
+  if (!fetchedDocument || fetchedDocument.kind !== 'success') {
+    return null;
+  }
+
+  const documentId =
+    readFetchedDocumentId(fetchedDocument.document) ??
+    getString(fetchedDocument.document.documentId);
+  if (!documentId) {
+    return null;
+  }
+
+  const byDocument = await contractLookup.getContractByDocumentId(documentId);
+  if (!byDocument) {
+    return null;
+  }
+
+  trace(logs, 'Resolved requesting contract via document lookup', {
+    eventId,
+    requestingSessionId: sessionId,
+    canonicalRequestingSessionId: getString(byDocument.sessionId) ?? null,
+    documentId,
+  });
+
+  return byDocument;
+};
+
+const handleDeliveryBootstrapRequest = async (input: {
+  request: NormalizedBootstrapRequest;
+  deliveryDocument: Record<string, unknown>;
+  responseContext: BootstrapResponseContext;
+  eventId: string;
+  bootstrapAssignee: string;
+  now: string;
+  credentials: Awaited<ReturnType<MyOsClient['getCredentials']>>;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<boolean> => {
+  const {
+    request,
+    deliveryDocument,
+    responseContext,
+    eventId,
+    bootstrapAssignee,
+    now,
+    credentials,
+    deps,
+    logs,
+  } = input;
+  const synchronySessionId =
+    getSynchronySessionIdFromDocument(deliveryDocument);
+  const deliveryError =
+    getString(deliveryDocument.deliveryError) ??
+    getString(toSimpleRecord(deliveryDocument)?.deliveryError);
+  if (!synchronySessionId) {
+    trace(logs, 'Delivery bootstrap request missing synchrony merchant link', {
+      eventId,
+      bootstrapAssignee,
+    });
+  }
+
+  const cardDetails = getCardTransactionDetailsFromDocument(deliveryDocument);
+  if (!cardDetails) {
+    log(logs, 'warn', 'Delivery missing card transaction details', {
+      eventId,
+    });
+    return true;
+  }
+
+  const deliveryId = buildCardTransactionDetailsKey(cardDetails);
+  trace(logs, 'Processing delivery bootstrap request', {
+    eventId,
+    deliveryId,
+  });
+
+  const existing = await deps.payNoteDeliveryRepository.getDelivery(deliveryId);
+  const requestingSessionId = responseContext.requestingSessionId;
+  if (existing?.deliverySessionId || existing?.deliverySessionIds?.length) {
+    log(
+      logs,
+      'info',
+      'Bootstrap request ignored (delivery already bootstrapped)',
+      {
+        eventId,
+        deliveryId,
+        requestingSessionId: requestingSessionId ?? null,
+        deliverySessionId: existing.deliverySessionId ?? null,
+        deliverySessionIds: existing.deliverySessionIds ?? null,
+      }
+    );
+    return true;
+  }
+
+  const deliveryRecord: PayNoteDeliveryRecord = {
+    ...(existing ?? {
+      deliveryId,
+      createdAt: now,
+      updatedAt: now,
+    }),
+    deliveryId,
+    cardTransactionDetails: cardDetails,
+    cardTransactionDetailsKey: deliveryId,
+    deliveryDocument,
+    synchronySessionId: existing?.synchronySessionId ?? synchronySessionId,
+    updatedAt: now,
+    createdAt: existing?.createdAt ?? now,
+  };
+
+  await deps.payNoteDeliveryRepository.saveDelivery(deliveryRecord);
+
+  const payNoteDelivererBindingValidation =
+    validateBankControlledChannelBinding({
+      request,
+      requestedDocumentPayload: deliveryDocument,
+      channelKey: 'payNoteDeliverer',
+      accountId: credentials.accountId,
+    });
+  if (!payNoteDelivererBindingValidation.ok) {
+    log(
+      logs,
+      'warn',
+      'Bootstrap request rejected (delivery channel conflict)',
+      {
+        eventId,
+        bootstrapAssignee,
+        reason: payNoteDelivererBindingValidation.reason,
+      }
+    );
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason:
+        'payNoteDeliverer must be bound to the bank delivery account for bootstrap.',
+    });
+    return true;
+  }
+
+  const channelBindings: ChannelBindings = {
+    ...request.channelBindings,
+    payNoteDeliverer: { accountId: credentials.accountId },
+  };
+
+  trace(logs, 'Bootstrapping PayNote Delivery document', {
+    eventId,
+    deliveryId,
+    channelBindingCount: Object.keys(channelBindings).length,
+    hasDeliveryDocument: Boolean(deliveryDocument),
+  });
+
+  await respondBootstrapDecision(responseContext, {
+    status: 'accepted',
+  });
+
+  const bootstrapDocument = normalizeBootstrapDocument(deliveryDocument);
+  const response = await deps.myOsClient.bootstrapDocument({
+    credentials,
+    idempotencyKey: buildDocumentBootstrapIdempotencyKey({
+      scope: 'delivery-doc',
+      stableKey: `delivery:${deliveryId}`,
+    }),
+    payload: {
+      channelBindings,
+      document: bootstrapDocument,
+    },
+  });
+
+  if (!response.ok) {
+    log(logs, 'error', 'PayNote Delivery bootstrap failed', {
+      eventId,
+      status: response.status,
+      body: response.body,
+    });
+    await respondBootstrapFailed(
+      responseContext,
+      resolveBootstrapFailureReason({
+        status: response.status,
+        body: response.body,
+      })
+    );
+  } else {
+    log(logs, 'info', 'PayNote Delivery bootstrap requested', {
+      eventId,
+      deliveryId,
+    });
+  }
+
+  const bootstrapSessionId = response.ok
+    ? extractBootstrapSessionId(response)
+    : undefined;
+
+  if (response.ok && bootstrapSessionId) {
+    await deps.bootstrapContextRepository.saveContext({
+      bootstrapSessionId,
+      ...(deliveryRecord.merchantId
+        ? { merchantId: deliveryRecord.merchantId }
+        : {}),
+      ...(deliveryRecord.accountNumber
+        ? { accountNumber: deliveryRecord.accountNumber }
+        : {}),
+      ...(deliveryRecord.userId ? { userId: deliveryRecord.userId } : {}),
+      ...(deliveryRecord.holdId ? { holdId: deliveryRecord.holdId } : {}),
+      ...(deliveryRecord.transactionId
+        ? { transactionId: deliveryRecord.transactionId }
+        : {}),
+      ...(responseContext.requestingSessionId
+        ? { requestingSessionId: responseContext.requestingSessionId }
+        : {}),
+      ...(responseContext.requestId
+        ? { requestId: responseContext.requestId }
+        : {}),
+      createdAt: now,
+    });
+  }
+
+  if (response.ok && deliveryError) {
+    if (!bootstrapSessionId) {
+      log(
+        logs,
+        'error',
+        'Failed to report PayNote Delivery bootstrap error (missing session id)',
+        { eventId, deliveryId }
+      );
+      return true;
+    }
+
+    const reportResponse = await deps.myOsClient.runDocumentOperation({
+      credentials,
+      sessionId: bootstrapSessionId,
+      operation: 'reportDeliveryError',
+      payload: deliveryError,
+    });
+
+    if (!reportResponse.ok) {
+      log(logs, 'error', 'Failed to report PayNote Delivery error', {
+        eventId,
+        deliveryId,
+        status: reportResponse.status,
+        body: reportResponse.body,
+      });
+    } else {
+      log(logs, 'info', 'Reported PayNote Delivery error', {
+        eventId,
+        deliveryId,
+      });
+    }
+  }
+
+  return true;
+};
+
+const handlePayNoteBootstrapRequest = async (input: {
+  request: NormalizedBootstrapRequest;
+  requestedDocumentNode: BlueNode | null;
+  requestedDocumentPayload?: Record<string, unknown> | null;
+  requestIndex: number;
+  responseContext: BootstrapResponseContext;
+  eventId: string;
+  eventObject?: WebhookEventObject;
+  documentPayload?: Record<string, unknown>;
+  now: string;
+  credentials: Awaited<ReturnType<MyOsClient['getCredentials']>>;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<boolean> => {
+  const {
+    request,
+    requestedDocumentNode,
+    requestedDocumentPayload,
+    requestIndex,
+    responseContext,
+    eventId,
+    eventObject,
+    documentPayload,
+    now,
+    credentials,
+    deps,
+    logs,
+  } = input;
+
+  const context = buildPayNoteBootstrapContext({
+    request,
+    documentNode: requestedDocumentNode,
+    requestedDocumentPayload,
+    eventObject,
+    documentPayload,
+  });
+  const payNoteDocument = await ensureValidPayNoteBootstrapRequest({
+    context,
+    responseContext,
+    eventId,
+  });
+
+  if (!payNoteDocument) {
+    return true;
+  }
+
+  const { deliveryId, requestingSessionId, requestingDeliveryCardDetails } =
+    context;
+  const existingDelivery = await resolveExistingDelivery({
+    deliveryId,
+    requestingSessionId,
+    deps,
+  });
+  const existingPayNoteDocumentId = readNonEmptyString(
+    existingDelivery?.payNoteDocumentId
+  );
+  if (existingPayNoteDocumentId) {
+    log(logs, 'info', 'PayNote bootstrap request already satisfied', {
+      eventId,
+      deliveryId: existingDelivery?.deliveryId ?? deliveryId,
+      requestingSessionId: requestingSessionId ?? null,
+      payNoteDocumentId: existingPayNoteDocumentId,
+    });
+    return true;
+  }
+  const existingPayNoteBootstrapSessionId = readNonEmptyString(
+    existingDelivery?.payNoteBootstrapSessionId
+  );
+  if (existingPayNoteBootstrapSessionId) {
+    log(logs, 'info', 'PayNote bootstrap request already in progress', {
+      eventId,
+      deliveryId: existingDelivery?.deliveryId ?? deliveryId,
+      requestingSessionId: requestingSessionId ?? null,
+      payNoteBootstrapSessionId: existingPayNoteBootstrapSessionId,
+    });
+    return true;
+  }
+  const payNoteSummary = getPayNoteSummaryFromDocument(payNoteDocument);
+  const payNoteAmountMinor = payNoteSummary.amountMinor;
+  const holdForBootstrap =
+    existingDelivery?.merchantId || payNoteAmountMinor !== undefined
+      ? await resolveHoldForBootstrap({
+          existingDelivery,
+          requestingDeliveryCardDetails,
+          deps,
+        })
+      : null;
+  const merchantId =
+    existingDelivery?.merchantId ?? holdForBootstrap?.merchantId;
+
+  if (payNoteAmountMinor !== undefined) {
+    if (
+      holdForBootstrap &&
+      holdForBootstrap.amountMinor !== payNoteAmountMinor
+    ) {
+      const deliveryError = `PayNote amount (${payNoteAmountMinor}) does not match transaction amount (${holdForBootstrap.amountMinor})`;
+      return rejectPayNoteBootstrapRequest({
+        context: responseContext,
+        eventId,
+        deliveryId,
+        reason: deliveryError,
+        logMessage: 'PayNote bootstrap request rejected (amount mismatch)',
+        logContext: {
+          holdId: holdForBootstrap.holdId,
+          payNoteAmountMinor,
+          holdAmountMinor: holdForBootstrap.amountMinor,
+        },
+      });
+    }
+  }
+
+  const guarantorBindingValidation = validateBankControlledChannelBinding({
+    request,
+    requestedDocumentPayload: payNoteDocument,
+    channelKey: 'guarantorChannel',
+    accountId: credentials.accountId,
+  });
+  if (!guarantorBindingValidation.ok) {
+    return rejectPayNoteBootstrapRequest({
+      context: responseContext,
+      eventId,
+      deliveryId,
+      reason:
+        'guarantorChannel must be bound to the bank guarantor account for bootstrap.',
+      logMessage:
+        'PayNote bootstrap request rejected (guarantor channel conflict)',
+      logContext: {
+        reason: guarantorBindingValidation.reason,
+      },
+    });
+  }
+
+  const payerBindingValidation = validateBankControlledChannelBinding({
+    request,
+    requestedDocumentPayload: payNoteDocument,
+    channelKey: 'payerChannel',
+    accountId: credentials.accountId,
+  });
+  if (!payerBindingValidation.ok) {
+    return rejectPayNoteBootstrapRequest({
+      context: responseContext,
+      eventId,
+      deliveryId,
+      reason:
+        'payerChannel must be bound to the bank payer account for bootstrap.',
+      logMessage: 'PayNote bootstrap request rejected (payer channel conflict)',
+      logContext: {
+        reason: payerBindingValidation.reason,
+      },
+    });
+  }
+
+  const paymentMandateDocumentId =
+    resolveReferencedPaymentMandateDocumentId(payNoteDocument);
+  if (paymentMandateDocumentId) {
+    const mandateValidation =
+      await validateReferencedPaymentMandateForBootstrap({
+        mandateDocumentId: paymentMandateDocumentId,
+        now,
+        eventId,
+        deliveryId,
+        deps,
+        logs,
+      });
+    if (!mandateValidation.ok) {
+      return rejectPayNoteBootstrapRequest({
+        context: responseContext,
+        eventId,
+        deliveryId,
+        reason: mandateValidation.reason,
+        logMessage:
+          'PayNote bootstrap request rejected (payment mandate validation failed)',
+        logContext: {
+          paymentMandateDocumentId,
+        },
+      });
+    }
+  }
+
+  const channelBindings: ChannelBindings = {
+    ...request.channelBindings,
+    payerChannel: { accountId: credentials.accountId },
+    guarantorChannel: { accountId: credentials.accountId },
+  };
+
+  trace(logs, 'Bootstrapping PayNote document', {
+    eventId,
+    deliveryId,
+    channelBindingCount: Object.keys(channelBindings).length,
+    hasPayNoteDocument: Boolean(payNoteDocument),
+  });
+
+  await respondBootstrapDecision(responseContext, {
+    status: 'accepted',
+  });
+
+  const bootstrapDocument = normalizeBootstrapDocument(payNoteDocument);
+  const response = await deps.myOsClient.bootstrapDocument({
+    credentials,
+    idempotencyKey: buildDocumentBootstrapIdempotencyKey({
+      scope: 'paynote-doc',
+      ...(deliveryId
+        ? { stableKey: `delivery:${deliveryId}` }
+        : { eventId, requestIndex }),
+    }),
+    payload: {
+      channelBindings,
+      document: bootstrapDocument,
+    },
+  });
+
+  if (!response.ok) {
+    log(logs, 'error', 'PayNote bootstrap failed', {
+      eventId,
+      status: response.status,
+      body: response.body,
+    });
+    await respondBootstrapFailed(
+      responseContext,
+      resolveBootstrapFailureReason({
+        status: response.status,
+        body: response.body,
+      })
+    );
+    return true;
+  }
+
+  const bootstrapSessionId = extractBootstrapSessionId(response);
+
+  if (existingDelivery) {
+    await deps.payNoteDeliveryRepository.saveDelivery({
+      ...existingDelivery,
+      payNoteBootstrapRequestedAt: now,
+      payNoteBootstrapSessionId:
+        existingDelivery.payNoteBootstrapSessionId ?? bootstrapSessionId,
+      updatedAt: now,
+    });
+  }
+
+  if (bootstrapSessionId) {
+    await deps.bootstrapContextRepository.saveContext({
+      bootstrapSessionId,
+      ...(merchantId ? { merchantId } : {}),
+      ...(existingDelivery?.accountNumber
+        ? { accountNumber: existingDelivery.accountNumber }
+        : {}),
+      ...(existingDelivery?.userId ? { userId: existingDelivery.userId } : {}),
+      ...(existingDelivery?.holdId ? { holdId: existingDelivery.holdId } : {}),
+      ...(existingDelivery?.transactionId
+        ? { transactionId: existingDelivery.transactionId }
+        : {}),
+      ...(responseContext.requestingSessionId
+        ? { requestingSessionId: responseContext.requestingSessionId }
+        : {}),
+      ...(responseContext.requestId
+        ? { requestId: responseContext.requestId }
+        : {}),
+      createdAt: now,
+    });
+  }
+
+  if (bootstrapSessionId && deps.consumePendingBootstrapEvents) {
+    try {
+      await deps.consumePendingBootstrapEvents(bootstrapSessionId);
+    } catch (error) {
+      log(logs, 'error', 'Failed consuming pending bootstrap events', {
+        eventId,
+        bootstrapSessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const shouldReportInlinePaymentMandateAttachment =
+    bootstrapSessionId &&
+    paymentMandateDocumentId &&
+    !existingDelivery?.paymentMandateBootstrapSessionId;
+
+  if (shouldReportInlinePaymentMandateAttachment) {
+    const attachedReported = await runGuarantorUpdate({
+      myOsClient: deps.myOsClient,
+      sessionId: bootstrapSessionId,
+      credentials,
+      logs,
+      logContext: {
+        eventId,
+        bootstrapSessionId,
+        paymentMandateDocumentId,
+      },
+      request: [
+        {
+          type: 'PayNote/Payment Mandate Attached',
+          paymentMandateDocumentId,
+        },
+      ],
+      successMessage:
+        'Reported payment mandate attachment for bootstrapped PayNote',
+      failureMessage:
+        'Failed to report payment mandate attachment for bootstrapped PayNote',
+      missingCredentialsMessage:
+        'Skipped payment mandate attachment update (missing MyOS credentials)',
+    });
+
+    if (!attachedReported) {
+      await runGuarantorUpdate({
+        myOsClient: deps.myOsClient,
+        sessionId: bootstrapSessionId,
+        credentials,
+        logs,
+        logContext: {
+          eventId,
+          bootstrapSessionId,
+          paymentMandateDocumentId,
+        },
+        request: [
+          {
+            type: 'PayNote/Payment Mandate Attachment Failed',
+            reason: 'Unable to attach referenced payment mandate.',
+          },
+        ],
+        successMessage:
+          'Reported payment mandate attachment failure for bootstrapped PayNote',
+        failureMessage:
+          'Failed to report payment mandate attachment failure for bootstrapped PayNote',
+        missingCredentialsMessage:
+          'Skipped payment mandate attachment failure update (missing MyOS credentials)',
+      });
+    }
+  }
+
+  log(logs, 'info', 'PayNote bootstrap requested', {
+    eventId,
+    bootstrapSessionId,
+    deliveryId: existingDelivery?.deliveryId ?? deliveryId,
+  });
+
+  return true;
+};
+
+export const handleBootstrapRequests = async (input: {
+  requests: BootstrapRequest[];
+  eventId: string;
+  eventObject?: WebhookEventObject;
+  documentPayload?: Record<string, unknown>;
+  now: string;
+  deps: HandlePayNoteDeliveryWebhookDependencies;
+  logs: LogEntry[];
+}): Promise<void> => {
+  const { requests, eventId, eventObject, documentPayload, now, deps, logs } =
+    input;
+  const credentials = await deps.myOsClient.getCredentials();
+  const requestingSessionId = getString(eventObject?.sessionId);
+  const requestingDocumentNode = toBlueNode(
+    eventObject?.document ?? documentPayload
+  );
+  const requestingDocumentPayload = requestingDocumentNode
+    ? (blue.nodeToJson(requestingDocumentNode, 'original') as
+        | Record<string, unknown>
+        | undefined)
+    : undefined;
+  const isRequestingDeliveryDoc = isDeliveryDocumentNode(
+    requestingDocumentNode
+  );
+  const requestingContracts = getContractsFromDocument({
+    document: requestingDocumentPayload,
+    node: requestingDocumentNode,
+  });
+  const allowGuarantorUpdateResponse =
+    supportsGuarantorUpdateResponses(requestingContracts);
+  const requestingBindings = requestingContracts
+    ? buildChannelBindingsFromContracts(requestingContracts)
+    : {};
+  const requestingPayerAccountId = getString(
+    requestingBindings.payerChannel?.accountId
+  );
+  const requestingPayeeAccountId = getString(
+    requestingBindings.payeeChannel?.accountId
+  );
+  const isSynchronyMerchantDoc = Boolean(
+    requestingContracts?.synchronyChannel && requestingContracts?.sendPayNote
+  );
+  let knownDelivery: PayNoteDeliveryRecord | null | undefined;
+  const getKnownDelivery = async () => {
+    if (knownDelivery !== undefined) {
+      return knownDelivery;
+    }
+    knownDelivery = await resolveKnownDeliveryBySessionId({
+      sessionId: requestingSessionId,
+      deps,
+    });
+    return knownDelivery;
+  };
+  const shouldRequireKnownRequestingSession =
+    !isRequestingDeliveryDoc && !isSynchronyMerchantDoc;
+  const canResolveCanonicalRequestingSession =
+    typeof deps.contractRepository.getContractBySessionId === 'function';
+  const canonicalRequestingContract =
+    shouldRequireKnownRequestingSession &&
+    canResolveCanonicalRequestingSession &&
+    requestingSessionId
+      ? await resolveCanonicalRequestingContract({
+          eventId,
+          sessionId: requestingSessionId,
+          eventObject,
+          documentPayload: requestingDocumentPayload,
+          deps,
+          logs,
+        })
+      : null;
+  if (
+    shouldRequireKnownRequestingSession &&
+    canResolveCanonicalRequestingSession &&
+    !canonicalRequestingContract
+  ) {
+    log(
+      logs,
+      'info',
+      'Bootstrap requests ignored (unknown or non-canonical requesting session)',
+      {
+        eventId,
+        requestingSessionId: requestingSessionId ?? null,
+      }
+    );
+    return;
+  }
+  const canonicalRequestingDocumentId = getString(
+    canonicalRequestingContract?.documentId
+  );
+  const knownRequestingDelivery = shouldRequireKnownRequestingSession
+    ? canonicalRequestingDocumentId
+      ? isRequestingDeliveryDoc
+        ? await deps.payNoteDeliveryRepository.getDeliveryByDocumentId(
+            canonicalRequestingDocumentId
+          )
+        : await deps.payNoteDeliveryRepository.getDeliveryByPayNoteDocumentId(
+            canonicalRequestingDocumentId
+          )
+      : await getKnownDelivery()
+    : null;
+  if (shouldRequireKnownRequestingSession && !knownRequestingDelivery) {
+    log(
+      logs,
+      'info',
+      'Bootstrap requests ignored (unknown or non-canonical requesting session)',
+      {
+        eventId,
+        requestingSessionId: requestingSessionId ?? null,
+      }
+    );
+    return;
+  }
+
+  for (const [requestIndex, request] of requests.entries()) {
+    const normalized = normalizeBootstrapRequest(request.request);
+    const bootstrapAssignee = normalized.bootstrapAssignee;
+    const responseContext: BootstrapResponseContext = {
+      eventId,
+      bootstrapAssignee,
+      requestingSessionId,
+      requestingContractSessionId:
+        getString(canonicalRequestingContract?.sessionId) ??
+        requestingSessionId,
+      requestId: normalized.requestId,
+      allowGuarantorUpdateResponse,
+      credentials,
+      deps,
+      logs,
+    };
+
+    if (!bootstrapAssignee) {
+      log(logs, 'warn', 'Bootstrap request missing bootstrapAssignee', {
+        eventId,
+      });
+      continue;
+    }
+
+    if (
+      requestingBindings[bootstrapAssignee]?.accountId !== credentials.accountId
+    ) {
+      trace(logs, 'Bootstrap request ignored (not assigned)', {
+        eventId,
+        bootstrapAssignee,
+      });
+      continue;
+    }
+
+    const requestedDocumentPayload =
+      request.documentPayload ?? normalized.document ?? null;
+    if (!requestedDocumentPayload) {
+      log(logs, 'warn', 'Bootstrap request missing document', { eventId });
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason: 'Bootstrap request missing document payload.',
+      });
+      continue;
+    }
+
+    const requestedDocumentNode = request.documentNode;
+    if (!requestedDocumentNode) {
+      log(logs, 'warn', 'Bootstrap request rejected (missing typed document)', {
+        eventId,
+        bootstrapAssignee,
+      });
+      await respondBootstrapDecision(responseContext, {
+        status: 'rejected',
+        reason: 'Unsupported document type for bootstrap.',
+      });
+      continue;
+    }
+
+    if (isSynchronyMerchantDoc) {
+      if (!isDeliveryDocumentNode(requestedDocumentNode)) {
+        log(
+          logs,
+          'warn',
+          'Bootstrap request rejected (synchrony supports delivery bootstrap only)',
+          {
+            eventId,
+            bootstrapAssignee,
+          }
+        );
+        await respondBootstrapDecision(responseContext, {
+          status: 'rejected',
+          reason:
+            'Synchrony bootstrap supports only PayNote/PayNote Delivery documents.',
+        });
+        continue;
+      }
+
+      await handleDeliveryBootstrapRequest({
+        request: normalized,
+        deliveryDocument: requestedDocumentPayload,
+        responseContext,
+        eventId,
+        bootstrapAssignee,
+        now,
+        credentials,
+        deps,
+        logs,
+      });
+      continue;
+    }
+
+    if (isRequestingDeliveryDoc) {
+      const knownDeliveryRecord = await getKnownDelivery();
+      const canonicalDeliverySessionId = knownDeliveryRecord?.deliverySessionId;
+      if (
+        canonicalDeliverySessionId &&
+        requestingSessionId &&
+        canonicalDeliverySessionId !== requestingSessionId
+      ) {
+        log(
+          logs,
+          'info',
+          'Bootstrap requests ignored (non-canonical delivery session)',
+          {
+            eventId,
+            bootstrapAssignee,
+            requestingSessionId,
+            canonicalDeliverySessionId,
+            deliveryId: knownDeliveryRecord?.deliveryId ?? null,
+          }
+        );
+        continue;
+      }
+
+      if (isPaymentMandateDocumentPayload({ node: requestedDocumentNode })) {
+        await handlePaymentMandateBootstrapRequest({
+          request: normalized,
+          requestedDocumentNode,
+          requestedDocumentPayload,
+          isRequestingDeliveryDoc,
+          responseContext,
+          eventId,
+          requestIndex,
+          now,
+          deps,
+          logs,
+        });
+        continue;
+      }
+
+      if (!isPayNoteDocumentNode(requestedDocumentNode)) {
+        log(
+          logs,
+          'warn',
+          'Bootstrap request rejected (delivery supports paynote bootstrap only)',
+          {
+            eventId,
+            bootstrapAssignee,
+          }
+        );
+        await respondBootstrapDecision(responseContext, {
+          status: 'rejected',
+          reason:
+            'Delivery bootstrap supports only PayNote and Payment Mandate documents.',
+        });
+        continue;
+      }
+
+      await handlePayNoteBootstrapRequest({
+        request: normalized,
+        requestedDocumentNode,
+        requestedDocumentPayload,
+        requestIndex,
+        responseContext,
+        eventId,
+        eventObject,
+        documentPayload,
+        now,
+        credentials,
+        deps,
+        logs,
+      });
+      continue;
+    }
+
+    if (isPaymentMandateDocumentPayload({ node: requestedDocumentNode })) {
+      await handlePaymentMandateBootstrapRequest({
+        request: normalized,
+        requestedDocumentNode,
+        requestedDocumentPayload,
+        isRequestingDeliveryDoc,
+        responseContext,
+        eventId,
+        requestIndex,
+        now,
+        deps,
+        logs,
+      });
+      continue;
+    }
+
+    const allowedExistingDocType = resolveExistingDocAllowedBootstrapType({
+      node: requestedDocumentNode,
+    });
+    if (allowedExistingDocType) {
+      if (!knownRequestingDelivery) {
+        log(
+          logs,
+          'info',
+          'Bootstrap requests ignored (unknown or non-canonical requesting session)',
+          {
+            eventId,
+            bootstrapAssignee,
+            requestedTypeName: allowedExistingDocType,
+          }
+        );
+        continue;
+      }
+
+      await handleExistingDocBootstrapRequest({
+        request: normalized,
+        requestedTypeName: allowedExistingDocType,
+        requestedDocumentPayload,
+        existingDelivery: knownRequestingDelivery,
+        requestIndex,
+        requestingPayerAccountId,
+        requestingPayeeAccountId,
+        responseContext,
+        eventId,
+        bootstrapAssignee,
+        now,
+        credentials,
+        deps,
+        logs,
+      });
+      continue;
+    }
+
+    log(logs, 'warn', 'Bootstrap request rejected (unsupported document)', {
+      eventId,
+      bootstrapAssignee,
+    });
+    await respondBootstrapDecision(responseContext, {
+      status: 'rejected',
+      reason: 'Unsupported document type for bootstrap.',
+    });
+  }
+};

@@ -27,6 +27,8 @@ const mockCreatedAccount = {
   name: 'My Savings Account',
   currency: 'USD' as const,
   createdAt: '2023-01-01T00:00:00Z',
+  accountType: 'DEPOSIT' as const,
+  creditLimitMinor: undefined,
   ledgerBalanceMinor: 0,
   availableBalanceMinor: 0,
   status: 'ACTIVE',

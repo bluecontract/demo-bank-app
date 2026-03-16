@@ -33,6 +33,7 @@ describe('getTransaction', () => {
   beforeEach(() => {
     mockRepository = {
       saveAccount: vi.fn(),
+      updateAccountBalance: vi.fn(),
       getAccountById: vi.fn(),
       getAccountIdByNumber: vi.fn(),
       getAccountsByUserId: vi.fn(),

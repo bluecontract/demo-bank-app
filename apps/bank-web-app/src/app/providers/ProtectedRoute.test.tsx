@@ -3,6 +3,7 @@ import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { ProtectedRoute } from './ProtectedRoute';
+import { routerFutureConfig } from '../routerFutureConfig';
 
 // Mock the auth context
 const mockUseAuth = vi.fn();
@@ -33,7 +34,7 @@ describe('ProtectedRoute', () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFutureConfig}>
         <ProtectedRoute>
           <div>Protected Content</div>
         </ProtectedRoute>
@@ -51,7 +52,7 @@ describe('ProtectedRoute', () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFutureConfig}>
         <ProtectedRoute>
           <div>Protected Content</div>
         </ProtectedRoute>
@@ -70,7 +71,7 @@ describe('ProtectedRoute', () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFutureConfig}>
         <ProtectedRoute>
           <div>Protected Content</div>
         </ProtectedRoute>
@@ -89,7 +90,7 @@ describe('ProtectedRoute', () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFutureConfig}>
         <ProtectedRoute>
           <div>Protected Content</div>
         </ProtectedRoute>
@@ -101,7 +102,7 @@ describe('ProtectedRoute', () => {
 
   it('should handle auth state changes correctly', () => {
     const { rerender } = render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFutureConfig}>
         <ProtectedRoute>
           <div>Protected Content</div>
         </ProtectedRoute>
@@ -116,7 +117,7 @@ describe('ProtectedRoute', () => {
     });
 
     rerender(
-      <MemoryRouter>
+      <MemoryRouter future={routerFutureConfig}>
         <ProtectedRoute>
           <div>Protected Content</div>
         </ProtectedRoute>
@@ -133,7 +134,7 @@ describe('ProtectedRoute', () => {
     });
 
     rerender(
-      <MemoryRouter>
+      <MemoryRouter future={routerFutureConfig}>
         <ProtectedRoute>
           <div>Protected Content</div>
         </ProtectedRoute>

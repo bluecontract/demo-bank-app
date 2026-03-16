@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as ReactDOM from 'react-dom/client';
 import { ApiProvider } from './app/providers/ApiProvider';
 import App from './app/app';
+import { routerFutureConfig } from './app/routerFutureConfig';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,7 +21,7 @@ const root = ReactDOM.createRoot(
 
 root.render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter future={routerFutureConfig}>
       <QueryClientProvider client={queryClient}>
         <ApiProvider>
           <App />

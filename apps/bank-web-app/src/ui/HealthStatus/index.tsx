@@ -47,7 +47,7 @@ export function HealthStatus() {
           <p>Backend service is not available.</p>
           <p className="text-sm mt-1">
             Ensure the API server is running on{' '}
-            {import.meta.env.VITE_API_URL || 'http://localhost:3000'}.
+            {__BANK_API_URL__ || 'http://localhost:3000'}.
           </p>
         </div>
       );

@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import App from './app';
 import { ApiProvider } from './providers/ApiProvider';
+import { routerFutureConfig } from './routerFutureConfig';
 
 // Use vi.hoisted to create mocks that can be used in vi.mock
 const { mockSignUp, mockHealth } = vi.hoisted(() => ({
@@ -36,7 +37,7 @@ const createTestWrapper = () => {
   });
 
   return ({ children }: { children: React.ReactNode }) => (
-    <BrowserRouter>
+    <BrowserRouter future={routerFutureConfig}>
       <QueryClientProvider client={queryClient}>
         <ApiProvider>{children}</ApiProvider>
       </QueryClientProvider>
@@ -68,10 +69,10 @@ describe('App', () => {
       </TestWrapper>
     );
 
-    expect(screen.getByText('Demo Bank App')).toBeInTheDocument();
+    expect(screen.getByText('My Synchrony')).toBeInTheDocument();
   });
 
-  it('should show the Demo Bank App title and tagline', () => {
+  it('should show the My Synchrony title and tagline', () => {
     const TestWrapper = createTestWrapper();
 
     render(
@@ -80,7 +81,7 @@ describe('App', () => {
       </TestWrapper>
     );
 
-    expect(screen.getByText('Demo Bank App')).toBeInTheDocument();
+    expect(screen.getByText('My Synchrony')).toBeInTheDocument();
     expect(
       screen.getByText(
         /The end-to-end reference for modelling banking workflows using/i

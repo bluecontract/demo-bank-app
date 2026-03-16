@@ -22,8 +22,20 @@ import {
 } from './errors';
 import { randomUUID } from 'crypto';
 
+const resolveLocalstackEndpoint = () => {
+  const envEndpoint =
+    process.env.AWS_ENDPOINT_URL?.trim() ||
+    process.env.LOCALSTACK_ENDPOINT_URL?.trim();
+  if (envEndpoint) {
+    return envEndpoint;
+  }
+
+  const port = process.env.LOCALSTACK_EDGE_PORT?.trim() || '4566';
+  return `http://localhost:${port}`;
+};
+
 const TEST_CONFIG = {
-  localstackEndpoint: 'http://localhost:4566',
+  localstackEndpoint: resolveLocalstackEndpoint(),
   region: 'us-east-1',
   secretName: `demo-bank-app-auth-jwt-service-integration-test-${Date.now()}`,
   testSecret: 'test-jwt-secret-key-for-integration-tests',

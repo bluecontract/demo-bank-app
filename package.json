@@ -13,13 +13,18 @@
     "test:integration": "nx affected --target=test:integration",
     "test:integration:all": "nx run-many --target=test:integration --all",
     "test:watch": "nx test bank-web-app --watch",
-    "e2e": "E2E_BASE_URL=http://localhost:4200 BANK_API_URL=http://localhost:3000 nx e2e bank-web-app-e2e",
+    "e2e": "E2E_BASE_URL=${E2E_BASE_URL:-http://localhost:4200} BANK_API_URL=${BANK_API_URL:-http://localhost:3000} nx e2e bank-web-app-e2e",
     "e2e:dev": "E2E_BASE_URL=https://d269swnzk7f4lx.cloudfront.net BANK_API_URL=https://bzwm8wkrs4.execute-api.eu-west-1.amazonaws.com/dev nx e2e bank-web-app-e2e",
     "e2e:prod": "E2E_BASE_URL=https://d5d6dqgc3s3qo.cloudfront.net BANK_API_URL=https://yfqb5j7pj0.execute-api.eu-west-1.amazonaws.com/prod nx e2e bank-web-app-e2e",
     "lint": "nx affected --target=lint",
     "lint:all": "nx run-many --target=lint --all",
     "lint:fix": "nx affected --target=lint --fix",
     "typecheck": "nx run-many --target=typecheck --all",
+    "deps:blue:check": "tsx scripts/check-blue-deps.ts",
+    "verify:quick": "npx tsx scripts/verify-quick.ts",
+    "verify:full": "npx tsx scripts/verify-full.ts",
+    "verify:full:stepwise": "bash scripts/verify-full-stepwise.sh",
+    "verify:full:resume": "bash scripts/verify-full-resume.sh",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "format:staged": "lint-staged",
@@ -32,6 +37,7 @@
     "graph": "nx graph",
     "serve:all": "nx run-many --target=serve --all",
     "serve:stack": "nx run-many --target=serve --projects=localstack,bank-api,bank-web-app",
+    "logs:summary": "AWS_REGION=eu-west-1 aws --endpoint-url ${AWS_ENDPOINT_URL:-http://localhost:4566} logs tail \"/aws/lambda/blue-bank-summary-dev\" --follow",
     "docker:check": "docker info > /dev/null 2>&1 || (echo 'Error: Docker is not running. Please start Docker first.' && exit 1)",
     "generate-docs": "npx tsx scripts/generate-openapi.ts",
     "wait-for-backend": "npx tsx scripts/wait-for-backend.ts",
@@ -41,8 +47,11 @@
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.840.0",
     "@aws-sdk/client-secrets-manager": "^3.840.0",
+    "@aws-sdk/client-sqs": "^3.985.0",
     "@aws-sdk/client-ssm": "^3.840.0",
     "@aws-sdk/lib-dynamodb": "^3.840.0",
+    "@blue-labs/document-processor": "3.5.0",
+    "@blue-repository/types": "^0.23.0",
     "@demo-bank-app/shared-bank-api-client": "*",
     "@demo-bank-app/shared-bank-api-contract": "*",
     "@demo-bank-app/shared-config": "*",
@@ -59,8 +68,8 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
-    "@blue-labs/language": "3.4.1",
-    "@blue-labs/shared-utils": "3.4.1",
+    "@blue-labs/language": "3.5.0",
+    "@blue-labs/shared-utils": "3.5.0",
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",
     "@eslint/js": "^9.8.0",
@@ -119,8 +128,15 @@
     "vitest": "^3.0.0"
   },
   "overrides": {
+    "@blue-repository/types": "^0.23.0",
     "@remix-run/router": "1.23.2",
-    "qs": "^6.14.1"
+    "axios": "^1.13.5",
+    "fast-xml-parser": "5.3.8",
+    "koa": "3.1.2",
+    "lodash": "4.17.23",
+    "serialize-javascript": "7.0.3",
+    "qs": "6.15.0",
+    "minimatch": "10.2.4"
   },
   "workspaces": [
     "apps/*",

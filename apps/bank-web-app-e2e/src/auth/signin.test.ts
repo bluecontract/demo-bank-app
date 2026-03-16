@@ -7,7 +7,7 @@ import {
 } from '../constants';
 
 const waitForDashboard = async (page: Page, userEmail?: string) => {
-  await expect(page).toHaveURL(/\/dashboard(?:$|\?)/, {
+  await expect(page).toHaveURL(/\/dashboard(?:\/|$|\?)/, {
     timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
   });
 
@@ -37,7 +37,10 @@ const waitForDashboard = async (page: Page, userEmail?: string) => {
       /* spinner may not appear if data loads instantly */
     });
   await expect(
-    dashboardContainer.getByText(DASHBOARD_HEADING_TEXT, { exact: true })
+    dashboardContainer.getByRole('heading', {
+      name: DASHBOARD_HEADING_TEXT,
+      exact: true,
+    })
   ).toBeVisible();
 
   if (userEmail) {
@@ -45,6 +48,13 @@ const waitForDashboard = async (page: Page, userEmail?: string) => {
       dashboardContainer.getByText(userEmail, { exact: true })
     ).toBeVisible();
   }
+};
+
+const waitForSignedOut = async (page: Page) => {
+  await page.waitForURL(
+    url => url.pathname === '/' || url.pathname === '/signin',
+    { timeout: TEST_DATA.TIMEOUTS.NAVIGATION }
+  );
 };
 
 test.describe('Sign In Flow', () => {
@@ -62,15 +72,11 @@ test.describe('Sign In Flow', () => {
 
     await waitForDashboard(page, testUserEmail);
 
-    // Sign out
-    // First click on the avatar to open the dropdown
-    await page.click('button[aria-haspopup="true"]');
-    // Then click on the Sign Out button
-    await page.click('button:has-text("Sign Out")');
+    // Sign out from the dashboard header action.
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
 
-    // Should be redirected to home page
-    await page.waitForURL(`${BASE_URL}/`);
-    await expect(page).toHaveURL(`${BASE_URL}/`);
+    // Should be redirected to home or sign-in page
+    await waitForSignedOut(page);
 
     // Now sign in with the same credentials
     await page.goto(`${BASE_URL}/signin`);
@@ -78,7 +84,7 @@ test.describe('Sign In Flow', () => {
     await page.click('button[type="submit"]');
 
     await waitForDashboard(page, testUserEmail);
-    await expect(page).toHaveURL(/\/dashboard(?:$|\?)/);
+    await expect(page).toHaveURL(/\/dashboard(?:\/|$|\?)/);
   });
 
   test('should show error for non-existent user', async ({ page }) => {
@@ -122,7 +128,7 @@ test.describe('Sign In Flow', () => {
     // Try to access dashboard directly - should stay on dashboard
     await page.goto(`${BASE_URL}/dashboard`);
     await waitForDashboard(page, testUserEmail);
-    await expect(page).toHaveURL(/\/dashboard(?:$|\?)/);
+    await expect(page).toHaveURL(/\/dashboard(?:\/|$|\?)/);
   });
 
   test('should redirect to signin when accessing protected route while unauthenticated', async ({
@@ -148,14 +154,11 @@ test.describe('Sign In Flow', () => {
 
     await waitForDashboard(page, testUserEmail);
 
-    // Sign out
-    // First click on the avatar to open the dropdown
-    await page.click('button[aria-haspopup="true"]');
-    // Then click on the Sign Out button
-    await page.click('button:has-text("Sign Out")');
+    // Sign out from the dashboard header action.
+    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
 
-    // Should be redirected to home page
-    await page.waitForURL(`${BASE_URL}/`);
+    // Should be redirected to home or sign-in page
+    await waitForSignedOut(page);
 
     // Try to access dashboard after sign out - should be redirected to signin
     await page.goto(`${BASE_URL}/dashboard`);

@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DynamoUserRepository } from './DynamoUserRepository';
 import { User } from '../domain/entities/User';
-import { UserAlreadyExistsError, AuthRepositoryError } from './errors';
+import {
+  UserAlreadyExistsError,
+  AuthRepositoryError,
+  MerchantDirectoryOwnershipError,
+} from './errors';
 import { randomUUID } from 'crypto';
 
 // Mock AWS SDK
@@ -22,15 +26,16 @@ vi.mock('@aws-sdk/lib-dynamodb', () => ({
   GetCommand: vi.fn(),
   QueryCommand: vi.fn(),
   TransactWriteCommand: vi.fn(),
+  UpdateCommand: vi.fn(),
 }));
 
 // Get typed access to mocked constructors
-const { GetCommand, QueryCommand, TransactWriteCommand } = await import(
-  '@aws-sdk/lib-dynamodb'
-);
+const { GetCommand, QueryCommand, TransactWriteCommand, UpdateCommand } =
+  await import('@aws-sdk/lib-dynamodb');
 const mockGetCommand = vi.mocked(GetCommand);
 const mockQueryCommand = vi.mocked(QueryCommand);
 const mockTransactWriteCommand = vi.mocked(TransactWriteCommand);
+const mockUpdateCommand = vi.mocked(UpdateCommand);
 
 describe('DynamoUserRepository', () => {
   let repository: DynamoUserRepository;
@@ -105,6 +110,74 @@ describe('DynamoUserRepository', () => {
       expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
+    it('should persist merchantId when provided', async () => {
+      const user = new User({
+        id: randomUUID(),
+        email: 'merchant.user@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-123',
+      });
+      mockSend.mockResolvedValueOnce({});
+
+      await repository.save(user);
+
+      expect(mockTransactWriteCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TransactItems: expect.arrayContaining([
+            {
+              Put: {
+                TableName: 'test-table',
+                Item: expect.objectContaining({
+                  PK: `USER#${user.id}`,
+                  SK: 'PROFILE',
+                  merchantId: 'merchant-123',
+                }),
+                ConditionExpression: 'attribute_not_exists(PK)',
+              },
+            },
+          ]),
+        })
+      );
+    });
+
+    it('should reserve merchant profile when merchant id and name are provided', async () => {
+      const user = new User({
+        id: randomUUID(),
+        email: 'merchant.owner@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-321',
+        merchantName: 'Merchant 321',
+      });
+      mockSend.mockResolvedValueOnce({});
+
+      await repository.save(user);
+
+      expect(mockTransactWriteCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TransactItems: expect.arrayContaining([
+            {
+              Put: {
+                TableName: 'test-table',
+                Item: expect.objectContaining({
+                  PK: 'MERCHANT#merchant-321',
+                  SK: 'PROFILE',
+                  entityType: 'MERCHANT_PROFILE',
+                  merchantId: 'merchant-321',
+                  name: 'Merchant 321',
+                  ownerUserId: user.id,
+                }),
+                ConditionExpression: 'attribute_not_exists(PK)',
+              },
+            },
+          ]),
+        })
+      );
+    });
+
     it('should throw UserAlreadyExistsError when user already exists (ConditionalCheckFailedException)', async () => {
       // Given
       const user = new User({
@@ -142,6 +215,9 @@ describe('DynamoUserRepository', () => {
       const transactionError = new Error('Transaction cancelled');
       transactionError.name = 'TransactionCanceledException';
       mockSend.mockRejectedValueOnce(transactionError);
+      mockSend.mockResolvedValueOnce({
+        Items: [{ id: 'existing-user-id' }],
+      });
 
       // When & Then
       await expect(repository.save(user)).rejects.toThrow(
@@ -150,7 +226,53 @@ describe('DynamoUserRepository', () => {
 
       // Verify TransactWriteCommand was attempted
       expect(mockTransactWriteCommand).toHaveBeenCalledTimes(1);
-      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw MerchantDirectoryOwnershipError when merchant id is already owned', async () => {
+      const user = new User({
+        id: randomUUID(),
+        email: 'new-merchant@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-123',
+        merchantName: 'New Merchant',
+      });
+
+      const transactionError = new Error('Transaction cancelled');
+      transactionError.name = 'TransactionCanceledException';
+      mockSend.mockRejectedValueOnce(transactionError);
+      mockSend.mockResolvedValueOnce({ Items: [] });
+      mockSend.mockResolvedValueOnce({
+        Item: { ownerUserId: 'existing-owner-user-id' },
+      });
+
+      await expect(repository.save(user)).rejects.toThrow(
+        MerchantDirectoryOwnershipError
+      );
+
+      expect(mockQueryCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TableName: 'test-table',
+          IndexName: 'AUTH_GSI1',
+          ExpressionAttributeValues: expect.objectContaining({
+            ':gsi1pk': 'EMAIL#new-merchant@example.com',
+            ':gsi1sk': 'PROFILE',
+          }),
+          Limit: 1,
+        })
+      );
+      expect(mockGetCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TableName: 'test-table',
+          Key: {
+            PK: 'MERCHANT#merchant-123',
+            SK: 'PROFILE',
+          },
+          ProjectionExpression: 'ownerUserId',
+        })
+      );
     });
 
     it('should wrap other DynamoDB errors in AuthRepositoryError', async () => {
@@ -238,6 +360,37 @@ describe('DynamoUserRepository', () => {
     });
   });
 
+  describe('updateProfile', () => {
+    it('updates merchantName and avatarDataUrl', async () => {
+      const userId = randomUUID();
+      const updatedItem = {
+        PK: `USER#${userId}`,
+        SK: 'PROFILE',
+        AUTH_GSI1PK: 'EMAIL#merchant@example.com',
+        AUTH_GSI1SK: 'PROFILE',
+        id: userId,
+        email: 'merchant@example.com',
+        createdAt: new Date('2024-01-01T00:00:00Z').toISOString(),
+        isTest: false,
+        marketingEmailsOptIn: true,
+        merchantName: 'Demo Merchant',
+        avatarDataUrl: 'data:image/png;base64,abc123',
+      };
+
+      mockSend.mockResolvedValueOnce({ Attributes: updatedItem });
+
+      const result = await repository.updateProfile(userId, {
+        merchantName: 'Demo Merchant',
+        avatarDataUrl: 'data:image/png;base64,abc123',
+      });
+
+      expect(result.merchantName).toBe('Demo Merchant');
+      expect(result.avatarDataUrl).toBe('data:image/png;base64,abc123');
+      expect(mockUpdateCommand).toHaveBeenCalledTimes(1);
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('findById', () => {
     it('should return user when found', async () => {
       // Given
@@ -311,6 +464,67 @@ describe('DynamoUserRepository', () => {
       );
 
       expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('should map merchantId when present', async () => {
+      const user = new User({
+        id: randomUUID(),
+        email: 'merchant.lookup@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-lookup',
+      });
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          PK: `USER#${user.id}`,
+          SK: 'PROFILE',
+          AUTH_GSI1PK: `EMAIL#${user.email}`,
+          AUTH_GSI1SK: 'PROFILE',
+          id: user.id,
+          email: user.email,
+          createdAt: user.createdAt.toISOString(),
+          isTest: false,
+          marketingEmailsOptIn: true,
+          merchantId: 'merchant-lookup',
+        },
+      });
+
+      const foundUser = await repository.findById(user.id);
+
+      expect(foundUser?.merchantId).toBe('merchant-lookup');
+    });
+
+    it('should map merchantName and avatarDataUrl when present', async () => {
+      const user = new User({
+        id: randomUUID(),
+        email: 'merchant.avatar@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantName: 'Demo Merchant',
+        avatarDataUrl: 'data:image/png;base64,abc123',
+      });
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          PK: `USER#${user.id}`,
+          SK: 'PROFILE',
+          AUTH_GSI1PK: `EMAIL#${user.email}`,
+          AUTH_GSI1SK: 'PROFILE',
+          id: user.id,
+          email: user.email,
+          createdAt: user.createdAt.toISOString(),
+          isTest: false,
+          marketingEmailsOptIn: true,
+          merchantName: 'Demo Merchant',
+          avatarDataUrl: 'data:image/png;base64,abc123',
+        },
+      });
+
+      const foundUser = await repository.findById(user.id);
+
+      expect(foundUser?.merchantName).toBe('Demo Merchant');
+      expect(foundUser?.avatarDataUrl).toBe('data:image/png;base64,abc123');
     });
   });
 

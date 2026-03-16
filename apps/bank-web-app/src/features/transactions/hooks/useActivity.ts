@@ -27,7 +27,6 @@ export function useActivity({
   cursor,
 }: UseActivityOptions) {
   const { handleAuthError } = useAuthErrorHandler();
-  const disablePolling = __UI_REFRESH_DISABLE_POLLING__ === 'true';
 
   return useQuery({
     queryKey: ['activity', accountNumber, limit, cursor],
@@ -57,8 +56,7 @@ export function useActivity({
       }
     },
     enabled: !!accountNumber,
-    refetchInterval: accountNumber && !disablePolling ? 5000 : false,
-    refetchIntervalInBackground: !disablePolling,
+    refetchInterval: false,
     staleTime: 30 * 1000, // 30 seconds
     gcTime: 2 * 60 * 1000, // 2 minutes
     placeholderData: accountNumber

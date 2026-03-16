@@ -25,7 +25,7 @@ export class AuthEnvironmentConfiguration
       ...this.getBaseConfig(),
       dynamoTableName: this.getRequiredStringEnv('AUTH_DYNAMO_TABLE_NAME'),
       jwtSecretArn: this.getRequiredStringEnv('JWT_SECRET_ARN'),
-      jwtTtlSeconds: this.getNumberEnv('JWT_TTL_SECONDS', 604800),
+      jwtTtlSeconds: this.getNumberEnv('JWT_TTL_SECONDS', 259200),
       testUserTtlSeconds: this.getNumberEnv('TEST_USER_TTL_SECONDS', 86400),
       serviceName: this.getStringEnv('SERVICE_NAME', 'auth'),
       metricsNamespace: this.getStringEnv('METRICS_NAMESPACE', 'App/Auth'),
@@ -34,7 +34,7 @@ export class AuthEnvironmentConfiguration
 
   protected performCustomValidation(errors: string[]): void {
     // Validate JWT TTL
-    const jwtTtl = this.getNumberEnv('JWT_TTL_SECONDS', 604800);
+    const jwtTtl = this.getNumberEnv('JWT_TTL_SECONDS', 259200);
     this.validateRange('JWT_TTL_SECONDS', jwtTtl, 1, 604800, errors);
 
     // Validate test user TTL

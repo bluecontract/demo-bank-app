@@ -25,6 +25,7 @@ export interface ReleaseHoldCommand {
   userId: string;
   idempotencyKey: string;
   reason?: string;
+  payNoteDocumentId?: string;
 }
 
 export interface ReleaseHoldDependencies {
@@ -132,6 +133,9 @@ export async function releaseHold(
         at: releasedAt,
         type: 'RELEASED',
         ...(cmd.reason ? { reason: cmd.reason } : {}),
+        ...(cmd.payNoteDocumentId
+          ? { payNoteDocumentId: cmd.payNoteDocumentId }
+          : {}),
       },
       idempotencyKey: cmd.idempotencyKey,
       idempotencyKeyHash,

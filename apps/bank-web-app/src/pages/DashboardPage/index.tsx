@@ -1,64 +1,85 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/providers/AuthProvider';
-import { SelectedAccountProvider } from '../../app/providers/SelectedAccountProvider';
+import {
+  SelectedAccountProvider,
+  useSelectedAccount,
+} from '../../app/providers/SelectedAccountProvider';
 import {
   DashboardHeader,
-  SidebarNav,
+  DashboardShell,
 } from '../../features/dashboard/components';
 import {
   AccountCreationModal,
   AccountsSection,
+  CreditLimitModal,
 } from '../../features/accounts/components';
+import { useAccountModals } from '../../features/accounts/hooks/useAccountModals';
 import { FundModal, TransactionHistory } from '../../features/transfer';
 import { useAccounts } from '../../features/accounts/hooks/useAccounts';
 import { SpinnerWithText } from '../../ui/Spinner';
-import type { Account } from '../../types/api';
+
+interface DashboardPageContentProps {
+  userEmail: string;
+  accounts: NonNullable<ReturnType<typeof useAccounts>['data']>;
+  onCreateAccount: () => void;
+  onTransfer: (accountId: string) => void;
+  onFund: (accountId: string) => void;
+  onEditCreditLimit: (accountId: string) => void;
+}
+
+function DashboardPageContent({
+  userEmail,
+  accounts,
+  onCreateAccount,
+  onTransfer,
+  onFund,
+  onEditCreditLimit,
+}: DashboardPageContentProps) {
+  const { selectedAccount } = useSelectedAccount();
+
+  return (
+    <DashboardShell
+      header={<DashboardHeader userEmail={userEmail} />}
+      data-testid="dashboard-main-container"
+      contentWidth="full"
+      pollingActivityAccountNumber={selectedAccount?.accountNumber ?? null}
+    >
+      <AccountsSection
+        accounts={accounts}
+        onCreateAccount={onCreateAccount}
+        onTransfer={onTransfer}
+        onFund={onFund}
+        onEditCreditLimit={onEditCreditLimit}
+      />
+
+      <section className="flex-1 min-h-0">
+        <TransactionHistory />
+      </section>
+    </DashboardShell>
+  );
+}
 
 export function DashboardPage() {
   const { user } = useAuth();
   const { data: accounts, isLoading, error } = useAccounts();
   const navigate = useNavigate();
 
-  const [accountCreationModal, setAccountCreationModal] = useState({
-    isOpen: false,
-  });
-
-  const [fundModal, setFundModal] = useState<{
-    isOpen: boolean;
-    sourceAccount: Account | null;
-  }>({
-    isOpen: false,
-    sourceAccount: null,
-  });
-
-  const handleCreateAccount = () => {
-    setAccountCreationModal({ isOpen: true });
-  };
-
-  const closeAccountCreationModal = () => {
-    setAccountCreationModal({ isOpen: false });
-  };
+  const {
+    depositAccounts,
+    creditLineAccounts,
+    accountCreationModal,
+    fundModal,
+    creditLimitModal,
+    openAccountCreationModal,
+    closeAccountCreationModal,
+    openFundModal,
+    closeFundModal,
+    openCreditLimitModal,
+    closeCreditLimitModal,
+  } = useAccountModals(accounts);
 
   const handleTransfer = (accountId: string) => {
     navigate(`/transfer/new?accountId=${accountId}`);
-  };
-
-  const handleFund = (accountId: string) => {
-    const account = accounts?.find(acc => acc.accountId === accountId);
-    if (account) {
-      setFundModal({
-        isOpen: true,
-        sourceAccount: account,
-      });
-    }
-  };
-
-  const closeFundModal = () => {
-    setFundModal({
-      isOpen: false,
-      sourceAccount: null,
-    });
   };
 
   if (isLoading) {
@@ -87,28 +108,14 @@ export function DashboardPage() {
 
   return (
     <SelectedAccountProvider>
-      <div className="app-shell flex" data-testid="dashboard-main-container">
-        <SidebarNav />
-
-        <div className="flex-1 flex flex-col min-h-screen">
-          <div className="px-6 pt-8 pb-4 lg:px-10">
-            <DashboardHeader userEmail={user?.email || 'Guest'} />
-          </div>
-
-          <main className="flex-1 px-6 pb-8 lg:px-10 flex flex-col gap-6 min-h-0">
-            <AccountsSection
-              accounts={accounts || []}
-              onCreateAccount={handleCreateAccount}
-              onTransfer={handleTransfer}
-              onFund={handleFund}
-            />
-
-            <section className="flex-1 min-h-0">
-              <TransactionHistory />
-            </section>
-          </main>
-        </div>
-      </div>
+      <DashboardPageContent
+        userEmail={user?.email || 'Guest'}
+        accounts={accounts || []}
+        onCreateAccount={openAccountCreationModal}
+        onTransfer={handleTransfer}
+        onFund={openFundModal}
+        onEditCreditLimit={openCreditLimitModal}
+      />
 
       {/* Account Creation Modal */}
       <AccountCreationModal
@@ -120,8 +127,15 @@ export function DashboardPage() {
       <FundModal
         isOpen={fundModal.isOpen}
         onClose={closeFundModal}
-        accounts={accounts || []}
+        accounts={depositAccounts}
         defaultAccountId={fundModal.sourceAccount?.accountId}
+      />
+
+      <CreditLimitModal
+        isOpen={creditLimitModal.isOpen}
+        onClose={closeCreditLimitModal}
+        accounts={creditLineAccounts}
+        defaultAccountId={creditLimitModal.sourceAccount?.accountId}
       />
     </SelectedAccountProvider>
   );

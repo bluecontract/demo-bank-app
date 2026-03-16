@@ -1,11 +1,9 @@
-import { ReactNode } from 'react';
+import { ReactNode, HTMLAttributes } from 'react';
+import { CARD_GRADIENT_CLASS } from '../styleConstants';
 
-interface CardProps {
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
-  className?: string;
   variant?: 'default' | 'gradient' | 'dashed';
-  onClick?: () => void;
-  'data-testid'?: string;
 }
 
 export function Card({
@@ -13,14 +11,13 @@ export function Card({
   className = '',
   variant = 'default',
   onClick,
-  'data-testid': testId,
+  ...rest
 }: CardProps) {
   const baseClasses = 'app-surface p-6 transition-all duration-200';
 
   const variantClasses = {
     default: '',
-    gradient:
-      'bg-gradient-to-br from-[#2bbe9c] via-[#a7f0d4] to-[#f4b740] text-slate-900 border-transparent',
+    gradient: CARD_GRADIENT_CLASS,
     dashed: 'bg-white/70 border-2 border-dashed border-slate-200 shadow-none',
   };
 
@@ -32,7 +29,7 @@ export function Card({
     `${baseClasses} ${variantClasses[variant]} ${interactiveClasses} ${className}`.trim();
 
   return (
-    <div className={finalClasses} onClick={onClick} data-testid={testId}>
+    <div className={finalClasses} onClick={onClick} {...rest}>
       {children}
     </div>
   );

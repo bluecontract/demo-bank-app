@@ -5,6 +5,7 @@ interface DropdownProps {
   children: ReactNode;
   align?: 'left' | 'right';
   className?: string;
+  triggerAriaLabel?: string;
 }
 
 export function Dropdown({
@@ -12,6 +13,7 @@ export function Dropdown({
   children,
   align = 'right',
   className = '',
+  triggerAriaLabel,
 }: DropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -57,6 +59,7 @@ export function Dropdown({
         className="focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 rounded-full"
         aria-expanded={isOpen}
         aria-haspopup="true"
+        aria-label={triggerAriaLabel}
       >
         {trigger}
       </button>

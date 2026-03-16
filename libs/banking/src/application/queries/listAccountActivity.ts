@@ -67,6 +67,7 @@ type HoldEventActivityItem =
       cardId?: string;
       cardLast4?: string;
       merchantName?: string;
+      merchantId?: string;
       merchantStatementDescriptor?: string;
       processorChargeId?: string;
     }
@@ -82,6 +83,7 @@ type HoldEventActivityItem =
       cardId?: string;
       cardLast4?: string;
       merchantName?: string;
+      merchantId?: string;
       merchantStatementDescriptor?: string;
       processorChargeId?: string;
     }
@@ -90,6 +92,7 @@ type HoldEventActivityItem =
       activityId: string;
       holdId: string;
       amountMinor: number;
+      remainingAmountMinor?: number;
       description?: string;
       capturedAt: string;
       transactionId: string;
@@ -98,6 +101,7 @@ type HoldEventActivityItem =
       cardId?: string;
       cardLast4?: string;
       merchantName?: string;
+      merchantId?: string;
       merchantStatementDescriptor?: string;
       processorChargeId?: string;
     }
@@ -114,6 +118,7 @@ type HoldEventActivityItem =
       cardId?: string;
       cardLast4?: string;
       merchantName?: string;
+      merchantId?: string;
       merchantStatementDescriptor?: string;
       processorChargeId?: string;
     };
@@ -134,6 +139,7 @@ type PostedTransactionActivityItem = {
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
 };
@@ -199,6 +205,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       cardId: z.string().optional(),
       cardLast4: z.string().optional(),
       merchantName: z.string().optional(),
+      merchantId: z.string().optional(),
       merchantStatementDescriptor: z.string().optional(),
       processorChargeId: z.string().optional(),
     }),
@@ -214,6 +221,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       cardId: z.string().optional(),
       cardLast4: z.string().optional(),
       merchantName: z.string().optional(),
+      merchantId: z.string().optional(),
       merchantStatementDescriptor: z.string().optional(),
       processorChargeId: z.string().optional(),
     }),
@@ -222,6 +230,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       activityId: z.string(),
       holdId: z.string(),
       amountMinor: z.number(),
+      remainingAmountMinor: z.number().optional(),
       description: z.string().optional(),
       capturedAt: z.string(),
       transactionId: z.string(),
@@ -230,6 +239,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       cardId: z.string().optional(),
       cardLast4: z.string().optional(),
       merchantName: z.string().optional(),
+      merchantId: z.string().optional(),
       merchantStatementDescriptor: z.string().optional(),
       processorChargeId: z.string().optional(),
     }),
@@ -251,6 +261,7 @@ const HoldEventActivityItemSchema: z.ZodType<HoldEventActivityItem> =
       cardId: z.string().optional(),
       cardLast4: z.string().optional(),
       merchantName: z.string().optional(),
+      merchantId: z.string().optional(),
       merchantStatementDescriptor: z.string().optional(),
       processorChargeId: z.string().optional(),
     }),
@@ -273,6 +284,7 @@ const PostedTransactionActivityItemSchema: z.ZodType<PostedTransactionActivityIt
     cardId: z.string().optional(),
     cardLast4: z.string().optional(),
     merchantName: z.string().optional(),
+    merchantId: z.string().optional(),
     merchantStatementDescriptor: z.string().optional(),
     processorChargeId: z.string().optional(),
   });
@@ -347,6 +359,7 @@ const buildHoldEventFeedItem = (
     cardId: record.cardId,
     cardLast4: record.cardLast4,
     merchantName: record.merchantName,
+    merchantId: record.merchantId,
     merchantStatementDescriptor: record.merchantStatementDescriptor,
     processorChargeId: record.processorChargeId,
   };
@@ -403,6 +416,8 @@ const buildHoldEventFeedItem = (
         event.counterpartyAccountNumber ??
         record.counterpartyAccountNumber ??
         '';
+      const captureAmount = event.amountMinor ?? record.amountMinor;
+      const remainingAmountMinor = event.remainingAmountMinor;
       return {
         kind: 'HOLD_EVENT',
         id: `${record.holdId}#${record.eventId}`,
@@ -413,7 +428,36 @@ const buildHoldEventFeedItem = (
           kind: 'HOLD_CAPTURED',
           activityId: `HOLD#${record.holdId}`,
           holdId: record.holdId,
-          amountMinor: record.amountMinor,
+          amountMinor: captureAmount,
+          ...(remainingAmountMinor !== undefined
+            ? { remainingAmountMinor }
+            : {}),
+          description: record.description,
+          capturedAt: event.at,
+          transactionId: event.transactionId,
+          counterpartyAccountNumber: counterparty,
+          ...payNoteFields,
+          ...cardMeta,
+        },
+      };
+    }
+    case 'CAPTURED_PARTIAL': {
+      const counterparty =
+        event.counterpartyAccountNumber ??
+        record.counterpartyAccountNumber ??
+        '';
+      return {
+        kind: 'HOLD_EVENT',
+        id: `${record.holdId}#${record.eventId}`,
+        holdId: record.holdId,
+        eventId: record.eventId,
+        time: event.at,
+        item: {
+          kind: 'HOLD_CAPTURED',
+          activityId: `HOLD#${record.holdId}`,
+          holdId: record.holdId,
+          amountMinor: event.amountMinor,
+          remainingAmountMinor: event.remainingAmountMinor,
           description: record.description,
           capturedAt: event.at,
           transactionId: event.transactionId,
@@ -467,6 +511,7 @@ const toTransactionFeedItem = (summary: {
   cardId?: string;
   cardLast4?: string;
   merchantName?: string;
+  merchantId?: string;
   merchantStatementDescriptor?: string;
   processorChargeId?: string;
 }): TransactionFeedItem => ({
@@ -492,6 +537,7 @@ const toTransactionFeedItem = (summary: {
     cardId: summary.cardId,
     cardLast4: summary.cardLast4,
     merchantName: summary.merchantName,
+    merchantId: summary.merchantId,
     merchantStatementDescriptor: summary.merchantStatementDescriptor,
     processorChargeId: summary.processorChargeId,
   },
@@ -711,6 +757,7 @@ const listTransactionItems = async (
         cardId: summary.cardId,
         cardLast4: summary.cardLast4,
         merchantName: summary.merchantName,
+        merchantId: summary.merchantId,
         merchantStatementDescriptor: summary.merchantStatementDescriptor,
         processorChargeId: summary.processorChargeId,
       })

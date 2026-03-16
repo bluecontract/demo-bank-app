@@ -1,5 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react';
 
+type ButtonType = 'button' | 'submit' | 'reset';
+
 interface ButtonProps {
   children: ReactNode;
   variant?: 'primary' | 'secondary' | 'outline' | 'gradient';
@@ -7,6 +9,7 @@ interface ButtonProps {
   fullWidth?: boolean;
   disabled?: boolean;
   className?: string;
+  type?: ButtonType;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   'data-testid'?: string;
 }
@@ -18,6 +21,7 @@ export function Button({
   fullWidth = false,
   disabled = false,
   className = '',
+  type = 'button',
   onClick,
   'data-testid': testId,
 }: ButtonProps) {
@@ -30,9 +34,9 @@ export function Button({
     secondary:
       'bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:text-slate-900 focus:ring-[var(--color-primary)]',
     outline:
-      'border border-[var(--color-primary)] text-[var(--color-primary)] bg-transparent hover:bg-[rgba(43,190,156,0.08)] focus:ring-[var(--color-primary)]',
+      'border border-[var(--color-primary)] text-[var(--color-primary)] bg-transparent hover:bg-[color:var(--color-primary-soft)] focus:ring-[var(--color-primary)]',
     gradient:
-      'bg-gradient-to-r from-[#2bbe9c] to-[#f4b740] text-slate-900 hover:from-[#2aae91] hover:to-[#e6aa3b] focus:ring-[var(--color-primary)]',
+      'bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] text-slate-900 hover:from-[var(--color-primary-600)] hover:to-[var(--color-accent-600)] focus:ring-[var(--color-primary)]',
   };
 
   const sizeClasses = {
@@ -53,6 +57,7 @@ export function Button({
   return (
     <button
       className={finalClasses}
+      type={type}
       onClick={onClick}
       disabled={disabled}
       data-testid={testId}

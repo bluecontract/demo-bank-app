@@ -8,9 +8,21 @@ const mockAccount = {
   name: 'Checking Account',
   currency: 'USD' as const,
   createdAt: '2023-01-01T00:00:00Z',
+  accountType: 'DEPOSIT' as const,
+  creditLimitMinor: undefined,
   ledgerBalanceMinor: 50000,
   availableBalanceMinor: 45000,
   status: 'active',
+};
+
+const creditLineAccount = {
+  ...mockAccount,
+  accountId: 'acc-456',
+  name: 'Merchant Credit Line',
+  accountType: 'CREDIT_LINE' as const,
+  creditLimitMinor: 500000,
+  ledgerBalanceMinor: 400000,
+  availableBalanceMinor: 350000,
 };
 
 describe('AccountCard', () => {
@@ -29,16 +41,22 @@ describe('AccountCard', () => {
     expect(screen.getByText('Business Account')).toBeInTheDocument();
   });
 
-  it('calls onDetailsClick when Details button is clicked', () => {
-    const onDetailsClick = vi.fn();
+  it('calls onSelect when card is clicked', () => {
+    const onSelect = vi.fn();
     render(
-      <AccountCard account={mockAccount} onDetailsClick={onDetailsClick} />
+      <AccountCard
+        account={mockAccount}
+        onSelect={onSelect}
+        showActions={false}
+      />
     );
 
-    const detailsButton = screen.getByRole('button', { name: 'Details' });
-    fireEvent.click(detailsButton);
+    const cardButton = screen.getByRole('button', {
+      name: 'Select Checking Account',
+    });
+    fireEvent.click(cardButton);
 
-    expect(onDetailsClick).toHaveBeenCalledWith(mockAccount.accountId);
+    expect(onSelect).toHaveBeenCalledWith(mockAccount.accountId);
   });
 
   it('calls onTransferClick when New transfer button is clicked', () => {
@@ -53,40 +71,88 @@ describe('AccountCard', () => {
     expect(onTransferClick).toHaveBeenCalledWith(mockAccount.accountId);
   });
 
-  it('calls onFundClick when Fund Account button is clicked', () => {
+  it('calls onFundClick when Fund button is clicked', () => {
     const onFundClick = vi.fn();
     render(<AccountCard account={mockAccount} onFundClick={onFundClick} />);
 
-    const fundButton = screen.getByRole('button', { name: 'Fund Account' });
+    const fundButton = screen.getByRole('button', { name: 'Fund' });
     fireEvent.click(fundButton);
 
     expect(onFundClick).toHaveBeenCalledWith(mockAccount.accountId);
   });
 
-  it('renders all three action buttons', () => {
-    render(<AccountCard account={mockAccount} />);
+  it('renders action buttons for deposit accounts', () => {
+    render(
+      <AccountCard
+        account={mockAccount}
+        onFundClick={vi.fn()}
+        onTransferClick={vi.fn()}
+      />
+    );
 
-    expect(screen.getByRole('button', { name: 'Details' })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'New transfer' })
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Fund Account' })
-    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fund' })).toBeInTheDocument();
   });
 
-  it('does not call handlers when not provided', () => {
+  it('renders credit line details and edit button', () => {
+    render(
+      <AccountCard
+        account={creditLineAccount}
+        onEditCreditLimitClick={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Merchant Credit Line')).toBeInTheDocument();
+    expect(screen.getByText('$3,500')).toBeInTheDocument();
+    expect(screen.getByText('Limit: $5,000')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+  });
+
+  it('hides action buttons when showActions is false', () => {
+    render(<AccountCard account={mockAccount} showActions={false} />);
+
+    expect(
+      screen.queryByRole('button', { name: 'New transfer' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Fund' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('hides credit line actions when showActions is false', () => {
+    render(<AccountCard account={creditLineAccount} showActions={false} />);
+
+    expect(screen.getByText('Limit: $5,000')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Edit' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('calls onEditCreditLimitClick when Edit button is clicked', () => {
+    const onEditCreditLimitClick = vi.fn();
+    render(
+      <AccountCard
+        account={creditLineAccount}
+        onEditCreditLimitClick={onEditCreditLimitClick}
+      />
+    );
+
+    const editButton = screen.getByRole('button', { name: 'Edit' });
+    fireEvent.click(editButton);
+
+    expect(onEditCreditLimitClick).toHaveBeenCalledWith(
+      creditLineAccount.accountId
+    );
+  });
+
+  it('does not render transfer action when transfer handler is not provided', () => {
     render(<AccountCard account={mockAccount} />);
 
-    const detailsButton = screen.getByRole('button', { name: 'Details' });
-    const transferButton = screen.getByRole('button', { name: 'New transfer' });
-    const fundButton = screen.getByRole('button', { name: 'Fund Account' });
-
-    expect(() => {
-      fireEvent.click(detailsButton);
-      fireEvent.click(transferButton);
-      fireEvent.click(fundButton);
-    }).not.toThrow();
+    expect(
+      screen.queryByRole('button', { name: 'New transfer' })
+    ).not.toBeInTheDocument();
   });
 
   it('displays correct currency formatting', () => {
@@ -126,7 +192,7 @@ describe('AccountCard', () => {
       <AccountCard account={mockAccount} isSelected={true} />
     );
 
-    const cardElement = container.querySelector('.ring-2');
+    const cardElement = container.querySelector('.border-2');
     expect(cardElement).toBeInTheDocument();
   });
 
@@ -135,14 +201,14 @@ describe('AccountCard', () => {
       <AccountCard account={mockAccount} isSelected={false} />
     );
 
-    const cardElement = container.querySelector('.ring-2');
+    const cardElement = container.querySelector('.border-2');
     expect(cardElement).not.toBeInTheDocument();
   });
 
   it('applies default styling when isSelected is not provided', () => {
     const { container } = render(<AccountCard account={mockAccount} />);
 
-    const cardElement = container.querySelector('.ring-2');
+    const cardElement = container.querySelector('.border-2');
     expect(cardElement).not.toBeInTheDocument();
   });
 

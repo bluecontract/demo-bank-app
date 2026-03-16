@@ -1,11 +1,9 @@
-import { Avatar } from '../../../ui/Avatar';
-import { Dropdown, DropdownItem } from '../../../ui/Dropdown';
 import { useAuth } from '../../../app/providers/AuthProvider';
 
 interface DashboardHeaderProps {
   userEmail: string;
   title?: string;
-  description?: string;
+  description?: string | null;
   'data-testid'?: string;
 }
 
@@ -16,57 +14,50 @@ export function DashboardHeader({
   'data-testid': testId,
 }: DashboardHeaderProps) {
   const { signOut } = useAuth();
-
-  const handleSignOut = () => {
-    signOut();
-  };
+  const resolvedDescription = description ?? null;
+  const shouldRenderDescription = resolvedDescription !== null;
 
   return (
     <header
-      className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between"
+      className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between"
       data-testid={testId}
     >
-      <div>
-        <p className="text-xs uppercase tracking-[0.35em] text-[color:var(--color-muted)]">
-          Demo Bank
-        </p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">
-          {title ?? 'Welcome back'}
+      <div className="min-w-0">
+        <h1 className="text-[32px] font-extrabold leading-10 text-[color:var(--color-ink)]">
+          {title ?? 'Overview'}
         </h1>
-        <p className="mt-1 text-sm text-[color:var(--color-muted)]">
-          {description ??
-            'Your personal overview for accounts, cards, and activity.'}
-        </p>
+        {shouldRenderDescription && (
+          <p className="mt-1 text-sm leading-6 text-[color:var(--color-muted)]">
+            {resolvedDescription}
+          </p>
+        )}
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="flex items-center rounded-2xl border border-slate-200 bg-white/80 px-3 py-2 text-sm text-slate-700">
-          <span className="font-medium">{userEmail}</span>
-        </div>
-
-        <Dropdown trigger={<Avatar name={userEmail} size="lg" />} align="right">
-          <DropdownItem
-            onClick={handleSignOut}
-            icon={
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                />
-              </svg>
-            }
+      <div className="hidden items-center gap-2 lg:flex">
+        <span className="text-base leading-6 text-[color:var(--color-ink)]">
+          {userEmail}
+        </span>
+        <button
+          type="button"
+          onClick={signOut}
+          className="inline-flex h-9 w-9 items-center justify-center text-[color:var(--color-muted)] transition hover:text-[color:var(--color-ink)]"
+          aria-label="Sign out"
+        >
+          <svg
+            className="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
           >
-            Sign Out
-          </DropdownItem>
-        </Dropdown>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M12 2.5V9m6.364-2.364A9 9 0 105.636 6.636"
+            />
+          </svg>
+        </button>
       </div>
     </header>
   );

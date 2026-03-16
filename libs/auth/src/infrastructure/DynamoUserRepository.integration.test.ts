@@ -7,12 +7,27 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { DynamoUserRepository } from './DynamoUserRepository';
 import { User } from '../domain/entities/User';
-import { UserAlreadyExistsError } from './errors';
+import {
+  UserAlreadyExistsError,
+  MerchantDirectoryOwnershipError,
+} from './errors';
 import { randomUUID } from 'crypto';
+
+const resolveLocalstackEndpoint = () => {
+  const envEndpoint =
+    process.env.AWS_ENDPOINT_URL?.trim() ||
+    process.env.LOCALSTACK_ENDPOINT_URL?.trim();
+  if (envEndpoint) {
+    return envEndpoint;
+  }
+
+  const port = process.env.LOCALSTACK_EDGE_PORT?.trim() || '4566';
+  return `http://localhost:${port}`;
+};
 
 const TEST_CONFIG = {
   tableName: `demo-bank-app-auth-dynamo-user-repository-integration-test-${Date.now()}`,
-  localstackEndpoint: 'http://localhost:4566',
+  localstackEndpoint: resolveLocalstackEndpoint(),
   region: 'us-east-1',
   testUserTtlSeconds: 600, // 10 minutes
 };
@@ -122,6 +137,57 @@ describe('DynamoUserRepository Integration', () => {
       expect(retrievedUser!.email).toBe(user.email);
       expect(retrievedUser!.isTest).toBe(false);
       expect(retrievedUser!.marketingEmailsOptIn).toBe(true);
+    });
+
+    it('should save and retrieve a merchant user with merchantId', async () => {
+      const user = new User({
+        id: randomUUID(),
+        email: 'merchant.integration@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-integration',
+        merchantName: 'Merchant Integration',
+      });
+
+      const savedUser = await repository.save(user);
+
+      expect(savedUser.merchantId).toBe('merchant-integration');
+
+      const retrievedUser = await repository.findById(user.id);
+      expect(retrievedUser?.merchantId).toBe('merchant-integration');
+    });
+
+    it('should reject merchant signup when merchant id is already owned', async () => {
+      const originalOwner = new User({
+        id: randomUUID(),
+        email: 'merchant-owner@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-shared',
+        merchantName: 'Owner Merchant',
+      });
+      const conflictingUser = new User({
+        id: randomUUID(),
+        email: 'merchant-conflict@example.com',
+        isTest: false,
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        marketingEmailsOptIn: true,
+        merchantId: 'merchant-shared',
+        merchantName: 'Conflict Merchant',
+      });
+
+      await repository.save(originalOwner);
+
+      await expect(repository.save(conflictingUser)).rejects.toThrow(
+        MerchantDirectoryOwnershipError
+      );
+
+      const conflictingUserByEmail = await repository.findByEmail(
+        conflictingUser.email
+      );
+      expect(conflictingUserByEmail).toBeNull();
     });
 
     it('should save and retrieve a test user with TTL', async () => {

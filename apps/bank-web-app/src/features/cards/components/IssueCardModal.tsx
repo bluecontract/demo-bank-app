@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Button } from '../../../ui/Button';
+import { BRAND_GRADIENT_CLASS } from '../../../ui/styleConstants';
 import { useIssueCard } from '../hooks/useIssueCard';
+import { formatCardExpiry } from '../lib/cardFormatters';
 import { IssueCardResponse } from '../../../types/api';
 
 interface IssueCardModalProps {
@@ -9,12 +11,6 @@ interface IssueCardModalProps {
   accountId: string;
   accountName: string;
 }
-
-const formatExpiry = (month: number, year: number) => {
-  const monthValue = month.toString().padStart(2, '0');
-  const shortYear = year.toString().slice(-2);
-  return `${monthValue}/${shortYear}`;
-};
 
 export function IssueCardModal({
   isOpen,
@@ -116,7 +112,7 @@ export function IssueCardModal({
                   value={cardholderName}
                   onChange={event => setCardholderName(event.target.value)}
                   className="mt-1 w-full px-3 py-2.5 border border-slate-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-primary)]"
-                  placeholder="e.g., Taylor Jordan"
+                  placeholder="e.g., Jon Doe"
                   maxLength={100}
                 />
               </div>
@@ -129,6 +125,7 @@ export function IssueCardModal({
                 <Button
                   variant="secondary"
                   size="sm"
+                  type="button"
                   onClick={handleClose}
                   disabled={issueCard.isPending}
                 >
@@ -137,6 +134,7 @@ export function IssueCardModal({
                 <Button
                   variant="primary"
                   size="sm"
+                  type="submit"
                   disabled={issueCard.isPending}
                 >
                   {issueCard.isPending ? 'Issuing...' : 'Issue Card'}
@@ -157,9 +155,11 @@ export function IssueCardModal({
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-gradient-to-br from-[#2bbe9c] to-[#f4b740] text-slate-900 p-5">
+              <div
+                className={`rounded-2xl ${BRAND_GRADIENT_CLASS} text-slate-900 p-5`}
+              >
                 <div className="text-sm uppercase tracking-widest text-slate-900/70">
-                  Demo Bank
+                  My Synchrony
                 </div>
                 <div className="mt-4 text-lg font-semibold">
                   {issuedCard.cardholderName || 'Cardholder'}
@@ -177,7 +177,7 @@ export function IssueCardModal({
                       className="font-medium"
                       data-testid="issued-card-expiry"
                     >
-                      {formatExpiry(
+                      {formatCardExpiry(
                         issuedCard.expiryMonth,
                         issuedCard.expiryYear
                       )}

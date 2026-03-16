@@ -1,6 +1,7 @@
 import {
   UserAlreadyExistsError,
   TokenGenerationError,
+  MerchantDirectoryOwnershipError,
 } from '../../infrastructure/errors';
 import { AuthError } from '../errors';
 import type { UserRepository, JwtService, Logger, Metrics } from '../ports';
@@ -18,6 +19,9 @@ export interface SignUpCommand {
   email: string;
   isTest?: boolean;
   marketingEmailsOptIn: boolean;
+  merchantId?: string;
+  merchantName?: string;
+  avatarDataUrl?: string;
 }
 
 export interface SignUpDependencies {
@@ -35,6 +39,9 @@ function toAuthResult(user: User, token: string): AuthResult {
       createdAt: user.createdAt.toISOString(),
       isTest: user.isTest,
       marketingEmailsOptIn: user.marketingEmailsOptIn,
+      merchantId: user.merchantId,
+      merchantName: user.merchantName,
+      avatarDataUrl: user.avatarDataUrl,
     },
     token,
   };
@@ -46,7 +53,14 @@ export async function signUp(
 ): Promise<AuthResult> {
   const { userRepository, jwtService, logger, metrics } = dependencies;
 
-  const { email, isTest = false, marketingEmailsOptIn } = command;
+  const {
+    email,
+    isTest = false,
+    marketingEmailsOptIn,
+    merchantId,
+    merchantName,
+    avatarDataUrl,
+  } = command;
   const timing = TimingUtils.startTiming(OPERATION_NAMES.AUTH.SIGN_UP);
 
   logger.info('User sign-up started', {
@@ -64,6 +78,9 @@ export async function signUp(
       createdAt: new Date(),
       isTest,
       marketingEmailsOptIn,
+      merchantId,
+      merchantName,
+      avatarDataUrl,
     });
 
     savedUser = await userRepository.save(user);
@@ -125,6 +142,21 @@ export async function signUp(
       });
       metrics.addMetric(
         METRIC_NAMES.AUTH.USER_SIGN_UP_JWT_ERROR,
+        METRIC_UNITS.COUNT,
+        1
+      );
+      throw error;
+    }
+
+    if (error instanceof MerchantDirectoryOwnershipError) {
+      logger.error('Merchant ownership conflict during sign-up', {
+        userEmail: email,
+        merchantId,
+        error: error.message,
+        ...TimingUtils.createTimingMetadata(failedTiming),
+      });
+      metrics.addMetric(
+        METRIC_NAMES.AUTH.USER_SIGN_UP_ERROR,
         METRIC_UNITS.COUNT,
         1
       );

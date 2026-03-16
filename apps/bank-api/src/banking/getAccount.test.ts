@@ -63,6 +63,7 @@ const mockConfig = {
     cardBinPrefix: '123456',
     cardProcessorToken: 'processor-token',
   },
+  defaultMerchantCreditLimitMinor: 500_000,
 };
 
 // Helper to generate a valid demoAuth JWT for tests
@@ -113,6 +114,8 @@ describe('getAccountHandler', () => {
       name: mockAccount.name,
       currency: mockAccount.currency,
       createdAt: mockAccount.createdAt.toISOString(),
+      accountType: mockAccount.accountType,
+      creditLimitMinor: mockAccount.creditLimitMinor?.toCents(),
       ledgerBalanceMinor: mockAccount.ledgerBalanceMinor.toCents(),
       availableBalanceMinor: mockAccount.availableBalanceMinor.toCents(),
       status: mockAccount.status,

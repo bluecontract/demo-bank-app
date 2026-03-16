@@ -9,6 +9,8 @@ const mockAccounts = [
     name: 'Checking Account',
     currency: 'USD' as const,
     createdAt: '2023-01-01T00:00:00Z',
+    accountType: 'DEPOSIT' as const,
+    creditLimitMinor: undefined,
     ledgerBalanceMinor: 1030000,
     availableBalanceMinor: 1030000,
     status: 'ACTIVE',
@@ -19,6 +21,8 @@ const mockAccounts = [
     name: 'Savings Account',
     currency: 'USD' as const,
     createdAt: '2023-01-01T00:00:00Z',
+    accountType: 'DEPOSIT' as const,
+    creditLimitMinor: undefined,
     ledgerBalanceMinor: 500000,
     availableBalanceMinor: 500000,
     status: 'ACTIVE',
@@ -72,7 +76,7 @@ describe('AccountsList', () => {
     expect(handleCreateAccount).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle account details click', () => {
+  it('should handle account selection click', () => {
     const handleAccountDetails = vi.fn();
     render(
       <AccountsList
@@ -83,8 +87,10 @@ describe('AccountsList', () => {
       />
     );
 
-    const detailsButton = screen.getAllByText('Details')[0];
-    detailsButton.click();
+    const accountCard = screen.getByRole('button', {
+      name: 'Select Checking Account',
+    });
+    accountCard.click();
 
     expect(handleAccountDetails).toHaveBeenCalledTimes(1);
     expect(handleAccountDetails).toHaveBeenCalledWith(
@@ -163,7 +169,9 @@ describe('AccountsList', () => {
     );
 
     // 2 account cards + 1 add account card
-    const detailsButtons = screen.getAllByText('Details');
-    expect(detailsButtons).toHaveLength(2);
+    const accountCards = screen.getAllByRole('button', {
+      name: /Select .* Account/,
+    });
+    expect(accountCards).toHaveLength(2);
   });
 });

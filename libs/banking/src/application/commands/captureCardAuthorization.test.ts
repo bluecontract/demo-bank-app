@@ -48,6 +48,7 @@ describe('captureCardAuthorization', () => {
         holdId: 'hold-1',
         payerAccountNumber: '1234567890',
         amountMinor: 500,
+        payNoteDocumentId: 'paynote-123',
         currency: 'USD',
         status: 'PENDING',
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -71,6 +72,105 @@ describe('captureCardAuthorization', () => {
     expect(result.status).toBe('CAPTURED');
     expect(result.transactionId).toBe('txn-1');
     expect(holdRepository.captureHold).toHaveBeenCalledTimes(1);
+    const request = vi.mocked(holdRepository.captureHold).mock.calls[0][0];
+    expect(request.transaction.payNoteDocumentId).toBe('paynote-123');
+  });
+
+  it('partially captures a pending authorization', async () => {
+    const bankingRepository = {
+      getAccountIdByNumber: vi.fn().mockResolvedValue('acc-1'),
+      getAccountById: vi.fn().mockImplementation(async (id: string) => {
+        if (id === CARD_SETTLEMENT.ACCOUNT_ID) {
+          return buildAccount({
+            id: CARD_SETTLEMENT.ACCOUNT_ID,
+            accountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
+            ownerUserId: 'SYSTEM',
+          });
+        }
+        return buildAccount();
+      }),
+    } as unknown as BankingRepository;
+
+    const holdRepository = {
+      getHold: vi.fn().mockResolvedValue({
+        holdId: 'hold-1',
+        payerAccountNumber: '1234567890',
+        amountMinor: 500,
+        capturedAmountMinor: 0,
+        currency: 'USD',
+        status: 'PENDING',
+        createdAt: '2025-01-01T00:00:00.000Z',
+      }),
+      captureHold: vi.fn(),
+      partialCaptureHold: vi.fn().mockResolvedValue({
+        hold: { holdId: 'hold-1', status: 'PARTIALLY_CAPTURED' },
+        transactionId: 'txn-partial',
+        created: true,
+      }),
+    } as unknown as HoldRepository;
+
+    const result = await captureCardAuthorization(
+      { authorizationId: 'hold-1', amountMinor: 200, idempotencyKey: 'idem' },
+      {
+        bankingRepository,
+        holdRepository,
+        transactionIdGenerator: () => 'txn-partial',
+      }
+    );
+
+    expect(result.status).toBe('CAPTURED');
+    expect(result.transactionId).toBe('txn-partial');
+    expect(holdRepository.partialCaptureHold).toHaveBeenCalledTimes(1);
+    expect(holdRepository.captureHold).not.toHaveBeenCalled();
+  });
+
+  it('captures remaining amount on a partially captured hold', async () => {
+    const bankingRepository = {
+      getAccountIdByNumber: vi.fn().mockResolvedValue('acc-1'),
+      getAccountById: vi.fn().mockImplementation(async (id: string) => {
+        if (id === CARD_SETTLEMENT.ACCOUNT_ID) {
+          return buildAccount({
+            id: CARD_SETTLEMENT.ACCOUNT_ID,
+            accountNumber: CARD_SETTLEMENT.ACCOUNT_NUMBER,
+            ownerUserId: 'SYSTEM',
+          });
+        }
+        return buildAccount();
+      }),
+    } as unknown as BankingRepository;
+
+    const holdRepository = {
+      getHold: vi.fn().mockResolvedValue({
+        holdId: 'hold-1',
+        payerAccountNumber: '1234567890',
+        amountMinor: 500,
+        capturedAmountMinor: 200,
+        currency: 'USD',
+        status: 'PARTIALLY_CAPTURED',
+        createdAt: '2025-01-01T00:00:00.000Z',
+      }),
+      captureHold: vi.fn(),
+      partialCaptureHold: vi.fn().mockResolvedValue({
+        hold: { holdId: 'hold-1', status: 'CAPTURED' },
+        transactionId: 'txn-final',
+        created: true,
+      }),
+    } as unknown as HoldRepository;
+
+    const result = await captureCardAuthorization(
+      { authorizationId: 'hold-1', amountMinor: 300, idempotencyKey: 'idem' },
+      {
+        bankingRepository,
+        holdRepository,
+        transactionIdGenerator: () => 'txn-final',
+      }
+    );
+
+    expect(result.status).toBe('CAPTURED');
+    expect(result.transactionId).toBe('txn-final');
+    const request = vi.mocked(holdRepository.partialCaptureHold).mock
+      .calls[0][0];
+    expect(request.holdEvent.type).toBe('CAPTURED');
   });
 
   it('returns idempotent capture when already captured', async () => {
@@ -110,15 +210,16 @@ describe('captureCardAuthorization', () => {
         holdId: 'hold-1',
         payerAccountNumber: '1234567890',
         amountMinor: 500,
+        capturedAmountMinor: 400,
         currency: 'USD',
-        status: 'PENDING',
+        status: 'PARTIALLY_CAPTURED',
         createdAt: '2025-01-01T00:00:00.000Z',
       }),
     } as unknown as HoldRepository;
 
     await expect(
       captureCardAuthorization(
-        { authorizationId: 'hold-1', amountMinor: 999, idempotencyKey: 'idem' },
+        { authorizationId: 'hold-1', amountMinor: 200, idempotencyKey: 'idem' },
         { bankingRepository, holdRepository }
       )
     ).rejects.toBeInstanceOf(IdempotencyConflictError);

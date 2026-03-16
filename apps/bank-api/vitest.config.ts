@@ -1,5 +1,12 @@
 import { defineConfig } from 'vitest/config';
 
+const defaultExclude = ['**/node_modules/**', '**/dist/**'];
+const integrationExclude = [
+  '**/*.integration.test.ts',
+  '**/*.integration.serial.test.ts',
+  '**/*.e2e.test.ts',
+];
+
 export default defineConfig({
   test: {
     globals: true,
@@ -9,8 +16,8 @@ export default defineConfig({
     // Exclude integration tests from regular test runs when env var is set
     exclude:
       process.env.VITEST_EXCLUDE_INTEGRATION === 'true'
-        ? ['**/node_modules/**', '**/dist/**', '**/*.integration.test.ts']
-        : ['**/node_modules/**', '**/dist/**'],
+        ? [...defaultExclude, ...integrationExclude]
+        : defaultExclude,
     isolate: true,
     passWithNoTests: true,
   },

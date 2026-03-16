@@ -9,6 +9,24 @@ describe('Button', () => {
     expect(screen.getByText('Click me')).toBeInTheDocument();
   });
 
+  it('should default to type="button"', () => {
+    render(<Button data-testid="button">Default Type</Button>);
+
+    const button = screen.getByTestId('button');
+    expect(button).toHaveAttribute('type', 'button');
+  });
+
+  it('should allow overriding button type', () => {
+    render(
+      <Button type="submit" data-testid="button">
+        Submit Button
+      </Button>
+    );
+
+    const button = screen.getByTestId('button');
+    expect(button).toHaveAttribute('type', 'submit');
+  });
+
   it('should apply default primary variant styling', () => {
     render(<Button data-testid="button">Primary Button</Button>);
 

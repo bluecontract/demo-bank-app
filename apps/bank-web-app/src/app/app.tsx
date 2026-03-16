@@ -5,8 +5,11 @@ import { ProtectedRoute } from './providers/ProtectedRoute';
 import { HomePage } from '../pages/HomePage';
 import { DashboardPage } from '../pages/DashboardPage';
 import { CardsPage } from '../pages/CardsPage';
+import { TransactionsPage } from '../pages/TransactionsPage';
+import { TransactionDetailsPage } from '../pages/TransactionDetailsPage';
 import { NewTransferPage } from '../pages/NewTransferPage';
 import { ContractsPage } from '../pages/ContractsPage';
+import { ContractDetailsPage } from '../pages/ContractDetailsPage';
 import { SignUpPage } from '../features/auth/pages/SignUpPage';
 import { SignInPage } from '../features/auth/pages/SignInPage';
 
@@ -35,6 +38,22 @@ export function App() {
             }
           />
           <Route
+            path="/transactions"
+            element={
+              <ProtectedRoute>
+                <TransactionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/transactions/:accountId/:activityId"
+            element={
+              <ProtectedRoute>
+                <TransactionDetailsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/transfer/new"
             element={
               <ProtectedRoute>
@@ -47,6 +66,22 @@ export function App() {
             element={
               <ProtectedRoute>
                 <ContractsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contracts/archive"
+            element={
+              <ProtectedRoute>
+                <ContractsPage view="archive" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contracts/:sessionId"
+            element={
+              <ProtectedRoute>
+                <ContractDetailsPage />
               </ProtectedRoute>
             }
           />

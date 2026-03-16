@@ -41,6 +41,18 @@ import { ERROR_CODES } from './shared/errors';
  * These tests require LocalStack to be running
  */
 
+const resolveLocalstackEndpoint = () => {
+  const envEndpoint =
+    process.env.AWS_ENDPOINT_URL?.trim() ||
+    process.env.LOCALSTACK_ENDPOINT_URL?.trim();
+  if (envEndpoint) {
+    return envEndpoint;
+  }
+
+  const port = process.env.LOCALSTACK_EDGE_PORT?.trim() || '4566';
+  return `http://localhost:${port}`;
+};
+
 // Test configuration
 const TEST_CONFIG = {
   tableName: `demo-bank-app-bank-api-integration-test-${Date.now()}`,
@@ -48,10 +60,11 @@ const TEST_CONFIG = {
   myOsSecretArn: '/demo-bank-app/integration-test/myos-credentials',
   openAiSecretArn: '/demo-bank-app/integration-test/openai-api-key',
   jwtSecret: 'integration-test-jwt-secret-key-12345',
-  localstackEndpoint: 'http://localhost:4566',
+  localstackEndpoint: resolveLocalstackEndpoint(),
   region: 'us-east-1',
   jwtTtlSeconds: 604800,
   testUserTtlSeconds: 600,
+  defaultMerchantCreditLimitMinor: 500_000,
 };
 
 // AWS clients configured for LocalStack
@@ -106,6 +119,8 @@ describe('Bank API Integration Tests', () => {
       TEST_CONFIG.testUserTtlSeconds.toString();
     process.env.MYOS_SECRET_ARN = TEST_CONFIG.myOsSecretArn;
     process.env.OPENAI_API_KEY_SECRET_ARN = TEST_CONFIG.openAiSecretArn;
+    process.env.DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR =
+      TEST_CONFIG.defaultMerchantCreditLimitMinor.toString();
     process.env.SERVICE_NAME = 'bank-api-integration-test';
     process.env.LOG_LEVEL = 'INFO';
     process.env.METRICS_NAMESPACE = 'IntegrationTest';
@@ -135,6 +150,7 @@ describe('Bank API Integration Tests', () => {
     delete process.env.TEST_USER_TTL_SECONDS;
     delete process.env.MYOS_SECRET_ARN;
     delete process.env.OPENAI_API_KEY_SECRET_ARN;
+    delete process.env.DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR;
     delete process.env.SERVICE_NAME;
     delete process.env.LOG_LEVEL;
     delete process.env.METRICS_NAMESPACE;
@@ -192,11 +208,79 @@ describe('Bank API Integration Tests', () => {
         });
         expect(result.statusCode).toBe(204);
         expect(result.headers).toMatchObject({
-          'access-control-allow-methods': 'GET,POST,OPTIONS',
+          'access-control-allow-methods': 'GET,POST,PATCH,OPTIONS',
           'access-control-allow-headers':
             'Content-Type,X-Amz-Date,X-Api-Key,X-Amz-Security-Token,Authorization,idempotency-key',
+          'access-control-max-age': '600',
         });
       }
+    });
+  });
+
+  describe('Unified Poll Changes Endpoint', () => {
+    it('returns contracts and proposals scopes by default', async () => {
+      const creds = await signupUniqueTestUser('poll-default-scopes');
+      const response = await invokeApi({
+        method: 'GET',
+        path: '/v1/poll/changes',
+        jwtCookie: creds.jwtCookie,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          serverTime: expect.any(String),
+          contracts: expect.objectContaining({
+            cursor: expect.any(String),
+            changed: expect.any(Boolean),
+          }),
+          proposals: expect.objectContaining({
+            cursor: expect.any(String),
+            changed: expect.any(Boolean),
+          }),
+        })
+      );
+      expect(response.body.activity).toBeUndefined();
+    });
+
+    it('returns validation error when activity scope is requested without account number', async () => {
+      const creds = await signupUniqueTestUser('poll-activity-validation');
+      const response = await invokeApi({
+        method: 'GET',
+        path: '/v1/poll/changes?includeActivity=true',
+        jwtCookie: creds.jwtCookie,
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.body).toMatchObject({
+        error: ERROR_CODES.VALIDATION_ERROR,
+      });
+    });
+
+    it('returns activity scope when includeActivity and activityAccountNumber are provided', async () => {
+      const creds = await signupUniqueTestUser('poll-activity-scope');
+      const account = await invokeApi({
+        method: 'POST',
+        path: '/v1/accounts',
+        jwtCookie: creds.jwtCookie,
+        body: { name: 'Polling Activity Account' },
+      });
+      expect(account.statusCode).toBe(201);
+
+      const response = await invokeApi({
+        method: 'GET',
+        path: `/v1/poll/changes?includeActivity=true&activityAccountNumber=${account.body.accountNumber}`,
+        jwtCookie: creds.jwtCookie,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body.activity).toEqual(
+        expect.objectContaining({
+          accountNumber: account.body.accountNumber,
+          cursor: expect.any(String),
+          changed: expect.any(Boolean),
+        })
+      );
     });
   });
 
@@ -232,7 +316,11 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { email: creds.userEmail, marketingEmailsOptIn: true },
+        body: {
+          email: creds.userEmail,
+          merchantName: 'Duplicate Merchant',
+          marketingEmailsOptIn: true,
+        },
       });
       expect(signUp.statusCode).toBe(409);
       expect(signUp.body).toEqual({
@@ -246,7 +334,11 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { email: '', marketingEmailsOptIn: true },
+        body: {
+          email: '',
+          merchantName: 'Demo Merchant',
+          marketingEmailsOptIn: true,
+        },
       });
       expect(signUp.statusCode).toBe(400);
       expect(signUp.body).toEqual({
@@ -269,7 +361,11 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup?dev=true',
-        body: { email, marketingEmailsOptIn: true },
+        body: {
+          email,
+          merchantName: 'Demo Merchant',
+          marketingEmailsOptIn: true,
+        },
       });
       expect(signUp.statusCode).toBe(201);
       const cookieHeader = signUp.headers?.['set-cookie'] as string;
@@ -286,12 +382,191 @@ describe('Bank API Integration Tests', () => {
       const signUp = await invokeApi({
         method: 'POST',
         path: '/auth/signup',
-        body: { email: maliciousAccountName },
+        body: {
+          email: maliciousAccountName,
+          merchantName: 'Demo Merchant',
+          marketingEmailsOptIn: true,
+        },
       });
 
       expect(signUp.statusCode).toBe(400);
       expect(signUp.body.error).toBe('VALIDATION_ERROR');
       expect(signUp.body.message).toBe('Request validation failed');
+    });
+  });
+
+  describe('Merchant sign-up + credit line account', () => {
+    it('should create a credit line account when merchantId is provided', async () => {
+      const merchantEmail = generateUniqueTestUserName('merchant-user');
+      const merchantId = `merchant-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}`;
+
+      const signUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: {
+          email: merchantEmail,
+          merchantName: 'Merchant Demo',
+          marketingEmailsOptIn: true,
+          merchantId,
+        },
+      });
+
+      expect(signUp.statusCode).toBe(201);
+      const jwtCookie = signUp.headers?.['set-cookie'];
+      if (!jwtCookie) {
+        throw new Error(
+          'Missing set-cookie header in merchant signup response'
+        );
+      }
+
+      const accountsResponse = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+        jwtCookie,
+      });
+
+      expect(accountsResponse.statusCode).toBe(200);
+      const creditLineAccount = accountsResponse.body.accounts.find(
+        (account: { accountType: string }) =>
+          account.accountType === 'CREDIT_LINE'
+      );
+
+      expect(creditLineAccount).toBeDefined();
+      if (!creditLineAccount) {
+        throw new Error('Credit line account was not created for merchant');
+      }
+
+      expect(creditLineAccount).toMatchObject({
+        accountType: 'CREDIT_LINE',
+        name: 'Merchant Credit Line',
+        creditLimitMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+        ledgerBalanceMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+        availableBalanceMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+      });
+    });
+
+    it('should create a credit line account when signing up an existing user with merchantId', async () => {
+      const merchantEmail = generateUniqueTestUserName('merchant-existing');
+      const merchantId = `merchant-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}`;
+
+      const initialSignUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: {
+          email: merchantEmail,
+          merchantName: 'Merchant Demo',
+          marketingEmailsOptIn: true,
+        },
+      });
+
+      expect(initialSignUp.statusCode).toBe(201);
+
+      const recoverySignUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: {
+          email: merchantEmail,
+          merchantName: 'Merchant Demo',
+          marketingEmailsOptIn: true,
+          merchantId,
+        },
+      });
+
+      expect(recoverySignUp.statusCode).toBe(201);
+      const jwtCookie = recoverySignUp.headers?.['set-cookie'];
+      if (!jwtCookie) {
+        throw new Error(
+          'Missing set-cookie header in merchant signup response'
+        );
+      }
+
+      const accountsResponse = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+        jwtCookie,
+      });
+
+      expect(accountsResponse.statusCode).toBe(200);
+      const creditLineAccount = accountsResponse.body.accounts.find(
+        (account: { accountType: string }) =>
+          account.accountType === 'CREDIT_LINE'
+      );
+
+      expect(creditLineAccount).toBeDefined();
+      if (!creditLineAccount) {
+        throw new Error('Credit line account was not created for merchant');
+      }
+
+      expect(creditLineAccount).toMatchObject({
+        accountType: 'CREDIT_LINE',
+        name: 'Merchant Credit Line',
+        creditLimitMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+        ledgerBalanceMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+        availableBalanceMinor: TEST_CONFIG.defaultMerchantCreditLimitMinor,
+      });
+    });
+
+    it('should allow updating the credit limit for merchant credit line account', async () => {
+      const merchantEmail = generateUniqueTestUserName('merchant-credit-limit');
+      const merchantId = `merchant-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}`;
+
+      const signUp = await invokeApi({
+        method: 'POST',
+        path: '/auth/signup',
+        body: {
+          email: merchantEmail,
+          merchantName: 'Merchant Demo',
+          marketingEmailsOptIn: true,
+          merchantId,
+        },
+      });
+
+      expect(signUp.statusCode).toBe(201);
+      const jwtCookie = signUp.headers?.['set-cookie'];
+      if (!jwtCookie) {
+        throw new Error(
+          'Missing set-cookie header in merchant signup response'
+        );
+      }
+
+      const accountsResponse = await invokeApi({
+        method: 'GET',
+        path: '/v1/accounts',
+        jwtCookie,
+      });
+      expect(accountsResponse.statusCode).toBe(200);
+
+      const creditLineAccount = accountsResponse.body.accounts.find(
+        (account: { accountType: string }) =>
+          account.accountType === 'CREDIT_LINE'
+      );
+      if (!creditLineAccount) {
+        throw new Error('Credit line account was not created for merchant');
+      }
+
+      const updatedLimit =
+        TEST_CONFIG.defaultMerchantCreditLimitMinor + 100_000;
+      const updateResponse = await invokeApi({
+        method: 'POST',
+        path: `/v1/accounts/${creditLineAccount.accountId}/credit-limit`,
+        body: { creditLimitMinor: updatedLimit },
+        jwtCookie,
+      });
+
+      expect(updateResponse.statusCode).toBe(200);
+      expect(updateResponse.body).toMatchObject({
+        accountId: creditLineAccount.accountId,
+        accountType: 'CREDIT_LINE',
+        creditLimitMinor: updatedLimit,
+        ledgerBalanceMinor: updatedLimit,
+        availableBalanceMinor: updatedLimit,
+      });
     });
   });
 
@@ -308,6 +583,7 @@ describe('Bank API Integration Tests', () => {
         userId: creds.userId,
         email: creds.userEmail,
         marketingEmailsOptIn: true,
+        merchantName: creds.merchantName,
       });
       const cookieHeader = signIn.headers?.['set-cookie'] as string | undefined;
       expect(cookieHeader).toBeDefined();
@@ -2144,6 +2420,7 @@ describe('Bank API Integration Tests', () => {
 
     it('authorizes and captures card transactions via processor', async () => {
       const processorChargeId = `ch_${crypto.randomUUID()}`;
+      const merchantId = 'merchant-demo';
       const authorizationIdempotency = crypto.randomUUID();
 
       const authResponse = await invokeApi({
@@ -2164,6 +2441,7 @@ describe('Bank API Integration Tests', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
+            merchantId,
           },
           processorChargeId,
         },
@@ -2192,6 +2470,7 @@ describe('Bank API Integration Tests', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
+            merchantId,
           },
           processorChargeId,
         },
@@ -2218,6 +2497,7 @@ describe('Bank API Integration Tests', () => {
           merchant: {
             name: 'Demo Shop',
             statementDescriptor: 'DEMO SHOP',
+            merchantId,
           },
           processorChargeId,
         },
@@ -2289,6 +2569,244 @@ describe('Bank API Integration Tests', () => {
           expect.objectContaining({
             kind: 'HOLD_CREATED',
             merchantName: 'Demo Shop',
+            merchantId,
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+          expect.objectContaining({
+            kind: 'HOLD_CAPTURED',
+            merchantName: 'Demo Shop',
+            merchantId,
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+          expect.objectContaining({
+            kind: 'POSTED_TRANSACTION',
+            merchantName: 'Demo Shop',
+            merchantId,
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+        ])
+      );
+    }, 20000);
+
+    it('supports partial captures via processor', async () => {
+      const processorChargeId = `ch_${crypto.randomUUID()}`;
+      const merchantId = 'merchant-demo';
+      const authorizationIdempotency = crypto.randomUUID();
+
+      const authResponse = await invokeApi({
+        method: 'POST',
+        path: '/v1/card-processor/authorizations',
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': authorizationIdempotency,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          pan: issuedCard.pan,
+          expiryMonth: issuedCard.expiryMonth,
+          expiryYear: issuedCard.expiryYear,
+          cvc: issuedCard.cvc,
+          amountMinor: 1_200,
+          currency: 'USD',
+          merchant: {
+            name: 'Demo Shop',
+            statementDescriptor: 'DEMO SHOP',
+            merchantId,
+          },
+          processorChargeId,
+        },
+      });
+
+      expect(authResponse.statusCode).toBe(200);
+      expect(authResponse.body.status).toBe('APPROVED');
+      expect(authResponse.body.authorizationId).toBeDefined();
+      const authorizationId = authResponse.body.authorizationId;
+
+      const captureResponse = await invokeApi({
+        method: 'POST',
+        path: `/v1/card-processor/authorizations/${authorizationId}/capture`,
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 100 },
+      });
+
+      expect(captureResponse.statusCode).toBe(200);
+      expect(captureResponse.body.status).toBe('CAPTURED');
+
+      let activityResponse: Awaited<ReturnType<typeof invokeApi>> | null = null;
+      let lastResponse: Awaited<ReturnType<typeof invokeApi>> | null = null;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const response = await invokeApi({
+          method: 'GET',
+          path: `/v1/activity/${accountNumber}`,
+          jwtCookie,
+        });
+        lastResponse = response;
+        const items = Array.isArray(response.body?.items)
+          ? response.body.items
+          : [];
+        const cardItems = items.filter(
+          (item: any) => item.processorChargeId === processorChargeId
+        );
+        const hasHold = cardItems.some(
+          (item: any) =>
+            item.kind === 'HOLD_CREATED' &&
+            item.processorChargeId === processorChargeId
+        );
+        const hasCapture = cardItems.some(
+          (item: any) =>
+            item.kind === 'HOLD_CAPTURED' &&
+            item.processorChargeId === processorChargeId
+        );
+        const hasPosted = cardItems.some(
+          (item: any) =>
+            item.kind === 'POSTED_TRANSACTION' &&
+            item.processorChargeId === processorChargeId
+        );
+
+        if (hasHold && hasCapture && hasPosted) {
+          activityResponse = response;
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      const resolvedActivity = activityResponse ?? lastResponse;
+      expect(resolvedActivity).toBeDefined();
+      const cardItems = resolvedActivity?.body.items.filter(
+        (item: any) => item.processorChargeId === processorChargeId
+      );
+      expect(cardItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'HOLD_CREATED',
+            merchantName: 'Demo Shop',
+            merchantId,
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+          }),
+          expect.objectContaining({
+            kind: 'HOLD_CAPTURED',
+            merchantName: 'Demo Shop',
+            merchantId,
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+            amountMinor: 100,
+          }),
+          expect.objectContaining({
+            kind: 'POSTED_TRANSACTION',
+            merchantName: 'Demo Shop',
+            merchantId,
+            processorChargeId,
+            cardLast4: issuedCard.panLast4,
+            amountMinor: 100,
+          }),
+        ])
+      );
+    }, 20000);
+
+    it('authorizes and captures card transactions without merchantId', async () => {
+      const processorChargeId = `ch_${crypto.randomUUID()}`;
+      const authorizationIdempotency = crypto.randomUUID();
+
+      const authResponse = await invokeApi({
+        method: 'POST',
+        path: '/v1/card-processor/authorizations',
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': authorizationIdempotency,
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: {
+          pan: issuedCard.pan,
+          expiryMonth: issuedCard.expiryMonth,
+          expiryYear: issuedCard.expiryYear,
+          cvc: issuedCard.cvc,
+          amountMinor: 1_300,
+          currency: 'USD',
+          merchant: {
+            name: 'Demo Shop',
+            statementDescriptor: 'DEMO SHOP',
+          },
+          processorChargeId,
+        },
+      });
+
+      expect(authResponse.statusCode).toBe(200);
+      expect(authResponse.body.status).toBe('APPROVED');
+      expect(authResponse.body.authorizationId).toBeDefined();
+      const authorizationId = authResponse.body.authorizationId;
+
+      const captureResponse = await invokeApi({
+        method: 'POST',
+        path: `/v1/card-processor/authorizations/${authorizationId}/capture`,
+        headers: {
+          Authorization: `Bearer ${process.env.CARD_PROCESSOR_TOKEN}`,
+          'idempotency-key': crypto.randomUUID(),
+          origin: DEFAULT_TEST_ORIGIN,
+        },
+        body: { amountMinor: 1_300 },
+      });
+
+      expect(captureResponse.statusCode).toBe(200);
+      expect(captureResponse.body.status).toBe('CAPTURED');
+
+      let activityResponse: Awaited<ReturnType<typeof invokeApi>> | null = null;
+      let lastResponse: Awaited<ReturnType<typeof invokeApi>> | null = null;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const response = await invokeApi({
+          method: 'GET',
+          path: `/v1/activity/${accountNumber}`,
+          jwtCookie,
+        });
+        lastResponse = response;
+        const items = Array.isArray(response.body?.items)
+          ? response.body.items
+          : [];
+        const cardItems = items.filter(
+          (item: any) => item.processorChargeId === processorChargeId
+        );
+        const hasHold = cardItems.some(
+          (item: any) =>
+            item.kind === 'HOLD_CREATED' &&
+            item.processorChargeId === processorChargeId
+        );
+        const hasCapture = cardItems.some(
+          (item: any) =>
+            item.kind === 'HOLD_CAPTURED' &&
+            item.processorChargeId === processorChargeId
+        );
+        const hasPosted = cardItems.some(
+          (item: any) =>
+            item.kind === 'POSTED_TRANSACTION' &&
+            item.processorChargeId === processorChargeId
+        );
+
+        if (hasHold && hasCapture && hasPosted) {
+          activityResponse = response;
+          break;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      const resolvedActivity = activityResponse ?? lastResponse;
+      expect(resolvedActivity).toBeDefined();
+      const cardItems = resolvedActivity?.body.items.filter(
+        (item: any) => item.processorChargeId === processorChargeId
+      );
+      expect(cardItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'HOLD_CREATED',
+            merchantName: 'Demo Shop',
             processorChargeId,
             cardLast4: issuedCard.panLast4,
           }),
@@ -2306,6 +2824,17 @@ describe('Bank API Integration Tests', () => {
           }),
         ])
       );
+
+      const relevantKinds = new Set([
+        'HOLD_CREATED',
+        'HOLD_CAPTURED',
+        'POSTED_TRANSACTION',
+      ]);
+      for (const item of cardItems ?? []) {
+        if (relevantKinds.has(item.kind)) {
+          expect(item.merchantId).toBeUndefined();
+        }
+      }
     }, 20000);
   });
 
@@ -2841,12 +3370,18 @@ async function signupUniqueTestUser(
   jwtCookie: string;
   userEmail: string;
   marketingEmailsOptIn: boolean;
+  merchantName: string;
 }> {
   const userEmail = generateUniqueTestUserName(namePrefix);
+  const merchantName = `Merchant ${namePrefix}`;
   const signUp = await invokeApi({
     method: 'POST',
     path: isTest ? '/auth/signup?dev=true' : '/auth/signup',
-    body: { email: userEmail, marketingEmailsOptIn: marketingOptIn },
+    body: {
+      email: userEmail,
+      merchantName,
+      marketingEmailsOptIn: marketingOptIn,
+    },
   });
   expect(signUp.statusCode).toBe(201);
   if (!signUp.headers || typeof signUp.headers['set-cookie'] !== 'string') {
@@ -2857,5 +3392,6 @@ async function signupUniqueTestUser(
     jwtCookie: signUp.headers['set-cookie'],
     userEmail,
     marketingEmailsOptIn: signUp.body.marketingEmailsOptIn,
+    merchantName,
   };
 }

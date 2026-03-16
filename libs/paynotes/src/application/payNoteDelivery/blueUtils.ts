@@ -2,10 +2,14 @@ import type { CardTransactionDetails } from '@demo-bank-app/banking';
 import type { BlueNode } from '@blue-labs/language';
 import { MyOSTimelineChannelSchema } from '@blue-repository/types/packages/myos/schemas';
 import {
+  CardTransactionPayNoteSchema,
   PayNoteDeliverySchema,
   PayNoteSchema,
 } from '@blue-repository/types/packages/paynote/schemas';
+import type { AnyZodObject, infer as ZodInfer } from 'zod';
 import { blue } from '../../blue';
+
+type SchemaOutput<TSchema extends AnyZodObject> = ZodInfer<TSchema>;
 
 const toBlueNode = (value: unknown): BlueNode | null => {
   if (!value) {
@@ -47,39 +51,68 @@ const getRecordString = (
   return record ? getString(record[key]) : undefined;
 };
 
-const parsePayNoteDelivery = (document: unknown) => {
+const getRecordStringOrNestedValue = (
+  record: Record<string, unknown> | undefined,
+  key: string
+): string | undefined => {
+  const direct = getRecordString(record, key);
+  if (direct) {
+    return direct;
+  }
+
+  const nested = record ? toSimpleRecord(record[key]) : null;
+  return nested ? getString(nested.value) : undefined;
+};
+
+const parseDocumentWithSchema = <TSchema extends AnyZodObject>(
+  document: unknown,
+  schema: TSchema,
+  options?: { includeSimple?: boolean }
+): {
+  node: BlueNode;
+  output: SchemaOutput<TSchema>;
+  simple?: Record<string, unknown>;
+} | null => {
   const node = toBlueNode(document);
   if (
     !node ||
-    !blue.isTypeOf(node, PayNoteDeliverySchema, {
+    !blue.isTypeOf(node, schema, {
       checkSchemaExtensions: true,
     })
   ) {
     return null;
   }
-  const simple = blue.nodeToJson(node, 'simple') as
-    | Record<string, unknown>
-    | undefined;
-  return {
-    node,
-    output: blue.nodeToSchemaOutput(node, PayNoteDeliverySchema),
-    simple,
-  };
+
+  const output = blue.nodeToSchemaOutput(node, schema) as SchemaOutput<TSchema>;
+  if (options?.includeSimple) {
+    const simple = blue.nodeToJson(node, 'simple') as
+      | Record<string, unknown>
+      | undefined;
+    return { node, output, simple };
+  }
+
+  return { node, output };
 };
 
-const parsePayNote = (document: unknown) => {
-  const node = toBlueNode(document);
-  if (
-    !node ||
-    !blue.isTypeOf(node, PayNoteSchema, { checkSchemaExtensions: true })
-  ) {
-    return null;
-  }
-  return {
-    node,
-    output: blue.nodeToSchemaOutput(node, PayNoteSchema),
-  };
-};
+const parsePayNoteDelivery = (document: unknown) =>
+  parseDocumentWithSchema(document, PayNoteDeliverySchema, {
+    includeSimple: true,
+  });
+
+const parsePayNote = (document: unknown) =>
+  parseDocumentWithSchema(document, PayNoteSchema);
+
+const parseCardTransactionPayNote = (document: unknown) =>
+  parseDocumentWithSchema(document, CardTransactionPayNoteSchema);
+
+export const isPayNoteDeliveryDocument = (document: unknown): boolean =>
+  Boolean(parsePayNoteDelivery(document));
+
+export const isPayNoteDocument = (document: unknown): boolean =>
+  Boolean(parsePayNote(document));
+
+export const isCardTransactionPayNoteDocument = (document: unknown): boolean =>
+  Boolean(parseCardTransactionPayNote(document));
 
 const parseTimelineChannel = (value: unknown) => {
   const node = toBlueNode(value);
@@ -190,12 +223,16 @@ export const buildChannelBindingsFromContracts = (
 export const getCardTransactionDetailsFromDocument = (
   document: unknown
 ): CardTransactionDetails | null => {
-  const parsed = parsePayNoteDelivery(document);
-  if (!parsed) {
+  const delivery = parsePayNoteDelivery(document);
+  const payNote = delivery ? null : parseCardTransactionPayNote(document);
+  const source = delivery?.output ?? payNote?.output;
+  if (!source) {
     return null;
   }
 
-  const cardDetails = parsed.output.cardTransactionDetails;
+  const cardDetails = toSimpleRecord(
+    (source as { cardTransactionDetails?: unknown }).cardTransactionDetails
+  );
   const retrievalReferenceNumber = getString(
     cardDetails?.retrievalReferenceNumber
   );
@@ -280,6 +317,72 @@ export const getPayNoteSummaryFromDocument = (
   };
 };
 
+export const getPayNoteInitialMessageFromDocument = (
+  payNote?: unknown
+): string | undefined => {
+  const parsed = parsePayNote(payNote);
+  const sourceSimple = toSimpleRecord(payNote);
+  const sourceParsed = parsed?.output as Record<string, unknown> | undefined;
+  const initialStateDescription =
+    toSimpleRecord(sourceSimple?.payNoteInitialStateDescription) ??
+    toSimpleRecord(sourceParsed?.payNoteInitialStateDescription);
+  return getRecordString(
+    initialStateDescription ?? undefined,
+    'initialMessage'
+  );
+};
+
+const resolveInitialMessageDescription = (
+  initialMessages?: unknown
+): string | undefined => {
+  const source = toSimpleRecord(initialMessages);
+  if (!source) {
+    return undefined;
+  }
+
+  const perChannel = toSimpleRecord(source.perChannel);
+  const payerMessage = getRecordString(perChannel ?? undefined, 'payerChannel');
+  if (payerMessage) {
+    return payerMessage;
+  }
+
+  return getRecordString(source, 'defaultMessage');
+};
+
+export const getProposalDescriptionFromDeliveryDocument = (
+  document: unknown
+): string | undefined => {
+  const parsed = parsePayNoteDelivery(document);
+  if (!parsed) {
+    return undefined;
+  }
+
+  const simple = parsed.simple as
+    | {
+        payNoteBootstrapRequest?: {
+          document?: unknown;
+          initialMessages?: unknown;
+        };
+        payNote?: unknown;
+      }
+    | undefined;
+
+  const payNoteDocument =
+    simple?.payNoteBootstrapRequest?.document ??
+    simple?.payNote ??
+    parsed.output.payNoteBootstrapRequest?.document;
+  const payNoteInitialMessage =
+    getPayNoteInitialMessageFromDocument(payNoteDocument);
+  if (payNoteInitialMessage) {
+    return payNoteInitialMessage;
+  }
+
+  return resolveInitialMessageDescription(
+    simple?.payNoteBootstrapRequest?.initialMessages ??
+      parsed.output.payNoteBootstrapRequest?.initialMessages
+  );
+};
+
 export const getDeliveryNameFromDocument = (
   document: unknown
 ): string | undefined => {
@@ -313,16 +416,13 @@ export const getSynchronySessionIdFromDocument = (
   document: unknown
 ): string | undefined => {
   const parsed = parsePayNoteDelivery(document);
-  if (!parsed) {
-    return undefined;
-  }
-  const simple = blue.nodeToJson(parsed.node, 'simple') as
-    | Record<string, unknown>
-    | undefined;
-  const contracts = simple?.contracts as Record<string, unknown> | undefined;
-  const links = contracts?.links as Record<string, unknown> | undefined;
-  const link = links?.synchronyMerchantLink as
-    | Record<string, unknown>
-    | undefined;
-  return getRecordString(link, 'sessionId');
+  const simple = parsed
+    ? (blue.nodeToJson(parsed.node, 'simple') as
+        | Record<string, unknown>
+        | undefined) ?? toSimpleRecord(document)
+    : toSimpleRecord(document);
+  const contracts = toSimpleRecord(simple?.contracts);
+  const links = toSimpleRecord(contracts?.links);
+  const link = toSimpleRecord(links?.synchronyMerchantLink);
+  return getRecordStringOrNestedValue(link ?? undefined, 'sessionId');
 };

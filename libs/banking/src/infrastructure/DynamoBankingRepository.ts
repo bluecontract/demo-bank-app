@@ -7,6 +7,7 @@ import {
   GetCommand,
   QueryCommand,
   TransactWriteCommand,
+  UpdateCommand,
   BatchGetCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { Account } from '../domain/entities/Account';
@@ -86,6 +87,7 @@ export interface AccountMetaItem {
   currency: string;
   createdAt: string;
   isTest?: boolean;
+  accountType?: string;
 }
 
 export interface AccountNumberReservationItem {
@@ -99,6 +101,7 @@ export interface AccountBalanceItem {
   SK: 'BALANCE';
   ledgerBalanceMinor: number;
   availableBalanceMinor: number;
+  creditLimitMinor?: number;
   version: number;
 }
 
@@ -213,13 +216,17 @@ export class DynamoBankingRepository implements BankingRepository {
     }
 
     const record = item as Record<string, unknown>;
+    const hasValidCreditLimit =
+      !('creditLimitMinor' in record) ||
+      typeof record.creditLimitMinor === 'number';
     return (
       'ledgerBalanceMinor' in record &&
       'availableBalanceMinor' in record &&
       'version' in record &&
       typeof record.ledgerBalanceMinor === 'number' &&
       typeof record.availableBalanceMinor === 'number' &&
-      typeof record.version === 'number'
+      typeof record.version === 'number' &&
+      hasValidCreditLimit
     );
   }
 
@@ -229,6 +236,8 @@ export class DynamoBankingRepository implements BankingRepository {
     }
 
     const record = item as Record<string, unknown>;
+    const hasValidAccountType =
+      !('accountType' in record) || typeof record.accountType === 'string';
     return (
       'accountNumber' in record &&
       'name' in record &&
@@ -241,7 +250,8 @@ export class DynamoBankingRepository implements BankingRepository {
       typeof record.ownerUserId === 'string' &&
       typeof record.status === 'string' &&
       typeof record.currency === 'string' &&
-      typeof record.createdAt === 'string'
+      typeof record.createdAt === 'string' &&
+      hasValidAccountType
     );
   }
 
@@ -398,6 +408,7 @@ export class DynamoBankingRepository implements BankingRepository {
         currency: account.currency,
         createdAt: account.createdAt.toISOString(),
         isTest: account.isTest,
+        accountType: account.accountType,
       };
 
       const balanceItem = {
@@ -407,6 +418,9 @@ export class DynamoBankingRepository implements BankingRepository {
         [GSI_SORT_KEYS.BANKING_GSI1SK]: account.createdAt.toISOString(),
         ledgerBalanceMinor: account.ledgerBalanceMinor.toCents(),
         availableBalanceMinor: account.availableBalanceMinor.toCents(),
+        ...(account.creditLimitMinor
+          ? { creditLimitMinor: account.creditLimitMinor.toCents() }
+          : {}),
         version: account.balanceVersion,
       };
 
@@ -478,6 +492,79 @@ export class DynamoBankingRepository implements BankingRepository {
       );
 
       throw new RepositoryError(`save_account(${account.id})`, error as Error);
+    }
+  }
+
+  async updateAccountBalance(account: Account): Promise<Account> {
+    if (!account.creditLimitMinor) {
+      throw new RepositoryError(
+        `update_account_balance(${account.id})`,
+        new Error('Credit limit is required for balance updates')
+      );
+    }
+
+    this.logger?.debug('Repository update account balance started', {
+      accountId: account.id,
+      accountNumber: account.accountNumber,
+      ownerUserId: account.ownerUserId,
+    });
+
+    const command = new UpdateCommand({
+      TableName: this.tableName,
+      Key: {
+        PK: `${TABLE_PREFIXES.ACCOUNT}${account.id}`,
+        SK: SORT_KEYS.BALANCE,
+      },
+      UpdateExpression: UPDATE_EXPRESSIONS.UPDATE_CREDIT_LIMIT,
+      ConditionExpression: CONDITION_EXPRESSIONS.BALANCE_VERSION_CHECK,
+      ExpressionAttributeNames: {
+        [EXPRESSION_ATTRIBUTE_NAMES.VERSION]: 'version',
+      },
+      ExpressionAttributeValues: {
+        ':ledger': account.ledgerBalanceMinor.toCents(),
+        ':available': account.availableBalanceMinor.toCents(),
+        ':creditLimit': account.creditLimitMinor.toCents(),
+        ':currentVersion': account.balanceVersion,
+        ':inc': 1,
+      },
+    });
+
+    try {
+      await this.client.send(command);
+      account.balanceVersion += 1;
+
+      this.logger?.debug('Repository update account balance completed', {
+        accountId: account.id,
+        accountNumber: account.accountNumber,
+        ownerUserId: account.ownerUserId,
+        balanceVersion: account.balanceVersion,
+      });
+
+      return account;
+    } catch (error: unknown) {
+      this.logger?.error('Repository update account balance failed', {
+        accountId: account.id,
+        accountNumber: account.accountNumber,
+        ownerUserId: account.ownerUserId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+
+      const errorName =
+        typeof error === 'object' && error && 'name' in error
+          ? String((error as { name?: string }).name)
+          : '';
+
+      if (errorName.includes(DYNAMO_ERROR_CODES.CONDITIONAL_CHECK_FAILED)) {
+        throw new OptimisticLockError(
+          `account_balance_${account.id}`,
+          error as Error
+        );
+      }
+
+      throw new RepositoryError(
+        `update_account_balance(${account.id})`,
+        error as Error
+      );
     }
   }
 
@@ -643,6 +730,7 @@ export class DynamoBankingRepository implements BankingRepository {
         cardId: item.cardId,
         cardLast4: item.cardLast4,
         merchantName: item.merchantName,
+        merchantId: item.merchantId,
         merchantStatementDescriptor: item.merchantStatementDescriptor,
         processorChargeId: item.processorChargeId,
       }));
@@ -717,6 +805,7 @@ export class DynamoBankingRepository implements BankingRepository {
         cardId: headerItem.cardId,
         cardLast4: headerItem.cardLast4,
         merchantName: headerItem.merchantName,
+        merchantId: headerItem.merchantId,
         merchantStatementDescriptor: headerItem.merchantStatementDescriptor,
         processorChargeId: headerItem.processorChargeId,
       });
@@ -733,6 +822,12 @@ export class DynamoBankingRepository implements BankingRepository {
     balance: AccountBalanceItem
   ): Account {
     const accountId = meta.PK.replace(TABLE_PREFIXES.ACCOUNT, '');
+    const accountType =
+      (meta.accountType as Account['accountType']) ?? 'DEPOSIT';
+    const creditLimitMinor =
+      balance.creditLimitMinor !== undefined
+        ? new Money(balance.creditLimitMinor)
+        : undefined;
 
     return new Account({
       id: accountId,
@@ -743,6 +838,8 @@ export class DynamoBankingRepository implements BankingRepository {
       currency: meta.currency as Account['currency'],
       createdAt: new Date(meta.createdAt),
       isTest: meta.isTest ?? false,
+      accountType,
+      creditLimitMinor,
       ledgerBalanceMinor: new Money(balance.ledgerBalanceMinor),
       availableBalanceMinor: new Money(balance.availableBalanceMinor),
       balanceVersion: balance.version,

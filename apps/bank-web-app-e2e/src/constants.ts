@@ -58,8 +58,8 @@ export const UI_TEXT = {
   BUTTONS: {
     HOME: 'Home', // From TransferConfirmation component
     BACK_TO_HOME: 'Back to Home', // Alternative text patterns
-    FUND_ACCOUNT: 'Fund Account',
-    NEW_TRANSFER: 'New transfer',
+    FUND_ACCOUNT: 'Fund',
+    NEW_TRANSFER: 'Transfer',
     DETAILS: 'Details',
     CREATE_ACCOUNT: 'Create Account',
     TRANSFER: 'Transfer',
@@ -104,6 +104,9 @@ export const createUniqueAmount = (baseAmount = 100) => {
   return (baseAmount + Math.floor(Math.random() * 50)).toFixed(2);
 };
 
+export const createUniqueMerchantId = () =>
+  `merchant-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
 export const waitForModalToClose = async (
   page: import('@playwright/test').Page,
   modalTestId: string
@@ -122,7 +125,69 @@ export const waitForModalToOpen = async (
   });
 };
 
-export const DASHBOARD_HEADING_TEXT = 'Welcome back';
+export const DASHBOARD_HEADING_TEXT = 'Overview';
+
+export const signUpAndReachDashboard = async (
+  page: Page,
+  emailPrefix = 'test-user'
+) => {
+  const testUserEmail = createUniqueEmail(emailPrefix);
+
+  await page.goto(URLS.SIGNUP);
+  await page.fill('input[name="email"]', testUserEmail);
+  await page.click('button[type="submit"]');
+
+  await page.waitForURL(URLS.DASHBOARD, {
+    timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+  });
+  await expect(
+    page.getByRole('heading', {
+      name: DASHBOARD_HEADING_TEXT,
+      exact: true,
+    })
+  ).toBeVisible();
+
+  return testUserEmail;
+};
+
+export const signUpMerchantAndReachDashboard = async (
+  page: Page,
+  emailPrefix = 'merchant-user',
+  merchantId = createUniqueMerchantId()
+) => {
+  const merchantEmail = createUniqueEmail(emailPrefix);
+
+  await page.goto(URLS.SIGNUP);
+  await page.fill('input[name="email"]', merchantEmail);
+  await page.getByLabel('I am a merchant').check();
+  await page.fill('input[name="merchantName"]', 'Demo Merchant');
+  await page.fill('input[name="merchantId"]', merchantId);
+  await page.click('button[type="submit"]');
+
+  await page.waitForURL(URLS.DASHBOARD, {
+    timeout: TEST_DATA.TIMEOUTS.NAVIGATION,
+  });
+  await expect(
+    page.getByRole('heading', {
+      name: DASHBOARD_HEADING_TEXT,
+      exact: true,
+    })
+  ).toBeVisible();
+
+  return { merchantEmail, merchantId };
+};
+
+export const createAccountViaModal = async (
+  page: Page,
+  accountName = createUniqueAccountName()
+) => {
+  await page.getByTestId('add-account-button').click();
+  await waitForModalToOpen(page, 'modal-content');
+  await page.fill('input#accountName', accountName);
+  await page.click('button[type="submit"]');
+  await waitForModalToClose(page, 'modal-content');
+  return accountName;
+};
 
 export const waitForTooltipToAppear = async (
   page: import('@playwright/test').Page,

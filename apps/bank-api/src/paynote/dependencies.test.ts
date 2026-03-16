@@ -29,6 +29,8 @@ vi.mock('../shared/myOsSecrets', () => ({
 describe('paynote dependencies', () => {
   beforeEach(() => {
     process.env.BANKING_DYNAMO_TABLE_NAME = 'test-paynote-table';
+    process.env.AUTH_DYNAMO_TABLE_NAME = 'test-auth-table';
+    process.env.JWT_SECRET_ARN = 'arn:aws:secretsmanager:us-east-1:123:test';
     process.env.AWS_REGION = 'us-east-1';
     resetDependencies();
     hoisted.getLoggerMock.mockClear();
@@ -40,6 +42,8 @@ describe('paynote dependencies', () => {
 
   afterEach(() => {
     delete process.env.BANKING_DYNAMO_TABLE_NAME;
+    delete process.env.AUTH_DYNAMO_TABLE_NAME;
+    delete process.env.JWT_SECRET_ARN;
     delete process.env.AWS_REGION;
   });
 

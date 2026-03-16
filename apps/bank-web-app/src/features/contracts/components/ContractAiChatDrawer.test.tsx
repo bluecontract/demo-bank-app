@@ -1,0 +1,167 @@
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { apiClient } from '../../../api/client';
+import { createQueryWrapper } from '../../../test-utils';
+import { useContractAiChat } from '../hooks/useContractAiChat';
+import { useRunContractOperation } from '../hooks/useRunContractOperation';
+import { ContractAiChatDrawer } from './ContractAiChatDrawer';
+
+vi.mock('../hooks/useContractAiChat', () => ({
+  useContractAiChat: vi.fn(),
+}));
+
+vi.mock('../hooks/useRunContractOperation', () => ({
+  useRunContractOperation: vi.fn(),
+}));
+
+vi.mock('../../../api/client', () => ({
+  apiClient: {
+    banking: {
+      getContractDetails: vi.fn(),
+    },
+  },
+}));
+
+const mockUseContractAiChat = useContractAiChat as ReturnType<typeof vi.fn>;
+const mockUseRunContractOperation = useRunContractOperation as ReturnType<
+  typeof vi.fn
+>;
+
+describe('ContractAiChatDrawer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    window.localStorage.clear();
+  });
+
+  it('requires confirmation before running an operation and confirms submission', async () => {
+    const chatMutateAsync = vi.fn().mockResolvedValue({
+      assistantMessage: 'Ready to run.',
+      status: 'ready',
+      nextProcessingState: 'confirm',
+      focus: null,
+      operationRequest: {
+        type: 'Conversation/Operation Request',
+        operation: 'incrementCounter',
+        request: { by: 2 },
+      },
+    });
+
+    mockUseContractAiChat.mockReturnValue({
+      mutateAsync: chatMutateAsync,
+      isPending: false,
+      reset: vi.fn(),
+    });
+
+    const runOperationMutate = vi.fn((_vars: any, options?: any) => {
+      options?.onSuccess?.();
+      options?.onSettled?.();
+    });
+
+    mockUseRunContractOperation.mockReturnValue({
+      mutate: runOperationMutate,
+      isPending: false,
+      reset: vi.fn(),
+    });
+
+    (apiClient.banking.getContractDetails as any).mockResolvedValueOnce({
+      status: 200,
+      body: {
+        updatedAt: '2026-02-02T00:00:00.000Z',
+      },
+    });
+
+    const wrapper = createQueryWrapper();
+    render(
+      <ContractAiChatDrawer
+        isOpen
+        sessionId="sess-1"
+        documentTitle="Test contract"
+        contractUpdatedAt="2026-02-01T00:00:00.000Z"
+        onClose={() => undefined}
+      />,
+      { wrapper }
+    );
+
+    expect(screen.getByText('Talk with AI: Test contract')).toBeInTheDocument();
+
+    const input = screen.getByPlaceholderText(
+      'Ask questions about the contract or make operations'
+    );
+    fireEvent.change(input, { target: { value: 'Run it' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    await waitFor(() => {
+      expect(chatMutateAsync).toHaveBeenCalled();
+    });
+
+    expect(runOperationMutate).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+
+    expect(runOperationMutate).toHaveBeenCalled();
+    await screen.findByText('Done.');
+
+    await waitFor(
+      () => {
+        expect(apiClient.banking.getContractDetails).toHaveBeenCalled();
+      },
+      { timeout: 3000 }
+    );
+  });
+
+  it('restores stored chat state for the same user and session', async () => {
+    mockUseContractAiChat.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+      reset: vi.fn(),
+    });
+
+    mockUseRunContractOperation.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      reset: vi.fn(),
+    });
+
+    window.localStorage.setItem(
+      'demo-bank-contract-ai-chat:v1:user-1:sess-1',
+      JSON.stringify({
+        version: 1,
+        messages: [
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: 'Stored assistant message.',
+          },
+          { id: 'user-1', role: 'user', content: 'Stored user message.' },
+        ],
+        draft: 'Stored draft',
+        pendingOperation: {
+          operation: 'incrementCounter',
+          request: { by: 3 },
+        },
+        updatedAt: '2026-03-02T10:00:00.000Z',
+      })
+    );
+
+    const wrapper = createQueryWrapper();
+    render(
+      <ContractAiChatDrawer
+        isOpen
+        sessionId="sess-1"
+        documentTitle="Test contract"
+        contractUpdatedAt="2026-02-01T00:00:00.000Z"
+        userId="user-1"
+        onClose={() => undefined}
+      />,
+      { wrapper }
+    );
+
+    expect(
+      await screen.findByText('Stored assistant message.')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Stored user message.')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Stored draft')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
+  });
+});

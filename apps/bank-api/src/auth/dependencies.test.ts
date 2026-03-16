@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getDependencies, resetDependencies } from './dependencies';
+import { AwsJwtService } from '@demo-bank-app/auth';
 import {
   PowertoolsLogger,
   PowertoolsMetrics,
@@ -8,6 +9,7 @@ import {
 // Mock the auth module
 vi.mock('@demo-bank-app/auth', () => ({
   DynamoUserRepository: vi.fn(() => ({ mockRepo: true })),
+  DynamoMerchantDirectoryRepository: vi.fn(() => ({ mockRepo: true })),
   AwsJwtService: vi.fn(() => ({ mockJwt: true })),
   PowertoolsLogger: vi.fn(() => ({
     info: vi.fn(),
@@ -54,6 +56,12 @@ describe('Dependencies Module', () => {
       expect(deps.config).toBeDefined();
       expect(deps.config.jwtTtlSeconds).toBe(604800);
       expect(deps.config.testUserTtlSeconds).toBe(600);
+      expect(vi.mocked(AwsJwtService)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jwtTtlSeconds: 604800,
+          testUserTtlSeconds: 600,
+        })
+      );
     });
 
     it('should return cached dependencies on subsequent calls', async () => {

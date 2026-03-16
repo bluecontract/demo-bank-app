@@ -26,6 +26,8 @@ import {
 export interface AwsJwtServiceConfig {
   region: string;
   jwtSecretArn: string;
+  jwtTtlSeconds?: number;
+  testUserTtlSeconds?: number;
   endpoint?: string; // For LocalStack testing
   credentials?: { accessKeyId: string; secretAccessKey: string };
   logger?: Logger;
@@ -36,6 +38,8 @@ export class AwsJwtService implements JwtService {
   private readonly secretsClient: SecretsManagerClient;
   private readonly jwtSecretArn: string;
   private jwtSecret: string | null = null; // Cache the secret
+  private readonly jwtTtlSeconds: number;
+  private readonly testUserTtlSeconds: number;
   private readonly logger?: Logger;
   private readonly metrics?: Metrics;
 
@@ -48,6 +52,8 @@ export class AwsJwtService implements JwtService {
       ...AwsResilienceConfigBuilder.toAwsConfig(resilienceConfig),
     });
     this.jwtSecretArn = config.jwtSecretArn;
+    this.jwtTtlSeconds = config.jwtTtlSeconds ?? 60 * 60;
+    this.testUserTtlSeconds = config.testUserTtlSeconds ?? 10 * 60;
     this.logger = config.logger;
     this.metrics = config.metrics;
   }
@@ -70,8 +76,7 @@ export class AwsJwtService implements JwtService {
       const secret = await this.getJwtSecret();
       const now = Math.floor(Date.now() / 1000);
 
-      // Set different TTL for test users (10 minutes vs 1 hour)
-      const ttl = isTest ? 10 * 60 : 60 * 60;
+      const ttl = isTest ? this.testUserTtlSeconds : this.jwtTtlSeconds;
 
       const payload: JwtPayload = {
         sub: userId,

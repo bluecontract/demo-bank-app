@@ -115,4 +115,99 @@ describe('bootstrapPayNote', () => {
 
     expect(result.type).toBe('verification-failed');
   });
+
+  it('prepares one-time paynote with form data before bootstrap', async () => {
+    const verificationRepository = createVerificationRepository();
+    vi.mocked(verificationRepository.getVerification).mockResolvedValue({
+      userId: 'user-123',
+      blueId: 'blue-id',
+      validationScore: 9,
+      explanation: 'Looks good',
+      isSuccessful: true,
+      validatedAt: new Date().toISOString(),
+    });
+
+    const myOsClient = createMyOsClient();
+    const payNote = {
+      name: 'One time payment',
+      type: 'PayNote/PayNote',
+      amount: { total: 25000 },
+      contracts: {
+        bootstrap: {
+          type: 'Conversation/Sequential Workflow',
+          steps: [
+            {
+              type: 'Conversation/Trigger Event',
+              event: {
+                type: 'PayNote/Reserve Funds and Capture Immediately Requested',
+                amount: 25000,
+              },
+            },
+          ],
+        },
+      },
+    } as Record<string, unknown>;
+
+    await bootstrapPayNote(
+      {
+        userId: 'user-123',
+        userEmail: 'user@example.com',
+        formData: {
+          fromAccount: '1234567890',
+          toAccount: '0987654321',
+          totalAmount: '99.99',
+        },
+        payNote,
+      },
+      {
+        verificationRepository,
+        myOsClient,
+        blueIdCalculator: createBlueIdCalculator(),
+        payNoteBootstrapRepository: createBootstrapRepository(),
+        clock: createClock(),
+        minimumSuccessfulScore: 7,
+      }
+    );
+
+    expect(myOsClient.bootstrapDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          document: expect.objectContaining({
+            payerAccountNumber: '1234567890',
+            payeeAccountNumber: '0987654321',
+            amount: expect.objectContaining({ total: 9999 }),
+            contracts: expect.objectContaining({
+              bootstrap: expect.objectContaining({
+                steps: expect.arrayContaining([
+                  expect.objectContaining({
+                    event: expect.objectContaining({ amount: 9999 }),
+                  }),
+                ]),
+              }),
+            }),
+          }),
+        }),
+      })
+    );
+
+    expect(payNote).toEqual({
+      name: 'One time payment',
+      type: 'PayNote/PayNote',
+      amount: { total: 25000 },
+      contracts: {
+        bootstrap: {
+          type: 'Conversation/Sequential Workflow',
+          steps: [
+            {
+              type: 'Conversation/Trigger Event',
+              event: {
+                type: 'PayNote/Reserve Funds and Capture Immediately Requested',
+                amount: 25000,
+              },
+            },
+          ],
+        },
+      },
+    });
+  });
 });
