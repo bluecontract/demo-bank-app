@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import conversationBlueIds from '@blue-repository/types/packages/conversation/blue-ids';
 import type { PayNoteLiveTestContext } from '../live/lib/testContext';
 import { createPayNoteLiveTestContext } from '../live/lib/testContext';
 import { requireAgentMyOsEnv, requireBankMyOsEnv } from '../lib/agentEnv';
@@ -14,6 +15,7 @@ import {
   logScenarioStep,
 } from '../live/lib/reporting';
 import {
+  waitForNoDuplicatePayNoteCaptureSequenceAfterReplay,
   waitForPayNoteCaptureSequence,
   waitForSinglePostedCapture,
 } from '../live/lib/assertions';
@@ -23,7 +25,10 @@ import {
   buildCardDeliveryDocument,
   buildPendingInstallDeliveryDocument,
 } from '../live/lib/simplePayNoteBuilders';
-import { buildVoucherMonitoringPayNote } from '../live/lib/documentFixtures';
+import {
+  buildSubscriptionDeliveryDocumentFromFixture,
+  buildVoucherMonitoringPayNote,
+} from '../live/lib/documentFixtures';
 
 const enabled = process.env.MYOS_E2E_ENABLED === '1';
 
@@ -41,6 +46,9 @@ type MyOsEventReadableClient = Pick<
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+const DOCUMENT_BOOTSTRAP_REQUESTED_BLUE_ID =
+  conversationBlueIds['Conversation/Document Bootstrap Requested'];
+
 const extractBlueString = (value: unknown): string | undefined => {
   if (typeof value === 'string' && value.trim().length > 0) {
     return value.trim();
@@ -49,6 +57,31 @@ const extractBlueString = (value: unknown): string | undefined => {
     return value.value.trim();
   }
   return undefined;
+};
+
+const extractBlueId = (value: unknown): string | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  if (typeof value.blueId === 'string' && value.blueId.trim().length > 0) {
+    return value.blueId.trim();
+  }
+
+  if (isRecord(value.type)) {
+    return extractBlueId(value.type);
+  }
+
+  return undefined;
+};
+
+const isDocumentBootstrapRequested = (value: unknown) => {
+  const typeName = extractBlueString(value);
+  if (typeName === 'Conversation/Document Bootstrap Requested') {
+    return true;
+  }
+
+  return extractBlueId(value) === DOCUMENT_BOOTSTRAP_REQUESTED_BLUE_ID;
 };
 
 const extractBlueStringList = (value: unknown): string[] => {
@@ -63,6 +96,17 @@ const extractBlueStringList = (value: unknown): string[] => {
       .filter((item): item is string => Boolean(item));
   }
   return [];
+};
+
+const requireNonEmptyString = (
+  value: string | undefined,
+  label: string
+): string => {
+  if (value && value.trim().length > 0) {
+    return value.trim();
+  }
+
+  throw new Error(`${label} is required`);
 };
 
 const summarizeBootstrapDocument = (document: Record<string, unknown>) => ({
@@ -397,10 +441,11 @@ const bootstrapRealRootDocument = async (input: {
   bootstrapClient: MyOsLiveClient;
   baseDocument: Record<string, unknown>;
   initiatorAccountId: string;
+  channelBindings?: Record<string, { email?: string; accountId?: string }>;
 }) => {
   const response = (await input.bootstrapClient.bootstrapDocument({
     document: input.baseDocument,
-    channelBindings: {
+    channelBindings: input.channelBindings ?? {
       guarantorChannel: {
         accountId: input.initiatorAccountId,
       },
@@ -453,9 +498,7 @@ const waitForCanonicalRawContract = async (input: {
   candidateSessionIds: string[];
 }) => {
   let matchedContract:
-    | {
-        sessionId: string;
-      }
+    | Awaited<ReturnType<PayNoteLiveTestContext['getRawContractBySessionId']>>
     | undefined;
 
   await waitForExpectWithLogging(
@@ -573,7 +616,7 @@ const postRealMyOsEvents = async (input: {
   for (const event of filtered) {
     const payload = toMyOsWebhookPayload(
       (await input.client.fetchEvent(event.id)) as Record<string, unknown>
-    );
+    ) as Record<string, unknown>;
     await input.bank.postPayNoteWebhookPayload(
       payload,
       buildTestWebhookHeaders(payload)
@@ -581,6 +624,62 @@ const postRealMyOsEvents = async (input: {
   }
 
   return filtered.map(event => event.id);
+};
+
+const postRealMyOsBootstrapRequestReplayEvents = async (input: {
+  client: MyOsEventReadableClient;
+  bank: PayNoteLiveTestContext['bank'];
+  sessionIds: string[];
+}) => {
+  const listed = await input.client.listRelevantDocumentEvents({
+    sessionIds: input.sessionIds,
+    itemsPerPage: 100,
+  });
+
+  const replayedEventIds: string[] = [];
+
+  for (const event of listed
+    .filter(item => item.type === 'DOCUMENT_EPOCH_ADVANCED')
+    .sort((left, right) => {
+      const leftEpoch = left.epoch ?? Number.POSITIVE_INFINITY;
+      const rightEpoch = right.epoch ?? Number.POSITIVE_INFINITY;
+      if (leftEpoch !== rightEpoch) {
+        return leftEpoch - rightEpoch;
+      }
+      if (left.createdAt !== right.createdAt) {
+        return left.createdAt.localeCompare(right.createdAt);
+      }
+      return left.id.localeCompare(right.id);
+    })) {
+    const payload = toMyOsWebhookPayload(
+      (await input.client.fetchEvent(event.id)) as Record<string, unknown>
+    ) as Record<string, unknown>;
+    const object = isRecord(payload.object)
+      ? structuredClone(payload.object)
+      : {};
+    const emitted = Array.isArray(object.emitted) ? object.emitted : [];
+    const bootstrapOnly = emitted.filter(
+      item => isRecord(item) && isDocumentBootstrapRequested(item.type)
+    );
+
+    if (bootstrapOnly.length === 0) {
+      continue;
+    }
+
+    object.emitted = bootstrapOnly;
+    const replayPayload = {
+      ...payload,
+      id: `${String(payload.id ?? event.id)}:bootstrap-replay`,
+      object,
+    };
+    replayedEventIds.push(String(replayPayload.id));
+    await input.bank.postPayNoteWebhookPayload(
+      replayPayload,
+      buildTestWebhookHeaders(replayPayload)
+    );
+  }
+
+  return replayedEventIds;
 };
 
 describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
@@ -751,7 +850,10 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
       context,
       candidateSessionIds: payNoteSessionIds,
     });
-    const payNoteSessionId = canonicalContract.sessionId;
+    const payNoteSessionId = requireNonEmptyString(
+      canonicalContract.sessionId,
+      'PayNote session id'
+    );
     const epochEventIds = await postRealMyOsEvents({
       client: myOsEventSource,
       bank: context.bank,
@@ -898,24 +1000,410 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
     expect(secondDelivery.deliveryId).toBe(firstDelivery.deliveryId);
   });
 
-  it.skip('subscription one follow-up cycle', async () => {
-    // Hard blocker as of 2026-03-16, after fixing the real-MyOS bootstrap test
-    // bindings and validating that the canonical root contract materializes:
-    // the real subscription root document reaches paymentMandateStatus=requested
-    // and initial capture succeeds, but bank runtime still ignores the real
-    // canonical Conversation/Document Bootstrap Requested emitted on the root
-    // DOCUMENT_EPOCH_ADVANCED event.
-    //
-    // Evidence from the live probe:
-    // - GET /v1/contracts/:sessionId returns 200 for the canonical root session
-    // - the root MyOS document shows subscription.paymentMandateStatus=requested
-    // - the root initial PayNote capture completes successfully
-    // - yet pendingActions stays empty and logs contain:
-    //   "PayNote emitted event intentionally ignored (Document Bootstrap Requested handled by delivery pipeline)"
-    //
-    // That leaves no paymentMandateBootstrapApproval to accept, so the follow-up
-    // subscription charge cannot proceed. This is no longer a harness/test issue.
-  });
+  it('subscription one follow-up cycle', async () => {
+    const run = createScenarioRunContext('real-subscription-follow-up');
+    const realContext = await createPayNoteLiveTestContext({
+      myOsCredentials: bankMyOsEnv,
+    });
+
+    try {
+      const bankEventPump = new EventPump(myOsEventSource, realContext.bank);
+
+      await realContext.bank.signUpUniqueTestUser(
+        'pn-e2e-subscription-merchant',
+        true,
+        {
+          merchantId: 'merchant-subscription-demo',
+          merchantName: 'Subscription Demo Shop',
+        }
+      );
+      const customer = await createFundedCustomerWithCard(realContext.bank, {
+        prefix: 'pn-e2e-subscription-customer',
+        accountName: 'Real MyOS subscription account',
+        fundingAmountMinor:
+          FAST_AMOUNTS.subscriptionMonthlyMinor * 2 +
+          FAST_AMOUNTS.fundingBufferMinor,
+      });
+
+      const authorization = await realContext.bank.authorizeCard({
+        pan: customer.card.pan,
+        expiryMonth: customer.card.expiryMonth,
+        expiryYear: customer.card.expiryYear,
+        cvc: customer.card.cvc,
+        amountMinor: FAST_AMOUNTS.subscriptionMonthlyMinor,
+        merchantId: 'merchant-subscription-demo',
+        merchantName: 'Subscription Demo Shop',
+      });
+
+      const deliveryDocument = buildSubscriptionDeliveryDocumentFromFixture({
+        merchantId: 'merchant-subscription-demo',
+        merchantAccountId: bankMyOsEnv.accountId,
+        cardTransactionDetails: authorization.cardTransactionDetails,
+      });
+
+      logScenarioStep(run, 'bootstrapping-real-subscription-delivery', {
+        merchantAccountId: bankMyOsEnv.accountId,
+      });
+      const { bootstrapSessionId, deliverySessionId } =
+        await bootstrapRealDeliveryDocument({
+          bootstrapClient,
+          bankClient: bankMyOsClient,
+          bankAccountId: bankMyOsEnv.accountId,
+          customerAccountId: agentMyOsEnv.accountId,
+          baseDocument: deliveryDocument,
+        });
+
+      await bankEventPump.flushUntilSettled({
+        sessionIds: [deliverySessionId],
+        timeoutMs: 180_000,
+        pollIntervalMs: 2_000,
+        idleQuietPeriodMs: 3_000,
+        assertSettled: async () => {
+          const rawDelivery = await realContext.getRawDeliveryBySessionId(
+            deliverySessionId
+          );
+          if (!rawDelivery) {
+            throw new Error('Subscription delivery not persisted yet');
+          }
+          expect(rawDelivery.transactionIdentificationStatus).toBe(
+            'identified'
+          );
+          expect(rawDelivery.userId).toBe(customer.user.userId);
+        },
+      });
+
+      logScenarioStep(run, 'accepting-subscription-delivery', {
+        bootstrapSessionId,
+        deliverySessionId,
+      });
+      await realContext.bank.acceptDelivery(
+        customer.user.jwtCookie,
+        deliverySessionId
+      );
+
+      await bankEventPump.flushUntilSettled({
+        sessionIds: [deliverySessionId],
+        timeoutMs: 180_000,
+        pollIntervalMs: 2_000,
+        idleQuietPeriodMs: 3_000,
+        assertSettled: async () => {
+          const payNoteSessionId = await realContext
+            .getRawDeliveryBySessionId(deliverySessionId)
+            .then(delivery =>
+              extractBlueString(delivery?.payNoteBootstrapSessionId)
+            );
+          if (!payNoteSessionId) {
+            throw new Error(
+              'Root subscription bootstrap session not visible yet'
+            );
+          }
+        },
+      });
+
+      const payNoteBootstrapSessionId = await waitForPayNoteBootstrapSessionId(
+        realContext,
+        deliverySessionId
+      );
+      const rootCandidateSessionIds = await waitForBootstrapInitiatorSessionIds(
+        bankMyOsClient,
+        payNoteBootstrapSessionId
+      );
+
+      logScenarioStep(run, 'draining-root-subscription-events', {
+        payNoteBootstrapSessionId,
+        rootCandidateSessionIds,
+      });
+      await bankEventPump.flushUntilSettled({
+        sessionIds: [
+          deliverySessionId,
+          payNoteBootstrapSessionId,
+          ...rootCandidateSessionIds,
+        ],
+        timeoutMs: 240_000,
+        pollIntervalMs: 2_000,
+        idleQuietPeriodMs: 3_000,
+        assertSettled: async () => {
+          for (const sessionId of rootCandidateSessionIds) {
+            const contract = await realContext.getRawContractBySessionId(
+              sessionId
+            );
+            const payNote = await realContext.getRawPayNoteBySessionId(
+              sessionId
+            );
+            if (contract?.documentId && payNote?.holdId) {
+              return;
+            }
+          }
+
+          throw new Error(
+            'Canonical subscription contract with initial capture not materialized yet'
+          );
+        },
+      });
+
+      const canonicalContract = await waitForCanonicalRawContract({
+        context: realContext,
+        candidateSessionIds: rootCandidateSessionIds,
+      });
+
+      let payNoteDocumentId =
+        extractBlueString(canonicalContract.documentId) ?? '';
+      const payNoteSessionId = requireNonEmptyString(
+        canonicalContract.sessionId,
+        'Subscription PayNote session id'
+      );
+      let contract: any;
+      let bootstrapPendingAction: any;
+      const waitForBootstrapPendingAction = async (
+        timeoutMs: number,
+        logLabel: string
+      ) =>
+        waitForExpectWithLogging(
+          async () => {
+            await realContext.bank.generateContractSummary(
+              customer.user.jwtCookie,
+              payNoteSessionId,
+              { force: true }
+            );
+            contract = await realContext.bank.waitForContract(
+              customer.user.jwtCookie,
+              payNoteSessionId,
+              15_000
+            );
+            bootstrapPendingAction = (contract.pendingActions ?? []).find(
+              (action: any) =>
+                action.status === 'pending' &&
+                action.type === 'paymentMandateBootstrapApproval'
+            );
+            if (!bootstrapPendingAction) {
+              throw new Error(
+                'Subscription payment mandate approval not visible yet'
+              );
+            }
+          },
+          timeoutMs,
+          5_000,
+          logLabel
+        );
+
+      try {
+        await waitForBootstrapPendingAction(
+          60_000,
+          'subscription-bootstrap-pending-action-initial'
+        );
+      } catch (initialError) {
+        logScenarioStep(run, 'replaying-bootstrap-request-only', {
+          payNoteSessionId,
+        });
+        const replayedEventIds = await postRealMyOsBootstrapRequestReplayEvents(
+          {
+            client: myOsEventSource,
+            bank: realContext.bank,
+            sessionIds: [payNoteSessionId],
+          }
+        );
+        logScenarioStep(run, 'replayed-bootstrap-request-only-events', {
+          payNoteSessionId,
+          replayedEventIds,
+        });
+        if (replayedEventIds.length === 0) {
+          throw initialError;
+        }
+
+        await waitForBootstrapPendingAction(
+          180_000,
+          'subscription-bootstrap-pending-action-after-replay'
+        );
+      }
+
+      payNoteDocumentId ||=
+        extractBlueString(contract.documentId) ?? payNoteDocumentId;
+      await waitForPayNoteCaptureSequence({
+        bank: realContext.bank,
+        jwtCookie: customer.user.jwtCookie,
+        accountNumber: customer.account.accountNumber,
+        payNoteDocumentId,
+        expectedCaptureAmountsMinor: [FAST_AMOUNTS.subscriptionMonthlyMinor],
+        timeoutMs: 120_000,
+      });
+
+      logScenarioStep(run, 'approving-subscription-payment-mandate', {
+        payNoteSessionId,
+        actionId: bootstrapPendingAction.actionId,
+      });
+      await realContext.bank.decideContractPendingAction(
+        customer.user.jwtCookie,
+        payNoteSessionId,
+        bootstrapPendingAction.actionId,
+        {
+          kind: 'approveReject',
+          input: 'accepted',
+        }
+      );
+
+      let mandateBootstrapSessionId: string | undefined;
+      await waitForExpectWithLogging(
+        async () => {
+          const rawContract = await realContext.getRawContractBySessionId(
+            payNoteSessionId
+          );
+          const updatedAction = (rawContract?.pendingActions ?? []).find(
+            (action: any) => action.actionId === bootstrapPendingAction.actionId
+          );
+          mandateBootstrapSessionId = extractBlueString(
+            updatedAction?.payload?.paymentMandateBootstrapSessionId
+          );
+          if (!mandateBootstrapSessionId) {
+            throw new Error(
+              'Payment mandate bootstrap session id not persisted on pending action yet'
+            );
+          }
+        },
+        120_000,
+        2_000,
+        'subscription-mandate-bootstrap-session'
+      );
+
+      const resolvedMandateBootstrapSessionId = requireNonEmptyString(
+        mandateBootstrapSessionId,
+        'Payment mandate bootstrap session id'
+      );
+
+      const mandateSessionIds = await waitForBootstrapInitiatorSessionIds(
+        bankMyOsClient,
+        resolvedMandateBootstrapSessionId
+      );
+
+      await bankEventPump.flushUntilSettled({
+        sessionIds: [
+          deliverySessionId,
+          payNoteBootstrapSessionId,
+          ...rootCandidateSessionIds,
+          resolvedMandateBootstrapSessionId,
+        ],
+        timeoutMs: 240_000,
+        pollIntervalMs: 2_000,
+        idleQuietPeriodMs: 3_000,
+        assertSettled: async () => {
+          const rawContract = await realContext.getRawContractBySessionId(
+            payNoteSessionId
+          );
+          const rawDocument = isRecord(rawContract?.document)
+            ? rawContract.document
+            : {};
+          const rawSubscription = isRecord(rawDocument.subscription)
+            ? rawDocument.subscription
+            : {};
+          const mandateContractVisible = await Promise.all(
+            mandateSessionIds.map(sessionId =>
+              realContext.getRawContractBySessionId(sessionId)
+            )
+          ).then(contracts =>
+            contracts.some(item => Boolean(item?.documentId))
+          );
+          const status = extractBlueString(
+            rawSubscription.paymentMandateStatus
+          );
+          if (!mandateContractVisible || status !== 'active') {
+            throw new Error('Payment mandate attachment not materialized yet');
+          }
+        },
+      });
+
+      await waitForExpectWithLogging(
+        async () => {
+          await realContext.bank.generateContractSummary(
+            customer.user.jwtCookie,
+            payNoteSessionId,
+            { force: true }
+          );
+          contract = await realContext.bank.waitForContract(
+            customer.user.jwtCookie,
+            payNoteSessionId,
+            15_000
+          );
+          const contractDocument = contract.document as any;
+          const status =
+            extractBlueString(
+              contractDocument?.subscription?.paymentMandateStatus
+            ) ?? contractDocument?.subscription?.paymentMandateStatus;
+          if (status !== 'active') {
+            throw new Error(
+              `Expected active payment mandate, got ${String(status)}`
+            );
+          }
+        },
+        240_000,
+        5_000,
+        'subscription-contract-summary-active-mandate'
+      );
+
+      logScenarioStep(run, 'triggering-follow-up-subscription-cycle', {
+        payNoteSessionId,
+        mandateSessionIds,
+      });
+      await bankMyOsClient.runDocumentOperation(
+        payNoteSessionId,
+        'triggerScheduledPayment',
+        {
+          amountMinor: FAST_AMOUNTS.subscriptionMonthlyMinor,
+          requestId: 'subscription-cycle-2',
+        }
+      );
+
+      await bankEventPump.flushUntilSettled({
+        sessionIds: [
+          deliverySessionId,
+          payNoteBootstrapSessionId,
+          ...rootCandidateSessionIds,
+          resolvedMandateBootstrapSessionId,
+          ...mandateSessionIds,
+        ],
+        timeoutMs: 240_000,
+        pollIntervalMs: 2_000,
+        idleQuietPeriodMs: 3_000,
+        assertSettled: async () => {
+          const items = await realContext.bank.getActivity(
+            customer.user.jwtCookie,
+            customer.account.accountNumber
+          );
+          const postedTransactions = items.filter(
+            (item: any) =>
+              item.kind === 'POSTED_TRANSACTION' &&
+              item.payNote?.payNoteDocumentId === payNoteDocumentId
+          );
+          if (postedTransactions.length < 2) {
+            throw new Error('Follow-up subscription capture not completed yet');
+          }
+        },
+      });
+
+      await waitForPayNoteCaptureSequence({
+        bank: realContext.bank,
+        jwtCookie: customer.user.jwtCookie,
+        accountNumber: customer.account.accountNumber,
+        payNoteDocumentId,
+        expectedCaptureAmountsMinor: [
+          FAST_AMOUNTS.subscriptionMonthlyMinor,
+          FAST_AMOUNTS.subscriptionMonthlyMinor,
+        ],
+        timeoutMs: 120_000,
+      });
+      await waitForNoDuplicatePayNoteCaptureSequenceAfterReplay({
+        bank: realContext.bank,
+        jwtCookie: customer.user.jwtCookie,
+        accountNumber: customer.account.accountNumber,
+        payNoteDocumentId,
+        expectedCaptureAmountsMinor: [
+          FAST_AMOUNTS.subscriptionMonthlyMinor,
+          FAST_AMOUNTS.subscriptionMonthlyMinor,
+        ],
+        stablePeriodMs: 5_000,
+      });
+    } finally {
+      await realContext.cleanup();
+    }
+  }, 300_000);
 
   it('voucher cashback smoke', async () => {
     const run = createScenarioRunContext('real-voucher-cashback');
@@ -1008,15 +1496,23 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
       context,
       candidateSessionIds: rootSessionIds,
     });
+    const voucherSessionId = requireNonEmptyString(
+      canonicalContract.sessionId,
+      'Voucher session id'
+    );
+    const voucherDocumentId = requireNonEmptyString(
+      extractBlueString(canonicalContract.documentId),
+      'Voucher document id'
+    );
 
     await context.bank.generateContractSummary(
       customer.user.jwtCookie,
-      canonicalContract.sessionId,
+      voucherSessionId,
       { force: true }
     );
     const contract = await context.bank.waitForContract(
       customer.user.jwtCookie,
-      canonicalContract.sessionId,
+      voucherSessionId,
       60_000
     );
     const monitoringPendingAction = (contract.pendingActions ?? []).find(
@@ -1028,12 +1524,12 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
     expect(monitoringPendingAction).toBeTruthy();
 
     logScenarioStep(run, 'approving-voucher-monitoring', {
-      sessionId: canonicalContract.sessionId,
+      sessionId: voucherSessionId,
       actionId: monitoringPendingAction?.actionId,
     });
     await context.bank.decideContractPendingAction(
       customer.user.jwtCookie,
-      canonicalContract.sessionId,
+      voucherSessionId,
       monitoringPendingAction.actionId,
       {
         kind: 'approveReject',
@@ -1048,7 +1544,7 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
       idleQuietPeriodMs: 3_000,
       assertSettled: async () => {
         const snapshot = (await bankMyOsClient.fetchDocument(
-          canonicalContract.sessionId
+          voucherSessionId
         )) as {
           document?: unknown;
         };
@@ -1091,14 +1587,14 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
           sponsorAccount.accountNumber
         );
         const holdCaptures = items.filter(
-          item =>
+          (item: any) =>
             item.kind === 'HOLD_CAPTURED' &&
-            item.payNote?.payNoteDocumentId === canonicalContract.documentId
+            item.payNote?.payNoteDocumentId === voucherDocumentId
         );
         const postedTransactions = items.filter(
-          item =>
+          (item: any) =>
             item.kind === 'POSTED_TRANSACTION' &&
-            item.payNote?.payNoteDocumentId === canonicalContract.documentId
+            item.payNote?.payNoteDocumentId === voucherDocumentId
         );
 
         if (
@@ -1124,14 +1620,14 @@ describe.skipIf(!enabled)('PayNote real MyOS canaries', () => {
       bank: context.bank,
       jwtCookie: sponsor.jwtCookie,
       accountNumber: sponsorAccount.accountNumber,
-      payNoteDocumentId: canonicalContract.documentId,
+      payNoteDocumentId: voucherDocumentId,
       expectedCaptureAmountsMinor: [FAST_AMOUNTS.voucherReserveMinor],
       timeoutMs: 20_000,
     });
 
     logScenarioStep(run, 'voucher-cashback-captured', {
-      sessionId: canonicalContract.sessionId,
-      payNoteDocumentId: canonicalContract.documentId,
+      sessionId: voucherSessionId,
+      payNoteDocumentId: voucherDocumentId,
     });
   });
 });

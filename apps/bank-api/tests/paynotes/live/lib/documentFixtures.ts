@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { Blue } from '@blue-labs/language';
 import { createDefaultMergingProcessor } from '@blue-labs/document-processor';
 import { repository } from '@blue-repository/types';
+import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
 import type { TestCardTransactionDetails } from './simplePayNoteBuilders';
 
 const blue = new Blue({
@@ -63,6 +64,54 @@ export const buildSubscriptionPayNoteFromFixture = (input: {
   });
 
   return document;
+};
+
+export const buildSubscriptionDeliveryDocumentFromFixture = (input: {
+  merchantId: string;
+  merchantAccountId: string;
+  cardTransactionDetails: TestCardTransactionDetails;
+}) => {
+  const rootDocument = buildSubscriptionPayNoteFromFixture({
+    merchantId: input.merchantId,
+    cardTransactionDetails: input.cardTransactionDetails,
+  });
+
+  return {
+    type: {
+      blueId: paynoteBlueIds['PayNote/PayNote Delivery'],
+    },
+    name: 'Delivery for Exclusive Spotify Subscription Offer',
+    payNoteBootstrapRequest: {
+      type: 'Conversation/Document Bootstrap Requested',
+      bootstrapAssignee: 'payNoteDeliverer',
+      channelBindings: {
+        payeeChannel: {
+          accountId: input.merchantAccountId,
+        },
+        cardProcessorChannel: {
+          accountId: 'processor-account',
+        },
+      },
+      document: rootDocument,
+    },
+    cardTransactionDetails: structuredClone(
+      rootDocument.cardTransactionDetails
+    ),
+    contracts: {
+      payNoteSender: {
+        type: 'MyOS/MyOS Timeline Channel',
+        accountId: input.merchantAccountId,
+      },
+      payNoteDeliverer: {
+        type: 'MyOS/MyOS Timeline Channel',
+        accountId: 'bank-account',
+      },
+      cardProcessorChannel: {
+        type: 'MyOS/MyOS Timeline Channel',
+        accountId: 'processor-account',
+      },
+    },
+  } as Record<string, unknown>;
 };
 
 export const buildVoucherMonitoringPayNote = (input: {

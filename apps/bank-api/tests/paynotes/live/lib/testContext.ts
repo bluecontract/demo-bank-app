@@ -62,6 +62,14 @@ export type PayNoteLiveTestContext = {
   cleanup: () => Promise<void>;
 };
 
+export type PayNoteLiveTestContextOptions = {
+  myOsCredentials?: {
+    apiKey: string;
+    accountId: string;
+    baseUrl: string;
+  };
+};
+
 const TRACKED_ENV_KEYS = [
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
@@ -392,145 +400,149 @@ const cleanupResources = async (
   ]);
 };
 
-export const createPayNoteLiveTestContext =
-  async (): Promise<PayNoteLiveTestContext> => {
-    const resourceId = `paynotes-${randomUUID()
-      .replace(/-/g, '')
-      .slice(0, 12)}`;
-    const tableName = `demo-bank-${resourceId}`;
-    const jwtSecretArn = `/demo-bank-app/${resourceId}/auth-jwt-secret`;
-    const myOsSecretArn = `/demo-bank-app/${resourceId}/myos-credentials`;
-    const openAiSecretArn = `/demo-bank-app/${resourceId}/openai-api-key`;
-    const previousEnv = captureEnvSnapshot();
+export const createPayNoteLiveTestContext = async (
+  options: PayNoteLiveTestContextOptions = {}
+): Promise<PayNoteLiveTestContext> => {
+  const resourceId = `paynotes-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+  const tableName = `demo-bank-${resourceId}`;
+  const jwtSecretArn = `/demo-bank-app/${resourceId}/auth-jwt-secret`;
+  const myOsSecretArn = `/demo-bank-app/${resourceId}/myos-credentials`;
+  const openAiSecretArn = `/demo-bank-app/${resourceId}/openai-api-key`;
+  const previousEnv = captureEnvSnapshot();
 
-    process.env.AWS_ACCESS_KEY_ID = 'test';
-    process.env.AWS_SECRET_ACCESS_KEY = 'test';
-    delete process.env.AWS_SESSION_TOKEN;
-    process.env.AWS_REGION = process.env.AWS_REGION ?? 'us-east-1';
-    process.env.AWS_ENDPOINT_URL = resolveLocalstackEndpoint();
-    delete process.env.AWS_PROFILE;
-    delete process.env.AWS_DEFAULT_PROFILE;
-    delete process.env.AWS_CONFIG_FILE;
-    delete process.env.AWS_SHARED_CREDENTIALS_FILE;
-    delete process.env.AWS_SDK_LOAD_CONFIG;
-    process.env.AUTH_DYNAMO_TABLE_NAME = tableName;
-    process.env.BANKING_DYNAMO_TABLE_NAME = tableName;
-    process.env.JWT_SECRET_ARN = jwtSecretArn;
-    process.env.JWT_TTL_SECONDS = '604800';
-    process.env.TEST_USER_TTL_SECONDS = '600';
-    process.env.MYOS_SECRET_ARN = myOsSecretArn;
-    process.env.OPENAI_API_KEY_SECRET_ARN = openAiSecretArn;
-    process.env.DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR =
-      DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR;
-    process.env.SERVICE_NAME = 'bank-api-paynotes-integration-test';
-    process.env.LOG_LEVEL = 'INFO';
-    process.env.METRICS_NAMESPACE = 'PayNotesIntegration';
-    process.env.CARD_PAN_SECRET = 'paynotes-integration-pan-secret';
-    process.env.CARD_CVC_SECRET = 'paynotes-integration-cvc-secret';
-    process.env.CARD_PROCESSOR_TOKEN =
-      process.env.CARD_PROCESSOR_TOKEN ?? 'demo-bank-processor-token';
-    process.env.CARD_BIN_PREFIX = '123456';
-    process.env.CARD_SETTLEMENT_ACCOUNT_ID = CARD_SETTLEMENT.ACCOUNT_ID;
-    process.env.CARD_SETTLEMENT_ACCOUNT_NUMBER = CARD_SETTLEMENT.ACCOUNT_NUMBER;
+  process.env.AWS_ACCESS_KEY_ID = 'test';
+  process.env.AWS_SECRET_ACCESS_KEY = 'test';
+  delete process.env.AWS_SESSION_TOKEN;
+  process.env.AWS_REGION = process.env.AWS_REGION ?? 'us-east-1';
+  process.env.AWS_ENDPOINT_URL = resolveLocalstackEndpoint();
+  delete process.env.AWS_PROFILE;
+  delete process.env.AWS_DEFAULT_PROFILE;
+  delete process.env.AWS_CONFIG_FILE;
+  delete process.env.AWS_SHARED_CREDENTIALS_FILE;
+  delete process.env.AWS_SDK_LOAD_CONFIG;
+  process.env.AUTH_DYNAMO_TABLE_NAME = tableName;
+  process.env.BANKING_DYNAMO_TABLE_NAME = tableName;
+  process.env.JWT_SECRET_ARN = jwtSecretArn;
+  process.env.JWT_TTL_SECONDS = '604800';
+  process.env.TEST_USER_TTL_SECONDS = '600';
+  process.env.MYOS_SECRET_ARN = myOsSecretArn;
+  process.env.OPENAI_API_KEY_SECRET_ARN = openAiSecretArn;
+  process.env.DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR =
+    DEFAULT_MERCHANT_CREDIT_LIMIT_MINOR;
+  process.env.SERVICE_NAME = 'bank-api-paynotes-integration-test';
+  process.env.LOG_LEVEL = 'INFO';
+  process.env.METRICS_NAMESPACE = 'PayNotesIntegration';
+  process.env.CARD_PAN_SECRET = 'paynotes-integration-pan-secret';
+  process.env.CARD_CVC_SECRET = 'paynotes-integration-cvc-secret';
+  process.env.CARD_PROCESSOR_TOKEN =
+    process.env.CARD_PROCESSOR_TOKEN ?? 'demo-bank-processor-token';
+  process.env.CARD_BIN_PREFIX = '123456';
+  process.env.CARD_SETTLEMENT_ACCOUNT_ID = CARD_SETTLEMENT.ACCOUNT_ID;
+  process.env.CARD_SETTLEMENT_ACCOUNT_NUMBER = CARD_SETTLEMENT.ACCOUNT_NUMBER;
 
-    resetBankRuntimeDependencies();
+  resetBankRuntimeDependencies();
 
-    const clients = createAwsClients();
-    await createBankTable(clients.dynamoClient, tableName);
-    await createSecret(
-      clients.secretsManagerClient,
-      jwtSecretArn,
-      JSON.stringify({ secret: DEFAULT_JWT_SECRET })
-    );
-    await createSecret(
-      clients.secretsManagerClient,
-      openAiSecretArn,
-      JSON.stringify({ openAiApiKey: 'dummy-not-used' })
-    );
+  const clients = createAwsClients();
+  await createBankTable(clients.dynamoClient, tableName);
+  await createSecret(
+    clients.secretsManagerClient,
+    jwtSecretArn,
+    JSON.stringify({ secret: DEFAULT_JWT_SECRET })
+  );
+  await createSecret(
+    clients.secretsManagerClient,
+    openAiSecretArn,
+    JSON.stringify({ openAiApiKey: 'dummy-not-used' })
+  );
 
-    const myOs = new MyOsHarness();
-    await myOs.start();
-
-    await createSecret(
-      clients.secretsManagerClient,
-      myOsSecretArn,
-      JSON.stringify({
-        apiKey: myOs.apiKey,
-        accountId: 'bank-account',
-        baseUrl: myOs.baseUrl,
-      })
-    );
-
-    const bank = new BankTestDriver();
-    const bootstrapContextRepository = new DynamoBootstrapContextRepository({
-      tableName,
-      region: process.env.AWS_REGION ?? 'us-east-1',
-      endpoint: process.env.AWS_ENDPOINT_URL,
-    });
-    const payNoteDeliveryRepository = new DynamoPayNoteDeliveryRepository({
-      tableName,
-      region: process.env.AWS_REGION ?? 'us-east-1',
-      endpoint: process.env.AWS_ENDPOINT_URL,
-    });
-    const contractRepository = new DynamoContractRepository({
-      tableName,
-      region: process.env.AWS_REGION ?? 'us-east-1',
-      endpoint: process.env.AWS_ENDPOINT_URL,
-    });
-    const payNoteRepository = new DynamoPayNoteRepository({
-      tableName,
-      region: process.env.AWS_REGION ?? 'us-east-1',
-      endpoint: process.env.AWS_ENDPOINT_URL,
-    });
-
-    return {
-      bank,
-      myOs,
-      tableName,
-      resourceId,
-      saveBootstrapContext: async input => {
-        await bootstrapContextRepository.saveContext({
-          bootstrapSessionId: input.bootstrapSessionId,
-          accountNumber: input.accountNumber,
-          userId: input.userId,
-          ...(input.merchantId ? { merchantId: input.merchantId } : {}),
-          createdAt: input.createdAt ?? new Date().toISOString(),
-        });
-      },
-      getRawDeliveryBySessionId: async sessionId =>
-        payNoteDeliveryRepository.getDeliveryBySessionId(sessionId),
-      waitForRawDeliveryBySessionId: async (sessionId, timeoutMs = 10_000) => {
-        let matched: any;
-        await waitForExpectWithLogging(
-          async () => {
-            matched = await payNoteDeliveryRepository.getDeliveryBySessionId(
-              sessionId
-            );
-            if (!matched) {
-              throw new Error('Raw delivery not visible yet');
-            }
-          },
-          timeoutMs,
-          250,
-          'raw-delivery-by-session'
-        );
-        return matched;
-      },
-      getRawContractBySessionId: async sessionId =>
-        contractRepository.getContractBySessionId(sessionId),
-      getRawPayNoteBySessionId: async sessionId =>
-        payNoteRepository.getPayNoteBySessionId(sessionId),
-      cleanup: async () => {
-        await myOs.stop();
-        resetBankRuntimeDependencies();
-        await cleanupResources(clients, {
-          tableName,
-          jwtSecretArn,
-          openAiSecretArn,
-          myOsSecretArn,
-        });
-        restoreEnvSnapshot(previousEnv);
-        resetBankRuntimeDependencies();
-      },
-    };
+  const myOs = new MyOsHarness();
+  await myOs.start();
+  const myOsCredentials = options.myOsCredentials ?? {
+    apiKey: myOs.apiKey,
+    accountId: 'bank-account',
+    baseUrl: myOs.baseUrl,
   };
+
+  await createSecret(
+    clients.secretsManagerClient,
+    myOsSecretArn,
+    JSON.stringify({
+      apiKey: myOsCredentials.apiKey,
+      accountId: myOsCredentials.accountId,
+      baseUrl: myOsCredentials.baseUrl,
+    })
+  );
+
+  const bank = new BankTestDriver();
+  const bootstrapContextRepository = new DynamoBootstrapContextRepository({
+    tableName,
+    region: process.env.AWS_REGION ?? 'us-east-1',
+    endpoint: process.env.AWS_ENDPOINT_URL,
+  });
+  const payNoteDeliveryRepository = new DynamoPayNoteDeliveryRepository({
+    tableName,
+    region: process.env.AWS_REGION ?? 'us-east-1',
+    endpoint: process.env.AWS_ENDPOINT_URL,
+  });
+  const contractRepository = new DynamoContractRepository({
+    tableName,
+    region: process.env.AWS_REGION ?? 'us-east-1',
+    endpoint: process.env.AWS_ENDPOINT_URL,
+  });
+  const payNoteRepository = new DynamoPayNoteRepository({
+    tableName,
+    region: process.env.AWS_REGION ?? 'us-east-1',
+    endpoint: process.env.AWS_ENDPOINT_URL,
+  });
+
+  return {
+    bank,
+    myOs,
+    tableName,
+    resourceId,
+    saveBootstrapContext: async input => {
+      await bootstrapContextRepository.saveContext({
+        bootstrapSessionId: input.bootstrapSessionId,
+        accountNumber: input.accountNumber,
+        userId: input.userId,
+        ...(input.merchantId ? { merchantId: input.merchantId } : {}),
+        createdAt: input.createdAt ?? new Date().toISOString(),
+      });
+    },
+    getRawDeliveryBySessionId: async sessionId =>
+      payNoteDeliveryRepository.getDeliveryBySessionId(sessionId),
+    waitForRawDeliveryBySessionId: async (sessionId, timeoutMs = 10_000) => {
+      let matched: any;
+      await waitForExpectWithLogging(
+        async () => {
+          matched = await payNoteDeliveryRepository.getDeliveryBySessionId(
+            sessionId
+          );
+          if (!matched) {
+            throw new Error('Raw delivery not visible yet');
+          }
+        },
+        timeoutMs,
+        250,
+        'raw-delivery-by-session'
+      );
+      return matched;
+    },
+    getRawContractBySessionId: async sessionId =>
+      contractRepository.getContractBySessionId(sessionId),
+    getRawPayNoteBySessionId: async sessionId =>
+      payNoteRepository.getPayNoteBySessionId(sessionId),
+    cleanup: async () => {
+      await myOs.stop();
+      resetBankRuntimeDependencies();
+      await cleanupResources(clients, {
+        tableName,
+        jwtSecretArn,
+        openAiSecretArn,
+        myOsSecretArn,
+      });
+      restoreEnvSnapshot(previousEnv);
+      resetBankRuntimeDependencies();
+    },
+  };
+};
