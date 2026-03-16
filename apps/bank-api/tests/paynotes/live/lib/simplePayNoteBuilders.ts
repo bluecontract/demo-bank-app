@@ -3,6 +3,7 @@ import { createDefaultMergingProcessor } from '@blue-labs/document-processor';
 import { repository } from '@blue-repository/types';
 import conversationBlueIds from '@blue-repository/types/packages/conversation/blue-ids';
 import paynoteBlueIds from '@blue-repository/types/packages/paynote/blue-ids';
+import { FAST_AMOUNTS } from './amounts';
 
 const blue = new Blue({
   repositories: [repository],
@@ -397,6 +398,315 @@ contracts:
   const node = blue.yamlToNode(yaml);
   node.setType(blue.jsonValueToNode({ blueId: DELIVERY_BLUE_ID }));
   return blue.nodeToJson(node) as Record<string, unknown>;
+};
+
+export const buildScaledMilestonesPayNote = (input: {
+  customerAccountId: string;
+  merchantAccountId: string;
+  cardTransactionDetails: TestCardTransactionDetails;
+  completedMilestones?: number;
+}) => {
+  const completedMilestones = Math.max(0, input.completedMilestones ?? 0);
+  const [m1, m2, m3, m4] = [1, 2, 3, 4].map(
+    milestoneNumber => completedMilestones >= milestoneNumber
+  );
+  const totalAmountMinor = FAST_AMOUNTS.scaledMilestoneCapturesMinor.reduce(
+    (sum, amountMinor) => sum + amountMinor,
+    0
+  );
+
+  const yaml = `type: PayNote/Card Transaction PayNote
+name: Demo Milestones
+LLM_SUMMARY_DISABLED: true
+currency: USD
+amount:
+  total: ${totalAmountMinor}
+milestones:
+  m1: ${m1}
+  m2: ${m2}
+  m3: ${m3}
+  m4: ${m4}
+payNoteInitialStateDescription:
+  summary: Uses the existing card hold and releases milestone captures after matching customer approvals.
+  details: |
+    This scaled fixture mirrors the milestone serial flow used in the coverage package.
+    Each customer approval unlocks exactly one partial capture and the next pending action.
+  initialMessage: Confirm completed milestones to release contractor payouts.
+cardTransactionDetails:
+  retrievalReferenceNumber: "${input.cardTransactionDetails.retrievalReferenceNumber}"
+  systemTraceAuditNumber: "${input.cardTransactionDetails.systemTraceAuditNumber}"
+  transmissionDateTime: "${input.cardTransactionDetails.transmissionDateTime}"
+  authorizationCode: "${input.cardTransactionDetails.authorizationCode}"
+contracts:
+  payerChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: ${input.customerAccountId}
+  payeeChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: ${input.merchantAccountId}
+  cardProcessorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: processor-account
+  guarantorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: bank-account
+`;
+
+  return blue.nodeToJson(blue.yamlToNode(yaml)) as Record<string, unknown>;
+};
+
+export const buildScaledMilestonesDeliveryDocument = (input: {
+  merchantAccountId: string;
+  cardTransactionDetails: TestCardTransactionDetails;
+}) => {
+  const totalAmountMinor = FAST_AMOUNTS.scaledMilestoneCapturesMinor.reduce(
+    (sum, amountMinor) => sum + amountMinor,
+    0
+  );
+
+  const yaml = `name: Delivery for Demo Milestones
+payNoteBootstrapRequest:
+  type: Conversation/Document Bootstrap Requested
+  bootstrapAssignee: payNoteDeliverer
+  channelBindings:
+    payeeChannel:
+      accountId: ${input.merchantAccountId}
+    cardProcessorChannel:
+      accountId: processor-account
+  document:
+    type: PayNote/Card Transaction PayNote
+    name: Demo Milestones
+    LLM_SUMMARY_DISABLED: true
+    currency: USD
+    amount:
+      total: ${totalAmountMinor}
+    milestones:
+      m1: false
+      m2: false
+      m3: false
+      m4: false
+    payNoteInitialStateDescription:
+      summary: Uses the existing card hold and releases milestone captures after matching customer approvals.
+      details: |
+        Each customer approval unlocks exactly one partial capture and the next pending action.
+      initialMessage: Confirm completed milestones to release contractor payouts.
+    cardTransactionDetails:
+      retrievalReferenceNumber: "${input.cardTransactionDetails.retrievalReferenceNumber}"
+      systemTraceAuditNumber: "${input.cardTransactionDetails.systemTraceAuditNumber}"
+      transmissionDateTime: "${input.cardTransactionDetails.transmissionDateTime}"
+      authorizationCode: "${input.cardTransactionDetails.authorizationCode}"
+    contracts:
+      payerChannel:
+        type: MyOS/MyOS Timeline Channel
+      payeeChannel:
+        type: MyOS/MyOS Timeline Channel
+      cardProcessorChannel:
+        type: MyOS/MyOS Timeline Channel
+      guarantorChannel:
+        type: MyOS/MyOS Timeline Channel
+cardTransactionDetails:
+  retrievalReferenceNumber: "${input.cardTransactionDetails.retrievalReferenceNumber}"
+  systemTraceAuditNumber: "${input.cardTransactionDetails.systemTraceAuditNumber}"
+  transmissionDateTime: "${input.cardTransactionDetails.transmissionDateTime}"
+  authorizationCode: "${input.cardTransactionDetails.authorizationCode}"
+contracts:
+  payNoteSender:
+    type: MyOS/MyOS Timeline Channel
+    accountId: ${input.merchantAccountId}
+  payNoteDeliverer:
+    type: MyOS/MyOS Timeline Channel
+    accountId: bank-account
+  cardProcessorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: processor-account
+`;
+
+  const node = blue.yamlToNode(yaml);
+  node.setType(blue.jsonValueToNode({ blueId: DELIVERY_BLUE_ID }));
+  return blue.nodeToJson(node) as Record<string, unknown>;
+};
+
+export const buildSubscriptionPayNote = (input: {
+  customerAccountId: string;
+  merchantAccountId: string;
+  merchantId: string;
+  cardTransactionDetails: TestCardTransactionDetails;
+  paymentMandateDocumentId?: string;
+  paymentMandateStatus?:
+    | 'not_requested'
+    | 'requested'
+    | 'bootstrapping'
+    | 'active';
+  completedCycles?: number;
+  successfulPaymentsMinor?: number;
+}) => {
+  const paymentMandateStatus = input.paymentMandateStatus ?? 'not_requested';
+  const completedCycles = input.completedCycles ?? 0;
+  const successfulPaymentsMinor =
+    input.successfulPaymentsMinor ??
+    completedCycles * FAST_AMOUNTS.subscriptionMonthlyMinor;
+
+  const paymentMandateDocumentIdYaml = input.paymentMandateDocumentId
+    ? `  paymentMandateDocumentId: "${input.paymentMandateDocumentId}"`
+    : '  paymentMandateDocumentId:';
+
+  const yaml = `type: PayNote/Card Transaction PayNote
+name: Exclusive Spotify Subscription Offer
+LLM_SUMMARY_DISABLED: true
+currency: USD
+amount:
+  total: ${FAST_AMOUNTS.subscriptionMonthlyMinor}
+subscription:
+  monthlyAmountMinor: ${FAST_AMOUNTS.subscriptionMonthlyMinor}
+  totalCycles: 12
+  completedCycles: ${completedCycles}
+  successfulPaymentsMinor: ${successfulPaymentsMinor}
+  paymentMandateStatus: ${paymentMandateStatus}
+${paymentMandateDocumentIdYaml}
+  paymentMandateRequest:
+    requestId: subscription-payment-mandate
+    summary: Approve automated payments for 12-month subscription. You can cancel any time.
+    customerMessage: 12-month subscription - 12 USD payment once a month.
+    amountLimit: 14400
+    expiresAt: 2027-12-31T23:59:59Z
+    merchantId: ${input.merchantId}
+payNoteInitialStateDescription:
+  summary: Root card transaction captures cycle 1 and bootstrap authorizes the recurring mandate.
+  details: |
+    This scaled fixture mirrors the subscription bootstrap and one follow-up cycle flow.
+  initialMessage: Thank you for signing up. Get 1 extra free month if you subscribe now.
+cardTransactionDetails:
+  retrievalReferenceNumber: "${input.cardTransactionDetails.retrievalReferenceNumber}"
+  systemTraceAuditNumber: "${input.cardTransactionDetails.systemTraceAuditNumber}"
+  transmissionDateTime: "${input.cardTransactionDetails.transmissionDateTime}"
+  authorizationCode: "${input.cardTransactionDetails.authorizationCode}"
+contracts:
+  payerChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: ${input.customerAccountId}
+  payeeChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: ${input.merchantAccountId}
+  cardProcessorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: processor-account
+  guarantorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: bank-account
+`;
+
+  return blue.nodeToJson(blue.yamlToNode(yaml)) as Record<string, unknown>;
+};
+
+export const buildSubscriptionDeliveryDocument = (input: {
+  merchantAccountId: string;
+  merchantId: string;
+  cardTransactionDetails: TestCardTransactionDetails;
+}) => {
+  const yaml = `name: Delivery for Exclusive Spotify Subscription Offer
+payNoteBootstrapRequest:
+  type: Conversation/Document Bootstrap Requested
+  bootstrapAssignee: payNoteDeliverer
+  channelBindings:
+    payeeChannel:
+      accountId: ${input.merchantAccountId}
+    cardProcessorChannel:
+      accountId: processor-account
+  document:
+    type: PayNote/Card Transaction PayNote
+    name: Exclusive Spotify Subscription Offer
+    LLM_SUMMARY_DISABLED: true
+    currency: USD
+    amount:
+      total: ${FAST_AMOUNTS.subscriptionMonthlyMinor}
+    subscription:
+      monthlyAmountMinor: ${FAST_AMOUNTS.subscriptionMonthlyMinor}
+      totalCycles: 12
+      completedCycles: 0
+      successfulPaymentsMinor: 0
+      paymentMandateStatus: not_requested
+      paymentMandateDocumentId:
+      paymentMandateRequest:
+        requestId: subscription-payment-mandate
+        summary: Approve automated payments for 12-month subscription. You can cancel any time.
+        customerMessage: 12-month subscription - 12 USD payment once a month.
+        amountLimit: 14400
+        expiresAt: 2027-12-31T23:59:59Z
+        merchantId: ${input.merchantId}
+    payNoteInitialStateDescription:
+      summary: Root card transaction captures cycle 1 and bootstrap authorizes the recurring mandate.
+      details: |
+        This scaled fixture mirrors the subscription bootstrap and one follow-up cycle flow.
+      initialMessage: Thank you for signing up. Get 1 extra free month if you subscribe now.
+    cardTransactionDetails:
+      retrievalReferenceNumber: "${input.cardTransactionDetails.retrievalReferenceNumber}"
+      systemTraceAuditNumber: "${input.cardTransactionDetails.systemTraceAuditNumber}"
+      transmissionDateTime: "${input.cardTransactionDetails.transmissionDateTime}"
+      authorizationCode: "${input.cardTransactionDetails.authorizationCode}"
+    contracts:
+      payerChannel:
+        type: MyOS/MyOS Timeline Channel
+      payeeChannel:
+        type: MyOS/MyOS Timeline Channel
+      cardProcessorChannel:
+        type: MyOS/MyOS Timeline Channel
+      guarantorChannel:
+        type: MyOS/MyOS Timeline Channel
+cardTransactionDetails:
+  retrievalReferenceNumber: "${input.cardTransactionDetails.retrievalReferenceNumber}"
+  systemTraceAuditNumber: "${input.cardTransactionDetails.systemTraceAuditNumber}"
+  transmissionDateTime: "${input.cardTransactionDetails.transmissionDateTime}"
+  authorizationCode: "${input.cardTransactionDetails.authorizationCode}"
+contracts:
+  payNoteSender:
+    type: MyOS/MyOS Timeline Channel
+    accountId: ${input.merchantAccountId}
+  payNoteDeliverer:
+    type: MyOS/MyOS Timeline Channel
+    accountId: bank-account
+  cardProcessorChannel:
+    type: MyOS/MyOS Timeline Channel
+    accountId: processor-account
+`;
+
+  const node = blue.yamlToNode(yaml);
+  node.setType(blue.jsonValueToNode({ blueId: DELIVERY_BLUE_ID }));
+  return blue.nodeToJson(node) as Record<string, unknown>;
+};
+
+export const buildSubscriptionMandateDocument = (input: {
+  customerUserId: string;
+  merchantId: string;
+  approvedChargeAttemptId?: string;
+  amountLimitMinor?: number;
+  allowLinkedPayNote?: boolean;
+}) => {
+  const chargeAttemptsYaml = input.approvedChargeAttemptId
+    ? `chargeAttempts:
+  ${input.approvedChargeAttemptId}:
+    authorizationStatus: approved
+    settled: true
+`
+    : '';
+
+  const yaml = `type: PayNote/Payment Mandate
+name: Subscription Payment Mandate
+LLM_SUMMARY_DISABLED: true
+granterType: customer
+granterId: ${input.customerUserId}
+granteeType: merchantId
+granteeId: ${input.merchantId}
+amountLimit: ${input.amountLimitMinor ?? 14_400}
+currency: USD
+sourceAccount: root
+allowLinkedPayNote: ${input.allowLinkedPayNote ?? false}
+allowedPaymentCounterparties:
+  - counterpartyType: merchantId
+    counterpartyId: ${input.merchantId}
+expiresAt: 2027-12-31T23:59:59Z
+${chargeAttemptsYaml}`;
+
+  return blue.nodeToJson(blue.yamlToNode(yaml)) as Record<string, unknown>;
 };
 
 export const buildTransferPayNote = (input: {

@@ -21,6 +21,70 @@ export function expectExactlyOneActivityMatch(
   return matches[0];
 }
 
+const sortActivityByTimestamp = (items: any[], timestampField: string): any[] =>
+  [...items].sort((left, right) => {
+    const leftTimestamp =
+      typeof left?.[timestampField] === 'string' ? left[timestampField] : '';
+    const rightTimestamp =
+      typeof right?.[timestampField] === 'string' ? right[timestampField] : '';
+
+    if (leftTimestamp !== rightTimestamp) {
+      return leftTimestamp.localeCompare(rightTimestamp);
+    }
+
+    const leftActivityId =
+      typeof left?.activityId === 'string' ? left.activityId : '';
+    const rightActivityId =
+      typeof right?.activityId === 'string' ? right.activityId : '';
+
+    return leftActivityId.localeCompare(rightActivityId);
+  });
+
+function expectPayNoteCaptureSequence(input: {
+  items: any[];
+  payNoteDocumentId: string;
+  expectedCaptureAmountsMinor: readonly number[];
+}) {
+  const payNoteMatches = (item: any): boolean =>
+    item?.payNote?.payNoteDocumentId === input.payNoteDocumentId;
+
+  const holdCaptures = sortActivityByTimestamp(
+    findActivityMatches(
+      input.items,
+      item => item.kind === 'HOLD_CAPTURED' && payNoteMatches(item)
+    ),
+    'capturedAt'
+  );
+  const postedTransactions = sortActivityByTimestamp(
+    findActivityMatches(
+      input.items,
+      item => item.kind === 'POSTED_TRANSACTION' && payNoteMatches(item)
+    ),
+    'postedAt'
+  );
+
+  expect(
+    holdCaptures,
+    'expected HOLD_CAPTURED items for the PayNote capture sequence'
+  ).toHaveLength(input.expectedCaptureAmountsMinor.length);
+  expect(
+    postedTransactions,
+    'expected POSTED_TRANSACTION items for the PayNote capture sequence'
+  ).toHaveLength(input.expectedCaptureAmountsMinor.length);
+
+  expect(holdCaptures.map(item => item.amountMinor)).toEqual([
+    ...input.expectedCaptureAmountsMinor,
+  ]);
+  expect(postedTransactions.map(item => item.amountMinor)).toEqual([
+    ...input.expectedCaptureAmountsMinor,
+  ]);
+
+  return {
+    holdCaptures,
+    postedTransactions,
+  };
+}
+
 export async function waitForSinglePostedCapture(input: {
   bank: BankTestDriver;
   jwtCookie: string;
@@ -84,6 +148,41 @@ export async function waitForSinglePostedCapture(input: {
   };
 }
 
+export async function waitForPayNoteCaptureSequence(input: {
+  bank: BankTestDriver;
+  jwtCookie: string;
+  accountNumber: string;
+  payNoteDocumentId: string;
+  expectedCaptureAmountsMinor: readonly number[];
+  timeoutMs?: number;
+}) {
+  let items: any[] = [];
+
+  await waitForExpectWithLogging(
+    async () => {
+      items = await input.bank.getActivity(
+        input.jwtCookie,
+        input.accountNumber
+      );
+
+      expectPayNoteCaptureSequence({
+        items,
+        payNoteDocumentId: input.payNoteDocumentId,
+        expectedCaptureAmountsMinor: input.expectedCaptureAmountsMinor,
+      });
+    },
+    input.timeoutMs ?? 20_000,
+    500,
+    'paynote-capture-sequence'
+  );
+
+  return expectPayNoteCaptureSequence({
+    items,
+    payNoteDocumentId: input.payNoteDocumentId,
+    expectedCaptureAmountsMinor: input.expectedCaptureAmountsMinor,
+  });
+}
+
 export async function waitForNoDuplicateActivityAfterReplay(input: {
   bank: BankTestDriver;
   jwtCookie: string;
@@ -129,5 +228,32 @@ export async function waitForNoDuplicateActivityAfterReplay(input: {
     stablePeriodMs,
     500,
     'no-duplicate-activity'
+  );
+}
+
+export async function waitForNoDuplicatePayNoteCaptureSequenceAfterReplay(input: {
+  bank: BankTestDriver;
+  jwtCookie: string;
+  accountNumber: string;
+  payNoteDocumentId: string;
+  expectedCaptureAmountsMinor: readonly number[];
+  stablePeriodMs?: number;
+}) {
+  await waitForExpectWithLogging(
+    async () => {
+      const items = await input.bank.getActivity(
+        input.jwtCookie,
+        input.accountNumber
+      );
+
+      expectPayNoteCaptureSequence({
+        items,
+        payNoteDocumentId: input.payNoteDocumentId,
+        expectedCaptureAmountsMinor: input.expectedCaptureAmountsMinor,
+      });
+    },
+    input.stablePeriodMs ?? 2_000,
+    500,
+    'no-duplicate-paynote-capture-sequence'
   );
 }
